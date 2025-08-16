@@ -1,7 +1,3 @@
-
-moved from [gov2-ro/scrapers](https://github.com/gov2-ro/scrapers/tree/main/ins-tempo-online) 
-
-
 [https://tempo-online.gov2.ro/](tempo-online.gov2.ro) - scrapes data from insse/[tempo-online](http://statistici.insse.ro:8077/tempo-online)  
 
 
@@ -17,7 +13,14 @@ moved from [gov2-ro/scrapers](https://github.com/gov2-ro/scrapers/tree/main/ins-
 - `browser/` - alpha GUI (to be deprecated for [Evidence](https://evidence.dev))
 
 ## Profilers
-- 
+
+- `data_profiler.py`
+- `variable_classifier.py`
+- `unit_classifier.py`
+- `rules-dictionaries/`
+    - `unit_rules.csv`
+    - `variable_classification_rules.csv`
+
 
 ## Data
 
@@ -43,7 +46,7 @@ moved from [gov2-ro/scrapers](https://github.com/gov2-ro/scrapers/tree/main/ins-
 - [x] compact data
 
 ### beta
-- [ ] categorise filters
+- [x] categorise filters
 - [ ] auto charts
 - [ ] dataset filtering, charting options
 

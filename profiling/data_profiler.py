@@ -8,6 +8,7 @@ import re
 import numpy as np
 import json
 from variable_classifier import classify_headers_in_file
+from unit_classifier import UnitClassifier
 import math
 
 # Suppress verbose logs from libraries to keep output clean
@@ -322,6 +323,11 @@ def main():
         help='Path to variable classification rules CSV (used by orchestrator)'
     )
     parser.add_argument(
+        '--unit-rules',
+        default='rules-dictionaries/unit_rules.csv',
+        help='Path to unit classification rules CSV (used by orchestrator)'
+    )
+    parser.add_argument(
         '--orchestrate',
         action='store_true',
         help='Also run variable classifier and write combined JSON outputs per CSV.'
@@ -338,6 +344,13 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     if args.orchestrate:
         os.makedirs(args.combined_out, exist_ok=True)
+        try:
+            unit_classifier = UnitClassifier(args.unit_rules)
+        except Exception as e:
+            print(f"Error initializing UnitClassifier: {e}")
+            unit_classifier = None
+    else:
+        unit_classifier = None
 
     # --- Collect all CSV files from the input paths ---
     all_csv_files = []
@@ -386,12 +399,20 @@ def main():
             profile_df.to_csv(output_path, index=False, quoting=1)
             tqdm.write(f"Successfully generated profile for '{base_name}' -> '{output_path}'")
 
-            # If requested, also classify headers and write combined JSON
+                # If requested, also classify headers and write combined JSON
             if args.orchestrate:
                 try:
                     headers_class = classify_headers_in_file(input_path, args.rules)
                 except Exception as e:
                     headers_class = {"error": str(e)}
+
+                # Classify UM if possible
+                if unit_classifier and file_checks.get("um_value") and file_checks["um_value"] != 'N/A':
+                    try:
+                        um_tags = unit_classifier.classify(file_checks["um_value"])
+                        file_checks["um_classification"] = um_tags
+                    except Exception as e:
+                        file_checks["um_classification"] = f"Error: {e}"
 
                 # Merge header classifications into per-column profile entries by column_name
                 merged_profile = []
