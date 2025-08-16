@@ -1,5 +1,5 @@
 
-moved from [gov2-ro/scrapers](https://github.com/gov2-ro/scrapers/tree/main/ins/tempo-online) 
+moved from [gov2-ro/scrapers](https://github.com/gov2-ro/scrapers/tree/main/ins-tempo-online) 
 
 
 [https://tempo-online.gov2.ro/](tempo-online.gov2.ro) - scrapes data from insse/[tempo-online](http://statistici.insse.ro:8077/tempo-online)  
@@ -15,6 +15,20 @@ moved from [gov2-ro/scrapers](https://github.com/gov2-ro/scrapers/tree/main/ins/
 - `6-data-compactor.py` – compact csv dimensions - replace `opt_label` with `nomItemId` reference
 - `0-tempoins-fetch-indexes.py` - fetches ctgs and datasets from prev version: [tempoins](http://statistici.insse.ro/tempoins/) - with archived datasets
 - `browser/` - alpha GUI (to be deprecated for [Evidence](https://evidence.dev))
+
+## Data
+
+- 1-indexes/<lang>/
+    - matrices.csv
+    - context.json
+    - context.csv
+- 2-metas – jsons
+- 3-db
+    - tempo-indexes.db
+- 4-datasets – csvs 
+    - TKP0961.csv
+- 5-compact-datasets - compact csvs
+
 
 
 ## Roadmap 
