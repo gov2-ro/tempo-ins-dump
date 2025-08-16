@@ -38,7 +38,7 @@ class VariableClassifier:
                 }
                 rules_list.append(rule)
             
-            print(f"✅ Successfully loaded {len(rules_list)} rules from '{rules_csv_path}'")
+            # print(f"✅ Successfully loaded {len(rules_list)} rules from '{rules_csv_path}'")
             return rules_list
         except Exception as e:
             raise RuntimeError(f"Failed to load or parse the rules CSV file: {e}")

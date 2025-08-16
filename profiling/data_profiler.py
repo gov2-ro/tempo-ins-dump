@@ -366,7 +366,7 @@ def main():
             output_path = os.path.join(args.output_dir, output_filename)
 
             if os.path.exists(output_path) and not args.force:
-                tqdm.write(f"Skipping '{base_name}': Profile already exists. Use -f to overwrite.")
+                # tqdm.write(f"Skipping '{base_name}': Profile already exists. Use -f to overwrite.")
                 continue
 
             # Generate the profile
@@ -429,7 +429,7 @@ def main():
                 with open(combined_path, 'w', encoding='utf-8') as cf:
                     json.dump(combined, cf, ensure_ascii=False, indent=2)
                     print(combined_path)
-                tqdm.write(f"Wrote combined JSON -> {combined_path}")
+                # tqdm.write(f"Wrote combined JSON -> {combined_path}")
 
         except FileNotFoundError:
             tqdm.write(f"Error: Input file not found at '{input_path}'")
