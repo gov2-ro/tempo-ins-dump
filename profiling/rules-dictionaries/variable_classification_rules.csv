@@ -1,0 +1,17 @@
+keyword,semantic_category,functional_types,match_type,priority
+um:,Unit,Metadata,prefix,1
+valoare,Value,Measure,exact,1
+perioade|ani|anul|luni|trimestre|durata,Time Period,"Time, Axis, Filter",keyword,10
+caen|activitati|intreprinderi|salariati|sectoare|industrie|comert|servicii,Economic/Business,"Economic Sector, Axis, Filter",keyword,20
+judete|regiuni|macroregiuni|localitati|municipii|orase|tari|romania|uniunea europeana|zone|rezidenta,Geographic/Administrative,"Geo, Axis, Filter",keyword,20
+sexe|varsta|populatie|persoane|nascuti|decedati|casatorii|divorturi,Demographics,"Demographic, Filter, Series",keyword,20
+sanatate|medical|boli|maladii|sanitare|medic,Health/Medical,"Generic Category, Filter, Axis",keyword,20
+educatie|invatamant|scolare|pregatire,Education,"Generic Category, Filter, Axis",keyword,20
+transport|vehicule|drumuri|cai ferata|nave|aeronave,Transport/Infrastructure,"Generic Category, Filter, Axis",keyword,20
+turistic|turisti|cultura|muzee|biblioteci|spectacol|arte,Tourism/Culture,"Generic Category, Filter, Axis",keyword,20
+agricol|paduri|ape|mediu|terenuri|culturi|animale|productie agricola,Agriculture/Environment,"Generic Category, Filter, Axis",keyword,20
+lei|euro|dolari|cheltuieli|venituri|investitii|credite|pib|financiar,Finance/Economic Indicators,"Financial, Filter",keyword,20
+locuinte|gospodarii|confort|dotarea|camere,Housing/Living Conditions,"Generic Category, Filter, Axis",keyword,20
+internet|computer|telefonie|comunicatii|tehnolog,Technology/Communication,"Generic Category, Filter, Axis",keyword,20
+forme de proprietate|statut|categorii sociale|ocupational|profesional,Social Status,"Demographic, Filter, Series",keyword,30
+categorii|tipuri|clase|grupe,Categories/Classifications,"Generic Category, Filter, Series, Axis",keyword,50

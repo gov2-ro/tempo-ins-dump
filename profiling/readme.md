@@ -37,3 +37,11 @@ Some ideas of categorisation and display:
 - [ ] categorise type of tables / data / columns
 - [ ] generate views/charts based on type of table / data
 - [ ] check/normalize/transform against Eurostat schema: [About Eurostat](https://ec.europa.eu/eurostat/data/database); [schema](https://ec.europa.eu/eurostat/cache/metadata/en/)
+
+
+## Scripts
+
+- `rules-dictionaries/`
+    - `unit_rules.csv` – how to guess um types
+    - `ctg_rules` - detect colum types
+- `unit_classifier.py` – 
