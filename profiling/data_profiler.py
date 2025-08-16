@@ -6,9 +6,15 @@ from tqdm import tqdm
 import unicodedata
 import re
 import numpy as np
+import json
+from variable_classifier import classify_headers_in_file
+import math
 
 # Suppress verbose logs from libraries to keep output clean
 logging.basicConfig(level=logging.ERROR)
+
+def trim_headers(cols):
+    return [str(c).strip() for c in cols]
 
 def guess_column_type(column: pd.Series) -> str:
     """
@@ -71,6 +77,10 @@ def profile_and_validate_csv(file_path: str):
     num_rows, num_cols = df.shape
     columns = df.columns
 
+    # Trim header spaces for consistent handling
+    columns = trim_headers(df.columns)
+    df.columns = columns
+
     # --- 1. Perform File-Level Validity Checks ---
     # Normalize header names for robust matching
     def normalize_header(h: str) -> str:
@@ -109,6 +119,16 @@ def profile_and_validate_csv(file_path: str):
                 break
 
     check_um_exists = um_col_name is not None
+
+    # Extract UM label from header (text after 'UM:' or 'Unitate de masura')
+    um_label = None
+    if check_um_exists:
+        raw_h = str(um_col_name).strip()
+        # remove leading 'UM: ' or variants
+        s = re.sub(r'^(um[:\-\s]+)', '', raw_h, flags=re.I).strip()
+        # remove leading 'Unitate/Unitati de masura' (with optional colon)
+        s = re.sub(r'^(unitati?|unitate)\s+(de\s+)?masura[:\-\s]*', '', s, flags=re.I).strip()
+        um_label = s or None
 
     # Check UM column uniformity and extract representative unit value
     um_uniformity = 'N/A'
@@ -178,21 +198,32 @@ def profile_and_validate_csv(file_path: str):
         year_with_anul = norm.str.contains(r'\banul\b\s*\d{4}')
         years_range = norm.str.contains(r'\b\d{4}\s*-\s*\d{4}\b') | norm.str.contains(r'anii\b')
         trimestru = norm.str.contains(r'trimestrul')
+        luna = norm.str.contains(r'\bluna\b')
 
         total = len(norm)
         cnt_year_exact = int(year_exact.sum())
         cnt_year_with_anul = int(year_with_anul.sum())
         cnt_range = int(years_range.sum())
         cnt_trimestru = int(trimestru.sum())
+        cnt_luna = int(luna.sum())
 
-        # cleaned series: extract year when possible
+        # cleaned series: extract year when possible, or clean Luna prefix
         def extract_year(val: str) -> str:
+            # For Luna patterns, remove "Luna " prefix but keep month + year
+            if 'luna' in val.lower():
+                cleaned_val = re.sub(r'^\s*luna\s+', '', val, flags=re.I).strip()
+                return cleaned_val
+            # For other patterns, extract just the year
             m = re.search(r'(\d{4})', val)
             return m.group(1) if m else val.strip()
 
         cleaned = s.map(lambda v: extract_year(v))
 
         # decide type
+        # if most entries are luna -> 'luna'
+        if total > 0 and (cnt_luna / total) >= 0.5:
+            return cleaned, 'luna'
+        
         # if most entries are trimestru -> 'trimestru'
         if total > 0 and (cnt_trimestru / total) >= 0.5:
             return cleaned, 'trimestru'
@@ -228,6 +259,10 @@ def profile_and_validate_csv(file_path: str):
             guessed_type = guess_column_type(column_data)
             use_series_for_sample = column_data
 
+        # Override guessed type for UM column
+        if check_um_exists and col_name == um_col_name:
+            guessed_type = 'um'
+
         nunique = None
         options_sample = None
 
@@ -249,18 +284,16 @@ def profile_and_validate_csv(file_path: str):
         
     # Convert per-column results to DataFrame
     df_results = pd.DataFrame(results)
+    # Build a separate, robust file_checks dict instead of summary rows
+    file_checks = {
+        "last_col_is_valoare": bool(check_valoare),
+        "um_col_exists": bool(check_um_exists),
+        "um_col_uniformity": um_uniformity,
+        "um_value": um_value,
+        "um_label": um_label,
+    }
 
-    # Append file-level checks as summary rows at the end of the file
-    summary_rows = [
-        {"column_index": "", "column_name": "last_col_is_valoare", "guessed_type": str(check_valoare), "unique_values_count": "", "unique_values_sample": ""},
-        {"column_index": "", "column_name": "um_col_exists", "guessed_type": str(check_um_exists), "unique_values_count": "", "unique_values_sample": ""},
-        {"column_index": "", "column_name": "um_col_uniformity", "guessed_type": um_uniformity, "unique_values_count": "", "unique_values_sample": ""},
-        {"column_index": "", "column_name": "um_value", "guessed_type": str(um_value), "unique_values_count": "", "unique_values_sample": ""},
-    ]
-
-    summary_df = pd.DataFrame(summary_rows)
-
-    return pd.concat([df_results, summary_df], ignore_index=True)
+    return df_results, file_checks
 
 
 def main():
@@ -283,11 +316,28 @@ def main():
         action='store_true',
         help="Force overwrite of existing profile reports."
     )
+    parser.add_argument(
+        '--rules',
+        default='rules-dictionaries/variable_classification_rules.csv',
+        help='Path to variable classification rules CSV (used by orchestrator)'
+    )
+    parser.add_argument(
+        '--orchestrate',
+        action='store_true',
+        help='Also run variable classifier and write combined JSON outputs per CSV.'
+    )
+    parser.add_argument(
+        '--combined_out',
+        default='../data/profiling/combined/',
+        help='Directory to write combined JSON outputs when --orchestrate is used.'
+    )
     
     args = parser.parse_args()
 
     # Create output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
+    if args.orchestrate:
+        os.makedirs(args.combined_out, exist_ok=True)
 
     # --- Collect all CSV files from the input paths ---
     all_csv_files = []
@@ -320,11 +370,66 @@ def main():
                 continue
 
             # Generate the profile
-            profile_df = profile_and_validate_csv(input_path)
-            
+            profile_out = profile_and_validate_csv(input_path)
+            # Backward compatibility: profile_and_validate_csv now returns (df, file_checks)
+            if isinstance(profile_out, tuple):
+                profile_df, file_checks = profile_out
+            else:
+                profile_df, file_checks = profile_out, {
+                    "last_col_is_valoare": None,
+                    "um_col_exists": None,
+                    "um_col_uniformity": None,
+                    "um_value": None,
+                }
+
             # Save the profile to a new CSV
             profile_df.to_csv(output_path, index=False, quoting=1)
             tqdm.write(f"Successfully generated profile for '{base_name}' -> '{output_path}'")
+
+            # If requested, also classify headers and write combined JSON
+            if args.orchestrate:
+                try:
+                    headers_class = classify_headers_in_file(input_path, args.rules)
+                except Exception as e:
+                    headers_class = {"error": str(e)}
+
+                # Merge header classifications into per-column profile entries by column_name
+                merged_profile = []
+                # Build quick lookup from header label to classification
+                class_map = {}
+                if isinstance(headers_class, list):
+                    for item in headers_class:
+                        if isinstance(item, dict) and 'label' in item:
+                            class_map[str(item['label']).strip()] = {
+                                'semantic_categories': item.get('semantic_categories', ''),
+                                'functional_types': item.get('functional_types', '')
+                            }
+
+                for rec in profile_df.to_dict(orient='records'):
+                    name = str(rec.get('column_name', '')).strip()
+                    cls = class_map.get(name, None)
+                    if cls:
+                        rec.update(cls)
+                    # Drop non-relevant or NaN fields for cleaner JSON
+                    uvc = rec.get('unique_values_count', None)
+                    if (uvc is None) or (isinstance(uvc, float) and math.isnan(uvc)):
+                        rec.pop('unique_values_count', None)
+                    uvs = rec.get('unique_values_sample', None)
+                    if uvs is None:
+                        rec.pop('unique_values_sample', None)
+                    merged_profile.append(rec)
+
+                combined = {
+                    "source_csv": os.path.abspath(input_path),
+                    "file_checks": file_checks,
+                    "columns": merged_profile
+                }
+
+                combined_path = os.path.join(args.combined_out, os.path.splitext(base_name)[0] + '.json')
+                with open(combined_path, 'w', encoding='utf-8') as cf:
+                    json.dump(combined, cf, ensure_ascii=False, indent=2)
+                    print(combined_path)
+                tqdm.write(f"Wrote combined JSON -> {combined_path}")
 
         except FileNotFoundError:
             tqdm.write(f"Error: Input file not found at '{input_path}'")

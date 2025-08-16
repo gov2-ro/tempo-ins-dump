@@ -1,8 +1,3 @@
-
-
-
-
-
 """ 
 This script is designed as a command-line tool. It loads the rules, reads the input file, classifies each label, and saves the enriched data to a new CSV file. 
 """
@@ -84,6 +79,34 @@ class VariableClassifier:
                 functional_tags.update(rule['functional_types'])
 
         return ", ".join(sorted(list(semantic_tags))), ", ".join(sorted(list(functional_tags)))
+
+    def classify_labels(self, labels):
+        """
+        Classify an iterable of label strings and return a list of dicts with
+        the original label and assigned semantic/functional tags.
+
+        This API is intended for programmatic use (e.g. orchestrator) where
+        callers only have the header row and don't want to read the full CSV.
+        """
+        results = []
+        for lab in labels:
+            sem, func = self.classify(lab)
+            results.append({"label": lab, "semantic_categories": sem, "functional_types": func})
+        return results
+
+
+def classify_headers_in_file(csv_path: str, rules_csv_path: str):
+    """
+    Convenience helper: read only the header row of a CSV file and classify
+    the header labels using the provided rules file. Returns a list of dicts
+    (same shape as classify_labels).
+    """
+    vc = VariableClassifier(rules_csv_path)
+    # Read only the header (no rows)
+    df_head = pd.read_csv(csv_path, nrows=0)
+    # Trim whitespace around headers to avoid stray leading spaces
+    headers = [str(h).strip() for h in list(df_head.columns)]
+    return vc.classify_labels(headers)
 
 def process_classification(input_path, output_path, rules_path):
     """
