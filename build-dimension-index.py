@@ -4,6 +4,11 @@ Script to build a searchable index of dimensions and their options from metadata
 Analyzes all JSON files in the metas directory and creates a database index.
 """
 
+# Configuration
+metas_dir = "data-old/2-metas/ro"
+db_path = "data/dimension_index.db"
+report_path = "data/dimension_analysis_report.md"
+
 import json
 import os
 import sqlite3
@@ -286,10 +291,7 @@ def search_dimensions(db_path: str, search_term: str = None):
 
 def main():
     """Main function."""
-    # Configuration
-    metas_dir = "/Users/pax/devbox/gov2/tempo-ins-dump/data-old/data-samples/metas"
-    db_path = "/Users/pax/devbox/gov2/tempo-ins-dump/data/dimension_index.db"
-    report_path = "/Users/pax/devbox/gov2/tempo-ins-dump/data/dimension_analysis_report.md"
+    
     
     # Ensure data directory exists
     os.makedirs(os.path.dirname(db_path), exist_ok=True)

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dimension Index Explorer - Tempo INS Data</title>
+    <link rel="stylesheet" href="dimensions-style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Dimension Index Explorer</h1>
+            <p class="subtitle">Search and explore statistical dimensions and options from Tempo INS metadata</p>
+        </header>
+
+        <div class="controls-panel">
+            <div class="search-container">
+                <div class="search-group">
+                    <label for="searchInput">Search Term:</label>
+                    <input type="text" id="searchInput" placeholder="Enter dimension or option name..." autocomplete="off">
+                </div>
+                
+                <div class="filter-group">
+                    <label for="searchType">Search In:</label>
+                    <select id="searchType">
+                        <option value="all">All (Dimensions & Options)</option>
+                        <option value="dimensions">Dimensions Only</option>
+                        <option value="options">Options Only</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="fileFilter">Filter by File:</label>
+                    <select id="fileFilter">
+                        <option value="">All Files</option>
+                    </select>
+                </div>
+
+                <button id="searchBtn" onclick="performSearch()">🔍 Search</button>
+                <button id="clearBtn" onclick="clearSearch()">Clear</button>
+            </div>
+
+            <div class="quick-actions">
+                <button onclick="showSummary()" class="action-btn">📋 File Summary</button>
+                <button onclick="showDimensionUsage()" class="action-btn">📊 Dimension Usage</button>
+                <button onclick="showStats()" class="action-btn">📈 Statistics</button>
+            </div>
+        </div>
+
+        <div class="results-section">
+            <div id="loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Loading dimension data...</p>
+            </div>
+
+            <div id="stats" class="stats-panel hidden">
+                <h3>Database Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-number" id="totalFiles">-</span>
+                        <span class="stat-label">Files Indexed</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="totalDimensions">-</span>
+                        <span class="stat-label">Total Dimensions</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="totalOptions">-</span>
+                        <span class="stat-label">Total Options</span>
+                    </div>
+                </div>
+                <p class="export-time">Data exported: <span id="exportTime">-</span></p>
+            </div>
+
+            <div id="results" class="results-container">
+                <div class="welcome-message">
+                    <h3>🎯 Welcome to Dimension Index Explorer</h3>
+                    <p>This tool helps you search through statistical dimension metadata from Tempo INS data files.</p>
+                    <ul>
+                        <li><strong>Search</strong> for specific dimensions or options</li>
+                        <li><strong>Filter</strong> by file or search type</li>
+                        <li><strong>Explore</strong> file summaries and dimension usage patterns</li>
+                    </ul>
+                    <p class="tip">💡 <strong>Tip:</strong> Try searching for terms like "Perioade", "Bucuresti", or "Grade Celsius"</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Dimension Index Explorer | Data from Tempo INS Metadata | <span id="dataInfo"></span></p>
+    </footer>
+
+    <script src="dimensions-script.js"></script>
+</body>
+</html>

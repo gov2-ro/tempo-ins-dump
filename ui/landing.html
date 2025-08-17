@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tempo INS Data Tools</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        .container {
+            text-align: center;
+            max-width: 600px;
+            padding: 40px;
+        }
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 40px;
+            opacity: 0.9;
+        }
+        .tools-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 40px;
+        }
+        .tool-card {
+            background: white;
+            color: #333;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+            text-decoration: none;
+        }
+        .tool-card:hover {
+            transform: translateY(-5px);
+        }
+        .tool-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        .tool-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        .tool-desc {
+            color: #666;
+            line-height: 1.5;
+        }
+        @media (max-width: 768px) {
+            .tools-grid {
+                grid-template-columns: 1fr;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Tempo INS Data Tools</h1>
+        <p class="subtitle">Romanian National Institute of Statistics - Data Exploration Tools</p>
+        
+        <div class="tools-grid">
+            <a href="index.html" class="tool-card">
+                <div class="tool-icon">🗂️</div>
+                <div class="tool-title">Dataset Navigator</div>
+                <div class="tool-desc">Browse and explore statistical datasets by category with hierarchical navigation and detailed metadata</div>
+            </a>
+            
+            <a href="dimensions.html" class="tool-card">
+                <div class="tool-icon">🔍</div>
+                <div class="tool-title">Dimension Explorer</div>
+                <div class="tool-desc">Search and analyze statistical dimensions and their options across all datasets</div>
+            </a>
+        </div>
+    </div>
+</body>
+</html>
