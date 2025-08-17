@@ -186,7 +186,7 @@ function validateInput($input, $type = 'string', $maxLength = 255) {
             
         case 'filename':
             $input = trim($input);
-            if (!preg_match('/^[a-zA-Z0-9_-]+$/', $input)) {
+            if (!preg_match('/^[a-zA-Z0-9_.-]+$/', $input)) {
                 throw new InvalidArgumentException("Invalid filename format");
             }
             return $input;
