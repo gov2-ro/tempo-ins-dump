@@ -6,6 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let contextMap = {};
     let currentFilteredDatasets = [];
     let selectedCategoryCode = null;
+    let selectedThemeCode = null; // root context code filter
+    const selectedKeywords = new Set();
 
     // --- DOM ELEMENTS ---
     const totalCountEl = document.getElementById('total-count');
@@ -15,6 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchInputEl = document.getElementById('search');
     const breadcrumbEl = document.getElementById('breadcrumb');
     const datasetsContentEl = document.getElementById('datasets-content');
+    const themesBarEl = document.getElementById('themes-bar');
+    const keywordsBarEl = document.getElementById('keywords-bar');
     const modalEl = document.getElementById('modal');
     const modalCloseEl = document.getElementById('modal-close');
     const modalTitleEl = document.getElementById('modal-title');
@@ -25,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await loadAllData();
             buildTreeNavigation();
+            buildThemesBar();
             applyFilters();
             setupEventListeners();
             updateStats();
@@ -46,15 +51,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Process matrices and fetch metadata for each
         const matrixLines = parseCSV(matricesCSV);
-        const datasetPromises = matrixLines.map(async (row) => {
+    const datasetPromises = matrixLines.map(async (row) => {
             const filename = row.filename?.trim();
             if (!filename) return null;
 
             try {
                 // Check both meta and CSV exist locally (avoid 404s and missing dims)
-                const [metaRes, csvHead] = await Promise.all([
+                const [metaRes, csvHead, detectedRes] = await Promise.all([
                     fetch(`${DATA_PATH}/metas/${filename}.json`),
-                    fetch(`${DATA_PATH}/datasets/${filename}.csv`, { method: 'HEAD' })
+                    fetch(`${DATA_PATH}/datasets/${filename}.csv`, { method: 'HEAD' }),
+                    fetch(`${DATA_PATH}/meta-detected/${filename}.json`).catch(() => ({ ok: false }))
                 ]);
 
                 if (!metaRes.ok || !csvHead.ok) {
@@ -62,18 +68,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 const meta = await metaRes.json();
+                let detected = null;
+                if (detectedRes && detectedRes.ok) {
+                    try { detected = await detectedRes.json(); } catch {}
+                }
 
-                return {
+                const dataset = {
                     id: filename,
                     code: filename,
                     contextCode: row['context-code'],
                     title: row.matrixName,
                     lastUpdate: row.ultimaActualizare,
                     meta,
+                    detected,
                     description: meta.definitie,
                     dimensions: (meta.dimensionsMap || []).map(d => d.label).filter(Boolean),
                     periodicity: meta.periodicitati?.[0] || 'N/A',
+                    keywords: [],
+                    themeCode: null,
+                    um: detected?.file_checks?.um_label || detected?.file_checks?.um_value || null,
+                    umClass: detected?.file_checks?.um_classification || null,
                 };
+
+                // derive keywords from metadata
+                dataset.keywords = deriveKeywords(dataset);
+                return dataset;
             } catch (e) {
                 return null;
             }
@@ -81,6 +100,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         allDatasets = (await Promise.all(datasetPromises)).filter(Boolean);
         associateDatasetsWithContext();
+        // After context is built, compute theme root per dataset
+        allDatasets.forEach(ds => {
+            ds.themeCode = getRootCode(ds.contextCode) || null;
+        });
     }
 
     function parseCSV(csvText) {
@@ -146,6 +169,80 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- UI RENDERING ---
+    function buildThemesBar(themeCounts) {
+        if (!Array.isArray(contextTree) || contextTree.length === 0) {
+            themesBarEl.innerHTML = '';
+            return;
+        }
+
+        // compute counts per root if not provided
+        const counts = themeCounts || computeThemeCounts(allDatasets);
+
+        const chips = [];
+        // All chip
+        const allActive = selectedThemeCode === null;
+        const allCount = Object.values(counts).reduce((a, b) => a + b, 0);
+        chips.push(`<span class="theme-chip ${allActive ? 'active' : ''}" data-theme="__ALL__">All (${allCount})</span>`);
+
+        // One chip per root with non-zero count
+        contextTree
+            .slice()
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .forEach(root => {
+                const cnt = counts[root.code] || 0;
+                if (cnt > 0) {
+                    const active = selectedThemeCode === root.code;
+                    chips.push(`<span class="theme-chip ${active ? 'active' : ''}" data-theme="${root.code}">${escapeHTML(root.name)} (${cnt})</span>`);
+                }
+            });
+
+        themesBarEl.innerHTML = chips.join('');
+        themesBarEl.querySelectorAll('.theme-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const val = chip.getAttribute('data-theme');
+                selectedThemeCode = (val === '__ALL__') ? null : val;
+                applyFilters();
+            });
+        });
+    }
+
+    function renderKeywordsBar(datasets) {
+        const freq = new Map();
+        datasets.forEach(ds => {
+            (ds.keywords || []).forEach(k => {
+                // don't count selected keywords here to keep them visible but deprioritized
+                freq.set(k, (freq.get(k) || 0) + 1);
+            });
+        });
+
+        // Remove common stopwords and very short tokens
+        const STOP = getStopwords();
+        const entries = [...freq.entries()]
+            .filter(([k, v]) => !STOP.has(k) && k.length > 2)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 30);
+
+        if (entries.length === 0) {
+            keywordsBarEl.style.display = 'none';
+            keywordsBarEl.innerHTML = '';
+            return;
+        }
+
+        keywordsBarEl.style.display = 'flex';
+        const html = entries.map(([k]) => {
+            const active = selectedKeywords.has(k) ? 'active' : '';
+            return `<span class="keyword-chip ${active}" data-key="${k}">${escapeHTML(k)}</span>`;
+        }).join('');
+        keywordsBarEl.innerHTML = html;
+        keywordsBarEl.querySelectorAll('.keyword-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const k = chip.getAttribute('data-key');
+                if (selectedKeywords.has(k)) selectedKeywords.delete(k); else selectedKeywords.add(k);
+                applyFilters();
+            });
+        });
+    }
+
     function buildTreeNavigation() {
         treeRootEl.innerHTML = ''; // Clear loading
         
@@ -240,7 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        const gridHTML = datasets.map(dataset => `
+    const gridHTML = datasets.map(dataset => `
             <div class="dataset-card" data-id="${dataset.id}">
                 <div class="dataset-header">
                     <div class="dataset-code">${dataset.code}</div>
@@ -251,6 +348,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span class="meta-tag">📅 ${dataset.lastUpdate || 'N/A'}</span>
                         <span class="meta-tag">🔄 ${dataset.periodicity || 'N/A'}</span>
                         <span class="meta-tag">📏 ${dataset.dimensions.length} Dimensions</span>
+            ${dataset.um ? `<span class="meta-tag">🧪 UM: ${escapeHTML(dataset.um)}</span>` : ''}
                     </div>
                     <div class="dataset-description">${(dataset.description || 'No description available.').substring(0, 120)}...</div>
                 </div>
@@ -298,15 +396,15 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function applyFilters() {
         const query = searchInputEl.value.toLowerCase();
-        
+        // 1) Start from category selection if any
         let baseDatasets;
         if (selectedCategoryCode && contextMap[selectedCategoryCode]) {
             baseDatasets = contextMap[selectedCategoryCode].datasets;
         } else {
             baseDatasets = allDatasets;
         }
-        
-        currentFilteredDatasets = baseDatasets.filter(dataset => {
+        // 2) Text search
+        const textFiltered = baseDatasets.filter(dataset => {
             const title = dataset.title || '';
             const desc = dataset.description || '';
             const code = dataset.code || '';
@@ -314,7 +412,35 @@ document.addEventListener('DOMContentLoaded', () => {
                    title.toLowerCase().includes(query) ||
                    desc.toLowerCase().includes(query);
         });
-        
+        // Update themes bar counts according to textFiltered + category filter
+        const themeCounts = computeThemeCounts(textFiltered);
+        // If current selectedThemeCode is no longer present, reset to All
+        if (selectedThemeCode && !themeCounts[selectedThemeCode]) {
+            selectedThemeCode = null;
+        }
+        buildThemesBar(themeCounts);
+
+        // 3) Theme filter
+        const themeFiltered = selectedThemeCode
+            ? textFiltered.filter(d => d.themeCode === selectedThemeCode)
+            : textFiltered;
+
+        // 4) Keyword filter (AND across selected keywords)
+        let keywordFiltered = themeFiltered;
+        if (selectedKeywords.size > 0) {
+            keywordFiltered = themeFiltered.filter(d => {
+                const set = new Set(d.keywords || []);
+                for (const k of selectedKeywords) {
+                    if (!set.has(k)) return false;
+                }
+                return true;
+            });
+        }
+
+        // Update keyword chips based on themeFiltered (not post-keyword filtering)
+        renderKeywordsBar(themeFiltered);
+
+        currentFilteredDatasets = keywordFiltered;
         renderDatasets(currentFilteredDatasets);
         updateStats();
     }
@@ -358,6 +484,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     `).join('') || 'No dimensions specified.'}
                 </div>
             </div>
+            ${dataset.detected ? `
+            <div class="metadata-section">
+                <h4>Detected Schema</h4>
+                <div class="metadata-content">
+                    ${dataset.um ? `<div><strong>Unit of Measure:</strong> ${escapeHTML(dataset.um)}${dataset.umClass ? ` <em>(${escapeHTML(dataset.umClass)})</em>` : ''}</div>` : ''}
+                </div>
+                <div class="column-info">
+                    ${(dataset.detected.columns || []).map(col => `
+                        <div class="column-item">
+                            <span class="column-name">${escapeHTML(col.column_name)}</span>
+                            <span>
+                                ${col.guessed_type ? `<em>${escapeHTML(col.guessed_type)}</em>` : ''}
+                                ${col.semantic_categories ? ` · ${escapeHTML(col.semantic_categories)}` : ''}
+                                ${col.functional_types ? ` · ${escapeHTML(col.functional_types)}` : ''}
+                            </span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>` : ''}
             ${meta?.observatii ? `
             <div class="metadata-section">
                 <h4>Observations</h4>
@@ -427,6 +572,91 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Failed to load data preview:", error);
             previewContainer.innerHTML = `<div class="no-results">Could not load data preview.</div>`;
         }
+    }
+
+    // --- Helpers ---
+    function getRootCode(code) {
+        let current = contextMap[code];
+        let last = current;
+        while (current && current.parentCode && current.parentCode !== '0') {
+            last = contextMap[current.parentCode] || last;
+            current = contextMap[current.parentCode];
+        }
+        return (last && last.code) || code || null;
+    }
+
+    function escapeHTML(str) {
+        return String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    function deriveKeywords(dataset) {
+        const meta = dataset.meta || {};
+        const detected = dataset.detected || {};
+        const words = [];
+        // Title and matrix name
+        if (dataset.title) words.push(...splitWords(dataset.title));
+        if (meta.matrixName) words.push(...splitWords(meta.matrixName));
+        // Definition (first 200 chars)
+        if (meta.definitie) words.push(...splitWords(meta.definitie.slice(0, 200)));
+        // Periodicities
+        if (Array.isArray(meta.periodicitati)) words.push(...meta.periodicitati);
+        // Dimensions labels
+        if (Array.isArray(meta.dimensionsMap)) {
+            meta.dimensionsMap.forEach(d => { if (d.label) words.push(...splitWords(d.label)); });
+        }
+        // Data sources names
+        if (Array.isArray(meta.surseDeDate)) {
+            meta.surseDeDate.forEach(s => { if (s?.nume) words.push(...splitWords(s.nume)); });
+        }
+        // Detected schema: UM label/value/classification
+        const um = detected?.file_checks?.um_label || detected?.file_checks?.um_value || '';
+        if (um) words.push(...splitWords(um));
+        if (detected?.file_checks?.um_classification) words.push(...splitWords(detected.file_checks.um_classification));
+        // Detected columns: names, types, semantic categories, functional types
+        if (Array.isArray(detected?.columns)) {
+            detected.columns.forEach(c => {
+                if (c.column_name) words.push(...splitWords(c.column_name));
+                if (c.guessed_type) words.push(...splitWords(c.guessed_type));
+                if (c.semantic_categories) words.push(...splitWords(c.semantic_categories));
+                if (c.functional_types) words.push(...splitWords(c.functional_types));
+            });
+        }
+        // Unique, lowercase
+        const STOP = getStopwords();
+        const uniq = new Set();
+        words.forEach(w => {
+            const k = w.toLowerCase();
+            if (k.length > 2 && !STOP.has(k)) uniq.add(k);
+        });
+        return [...uniq];
+    }
+
+    function splitWords(text) {
+        return String(text || '')
+            .replace(/[()\[\],.;:!?/\\\-]+/g, ' ')
+            .split(/\s+/)
+            .filter(Boolean);
+    }
+
+    function computeThemeCounts(datasets) {
+        const counts = {};
+        datasets.forEach(d => {
+            const root = d.themeCode || getRootCode(d.contextCode);
+            if (!root) return;
+            counts[root] = (counts[root] || 0) + 1;
+        });
+        return counts;
+    }
+
+    function getStopwords() {
+        // Light set combining English and Romanian common stopwords
+        const arr = [
+            'the','and','or','for','of','in','to','a','an','on','by','with','from','as','at','is','are','be','per','la','si','sau','din','ale','al','un','o','cu','de','pe','in','a','anul','ani','rata','numar','numărul','nr','total','medie'
+        ];
+        return new Set(arr);
     }
 
     // --- START ---
