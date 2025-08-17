@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dimension Index Explorer (API) - Tempo INS Data</title>
+    <link rel="stylesheet" href="dimensions-style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Dimension Index Explorer <span style="font-size: 0.6em; opacity: 0.7;">(API)</span></h1>
+            <p class="subtitle">Server-powered search through statistical dimensions and options from Tempo INS metadata</p>
+        </header>
+
+        <div class="controls-panel">
+            <div class="search-container">
+                <div class="search-group">
+                    <label for="searchInput">Search Term:</label>
+                    <input type="text" id="searchInput" placeholder="Enter dimension or option name (min. 2 chars)..." autocomplete="off">
+                </div>
+                
+                <div class="filter-group">
+                    <label for="searchType">Search In:</label>
+                    <select id="searchType">
+                        <option value="all">All (Dimensions & Options)</option>
+                        <option value="dimensions">Dimensions Only</option>
+                        <option value="options">Options Only</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="fileFilter">Filter by File:</label>
+                    <select id="fileFilter">
+                        <option value="">All Files</option>
+                    </select>
+                </div>
+
+                <button id="searchBtn" onclick="performSearch()">🔍 Search</button>
+                <button id="clearBtn" onclick="clearSearch()">Clear</button>
+            </div>
+
+            <div class="quick-actions">
+                <button onclick="showSummary()" class="action-btn">📋 File Summary</button>
+                <button onclick="showDimensionUsage()" class="action-btn">📊 Dimension Usage</button>
+                <button onclick="showStats()" class="action-btn">📈 Statistics</button>
+            </div>
+        </div>
+
+        <div class="results-section">
+            <div id="loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Loading from server...</p>
+            </div>
+
+            <div id="stats" class="stats-panel hidden">
+                <h3>Database Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-number" id="totalFiles">-</span>
+                        <span class="stat-label">Files Indexed</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="totalDimensions">-</span>
+                        <span class="stat-label">Total Dimensions</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="totalOptions">-</span>
+                        <span class="stat-label">Total Options</span>
+                    </div>
+                </div>
+                <p class="export-time">Database updated: <span id="exportTime">-</span></p>
+            </div>
+
+            <div id="results" class="results-container">
+                <div class="welcome-message">
+                    <h3>🎯 Welcome to Dimension Index Explorer (API Version)</h3>
+                    <p>This server-powered tool efficiently searches through large statistical dimension datasets from Tempo INS data files.</p>
+                    <ul>
+                        <li><strong>Fast server-side search</strong> - handles large datasets efficiently</li>
+                        <li><strong>Real-time filtering</strong> by file or search type</li>
+                        <li><strong>Detailed file exploration</strong> - click on file IDs to see full details</li>
+                        <li><strong>Caching</strong> for improved performance</li>
+                    </ul>
+                    <p class="tip">💡 <strong>Tip:</strong> Try searching for terms like "Perioade", "Bucuresti", or "Grade Celsius". Click on file IDs in search results to explore them in detail.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Dimension Index Explorer (API Version) | Server-side PHP API | <span id="dataInfo"></span></p>
+    </footer>
+
+    <script src="dimensions-script-api.js"></script>
+</body>
+</html>
