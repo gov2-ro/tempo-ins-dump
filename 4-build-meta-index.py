@@ -3,7 +3,7 @@ lang = 'ro'
 import os, json, csv
 
 data_path = 'data/2-metas/' + lang
-output_csv_path = 'data/1-indexes/' + lang + '/matrices.csv'
+output_csv_path = 'data/1-indexes/' + lang + '/matrices-list.csv'
 
 with open(output_csv_path, mode='w', newline='', encoding='utf-8') as csv_file:
     # fieldnames = ['filename', 'context-code', 'context-name', 'matrixName', 'ultimaActualizare', 'definitie', 'periodicitati']

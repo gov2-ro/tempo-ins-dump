@@ -5,10 +5,11 @@
 
 - `1-fetch-context.py` - fetches contexts &rarr; _data/1-indexes/**\<lang\>**/context.csv_ 
 - `2-fetch-matrices.py` - fetches datasets &rarr; _data/1-indexes/**\<lang\>**/matrices.csv_
-- `3-fetch-meta.py` - reads _matrices.csv_ and fetches dataset meta json &rarr; _data/2-metas/**\<lang\>**/**\<dataset-id\>**.json_
-- `4-varstats-db.py` - parses downloaded dataset meta and saves fields to SQLite.db
-- `5-fetch-csv.py` - loops through metas jsons and downloads dataset as csv &rarr; _data/3-datasets/**\<lang\>**/**\<dataset-id\>**.csv_
-- `6-data-compactor.py` – compact csv dimensions - replace `opt_label` with `nomItemId` reference
+- `3-fetch-metas.py` - reads _matrices.csv_ and fetches dataset meta json &rarr; _data/2-metas/**\<lang\>**/**\<dataset-id\>**.json_
+- `3-build-meta-index.py` – 
+- `5-varstats-db.py` - parses downloaded dataset meta and saves fields to SQLite.db
+- `6-fetch-csv.py` - loops through metas jsons and downloads dataset as csv &rarr; _data/3-datasets/**\<lang\>**/**\<dataset-id\>**.csv_
+- `7-data-compactor.py` – compact csv dimensions - replace `opt_label` with `nomItemId` reference
 - `0-tempoins-fetch-indexes.py` - fetches ctgs and datasets from prev version: [tempoins](http://statistici.insse.ro/tempoins/) - with archived datasets
 - `browser/` - alpha GUI (to be deprecated for [Evidence](https://evidence.dev))
 

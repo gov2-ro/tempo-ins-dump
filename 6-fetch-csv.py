@@ -10,6 +10,10 @@ todo
 lang = "ro"
 # lang = "en"
 
+""" 
+y not go through indexes/matrices.csv ? - flag?
+"""
+
 input_folder="data/2-metas/" + lang
 output_folder="data/4-datasets/" + lang
 
