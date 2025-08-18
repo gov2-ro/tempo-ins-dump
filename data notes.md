@@ -1,6 +1,7 @@
 
 regiuni: MACROREGIUNEA UNU / Regiunea NORD-VEST
 municipiul sebes codlea resita
+Localitati / Municipii si orase
 judet Bihor Bistrița-Năsăud 
 Feminin  / Masculin
 
@@ -32,3 +33,4 @@ de nationalitate maghiara - attempt removal of numitor comun - also partially?! 
 Medii de rezidenta urban rural
 
 get CAEN codes
+
