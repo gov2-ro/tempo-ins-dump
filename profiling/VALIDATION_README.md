@@ -253,31 +253,31 @@ Run `python validation_example.py` to see the system in action!
 
 # Roadmap / TODOs
 
--[ ] check if all files:
-    -[ ] have a variable/column named 'Valoare'
-    -[ ] have a valoare (last), UM (measuring unit) (secoond to last) and time (third to last) type columns at least
+-[x] check if all files:
+    -[x] have a variable/column named 'Valoare'
+    -[x] have a valoare (last), UM (measuring unit) (second to last) and time (third to last) type columns at least
 
 -[ ] column **label** checks 
-    -[ ] has '`', '|' or `,` in the name: label as `n-multiple?`
+    -[x] has '`', '|' or `,` in the name: label as `n-multiple`
     -[ ] has `Valoare` as the last column and all values are numbers
-    -[ ] geo Localitati|Judete|Macroregiuni, regiuni de dezvoltare si judete. has any of (regiuni, regiuni + dezvoltare, macroregiuni) - mark as such -> `n-geo` + `n-geo-localitati`, `n-geo-judete`, `n-geo-regiuni`, `n-geo-regiuni-dezvoltare`
-    -[ ] is time? is named: `Perioade|Luni|Trimestre|Ani` - mark it as `n-time`, `n-time-perioade`, `n-time-ani`, `n-time-luni` (it can have more types in one ex: [`n-time`, `n-time-ani`, `n-time-trimestre`])
+    -[x] geo Localitati|Judete|Macroregiuni, regiuni de dezvoltare si judete. has any of (regiuni, regiuni + dezvoltare, macroregiuni) - mark as such -> `n-geo` + `n-geo-localitati`, `n-geo-judete`, `n-geo-regiuni`, `n-geo-regiuni-dezvoltare`
+    -[x] is time? is named: `Perioade|Luni|Trimestre|Ani` - mark it as `n-time`, `n-time-perioade`, `n-time-ani`, `n-time-luni` (it can have more types in one ex: [`n-time`, `n-time-ani`, `n-time-trimestre`])
 
 -[ ] columns **data/values** checks
-    -[ ] is time: has `Anul <year>` | `luna august 2025` | `Trimestrul IV 2004` values, same labeling as above `d-time`, `d-time-ani`, `d-time-trimestre`
-    -[ ] has masculin / feminin `gender` (always check with and against lowercase)
-        -[ ] has only masculin / feminin `gender-exclusive`
+    -[x] is time: has `Anul <year>` | `luna august 2025` | `Trimestrul IV 2004` values, same labeling as above `d-time`, `d-time-ani`, `d-time-trimestre`
+    -[x] has masculin / feminin `gender` (always check with and against lowercase) ✅ **ColumnDataGenderRule**
+        -[x] has only masculin / feminin `gender-exclusive` ✅ **ColumnDataGenderRule**
     -[ ] has a preffix / suffix type of string (special case, multiple: time, where can have Perioade, Luni, Trimestre or grupe de varsta) `d-preffix`
-    -[ ] grupe vârstă `18-24 ani` ori vârstă (`9 ani`): `d-grupe-varsta`, `d-varste`
-    -[ ] has `rural` or `urban`? `d-mediu-geo` and `d-mediu-geo-exclusive` no other values besides rural/urban are found
+    -[x] grupe vârstă `18-24 ani` ori vârstă (`9 ani`): `d-grupe-varsta`, `d-varste` ✅ **ColumnDataAgeGroupRule**
+    -[x] has `rural` or `urban`? `d-mediu-geo` and `d-mediu-geo-exclusive` no other values besides rural/urban are found ✅ **ColumnDataResidenceRule**
     -[ ] has `total`? - has `total-{string}` ? - add `total-{string}` to labels
     -[ ] if detected kind, do all rows validate?
     -[ ] geo
-        -[ ] check common județe names to guess if it contains judete (Bihor, Gorj, Dolj, Hunedoara, Ilfov, Prahova) - `d-geo-judete` and add also precentage foud (of the attached list) `d-geo-judete-{number}`
-        -[ ] check common localități names to guess if it contains localități (Tuzla, Aiud) similar to above `d-geo-localitati*`
-        -[ ] regiuni: has `Regiunea {string}`
-        -[ ] macroregiuni: has `MACROREGIUNEA {string}`
-        -[ ] if any of the above, label it as `d-geo`
+        -[x] check common județe names to guess if it contains judete (Bihor, Gorj, Dolj, Hunedoara, Ilfov, Prahova) - `d-geo-judete` and add also precentage foud (of the attached list) `d-geo-judete-{number}` ✅ **ColumnDataGeographicRule**
+        -[x] check common localități names to guess if it contains localități (Tuzla, Aiud) similar to above `d-geo-localitati*` ✅ **ColumnDataGeographicRule**
+        -[x] regiuni: has `Regiunea {string}` `d-geo-regiune` ✅ **ColumnDataGeographicRule**
+        -[x] macroregiuni: has `MACROREGIUNEA {string}` `d-geo-macroregiune` ✅ **ColumnDataGeographicRule**
+        -[x] if any of the above, label it as `d-geo` ✅ **ColumnDataGeographicRule**
     -[ ] count values
     -[x] count unique values
 

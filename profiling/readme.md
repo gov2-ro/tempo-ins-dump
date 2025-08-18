@@ -43,6 +43,8 @@ Some ideas of categorisation and display:
 - [ ] check/normalize/transform against Eurostat schema: [About Eurostat](https://ec.europa.eu/eurostat/data/database); [schema](https://ec.europa.eu/eurostat/cache/metadata/en/)
 
 
+see also VALIDATION_README.md
+
 ## Scripts
 
 - `rules-dictionaries/`
