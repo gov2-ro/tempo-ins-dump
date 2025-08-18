@@ -5,7 +5,7 @@
  * 
  * Endpoints:
  * - GET /api.php?action=stats
- * - GET /api.php?action=search&query=term&type=all&file=
+ * - GET /api.php?action=search&query=term&type=all&file= (searches dimension labels, option labels, and matrix titles)
  * - GET /api.php?action=summary
  * - GET /api.php?action=usage
  * - GET /api.php?action=files
@@ -157,9 +157,9 @@ class DimensionAPI {
             'total_count' => 0
         ];
         
-        // Search dimensions
+        // Search dimensions (including matrix names)
         if ($type === 'all' || $type === 'dimensions') {
-            $sql = "SELECT id, label, dim_code, file_id, matrix_name FROM dimensions WHERE label LIKE :query";
+            $sql = "SELECT id, label, dim_code, file_id, matrix_name FROM dimensions WHERE (label LIKE :query OR matrix_name LIKE :query)";
             $params = [':query' => "%{$query}%"];
             
             if (!empty($file)) {
@@ -186,13 +186,13 @@ class DimensionAPI {
             }
         }
         
-        // Search options
+        // Search options (including matrix names)
         if ($type === 'all' || $type === 'options') {
             $sql = "SELECT o.id, o.label, o.nom_item_id, o.offset_value, o.file_id, 
                            d.label as dimension_label, d.matrix_name 
                     FROM options o 
                     JOIN dimensions d ON o.dimension_id = d.id 
-                    WHERE o.label LIKE :query";
+                    WHERE (o.label LIKE :query OR d.matrix_name LIKE :query)";
             $params = [':query' => "%{$query}%"];
             
             if (!empty($file)) {
