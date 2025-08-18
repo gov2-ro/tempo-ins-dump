@@ -1,3 +1,22 @@
+"""
+Data Profiler for Romanian INS CSV Files
+
+This script analyzes and profiles CSV files from the Romanian National Institute 
+of Statistics (INS) tempo-online.insse.ro database. It performs validation checks
+and detailed column profiling to understand the structure and content of datasets.
+
+Key features:
+- Validates CSV structure (checks for 'Valoare' column, UM/units column)
+- Profiles each column with type detection (integer, float, percent, string, temporal)
+- Detects and normalizes temporal columns (years, quarters, months)
+- Analyzes unit of measurement (UM) column uniformity
+- Optional integration with variable classification system
+- Generates detailed CSV and JSON reports for further processing
+
+The profiler is designed to handle the specific formatting conventions used
+in Romanian statistical data, including period representations and unit labels.
+"""
+
 import pandas as pd
 import os
 import argparse

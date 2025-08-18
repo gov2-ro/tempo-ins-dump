@@ -33,8 +33,12 @@ Some ideas of categorisation and display:
 
 
 ## Roadmap
-- [ ] run data profilers?
-- [ ] categorise type of tables / data / columns
+- [x] run data profilers?
+- [x] categorise type of tables / data / columns
+- [ ] specific checks
+    - [ ] is geo
+    - [ ] is time?
+    - [ ] has multiple um?
 - [ ] generate views/charts based on type of table / data
 - [ ] check/normalize/transform against Eurostat schema: [About Eurostat](https://ec.europa.eu/eurostat/data/database); [schema](https://ec.europa.eu/eurostat/cache/metadata/en/)
 
