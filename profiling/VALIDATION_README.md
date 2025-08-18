@@ -249,3 +249,39 @@ validator.add_rule(CountyNameRule())
 6. **Test your rules** - Validate rules work correctly with sample data
 
 Run `python validation_example.py` to see the system in action!
+
+
+# Roadmap / TODOs
+
+-[ ] check if all files:
+    -[ ] have a variable/column named 'Valoare'
+    -[ ] have a valoare (last), UM (measuring unit) (secoond to last) and time (third to last) type columns at least
+
+-[ ] column **label** checks 
+    -[ ] has '`', '|' or `,` in the name: label as `n-multiple?`
+    -[ ] has `Valoare` as the last column and all values are numbers
+    -[ ] geo Localitati|Judete|Macroregiuni, regiuni de dezvoltare si judete. has any of (regiuni, regiuni + dezvoltare, macroregiuni) - mark as such -> `n-geo` + `n-geo-localitati`, `n-geo-judete`, `n-geo-regiuni`, `n-geo-regiuni-dezvoltare`
+    -[ ] is time? is named: `Perioade|Luni|Trimestre|Ani` - mark it as `n-time`, `n-time-perioade`, `n-time-ani`, `n-time-luni` (it can have more types in one ex: [`n-time`, `n-time-ani`, `n-time-trimestre`])
+
+-[ ] columns **data/values** checks
+    -[ ] is time: has `Anul <year>` | `luna august 2025` | `Trimestrul IV 2004` values, same labeling as above `d-time`, `d-time-ani`, `d-time-trimestre`
+    -[ ] has masculin / feminin `gender` (always check with and against lowercase)
+        -[ ] has only masculin / feminin `gender-exclusive`
+    -[ ] has a preffix / suffix type of string (special case, multiple: time, where can have Perioade, Luni, Trimestre or grupe de varsta) `d-preffix`
+    -[ ] grupe vârstă `18-24 ani` ori vârstă (`9 ani`): `d-grupe-varsta`, `d-varste`
+    -[ ] has `rural` or `urban`? `d-mediu-geo` and `d-mediu-geo-exclusive` no other values besides rural/urban are found
+    -[ ] has `total`? - has `total-{string}` ? - add `total-{string}` to labels
+    -[ ] if detected kind, do all rows validate?
+    -[ ] geo
+        -[ ] check common județe names to guess if it contains judete (Bihor, Gorj, Dolj, Hunedoara, Ilfov, Prahova) - `d-geo-judete` and add also precentage foud (of the attached list) `d-geo-judete-{number}`
+        -[ ] check common localități names to guess if it contains localități (Tuzla, Aiud) similar to above `d-geo-localitati*`
+        -[ ] regiuni: has `Regiunea {string}`
+        -[ ] macroregiuni: has `MACROREGIUNEA {string}`
+        -[ ] if any of the above, label it as `d-geo`
+    -[ ] count values
+    -[x] count unique values
+
+-[ ] flags columns with inconsistencies between name and data guessed types
+
+column label guesses/labeling are prefixed with `n-` (from name), content guesses are prefixed with `d-` (from data)
+add a variable with all those flags as list, not a column for each.
