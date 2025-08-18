@@ -28,6 +28,7 @@ import numpy as np
 import json
 from variable_classifier import classify_headers_in_file
 from unit_classifier import UnitClassifier
+from validation_rules import DataValidator
 import math
 
 # Suppress verbose logs from libraries to keep output clean
@@ -82,12 +83,13 @@ def guess_column_type(column: pd.Series) -> str:
 def profile_and_validate_csv(file_path: str):
     """
     Performs validation checks and profiles each column of a given CSV file.
+    Now uses the modular validation system for data quality checks.
 
     Args:
         file_path (str): The path to the input CSV file.
 
     Returns:
-        pd.DataFrame: A DataFrame containing the profiling results.
+        tuple: (pd.DataFrame with profiling results, dict with file checks and validation results)
     """
     df = pd.read_csv(file_path)
 
@@ -101,108 +103,33 @@ def profile_and_validate_csv(file_path: str):
     columns = trim_headers(df.columns)
     df.columns = columns
 
-    # --- 1. Perform File-Level Validity Checks ---
-    # Normalize header names for robust matching
-    def normalize_header(h: str) -> str:
-        h = str(h)
-        h = unicodedata.normalize('NFKD', h).encode('ascii', 'ignore').decode('ascii')
-        h = h.lower().strip()
-        h = re.sub(r"[^a-z0-9:_ ]+", '', h)
-        h = re.sub(r"\s+", ' ', h)
-        return h
-
-    normalized_headers = [normalize_header(h) for h in columns]
-
-    # Detect last column being 'valoare' either by header or by content (numeric)
-    last_col_name = columns[-1]
-    normalized_last = normalize_header(last_col_name)
-    # consider header match OR if the last column is mostly numeric -> treat as 'Valoare'
-    try:
-        last_col_numeric_frac = pd.to_numeric(df[last_col_name], errors='coerce').notnull().mean()
-    except Exception:
-        last_col_numeric_frac = 0.0
-
-    check_valoare = (normalized_last == 'valoare') or normalized_last.startswith('valoare') or (last_col_numeric_frac >= 0.9)
-
-    # Detect UM column: prefer penultimate, otherwise search headers
+    # --- 1. Use Modular Validation System ---
+    validator = DataValidator()
+    validation_summary = validator.validate_dataframe_summary(df, file_path)
+    
+    # Extract file_checks for backward compatibility
+    file_checks = validation_summary.get("file_checks", {})
+    
+    # Add UM label extraction for backward compatibility
     um_col_name = None
-    penultimate_header = columns[-2]
-    penultimate_norm = normalize_header(penultimate_header)
-
-    if penultimate_norm.startswith('um') or penultimate_norm.startswith('um:') or penultimate_norm in ('unitati de masura', 'unitate de masura', 'unitati_masura'):
-        um_col_name = penultimate_header
-    else:
-        # search headers for something that starts with 'um' or contains 'unitat'
-        for orig, norm in zip(columns, normalized_headers):
-            if norm.startswith('um') or 'unitat' in norm or norm.startswith('unitati'):
-                um_col_name = orig
-                break
-
-    check_um_exists = um_col_name is not None
-
-    # Extract UM label from header (text after 'UM:' or 'Unitate de masura')
-    um_label = None
-    if check_um_exists:
+    for col in columns:
+        normalized = str(col).lower().strip()
+        if normalized.startswith('um') or 'unitat' in normalized:
+            um_col_name = col
+            break
+    
+    if um_col_name:
         raw_h = str(um_col_name).strip()
-        # remove leading 'UM: ' or variants
+        # Extract UM label from header (text after 'UM:' or 'Unitate de masura')
         s = re.sub(r'^(um[:\-\s]+)', '', raw_h, flags=re.I).strip()
-        # remove leading 'Unitate/Unitati de masura' (with optional colon)
         s = re.sub(r'^(unitati?|unitate)\s+(de\s+)?masura[:\-\s]*', '', s, flags=re.I).strip()
-        um_label = s or None
-
-    # Check UM column uniformity and extract representative unit value
-    um_uniformity = 'N/A'
-    um_value = 'N/A'
-    if check_um_exists:
-        # Work with non-null values as strings
-        um_series_raw = df[um_col_name].dropna().astype(str)
-
-        if um_series_raw.empty:
-            um_uniformity = 'No values'
-        else:
-            # Normalize unit values (remove 'UM:' prefix, collapse spaces, lowercase)
-            def normalize_um_value(s: str) -> str:
-                s = str(s).strip()
-                s = unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode('ascii')
-                # drop leading 'UM:' or similar labels
-                s = re.sub(r'^(um[:\-\s]+)', '', s, flags=re.I)
-                s = s.lower().strip()
-                s = re.sub(r"[^a-z0-9 ]+", ' ', s)
-                s = re.sub(r"\s+", ' ', s)
-                return s
-
-            normalized_values = um_series_raw.map(normalize_um_value)
-            # remove empty strings
-            valid = normalized_values.replace('', np.nan).dropna()
-
-            if valid.empty:
-                um_uniformity = 'No non-empty values'
-            else:
-                counts = valid.value_counts()
-                top_norm = counts.index[0]
-                top_count = counts.iloc[0]
-                frac = top_count / len(valid)
-
-                if frac >= 0.95:
-                    um_uniformity = 'Uniform'
-                    # pick the most common original raw value for that normalized value
-                    mask = normalized_values == top_norm
-                    try:
-                        candidate = um_series_raw[mask].str.strip().mode().iloc[0]
-                    except Exception:
-                        candidate = um_series_raw[mask].iloc[0].strip()
-                    # remove leading UM label if present
-                    candidate = re.sub(r'^(um[:\-\s]+)', '', candidate, flags=re.I).strip()
-                    um_value = candidate
-                else:
-                    um_uniformity = 'Not Uniform'
-                    # report top 3 original raw values (stripped)
-                    top_raw = um_series_raw.str.strip().value_counts().index[:3].tolist()
-                    top_raw = [re.sub(r'^(um[:\-\s]+)', '', t, flags=re.I).strip() for t in top_raw]
-                    um_value = ', '.join(top_raw)
-
-    # provide debug: if penultimate header looked like 'um' but was detected incorrectly due to spaces, log normalized headers
-    # (kept here for maintainers; not printed normally)
+        file_checks["um_label"] = s if s else None
+    else:
+        file_checks["um_label"] = None
+    
+    # Add validation results to file_checks
+    file_checks["validation_results"] = validation_summary.get("detailed_results", [])
+    file_checks["validation_summary"] = validation_summary.get("validation_summary", {})
 
     # --- 2. Profile Each Column ---
     # helper to detect period-like formats and return cleaned series + inferred period type
@@ -279,8 +206,15 @@ def profile_and_validate_csv(file_path: str):
             guessed_type = guess_column_type(column_data)
             use_series_for_sample = column_data
 
-        # Override guessed type for UM column
-        if check_um_exists and col_name == um_col_name:
+        # Override guessed type for UM column (check from validation results)
+        is_um_column = False
+        for validation_result in file_checks.get("validation_results", []):
+            if (validation_result.get("rule_id") == "um_column_check" and 
+                validation_result.get("column_name") == col_name):
+                is_um_column = True
+                break
+        
+        if is_um_column:
             guessed_type = 'um'
 
         nunique = None
@@ -304,15 +238,7 @@ def profile_and_validate_csv(file_path: str):
         
     # Convert per-column results to DataFrame
     df_results = pd.DataFrame(results)
-    # Build a separate, robust file_checks dict instead of summary rows
-    file_checks = {
-        "last_col_is_valoare": bool(check_valoare),
-        "um_col_exists": bool(check_um_exists),
-        "um_col_uniformity": um_uniformity,
-        "um_value": um_value,
-        "um_label": um_label,
-    }
-
+    
     return df_results, file_checks
 
 
