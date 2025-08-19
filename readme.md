@@ -13,6 +13,21 @@
 - `0-tempoins-fetch-indexes.py` - fetches ctgs and datasets from prev version: [tempoins](http://statistici.insse.ro/tempoins/) - with archived datasets
 - `browser/` - alpha GUI (to be deprecated for [Evidence](https://evidence.dev))
 
+query-dimensions.py
+
+#### Run the initial analysis
+python build-dimension-index.py
+
+#### Search for specific terms
+python build-dimension-index.py search "Perioade"
+python build-dimension-index.py search "Bucuresti" 
+
+#### Use the query helper for advanced searches
+python query-dimensions.py summary      # File overview
+python query-dimensions.py usage        # Dimension usage stats
+python query-dimensions.py search "grade" # Search options
+python query-dimensions.py file ZDP1321   # File details
+
 ## Profilers
 
 - `data_profiler.py`

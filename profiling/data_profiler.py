@@ -350,29 +350,45 @@ def main():
             output_filename = f"{os.path.splitext(base_name)[0]}_profile.csv"
             output_path = os.path.join(args.output_dir, output_filename)
 
+            # Check if we need to generate CSV profile
+            profile_df = None
+            file_checks = None
+            
             if os.path.exists(output_path) and not args.force:
-                # tqdm.write(f"Skipping '{base_name}': Profile already exists. Use -f to overwrite.")
-                continue
-
-            # Generate the profile
-            profile_out = profile_and_validate_csv(input_path)
-            # Backward compatibility: profile_and_validate_csv now returns (df, file_checks)
-            if isinstance(profile_out, tuple):
-                profile_df, file_checks = profile_out
+                # CSV profile exists, but we might still need data for orchestrate
+                if args.orchestrate:
+                    # Generate profile data (don't save CSV) for orchestrate
+                    profile_out = profile_and_validate_csv(input_path)
+                    if isinstance(profile_out, tuple):
+                        profile_df, file_checks = profile_out
+                    else:
+                        profile_df, file_checks = profile_out, {
+                            "last_col_is_valoare": None,
+                            "um_col_exists": None,
+                            "um_col_uniformity": None,
+                            "um_value": None,
+                        }
+                # else: skip completely if no orchestrate needed
             else:
-                profile_df, file_checks = profile_out, {
-                    "last_col_is_valoare": None,
-                    "um_col_exists": None,
-                    "um_col_uniformity": None,
-                    "um_value": None,
-                }
+                # Generate the profile
+                profile_out = profile_and_validate_csv(input_path)
+                # Backward compatibility: profile_and_validate_csv now returns (df, file_checks)
+                if isinstance(profile_out, tuple):
+                    profile_df, file_checks = profile_out
+                else:
+                    profile_df, file_checks = profile_out, {
+                        "last_col_is_valoare": None,
+                        "um_col_exists": None,
+                        "um_col_uniformity": None,
+                        "um_value": None,
+                    }
 
-            # Save the profile to a new CSV
-            profile_df.to_csv(output_path, index=False, quoting=1)
-            tqdm.write(f"Successfully generated profile for '{base_name}' -> '{output_path}'")
+                # Save the profile to a new CSV
+                profile_df.to_csv(output_path, index=False, quoting=1)
+                tqdm.write(f"Successfully generated profile for '{base_name}' -> '{output_path}'")
 
-                # If requested, also classify headers and write combined JSON
-            if args.orchestrate:
+            # If requested, also classify headers and write combined JSON
+            if args.orchestrate and profile_df is not None and file_checks is not None:
                 try:
                     headers_class = classify_headers_in_file(input_path, args.rules)
                 except Exception as e:
@@ -422,7 +438,7 @@ def main():
                 with open(combined_path, 'w', encoding='utf-8') as cf:
                     json.dump(combined, cf, ensure_ascii=False, indent=2)
                     print(combined_path)
-                # tqdm.write(f"Wrote combined JSON -> {combined_path}")
+                tqdm.write(f"Wrote combined JSON -> {combined_path}")
 
         except FileNotFoundError:
             tqdm.write(f"Error: Input file not found at '{input_path}'")
