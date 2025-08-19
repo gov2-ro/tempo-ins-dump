@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>INS Data Explorer</title>
+    <link rel="stylesheet" href="/explorer.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside class="sidebar">
+        <h2>Datasets</h2>
+        <input id="search" type="search" placeholder="Search…" />
+        <div class="flags">
+          <h3>Flags</h3>
+          <div id="flag-list"></div>
+        </div>
+      </aside>
+      <main class="content">
+        <header>
+          <div class="summary">
+            <span id="count">0</span> results
+          </div>
+        </header>
+        <section id="list" class="list"></section>
+        <section id="detail" class="detail hidden">
+          <button id="back">← Back</button>
+          <h2 id="title"></h2>
+          <pre id="meta"></pre>
+          <h3>Preview (first 15 rows)</h3>
+          <div class="table-wrapper">
+            <table id="preview"></table>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="/explorer.js"></script>
+  </body>
+</html>
