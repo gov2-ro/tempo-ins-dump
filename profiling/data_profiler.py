@@ -29,6 +29,12 @@ import json
 from variable_classifier import classify_headers_in_file
 from unit_classifier import UnitClassifier
 from validation_rules import DataValidator
+from ins_validation_rules import (
+    INSFileStructureRule, ColumnNameMultipleIndicatorRule, ColumnNameGeographicRule,
+    ColumnNameTemporalRule, ColumnDataTemporalRule, ColumnDataGenderRule,
+    ColumnDataGeographicRule, ColumnDataAgeGroupRule, ColumnDataResidenceRule,
+    ColumnDataTotalRule, ColumnDataPrefixSuffixRule, ColumnConsistencyRule
+)
 import math
 
 # Suppress verbose logs from libraries to keep output clean
@@ -132,6 +138,21 @@ def profile_and_validate_csv(file_path: str):
 
     # --- 1. Use Modular Validation System ---
     validator = DataValidator()
+    
+    # Add INS-specific validation rules
+    validator.add_rule(INSFileStructureRule())
+    validator.add_rule(ColumnNameMultipleIndicatorRule())
+    validator.add_rule(ColumnNameGeographicRule())
+    validator.add_rule(ColumnNameTemporalRule())
+    validator.add_rule(ColumnDataTemporalRule())
+    validator.add_rule(ColumnDataGenderRule())
+    validator.add_rule(ColumnDataGeographicRule())
+    validator.add_rule(ColumnDataAgeGroupRule())
+    validator.add_rule(ColumnDataResidenceRule())
+    validator.add_rule(ColumnDataTotalRule())
+    validator.add_rule(ColumnDataPrefixSuffixRule())
+    validator.add_rule(ColumnConsistencyRule())
+    
     validation_summary = validator.validate_dataframe_summary(df, file_path)
     
     # Extract file_checks for backward compatibility
@@ -255,12 +276,28 @@ def profile_and_validate_csv(file_path: str):
             else:
                 options_sample = f"High cardinality ({nunique})"
 
+        # Extract validation flags for this column from validation results
+        validation_flags = []
+        for validation_result in file_checks.get("validation_results", []):
+            validation_col_name = validation_result.get("column_name")
+            if validation_col_name is not None:
+                validation_col_name = validation_col_name.strip()
+                current_col_name = col_name.strip()
+                if validation_col_name == current_col_name:
+                    context = validation_result.get("context", {})
+                    flags = context.get("validation_flags", [])
+                    validation_flags.extend(flags)
+        
+        # Remove duplicates and sort
+        validation_flags = sorted(list(set(validation_flags)))
+
         results.append({
             "column_index": i,
             "column_name": col_name,
             "guessed_type": guessed_type,
             "unique_values_count": nunique,
-            "unique_values_sample": options_sample
+            "unique_values_sample": options_sample,
+            "validation_flags": validation_flags
         })
         
     # Convert per-column results to DataFrame
@@ -281,7 +318,7 @@ def main():
     )
     parser.add_argument(
         '-o', '--output_dir',
-        default='../data/profiling/datasets/',
+    default='data/profiling/datasets/',
         help="Directory to save the output CSV profile reports."
     )
     parser.add_argument(
@@ -306,8 +343,18 @@ def main():
     )
     parser.add_argument(
         '--combined_out',
-        default='../data/profiling/combined/',
+    default='data/profiling/combined/',
         help='Directory to write combined JSON outputs when --orchestrate is used.'
+    )
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='Enable debug output for troubleshooting validation flags extraction'
+    )
+    parser.add_argument(
+        '--quiet',
+        action='store_true',
+        help='Reduce console output (suppress non-critical info messages)'
     )
     
     args = parser.parse_args()
@@ -342,9 +389,10 @@ def main():
         print("No CSV files found in the specified paths. Exiting.")
         return
 
-    print(f"Found {len(all_csv_files)} CSV file(s) to process...")
+    if not args.quiet:
+        print(f"Found {len(all_csv_files)} CSV file(s) to process...")
     
-    for input_path in tqdm(all_csv_files, desc="Profiling Files"):
+    for input_path in tqdm(all_csv_files, desc="Profiling Files", disable=args.quiet):
         try:
             base_name = os.path.basename(input_path)
             output_filename = f"{os.path.splitext(base_name)[0]}_profile.csv"
@@ -385,7 +433,8 @@ def main():
 
                 # Save the profile to a new CSV
                 profile_df.to_csv(output_path, index=False, quoting=1)
-                tqdm.write(f"Successfully generated profile for '{base_name}' -> '{output_path}'")
+                if not args.quiet:
+                    tqdm.write(f"Successfully generated profile for '{base_name}' -> '{output_path}'")
 
             # If requested, also classify headers and write combined JSON
             if args.orchestrate and profile_df is not None and file_checks is not None:
@@ -417,6 +466,11 @@ def main():
                 for rec in profile_df.to_dict(orient='records'):
                     name = str(rec.get('column_name', '')).strip()
                     cls = class_map.get(name, None)
+                    
+                    # DEBUG: Print validation flags (only if debug enabled)
+                    if args.debug:
+                        print(f"DEBUG: Column '{name}' has validation_flags: {rec.get('validation_flags', 'MISSING')}")
+                    
                     if cls:
                         rec.update(cls)
                     # Drop non-relevant or NaN fields for cleaner JSON
@@ -426,26 +480,63 @@ def main():
                     uvs = rec.get('unique_values_sample', None)
                     if uvs is None:
                         rec.pop('unique_values_sample', None)
+                        
+                    # DEBUG: Print final validation flags (only if debug enabled)
+                    if args.debug:
+                        print(f"DEBUG: Final column '{name}' validation_flags: {rec.get('validation_flags', 'MISSING')}")
+                    
                     merged_profile.append(rec)
 
                 combined = {
                     "source_csv": os.path.abspath(input_path),
                     "file_checks": convert_numpy_types(file_checks),
-                    "columns": merged_profile
+                    "columns": convert_numpy_types(merged_profile)
                 }
 
+                # DEBUG: Check combined structure before writing JSON (only if debug enabled)
+                if args.debug:
+                    print(f"DEBUG: Combined JSON first column keys: {list(combined['columns'][0].keys())}")
+                    print(f"DEBUG: Combined JSON first column validation_flags: {combined['columns'][0].get('validation_flags', 'MISSING')}")
+
                 combined_path = os.path.join(args.combined_out, os.path.splitext(base_name)[0] + '.json')
-                with open(combined_path, 'w', encoding='utf-8') as cf:
-                    json.dump(combined, cf, ensure_ascii=False, indent=2)
-                    print(combined_path)
-                tqdm.write(f"Wrote combined JSON -> {combined_path}")
+                if args.debug:
+                    print(f"DEBUG: Writing to path: {combined_path}")
+                    print(f"DEBUG: Absolute path: {os.path.abspath(combined_path)}")
+                try:
+                    with open(combined_path, 'w', encoding='utf-8') as cf:
+                        json.dump(combined, cf, ensure_ascii=False, indent=2)
+                        print(combined_path)
+                    # if not args.quiet:
+                        # tqdm.write(f"Wrote combined JSON -> {combined_path}")
+                    
+                    # DEBUG: Read the file back immediately to confirm (only if debug enabled)
+                    if args.debug:
+                        with open(combined_path, 'r', encoding='utf-8') as rf:
+                            readback = json.load(rf)
+                        print(f"DEBUG: File written. Readback first column keys: {list(readback['columns'][0].keys())}")
+                        print(f"DEBUG: Readback first column validation_flags: {readback['columns'][0].get('validation_flags', 'MISSING')}")
+                    
+                except Exception as json_error:
+                    print(f"JSON WRITING ERROR: {json_error}")
+                    print(f"Problem data type: {type(combined['columns'][0].get('validation_flags'))}")
+                    # Try to fix and write without validation_flags for now
+                    for col in combined['columns']:
+                        if 'validation_flags' in col:
+                            del col['validation_flags']
+                    try:
+                        with open(combined_path, 'w', encoding='utf-8') as cf:
+                            json.dump(combined, cf, ensure_ascii=False, indent=2)
+                        print(f"Wrote JSON without validation_flags: {combined_path}")
+                    except Exception as e2:
+                        print(f"Still failed: {e2}")
 
         except FileNotFoundError:
             tqdm.write(f"Error: Input file not found at '{input_path}'")
         except Exception as e:
             tqdm.write(f"Error processing '{base_name}': {e}")
             
-    print("\nProfiling complete.")
+    if not args.quiet:
+        print("\nProfiling complete.")
 
 
 if __name__ == "__main__":
