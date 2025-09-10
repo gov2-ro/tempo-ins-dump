@@ -23,6 +23,43 @@ header { display: flex; align-items: center; justify-content: space-between; mar
   overflow: auto;
 }
 
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.navigation {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#prev-dataset, #next-dataset, #back {
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+#prev-dataset:hover, #next-dataset:hover, #back:hover {
+  background: #f5f5f5;
+}
+
+#prev-dataset:disabled, #next-dataset:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#dataset-position {
+  font-size: 13px;
+  color: #666;
+  margin: 0 5px;
+}
+
 .detail-content {
   display: flex;
   gap: 20px;

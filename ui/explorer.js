@@ -24,6 +24,7 @@ const state = {
   flags: new Set(),
   items: [],
   flagsIndex: {},
+  currentDatasetIndex: -1, // Track current position in the list
 }
 
 function renderFlags() {
@@ -75,6 +76,9 @@ async function openDetail(id) {
   // Update URL hash
   window.location.hash = id
   
+  // Find and store the current dataset index
+  state.currentDatasetIndex = state.items.findIndex(item => item.id === id)
+  
   const data = await fetchJSON(`/api/datasets/${id}`)
   const prev = await fetchJSON(`/api/datasets/${id}/preview`).catch(() => ({ 
     rows: [], 
@@ -87,6 +91,9 @@ async function openDetail(id) {
   document.getElementById('list').innerHTML = ''
   const detail = document.getElementById('detail')
   detail.classList.remove('hidden')
+  
+  // Update navigation buttons
+  updateNavigationButtons()
   
   // Show ID and descriptive name in detail title
   const filename = data.source_csv ? data.source_csv.split('/').pop() : `${id}.csv`
@@ -160,6 +167,41 @@ async function openDetail(id) {
       $('#preview').DataTable().destroy()
     }
     renderList()
+  }
+  
+  // Add navigation button event listeners
+  document.getElementById('prev-dataset').onclick = () => navigateToDataset(-1)
+  document.getElementById('next-dataset').onclick = () => navigateToDataset(1)
+}
+
+function updateNavigationButtons() {
+  const prevBtn = document.getElementById('prev-dataset')
+  const nextBtn = document.getElementById('next-dataset')
+  const positionSpan = document.getElementById('dataset-position')
+  
+  // Update position display
+  if (state.currentDatasetIndex >= 0 && state.items.length > 0) {
+    positionSpan.textContent = `${state.currentDatasetIndex + 1} of ${state.items.length}`
+  } else {
+    positionSpan.textContent = ''
+  }
+  
+  // Enable/disable buttons based on position
+  prevBtn.disabled = state.currentDatasetIndex <= 0
+  nextBtn.disabled = state.currentDatasetIndex >= state.items.length - 1
+}
+
+function navigateToDataset(direction) {
+  let newIndex = state.currentDatasetIndex + direction
+  
+  // Bounds checking
+  if (newIndex < 0 || newIndex >= state.items.length) {
+    return
+  }
+  
+  const nextDataset = state.items[newIndex]
+  if (nextDataset) {
+    openDetail(nextDataset.id)
   }
 }
 

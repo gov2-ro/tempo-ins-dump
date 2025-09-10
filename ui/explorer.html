@@ -26,7 +26,14 @@
         </header>
         <section id="list" class="list"></section>
         <section id="detail" class="detail hidden">
-          <button id="back">← Back</button>
+          <div class="detail-header">
+            <button id="back">← Back</button>
+            <div class="navigation">
+              <button id="prev-dataset" title="Previous dataset">‹ Prev</button>
+              <span id="dataset-position"></span>
+              <button id="next-dataset" title="Next dataset">Next ›</button>
+            </div>
+          </div>
           <h2 id="title"></h2>
           <div class="detail-content">
             <div class="json-container">
