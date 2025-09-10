@@ -111,6 +111,23 @@ async function openDetail(id) {
   // Render JSON with pretty formatting
   $('#json-viewer').html(`<pre>${JSON.stringify(data, null, 2)}</pre>`)
 
+  // Generate and render column analysis
+  renderColumnAnalysis(data)
+
+  // Add toggle functionality for JSON viewer
+  document.getElementById('toggle-json').onclick = () => {
+    const jsonViewer = document.getElementById('json-viewer')
+    const toggleBtn = document.getElementById('toggle-json')
+    
+    if (jsonViewer.style.display === 'none') {
+      jsonViewer.style.display = 'block'
+      toggleBtn.textContent = 'Hide'
+    } else {
+      jsonViewer.style.display = 'none'
+      toggleBtn.textContent = 'Show'
+    }
+  }
+
   // Destroy existing DataTable if it exists
   if ($.fn.DataTable.isDataTable('#preview')) {
     $('#preview').DataTable().destroy()
@@ -265,3 +282,76 @@ init().catch(err => {
   console.error(err)
   alert('Failed to initialize explorer: ' + err.message)
 })
+
+function getFlagType(flag) {
+  if (flag.includes('time')) return 'flag-time'
+  if (flag.includes('geo')) return 'flag-geo'
+  return 'flag-general'
+}
+
+function renderColumnAnalysis(data) {
+  const summaryContainer = document.getElementById('data-summary')
+  if (!summaryContainer || !data) return
+
+  const columns = data.columns || []
+  const fileChecks = data.file_checks || {}
+  const validationResults = fileChecks.validation_results || []
+  
+  let html = `
+    <div class="analysis-grid">
+      <div class="overview-card">
+        <div class="card-header">
+          <h4>📊 Dataset Overview</h4>
+        </div>
+        <div class="card-content">
+          <div class="overview-stats">
+            <div class="stat-item"><span>Columns:</span> <strong>${columns.length}</strong></div>
+            <div class="stat-item"><span>Unit Consistency:</span> <span class="status-${fileChecks.um_col_uniformity === 'Uniform' ? 'good' : 'warning'}">${fileChecks.um_col_uniformity || 'Unknown'}</span></div>
+            <div class="stat-item"><span>Unit:</span> <strong>${fileChecks.um_label || 'N/A'}</strong></div>
+            <div class="stat-item"><span>Validation:</span> <span class="status-good">${fileChecks.validation_summary?.info || 0} checks passed</span></div>
+          </div>
+        </div>
+      </div>
+  `
+  
+  columns.forEach(col => {
+    const flags = col.validation_flags || []
+    const sample = col.unique_values_sample && col.unique_values_sample !== 'High cardinality (30)' 
+      ? col.unique_values_sample.split(' | ').slice(0, 3).join(', ') + (col.unique_values_sample.split(' | ').length > 3 ? '...' : '')
+      : null
+      
+    // Find validation messages for this column
+    const columnMessages = validationResults.filter(result => result.column_name === col.column_name)
+    
+    html += `
+      <div class="column-card">
+        <div class="card-header">
+          <h4>${col.column_name}</h4>
+          <span class="column-type">${col.guessed_type || 'unknown'}</span>
+        </div>
+        <div class="card-content">
+          <div class="column-stat">
+            <span>Unique Values:</span> <strong>${(col.unique_values_count || 0).toLocaleString()}</strong>
+          </div>
+          ${sample ? `<div class="column-stat sample-data"><span>Sample:</span> <code>${sample}</code></div>` : ''}
+          ${flags.length > 0 ? `
+            <div class="column-flags">
+              ${flags.map(flag => `<span class="flag-badge ${getFlagType(flag)}">${flag}</span>`).join(' ')}
+            </div>
+          ` : ''}
+          ${columnMessages.length > 0 ? `
+            <div class="column-messages">
+              ${columnMessages.map(msg => `<div class="validation-msg ${msg.severity}">${msg.message}</div>`).join('')}
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `
+  })
+  
+  html += `
+    </div>
+  `
+  
+  summaryContainer.innerHTML = html
+}

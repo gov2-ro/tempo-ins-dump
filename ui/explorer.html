@@ -36,14 +36,20 @@
           </div>
           <h2 id="title"></h2>
           <div class="detail-content">
-            <div class="json-container">
-              <h3>Full JSON</h3>
-              <div id="json-viewer"></div>
+            <div class="data-summary-container">
+              <h3>Dataset Analysis</h3>
+              <div id="data-summary" class="data-summary-widget"></div>
             </div>
-            <div class="table-container">
-              <h3 id="preview-title">Preview</h3>
-              <div class="table-wrapper">
-                <table id="preview" class="display" style="width:100%"></table>
+            <div class="table-and-json-container">
+              <div class="table-container">
+                <h3 id="preview-title">Preview</h3>
+                <div class="table-wrapper">
+                  <table id="preview" class="display" style="width:100%"></table>
+                </div>
+              </div>
+              <div class="json-container">
+                <h3>Full JSON <button id="toggle-json" class="toggle-btn">Show</button></h3>
+                <div id="json-viewer" style="display: none;"></div>
               </div>
             </div>
           </div>
