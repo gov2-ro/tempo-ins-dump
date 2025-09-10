@@ -159,6 +159,7 @@ def list_datasets():
             hay = ' '.join([
                 it.get('id', ''),
                 it.get('name', ''),
+                it.get('matrix_name', '') or '',
                 it.get('um_label', '') or ''
             ]).lower()
             if q not in hay:
@@ -221,9 +222,22 @@ def dataset_preview(ds_id: str):
     if not source_csv or not os.path.exists(source_csv):
         abort(404, description='Source CSV not reachable')
     try:
-        df = pd.read_csv(source_csv, nrows=15)
+        # Check file size to determine how many rows to load
+        file_size = os.path.getsize(source_csv)
+        max_rows = None  # Load all rows if file < 4MB
+        if file_size > 4 * 1024 * 1024:  # 4MB
+            max_rows = 400
+        
+        df = pd.read_csv(source_csv, nrows=max_rows)
         rows = df.to_dict(orient='records')
-        return jsonify({'rows': rows, 'columns': list(df.columns)})
+        
+        return jsonify({
+            'rows': rows, 
+            'columns': list(df.columns),
+            'total_rows': len(rows),
+            'file_size_mb': round(file_size / (1024 * 1024), 2),
+            'is_truncated': max_rows is not None
+        })
     except Exception as e:
         abort(500, description=f'Failed to read CSV preview: {e}')
 

@@ -6,6 +6,7 @@
     <title>INS Data Explorer</title>
     <link rel="stylesheet" href="/explorer.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery-json-viewer/1.4.0/jquery.json-viewer.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
   </head>
   <body>
     <div id="app">
@@ -33,9 +34,9 @@
               <div id="json-viewer"></div>
             </div>
             <div class="table-container">
-              <h3>Preview (first 15 rows)</h3>
+              <h3 id="preview-title">Preview</h3>
               <div class="table-wrapper">
-                <table id="preview"></table>
+                <table id="preview" class="display" style="width:100%"></table>
               </div>
             </div>
           </div>
@@ -44,6 +45,7 @@
     </div>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-json-viewer/1.4.0/jquery.json-viewer.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <script src="/explorer.js"></script>
   </body>
 </html>

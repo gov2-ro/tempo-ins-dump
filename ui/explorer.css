@@ -59,3 +59,48 @@ header { display: flex; align-items: center; justify-content: space-between; mar
 
 #preview th, #preview td { border: 1px solid #eee; padding: 4px 6px; white-space: nowrap; }
 #preview th { background: #f7f7f7; position: sticky; top: 0; }
+
+/* DataTables styling integration */
+.dataTables_wrapper {
+  font-size: 13px;
+}
+
+.dataTables_length select,
+.dataTables_filter input {
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.dataTables_info,
+.dataTables_paginate {
+  margin-top: 10px;
+}
+
+.dataTables_paginate .paginate_button {
+  padding: 6px 12px;
+  margin: 0 2px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+  text-decoration: none;
+}
+
+.dataTables_paginate .paginate_button:hover {
+  background: #f5f5f5;
+}
+
+.dataTables_paginate .paginate_button.current {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+
+.dt-body-nowrap {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}

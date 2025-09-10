@@ -72,8 +72,17 @@ async function refresh() {
 }
 
 async function openDetail(id) {
+  // Update URL hash
+  window.location.hash = id
+  
   const data = await fetchJSON(`/api/datasets/${id}`)
-  const prev = await fetchJSON(`/api/datasets/${id}/preview`).catch(() => ({ rows: [], columns: [] }))
+  const prev = await fetchJSON(`/api/datasets/${id}/preview`).catch(() => ({ 
+    rows: [], 
+    columns: [], 
+    total_rows: 0, 
+    file_size_mb: 0, 
+    is_truncated: false 
+  }))
 
   document.getElementById('list').innerHTML = ''
   const detail = document.getElementById('detail')
@@ -84,28 +93,72 @@ async function openDetail(id) {
   const titleText = data.matrix_name ? `${id} - ${data.matrix_name}` : `${id} - ${filename}`
   document.getElementById('title').textContent = titleText
   
+  // Update preview title with row count and file size info
+  const previewTitle = document.getElementById('preview-title')
+  let titleSuffix = `(${prev.total_rows} rows, ${prev.file_size_mb}MB)`
+  if (prev.is_truncated) {
+    titleSuffix = `(showing top 400 of many rows, ${prev.file_size_mb}MB)`
+  }
+  previewTitle.textContent = `Preview ${titleSuffix}`
+  
   // Render JSON with pretty formatting
   $('#json-viewer').html(`<pre>${JSON.stringify(data, null, 2)}</pre>`)
 
-  // Render table
+  // Destroy existing DataTable if it exists
+  if ($.fn.DataTable.isDataTable('#preview')) {
+    $('#preview').DataTable().destroy()
+  }
+
+  // Clear and prepare table
   const tbl = document.getElementById('preview')
   tbl.innerHTML = ''
-  const thead = el('thead')
-  const trh = el('tr')
-  for (const c of prev.columns) trh.appendChild(el('th', { text: c }))
-  thead.appendChild(trh)
-  tbl.appendChild(thead)
 
-  const tbody = el('tbody')
-  for (const row of prev.rows) {
-    const tr = el('tr')
-    for (const c of prev.columns) tr.appendChild(el('td', { text: row[c] == null ? '' : String(row[c]) }))
-    tbody.appendChild(tr)
+  if (prev.rows.length > 0) {
+    // Create table structure
+    const thead = el('thead')
+    const trh = el('tr')
+    for (const c of prev.columns) {
+      trh.appendChild(el('th', { text: c }))
+    }
+    thead.appendChild(trh)
+    tbl.appendChild(thead)
+
+    const tbody = el('tbody')
+    for (const row of prev.rows) {
+      const tr = el('tr')
+      for (const c of prev.columns) {
+        tr.appendChild(el('td', { text: row[c] == null ? '' : String(row[c]) }))
+      }
+      tbody.appendChild(tr)
+    }
+    tbl.appendChild(tbody)
+
+    // Initialize DataTable
+    $('#preview').DataTable({
+      pageLength: 25,
+      lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+      scrollX: true,
+      columnDefs: [
+        {
+          targets: '_all',
+          className: 'dt-body-nowrap'
+        }
+      ]
+    })
+  } else {
+    // No data available
+    tbl.innerHTML = '<tr><td colspan="100%">No data available</td></tr>'
   }
-  tbl.appendChild(tbody)
 
   document.getElementById('back').onclick = () => {
+    // Clear URL hash
+    window.location.hash = ''
+    
     detail.classList.add('hidden')
+    // Destroy DataTable when going back
+    if ($.fn.DataTable.isDataTable('#preview')) {
+      $('#preview').DataTable().destroy()
+    }
     renderList()
   }
 }
@@ -134,7 +187,36 @@ async function init() {
     refresh()
   })
 
+  // Handle browser back/forward navigation
+  window.addEventListener('hashchange', handleHashChange)
+  
   await refresh()
+  
+  // Check if there's a hash in the URL on page load
+  handleHashChange()
+}
+
+function handleHashChange() {
+  const hash = window.location.hash.slice(1) // Remove the # character
+  if (hash) {
+    // Open the dataset if hash is present
+    openDetail(hash).catch(err => {
+      console.error('Failed to load dataset from hash:', err)
+      // If dataset doesn't exist, clear the hash and show the list
+      window.location.hash = ''
+      const detail = document.getElementById('detail')
+      detail.classList.add('hidden')
+      renderList()
+    })
+  } else {
+    // No hash, show the list
+    const detail = document.getElementById('detail')
+    detail.classList.add('hidden')
+    if ($.fn.DataTable.isDataTable('#preview')) {
+      $('#preview').DataTable().destroy()
+    }
+    renderList()
+  }
 }
 
 init().catch(err => {
