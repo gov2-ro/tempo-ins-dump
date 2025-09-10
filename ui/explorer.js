@@ -43,7 +43,11 @@ function renderList() {
 
   for (const it of state.items) {
     const card = el('div', { class: 'card', 'data-id': it.id })
-    card.appendChild(el('div', { class: 'title', text: it.name }))
+    
+    // Create title with ID and descriptive name
+    const titleText = it.matrix_name ? `${it.id} - ${it.matrix_name}` : `${it.id} - ${it.name}`
+    card.appendChild(el('div', { class: 'title', text: titleText }))
+    
     const meta = [
       it.um_label ? `UM: ${it.um_label}` : null,
       it.columns_count ? `${it.columns_count} cols` : null,
@@ -74,11 +78,14 @@ async function openDetail(id) {
   document.getElementById('list').innerHTML = ''
   const detail = document.getElementById('detail')
   detail.classList.remove('hidden')
-  document.getElementById('title').textContent = data.source_csv ? data.source_csv.split('/').pop() : id
-  document.getElementById('meta').textContent = JSON.stringify({
-    file_checks: data.file_checks,
-    columns: data.columns.slice(0, 5)
-  }, null, 2)
+  
+  // Show ID and descriptive name in detail title
+  const filename = data.source_csv ? data.source_csv.split('/').pop() : `${id}.csv`
+  const titleText = data.matrix_name ? `${id} - ${data.matrix_name}` : `${id} - ${filename}`
+  document.getElementById('title').textContent = titleText
+  
+  // Render JSON with pretty formatting
+  $('#json-viewer').html(`<pre>${JSON.stringify(data, null, 2)}</pre>`)
 
   // Render table
   const tbl = document.getElementById('preview')

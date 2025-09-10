@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>INS Data Explorer</title>
     <link rel="stylesheet" href="/explorer.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery-json-viewer/1.4.0/jquery.json-viewer.min.css">
   </head>
   <body>
     <div id="app">
@@ -26,14 +27,23 @@
         <section id="detail" class="detail hidden">
           <button id="back">← Back</button>
           <h2 id="title"></h2>
-          <pre id="meta"></pre>
-          <h3>Preview (first 15 rows)</h3>
-          <div class="table-wrapper">
-            <table id="preview"></table>
+          <div class="detail-content">
+            <div class="json-container">
+              <h3>Full JSON</h3>
+              <div id="json-viewer"></div>
+            </div>
+            <div class="table-container">
+              <h3>Preview (first 15 rows)</h3>
+              <div class="table-wrapper">
+                <table id="preview"></table>
+              </div>
+            </div>
           </div>
         </section>
       </main>
     </div>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-json-viewer/1.4.0/jquery.json-viewer.min.js"></script>
     <script src="/explorer.js"></script>
   </body>
 </html>

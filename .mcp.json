@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "browsermcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@browsermcp/mcp@latest"],
+      "env": {
+        "BROWSER_HEADLESS": "false",
+        "BROWSER_DEFAULT_TIMEOUT": "30000"
+      }
+    }
+  }
+}

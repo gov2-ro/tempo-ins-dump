@@ -16,6 +16,46 @@ header { display: flex; align-items: center; justify-content: space-between; mar
 .card .meta { color: #666; font-size: 12px; margin-top: 4px; }
 .hidden { display: none; }
 .table-wrapper { overflow: auto; border: 1px solid #eee; border-radius: 6px; }
-#preview { border-collapse: collapse; width: 100%; font-size: 12px; }
+.detail {
+  padding: 20px;
+  background: #fff;
+  height: 100%;
+  overflow: auto;
+}
+
+.detail-content {
+  display: flex;
+  gap: 20px;
+  height: calc(100vh - 200px);
+}
+
+.json-container,
+.table-container {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid #ddd;
+  padding: 15px;
+  background: #fdfdfd;
+}
+
+.json-container h3,
+.table-container h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.json-container pre {
+  background-color: #f4f4f4;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 15px;
+  overflow-x: auto;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
 #preview th, #preview td { border: 1px solid #eee; padding: 4px 6px; white-space: nowrap; }
 #preview th { background: #f7f7f7; position: sticky; top: 0; }

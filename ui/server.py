@@ -68,6 +68,9 @@ def _load_dataset(path: Path) -> Dict[str, Any]:
 
 def _index_datasets() -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
+    # Path to metadata files
+    meta_dir = REPO_ROOT / 'data' / '2-metas' / 'ro'
+    
     for p in sorted(COMBINED_DIR.glob('*.json')):
         try:
             data = _load_dataset(p)
@@ -75,6 +78,17 @@ def _index_datasets() -> List[Dict[str, Any]]:
             source_csv = data.get('source_csv')
             file_checks = data.get('file_checks', {})
             vsummary = file_checks.get('validation_summary', {})
+
+            # Try to load the matrix name from metadata
+            matrix_name = None
+            meta_file = meta_dir / f'{ds_id}.json'
+            if meta_file.exists():
+                try:
+                    with meta_file.open('r', encoding='utf-8') as f:
+                        meta_data = json.load(f)
+                        matrix_name = meta_data.get('matrixName')
+                except Exception as e:
+                    logger.warning("Failed to load metadata for %s: %s", ds_id, e)
 
             # Aggregate flags across columns
             flags = set()
@@ -85,6 +99,7 @@ def _index_datasets() -> List[Dict[str, Any]]:
             items.append({
                 'id': ds_id,
                 'name': os.path.basename(source_csv) if source_csv else ds_id,
+                'matrix_name': matrix_name,  # Add the descriptive name
                 'source_csv': source_csv,
                 'um_label': file_checks.get('um_label'),
                 'validation_summary': vsummary,
@@ -181,6 +196,18 @@ def dataset_detail(ds_id: str):
     if not path.exists():
         abort(404, description='Dataset not found')
     data = _load_dataset(path)
+    
+    # Add matrix name from metadata
+    meta_dir = REPO_ROOT / 'data' / '2-metas' / 'ro'
+    meta_file = meta_dir / f'{ds_id}.json'
+    if meta_file.exists():
+        try:
+            with meta_file.open('r', encoding='utf-8') as f:
+                meta_data = json.load(f)
+                data['matrix_name'] = meta_data.get('matrixName')
+        except Exception as e:
+            logger.warning("Failed to load metadata for %s: %s", ds_id, e)
+    
     return jsonify(data)
 
 

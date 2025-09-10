@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Romanian Statistical Datasets Navigator - TEMPO INS</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                <div class="logo">📊</div>
+                <span>Romanian Statistical Datasets Navigator</span>
+            </h1>
+            <p class="subtitle">An interactive explorer for the National Institute of Statistics (INS) - TEMPO Database</p>
+            <div class="stats-bar">
+                <div class="stat">
+                    <span>📈 Total Datasets:</span>
+                    <span class="stat-value" id="total-count">-</span>
+                </div>
+                <div class="stat">
+                    <span>🔍 Displaying:</span>
+                    <span class="stat-value" id="filtered-count">-</span>
+                </div>
+                <div class="stat">
+                    <span>📁 Categories:</span>
+                    <span class="stat-value" id="category-count">-</span>
+                </div>
+            </div>
+        </header>
+        
+        <div class="main-content">
+            <aside class="sidebar">
+                <div class="tree-container">
+                    <div class="tree-header">📂 Navigate by Category</div>
+                    <div id="tree-root">
+                        <div class="loading">
+                            <div class="loading-spinner"></div>
+                            <div>Loading categories...</div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+            
+            <main class="content-area">
+                <div class="filters">
+                    <div class="filter-group">
+                        <div id="themes-bar" class="themes-bar" aria-label="Themes filter" role="group">
+                            <!-- Theme chips will render here -->
+                        </div>
+                        <div class="search-container">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="search" placeholder="Search datasets by code, title, or keywords...">
+                        </div>
+                    </div>
+                    <div id="keywords-bar" class="keywords-bar" aria-label="Keyword filter" role="group" style="display:none;">
+                        <!-- Keyword chips will render here -->
+                    </div>
+                </div>
+                
+                <div class="datasets-container">
+                    <div id="breadcrumb" class="path-breadcrumb" style="display: none;"></div>
+                    <div id="datasets-content">
+                        <!-- Datasets will be rendered here -->
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <!-- Modal for Detailed View -->
+    <div id="modal" class="modal-backdrop">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title" class="modal-title">Dataset Details</h3>
+                <button id="modal-close" class="modal-close">&times;</button>
+            </div>
+            <div id="modal-body" class="modal-body">
+                <!-- Modal content will be generated here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
