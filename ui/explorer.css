@@ -64,7 +64,7 @@ header { display: flex; align-items: center; justify-content: space-between; mar
   display: flex;
   flex-direction: column;
   gap: 20px;
-  height: calc(100vh - 200px);
+  /* height: calc(100vh - 200px); */
 }
 
 .data-summary-container {

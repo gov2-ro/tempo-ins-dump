@@ -1,85 +1,65 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>INS Data Explorer - Static</title>
-  <link rel="stylesheet" href="explorer.css">
-  
-  <!-- DataTables CSS -->
-  <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
-  
-  <!-- jQuery and DataTables JS (lightweight dependencies) -->
-  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-  
-  <!-- CSV Parser -->
-  <script src="csv-parser.js"></script>
-</head>
-<body>
-  <div class="container">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="section">
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>INS Data Explorer - Static</title>
+    <link rel="stylesheet" href="explorer.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery-json-viewer/1.4.0/jquery.json-viewer.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+  </head>
+  <body>
+    <div id="app">
+      <aside class="sidebar">
         <h2>Datasets</h2>
-        <input type="text" id="search" placeholder="Search…">
-        <div class="count-display">
-          <span id="count">0</span> results
+        <input id="search" type="search" placeholder="Search…" />
+        <div class="flags">
+          <h3>Flags</h3>
+          <div id="flag-list"></div>
         </div>
-      </div>
-      
-      <div class="section">
-        <h3>Flags</h3>
-        <div id="flag-list" class="flag-container"></div>
-      </div>
-    </aside>
-
-    <!-- Main content -->
-    <main class="main">
-      <!-- Dataset list -->
-      <div id="list" class="dataset-list"></div>
-
-      <!-- Dataset detail -->
-      <div id="detail" class="detail hidden">
-        <!-- Navigation header -->
-        <div class="detail-header">
-          <button id="back" class="nav-button">← Back</button>
-          <div class="navigation-controls">
-            <button id="prev-dataset" class="nav-button">‹ Prev</button>
-            <span id="dataset-position" class="position-indicator"></span>
-            <button id="next-dataset" class="nav-button">Next ›</button>
+      </aside>
+      <main class="content">
+        <header>
+          <div class="summary">
+            <span id="count">0</span> results
           </div>
-        </div>
-
-        <h2 id="title"></h2>
-        
-        <!-- Data Summary Widget -->
-        <div class="section">
-          <h3>Dataset Analysis</h3>
-          <div class="data-summary-widget">
-            <div id="data-summary" class="data-summary-container"></div>
+        </header>
+        <section id="list" class="list"></section>
+        <section id="detail" class="detail hidden">
+          <div class="detail-header">
+            <button id="back">← Back</button>
+            <div class="navigation">
+              <button id="prev-dataset" title="Previous dataset">‹ Prev</button>
+              <span id="dataset-position"></span>
+              <button id="next-dataset" title="Next dataset">Next ›</button>
+            </div>
           </div>
-        </div>
-
-        <!-- Preview -->
-        <div class="section">
-          <h3 id="preview-title">Preview</h3>
-          <table id="preview" class="display" style="width:100%"></table>
-        </div>
-
-        <!-- JSON viewer -->
-        <div class="section">
-          <h3>
-            Full JSON 
-            <button id="toggle-json" class="toggle-button">Show</button>
-          </h3>
-          <div id="json-viewer" style="display: none;"></div>
-        </div>
-      </div>
-    </main>
-  </div>
-
-  <!-- Load static explorer -->
-  <script src="explorer-static.js"></script>
-</body>
+          <h2 id="title"></h2>
+          <div class="detail-content">
+            <div class="data-summary-container">
+              <h3>Dataset Analysis</h3>
+              <div id="data-summary" class="data-summary-widget"></div>
+            </div>
+            <div class="table-and-json-container">
+              <div class="table-container">
+                <h3 id="preview-title">Preview</h3>
+                <div class="table-wrapper">
+                  <table id="preview" class="display" style="width:100%"></table>
+                </div>
+              </div>
+              <div class="json-container">
+                <h3>Full JSON <button id="toggle-json" class="toggle-btn">Show</button></h3>
+                <div id="json-viewer" style="display: none;"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-json-viewer/1.4.0/jquery.json-viewer.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="csv-parser.js"></script>
+    <script src="explorer-static.js"></script>
+  </body>
 </html>
