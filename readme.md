@@ -73,7 +73,8 @@ ui/dim-browser.html
 
 ### Roadmap
 - [x] filter datasets by dimension
-- [ ] add context nav
-- [ ] permalinks #variables in url
-- [ ] combine labels
+- [x] add context info
+- [x] permalinks #variables in url
+- [x] combine labels/dimensions
 - [x] show dataset preview
+- [x] collapse definition

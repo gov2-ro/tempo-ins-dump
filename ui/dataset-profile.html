@@ -182,6 +182,44 @@
             line-height: 1.4;
         }
 
+        .collapsible-text {
+            font-size: 11px;
+            color: #333;
+            line-height: 1.5;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            transition: max-height 0.3s ease;
+        }
+
+        .collapsible-text.collapsed {
+            max-height: 8em;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .collapsible-text.collapsed::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 2em;
+            background: linear-gradient(to bottom, transparent, white);
+        }
+
+        .expand-toggle {
+            font-size: 11px;
+            color: #1976d2;
+            cursor: pointer;
+            margin-top: 5px;
+            user-select: none;
+            font-weight: 600;
+        }
+
+        .expand-toggle:hover {
+            color: #2196f3;
+        }
+
         .ancestor-item {
             padding: 2px 0;
         }
@@ -227,7 +265,7 @@
 </head>
 <body>
     <div class="sidebar">
-        <a href="dim-browser.html" class="back-link">← Back to Browser</a>
+        <a href="#" id="back-link" class="back-link">← Back to Browser</a>
         <div id="sidebar-content" class="loading" style="display: block; width: 100%;">Loading metadata...</div>
     </div>
 
@@ -247,9 +285,25 @@
     <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
 
     <script>
-        // Get dataset ID from URL parameter
+        // Get dataset ID and dimensions from URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         const datasetId = urlParams.get('id');
+        const dims = urlParams.get('dims');
+
+        // Setup back link with dimensions
+        const backLink = document.getElementById('back-link');
+        if (dims) {
+            backLink.href = `dim-browser.html?dims=${dims}`;
+        } else {
+            backLink.href = 'dim-browser.html';
+        }
+
+        // Handle escape key to go back
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                window.location.href = backLink.href;
+            }
+        });
 
         if (!datasetId) {
             document.getElementById('table-content').innerHTML = '<div class="error">No dataset ID provided</div>';
@@ -298,6 +352,29 @@
 
             let html = '';
 
+            // Ancestors (compact) - FIRST
+            if (meta.ancestors && meta.ancestors.length > 0) {
+                // Strip HTML tags and show just the path
+                const ancestorPath = meta.ancestors.map(a => {
+                    if (typeof a === 'string') return a;
+                    if (a.name) {
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = a.name;
+                        return tempDiv.textContent || tempDiv.innerText || a.name;
+                    }
+                    return '';
+                }).filter(Boolean).join(' → ');
+
+                if (ancestorPath) {
+                    html += `
+                        <div class="meta-field">
+                            <div class="meta-label">Path</div>
+                            <div class="meta-value" style="font-size: 10px; line-height: 1.4;">${escapeHtml(ancestorPath)}</div>
+                        </div>
+                    `;
+                }
+            }
+
             // Periodicitati
             if (meta.periodicitati) {
                 const periodText = Array.isArray(meta.periodicitati)
@@ -319,54 +396,6 @@
                         <div class="meta-value">${escapeHtml(meta.ultimaActualizare)}</div>
                     </div>
                 `;
-            }
-
-            // Definitie
-            if (meta.definitie) {
-                html += `
-                    <div class="meta-field">
-                        <div class="meta-label">Definition</div>
-                        <div class="meta-value">${escapeHtml(meta.definitie)}</div>
-                    </div>
-                `;
-            }
-
-            // Observatii
-            if (meta.observatii) {
-                // Strip HTML tags from observatii for cleaner display
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = meta.observatii;
-                const cleanText = tempDiv.textContent || tempDiv.innerText || '';
-
-                html += `
-                    <div class="meta-field">
-                        <div class="meta-label">Observations</div>
-                        <div class="meta-value" style="font-size: 11px;">${escapeHtml(cleanText)}</div>
-                    </div>
-                `;
-            }
-
-            // Ancestors (compact)
-            if (meta.ancestors && meta.ancestors.length > 0) {
-                // Strip HTML tags and show just the path
-                const ancestorPath = meta.ancestors.map(a => {
-                    if (typeof a === 'string') return a;
-                    if (a.name) {
-                        const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = a.name;
-                        return tempDiv.textContent || tempDiv.innerText || a.name;
-                    }
-                    return '';
-                }).filter(Boolean).join(' → ');
-
-                if (ancestorPath) {
-                    html += `
-                        <div class="meta-field">
-                            <div class="meta-label">Path</div>
-                            <div class="meta-value" style="font-size: 10px; line-height: 1.4;">${escapeHtml(ancestorPath)}</div>
-                        </div>
-                    `;
-                }
             }
 
             // Dimensions
@@ -395,6 +424,49 @@
                 });
             }
 
+            // Definitie - MOVED TO BOTTOM with collapse
+            if (meta.definitie) {
+                const cleanDef = escapeHtml(meta.definitie);
+                const defId = 'def-text';
+                html += `
+                    <h2 style="margin-top: 20px;">Definition</h2>
+                    <div class="meta-field">
+                        <div class="collapsible-text ${cleanDef.length > 320 ? 'collapsed' : ''}" id="${defId}">
+                            ${cleanDef}
+                        </div>
+                        ${cleanDef.length > 320 ? `
+                            <div class="expand-toggle" onclick="toggleExpandText('${defId}')">
+                                Show more ▼
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            // Observatii - MOVED TO BOTTOM with collapse
+            if (meta.observatii) {
+                // Strip HTML tags from observatii for cleaner display
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = meta.observatii;
+                const cleanText = tempDiv.textContent || tempDiv.innerText || '';
+                const cleanObs = escapeHtml(cleanText);
+                const obsId = 'obs-text';
+
+                html += `
+                    <h2 style="margin-top: 20px;">Observations</h2>
+                    <div class="meta-field">
+                        <div class="collapsible-text ${cleanObs.length > 320 ? 'collapsed' : ''}" id="${obsId}">
+                            ${cleanObs}
+                        </div>
+                        ${cleanObs.length > 320 ? `
+                            <div class="expand-toggle" onclick="toggleExpandText('${obsId}')">
+                                Show more ▼
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
             container.innerHTML = html;
         }
 
@@ -404,6 +476,19 @@
 
             element.classList.toggle('open');
             toggle.classList.toggle('open');
+        }
+
+        function toggleExpandText(textId) {
+            const element = document.getElementById(textId);
+            const toggle = element.nextElementSibling;
+
+            if (element.classList.contains('collapsed')) {
+                element.classList.remove('collapsed');
+                if (toggle) toggle.innerHTML = 'Show less ▲';
+            } else {
+                element.classList.add('collapsed');
+                if (toggle) toggle.innerHTML = 'Show more ▼';
+            }
         }
 
         function renderTable(csvText) {

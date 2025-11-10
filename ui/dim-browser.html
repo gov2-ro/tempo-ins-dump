@@ -617,7 +617,18 @@ h2 {margin: 5px 0}
 
         // Open dataset profile
         function openDataset(filename) {
-            window.location.href = `dataset-profile.html?id=${encodeURIComponent(filename)}`;
+            const params = new URLSearchParams();
+            params.set('id', filename);
+
+            // Pass selected dimensions to dataset profile
+            if (selectedDimensions.size > 0) {
+                const dims = Array.from(selectedDimensions)
+                    .map(d => encodeURIComponent(d))
+                    .join(',');
+                params.set('dims', dims);
+            }
+
+            window.location.href = `dataset-profile.html?${params.toString()}`;
         }
 
         // Initialize
