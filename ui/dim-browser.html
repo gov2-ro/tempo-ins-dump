@@ -144,10 +144,16 @@ h2 {margin: 5px 0}
             /* border-left: 3px solid #2196f3; */
             /* border-radius: 3px; */
             min-height: 120px;
-            width: 20em; 
+            width: 20em;
             display: inline-block;
             flex-direction: column;
             text-align: left; margin: .5ex; vertical-align: top;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .dataset-card:hover {
+            background: #e3f2fd;
         }
 
         .dataset-filename {
@@ -203,7 +209,7 @@ h2 {margin: 5px 0}
         <!-- <h1>INS TEMPO Dimension Browser</h1> -->
 
         <div class="tags-section">
-            <h2>Dimensions (<span id="dim-count">0</span>)</h2>
+            <h2>Top Dimensions (<span id="dim-count">0</span>)</h2>
             <div id="dimensions-tags" class="loading">Loading dimensions...</div>
 
             <div class="drawer">
@@ -458,12 +464,12 @@ h2 {margin: 5px 0}
             }
 
             container.innerHTML = datasets.map(ds => `
-                <div class="dataset-card">
+                <div class="dataset-card" onclick="openDataset('${escapeHtml(ds.filename)}')">
                     <div class="dataset-filename">${escapeHtml(ds.filename)}</div>
                     <div class="dataset-name">${escapeHtml(ds.matrixName)}</div>
                     <div class="dataset-dims">
                         ${(Array.isArray(ds.dim_labels_array) ? ds.dim_labels_array : []).map(dim =>
-                            `<span class="tag small" onclick="filterByDimension('${escapeHtml(dim)}')">${escapeHtml(dim)}</span>`
+                            `<span class="tag small" onclick="event.stopPropagation(); filterByDimension('${escapeHtml(dim)}')">${escapeHtml(dim)}</span>`
                         ).join('')}
                     </div>
                 </div>
@@ -475,6 +481,11 @@ h2 {margin: 5px 0}
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // Open dataset profile
+        function openDataset(filename) {
+            window.location.href = `dataset-profile.html?id=${encodeURIComponent(filename)}`;
         }
 
         // Initialize
