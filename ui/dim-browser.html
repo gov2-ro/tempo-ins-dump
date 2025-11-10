@@ -207,7 +207,15 @@ h2 {margin: 5px 0}
             <div id="dimensions-tags" class="loading">Loading dimensions...</div>
 
             <div class="drawer">
-                <div class="drawer-toggle" onclick="toggleDrawer()">
+                <div class="drawer-toggle" onclick="toggleDrawer('other-dims')">
+                    Other Dimensions (<span id="other-dim-count">0</span>)
+                </div>
+                <div class="drawer-content" id="other-dims-drawer">
+                </div>
+            </div>
+
+            <div class="drawer">
+                <div class="drawer-toggle" onclick="toggleDrawer('um')">
                     Units of Measure (<span id="um-count">0</span>)
                 </div>
                 <div class="drawer-content" id="um-drawer">
@@ -245,21 +253,29 @@ h2 {margin: 5px 0}
                     }
                 });
 
-                // Build dimension list from actual dataset dimensions
-                const dimSet = new Set();
+                // Build dimension list from actual dataset dimensions with usage counts
+                const dimCounts = new Map();
                 allDatasets.forEach(ds => {
                     if (Array.isArray(ds.dim_labels_array)) {
-                        ds.dim_labels_array.forEach(dim => dimSet.add(dim));
+                        ds.dim_labels_array.forEach(dim => {
+                            dimCounts.set(dim, (dimCounts.get(dim) || 0) + 1);
+                        });
                     }
                 });
-                allDimensions = Array.from(dimSet);
+                // Sort by usage count (descending), then alphabetically
+                allDimensions = Array.from(dimCounts.entries())
+                    .sort((a, b) => {
+                        if (b[1] !== a[1]) return b[1] - a[1]; // Count descending
+                        return a[0].localeCompare(b[0]); // Name ascending
+                    })
+                    .map(entry => ({name: entry[0], count: entry[1]}));
 
                 console.log('Loaded', allDatasets.length, 'datasets');
                 console.log('Sample dataset:', allDatasets[0]);
                 console.log('Sample dataset dim_labels field:', allDatasets[0].dim_labels);
                 console.log('Sample dataset dim_labels_array:', allDatasets[0].dim_labels_array);
                 console.log('Loaded', allDimensions.length, 'dimensions');
-                console.log('Sample dimensions:', allDimensions.slice(0, 5));
+                console.log('Top 5 dimensions by usage:', allDimensions.slice(0, 5));
 
                 renderDimensions();
             } catch (error) {
@@ -268,16 +284,16 @@ h2 {margin: 5px 0}
             }
         }
 
-        // Simple CSV parser
+        // CSV parser that handles multi-line quoted fields
         function parseCSV(text, columns) {
-            const lines = text.split('\n');
-            const headers = parseCSVLine(lines[0]).map(h => h.trim());
+            const rows = parseCSVRows(text);
+            if (rows.length === 0) return [];
+
+            const headers = rows[0].map(h => h.trim());
             const result = [];
 
-            for (let i = 1; i < lines.length; i++) {
-                if (!lines[i].trim()) continue;
-
-                const values = parseCSVLine(lines[i]);
+            for (let i = 1; i < rows.length; i++) {
+                const values = rows[i];
                 const row = {};
 
                 columns.forEach(col => {
@@ -293,32 +309,56 @@ h2 {margin: 5px 0}
             return result;
         }
 
-        // Parse CSV line handling quoted values
-        function parseCSVLine(line) {
-            const result = [];
-            let current = '';
+        // Parse CSV text into rows, handling quoted fields with newlines
+        function parseCSVRows(text) {
+            const rows = [];
+            let currentRow = [];
+            let currentField = '';
             let inQuotes = false;
 
-            for (let i = 0; i < line.length; i++) {
-                const char = line[i];
-                const nextChar = line[i + 1];
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                const nextChar = text[i + 1];
 
-                if (char === '"' && nextChar === '"') {
-                    // Escaped quote
-                    current += '"';
+                if (char === '"' && nextChar === '"' && inQuotes) {
+                    // Escaped quote inside quoted field
+                    currentField += '"';
                     i++; // Skip next quote
                 } else if (char === '"') {
+                    // Toggle quote mode
                     inQuotes = !inQuotes;
                 } else if (char === ',' && !inQuotes) {
-                    result.push(current);
-                    current = '';
+                    // Field separator
+                    currentRow.push(currentField);
+                    currentField = '';
+                } else if ((char === '\n' || char === '\r') && !inQuotes) {
+                    // Row separator (handle both \n and \r\n)
+                    if (char === '\r' && nextChar === '\n') {
+                        i++; // Skip \n in \r\n
+                    }
+                    if (currentField || currentRow.length > 0) {
+                        currentRow.push(currentField);
+                        if (currentRow.some(f => f.trim())) {
+                            rows.push(currentRow);
+                        }
+                        currentRow = [];
+                        currentField = '';
+                    }
                 } else {
-                    current += char;
+                    // Regular character (including newlines inside quotes)
+                    currentField += char;
                 }
             }
 
-            result.push(current);
-            return result;
+            // Push last field and row if any
+            if (currentField || currentRow.length > 0) {
+                currentRow.push(currentField);
+                if (currentRow.some(f => f.trim())) {
+                    rows.push(currentRow);
+                }
+            }
+
+            return rows;
         }
 
         // Check if dimension is a unit of measure
@@ -332,30 +372,48 @@ h2 {margin: 5px 0}
         // Render dimension tags
         function renderDimensions() {
             const container = document.getElementById('dimensions-tags');
+            const otherDimsContainer = document.getElementById('other-dims-drawer');
             const umContainer = document.getElementById('um-drawer');
-            const uniqueDims = [...new Set(allDimensions)].sort();
+
+            const POPULAR_THRESHOLD = 15;
 
             // Separate regular dimensions from UM dimensions
-            const regularDims = uniqueDims.filter(dim => !isUnitOfMeasure(dim));
-            const umDims = uniqueDims.filter(dim => isUnitOfMeasure(dim));
+            const regularDims = allDimensions.filter(dim => !isUnitOfMeasure(dim.name));
+            const umDims = allDimensions.filter(dim => isUnitOfMeasure(dim.name));
 
-            document.getElementById('dim-count').textContent = regularDims.length;
+            // Split regular dimensions into popular and other
+            const popularDims = regularDims.filter(dim => dim.count >= POPULAR_THRESHOLD);
+            const otherDims = regularDims.filter(dim => dim.count < POPULAR_THRESHOLD);
+
+            document.getElementById('dim-count').textContent = popularDims.length;
+            document.getElementById('other-dim-count').textContent = otherDims.length;
             document.getElementById('um-count').textContent = umDims.length;
 
-            container.innerHTML = regularDims.map(dim =>
-                `<span class="tag" onclick="filterByDimension('${escapeHtml(dim)}')">${escapeHtml(dim)}</span>`
+            container.innerHTML = popularDims.map(dim =>
+                `<span class="tag" onclick="filterByDimension('${escapeHtml(dim.name)}')">${escapeHtml(dim.name)} <sup>${dim.count}</sup></span>`
+            ).join('');
+
+            otherDimsContainer.innerHTML = otherDims.map(dim =>
+                `<span class="tag" onclick="filterByDimension('${escapeHtml(dim.name)}')">${escapeHtml(dim.name)} <sup>${dim.count}</sup></span>`
             ).join('');
 
             umContainer.innerHTML = umDims.map(dim =>
-                `<span class="tag" onclick="filterByDimension('${escapeHtml(dim)}')">${escapeHtml(dim)}</span>`
+                `<span class="tag" onclick="filterByDimension('${escapeHtml(dim.name)}')">${escapeHtml(dim.name)} <sup>${dim.count}</sup></span>`
             ).join('');
         }
 
         // Toggle drawer
-        function toggleDrawer() {
-            const toggle = document.querySelector('.drawer-toggle');
-            const content = document.getElementById('um-drawer');
-            toggle.classList.toggle('open');
+        function toggleDrawer(drawerId) {
+            const content = document.getElementById(drawerId + '-drawer');
+            const toggles = document.querySelectorAll('.drawer-toggle');
+
+            // Find the correct toggle button by checking which one was clicked
+            toggles.forEach(toggle => {
+                if (toggle.onclick.toString().includes(drawerId)) {
+                    toggle.classList.toggle('open');
+                }
+            });
+
             content.classList.toggle('open');
         }
 
