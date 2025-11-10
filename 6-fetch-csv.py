@@ -5,6 +5,10 @@ todo
 - [x] add progress bar
 - [x] add Excel/HTML table download functionality
 - [x] add flag to control Excel downloads (disabled by default)
+- [ ] fails at bigger downloads
+    - [x] detect empty datasets
+    - [ ] split larger downloads into options then recombine - detect filters with 3 options (one is total so 2) or max 5 options in order of number of options excluding last field with UM
+
 
 Usage:
     python 6-fetch-csv.py                          # Downloads CSV files for all matrices
@@ -50,6 +54,14 @@ logging.basicConfig(level=logging.INFO,
                    format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Set up file logging for empty dataset warnings
+log_folder = "data/logs"
+os.makedirs(log_folder, exist_ok=True)
+file_handler = logging.FileHandler(os.path.join(log_folder, 'fetch-csv.log'), encoding='utf-8')
+file_handler.setLevel(logging.WARNING)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(file_handler)
+
 def load_matrix_definition(file_path: str) -> Dict:
     """Load and parse the matrix definition file."""
     try:
@@ -65,20 +77,40 @@ def encode_query_parameters(matrix_def: Dict) -> str:
     Format: dimension1:value1,value2:value3,value4:...
     """
     encoded_parts = []
-    
+
     for dim in matrix_def["dimensionsMap"]:
         # Filter out "Total" options when there are alternatives
         options = dim["options"]
         if len(options) > 1:
             options = [opt for opt in options if opt["label"].strip().lower() != "total"]
-        
+
         if options:
             # Add nomItemIds for this dimension
             item_ids = [str(opt["nomItemId"]) for opt in options]
             encoded_parts.append(",".join(item_ids))
-    
+
     # Join all parts with colon
     return ":".join(encoded_parts)
+
+def count_csv_rows(file_path: str) -> int:
+    """
+    Count the number of data rows in a CSV file (excluding header).
+
+    Args:
+        file_path: Path to the CSV file
+
+    Returns:
+        Number of data rows (0 if only header exists)
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            # Count non-empty lines, excluding the header
+            data_rows = len([line for line in lines[1:] if line.strip()])
+            return data_rows
+    except Exception as e:
+        logger.error(f"Error counting rows in {file_path}: {e}")
+        return -1
 
 def convert_to_pivot_payload(matrix_def: Dict, matrix_code: str) -> Dict:
     """Convert matrix definition to pivot API payload format."""
@@ -140,11 +172,57 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
         tqdm.write(f"Making pivot request for {matrix_code}")
         response = requests.post(url, json=payload, headers=headers, verify=False)
         response.raise_for_status()
-        
+
+        # Check for cell limit error from INS API
+        # Error message: "Selectia dvs actuala ar solicita X celule... pragul de 30000 de celule"
+        response_text = response.content.decode('utf-8', errors='ignore')
+        if ('celule' in response_text.lower() and '30000' in response_text) or \
+           ('pragul' in response_text.lower() and 'celule' in response_text.lower()):
+            error_msg = f"SKIPPED: {matrix_code} - Query exceeds INS API cell limit (30,000 cells)"
+            tqdm.write(error_msg)
+            logger.warning(f"{matrix_code}.csv - {error_msg} | Response: {response_text[:500]}")
+            # Don't save the error response as a CSV file
+            return
+
         # Save CSV response
         with open(output_file, 'wb') as f:
             f.write(response.content)
         tqdm.write(f"Saved pivot data to {output_file}")
+
+        # Check if CSV has data rows
+        row_count = count_csv_rows(output_file)
+        if row_count == 0:
+            warning_msg = f"WARNING: {matrix_code}.csv has only header row (no data rows)"
+            tqdm.write(warning_msg)
+
+            # Log detailed information about empty dataset
+            response_headers = dict(response.headers)
+            content_length = response_headers.get('Content-Length', 'N/A')
+            content_type = response_headers.get('Content-Type', 'N/A')
+
+            # Get first 1000 chars of response for debugging
+            response_preview = response_text[:1000] if len(response_text) <= 1000 else response_text[:1000] + '...'
+
+            logger.warning(
+                f"{matrix_code}.csv - Empty dataset | "
+                f"Content-Length: {content_length} | "
+                f"Content-Type: {content_type} | "
+                f"Status: {response.status_code} | "
+                f"Response headers: {response_headers} | "
+                f"Response content: {response_preview}"
+            )
+
+            # Also fetch Excel/HTML version to help diagnose the issue
+            try:
+                tqdm.write(f"Fetching Excel/HTML version for diagnosis...")
+                debug_folder = os.path.join("data/logs/empty-datasets")
+                os.makedirs(debug_folder, exist_ok=True)
+                fetch_insse_excel_data(matrix_code, matrix_def, debug_folder, force_overwrite=True)
+                tqdm.write(f"Saved diagnostic Excel/HTML to {debug_folder}/{matrix_code}.xls")
+            except Exception as e:
+                tqdm.write(f"Failed to fetch diagnostic Excel/HTML: {e}")
+        elif row_count > 0:
+            tqdm.write(f"Dataset has {row_count} data rows")
         
     except requests.exceptions.RequestException as e:
         tqdm.write(f"Error making pivot request for {matrix_code}: {e}")

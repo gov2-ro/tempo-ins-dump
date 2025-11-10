@@ -62,6 +62,10 @@ python query-dimensions.py file ZDP1321   # File details
 - [x] compact data
 
 ### beta
+- [ ] some datasets are not downloaded
+    - [ ] 3000 rows limit alert: _Selectia dvs actuala ar solicita 30600 celule. Datorita limitarilor impuse de o aplicatie web, va rugam sa rafinati cautarea Dvs. pentru a cobori sub pragul de 30000 de celule. Va multumim!_ see comments in [6-fetch-csv.py](6-fetch-csv.py)
+
+### beta
 - [x] categorise filters
 - [ ] auto charts
 - [ ] dataset filtering, charting options
