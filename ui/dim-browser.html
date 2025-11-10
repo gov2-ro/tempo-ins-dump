@@ -95,14 +95,26 @@
             cursor: pointer;
             font-size: 13px;
             transition: all 0.2s;
+            
         }
-
+        .dataset-dims .tag.small { 
+            margin: 1px 2px;  
+            overflow: hidden;
+            white-space: nowrap;
+            max-width: 20em; text-overflow: ellipsis;
+        }
         .tag:hover {
             background: #bbdefb;
             border-color: #64b5f6;
         }
 
         .tag.active {
+            background: #2196f3;
+            color: white;
+            border-color: #1976d2;
+        }
+
+        .tag.small.active {
             background: #2196f3;
             color: white;
             border-color: #1976d2;
@@ -139,12 +151,13 @@ h2 {margin: 5px 0}
         }
 
         .dataset-card {
-            padding: 4px 6px;
-            background: #fafafa;
+            /* padding: 4px 6px;
+            background: #fafafa; */
             /* border-left: 3px solid #2196f3; */
             /* border-radius: 3px; */
-            min-height: 120px;
-            width: 20em;
+            /* min-height: 120px; */
+            margin: 0 2px 1ex 2px;
+            width: 30em;
             display: inline-block;
             flex-direction: column;
             text-align: left; margin: .5ex; vertical-align: top;
@@ -177,10 +190,12 @@ h2 {margin: 5px 0}
         }
 
         .dataset-dims {
-            margin-top: 8px;
-            padding-top: 6px;
-            border-top: 1px solid #e0e0e0;
+            margin-top: 2px;
+            /* padding-top: 6px; */
+            /* border-top: 1px solid #e0e0e0; */
+            line-height: 1;
         }
+
 
         .stats {
             color: #666;
@@ -230,7 +245,7 @@ h2 {margin: 5px 0}
         </div>
 
         <div class="datasets-section">
-            <h2>Datasets (<span id="dataset-count">0</span>)</h2>
+            <h2>Datasets (<span id="dataset-count">0</span>) <button id="clear-selection" style="display: none; margin-left: 10px; padding: 4px 8px; font-size: 11px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 3px; cursor: pointer;" onclick="clearSelection()">Clear Selection</button></h2>
             <div id="datasets-list" class="no-results">Click a dimension tag above to see datasets</div>
         </div>
     </div>
@@ -238,7 +253,7 @@ h2 {margin: 5px 0}
     <script>
         let allDimensions = [];
         let allDatasets = [];
-        let activeDimension = null;
+        let selectedDimensions = new Set();
 
         // Load and parse CSV files
         async function loadData() {
@@ -284,6 +299,9 @@ h2 {margin: 5px 0}
                 console.log('Top 5 dimensions by usage:', allDimensions.slice(0, 5));
 
                 renderDimensions();
+
+                // Load dimensions from URL
+                loadDimensionsFromURL();
             } catch (error) {
                 console.error('Error loading data:', error);
                 document.getElementById('dimensions-tags').innerHTML = '<div class="no-results">Error loading data</div>';
@@ -423,57 +441,171 @@ h2 {margin: 5px 0}
             content.classList.toggle('open');
         }
 
-        // Filter datasets by dimension
+        // Toggle dimension selection
         function filterByDimension(dimension) {
-            activeDimension = dimension;
-            console.log('Filtering by dimension:', dimension);
+            // Toggle selection
+            if (selectedDimensions.has(dimension)) {
+                selectedDimensions.delete(dimension);
+            } else {
+                selectedDimensions.add(dimension);
+            }
 
-            // Update active tag
+            console.log('Selected dimensions:', Array.from(selectedDimensions));
+
+            // Update URL
+            updateURL();
+
+            // Update active tags
+            updateActiveTags();
+
+            // Filter and render datasets
+            filterAndRenderDatasets();
+        }
+
+        // Update active tag styling
+        function updateActiveTags() {
             document.querySelectorAll('.tag').forEach(tag => {
-                if (tag.textContent === dimension) {
+                const tagText = tag.textContent.replace(/\s*\d+$/, '').trim(); // Remove count suffix
+                if (selectedDimensions.has(tagText)) {
                     tag.classList.add('active');
                 } else {
                     tag.classList.remove('active');
                 }
             });
-
-            // Filter datasets
-            const filtered = allDatasets.filter(ds => {
-                const hasArray = Array.isArray(ds.dim_labels_array);
-                const includes = hasArray && ds.dim_labels_array.includes(dimension);
-                return includes;
-            });
-
-            console.log('Found', filtered.length, 'datasets');
-            if (filtered.length > 0) {
-                console.log('First filtered dataset:', filtered[0].filename);
-                console.log('Its dimensions:', filtered[0].dim_labels_array);
-            }
-
-            renderDatasets(filtered);
         }
 
-        // Render dataset cards
-        function renderDatasets(datasets) {
-            const container = document.getElementById('datasets-list');
-            document.getElementById('dataset-count').textContent = datasets.length;
-
-            if (datasets.length === 0) {
-                container.innerHTML = '<div class="no-results">No datasets found for this dimension</div>';
+        // Filter datasets based on selected dimensions
+        function filterAndRenderDatasets() {
+            if (selectedDimensions.size === 0) {
+                document.getElementById('datasets-list').innerHTML = '<div class="no-results">Click a dimension tag above to see datasets</div>';
+                document.getElementById('dataset-count').textContent = '0';
                 return;
             }
 
-            container.innerHTML = datasets.map(ds => `
-                <div class="dataset-card" onclick="openDataset('${escapeHtml(ds.filename)}')">
-                    <div class="dataset-filename">${escapeHtml(ds.filename)}</div>
-                    <div class="dataset-name">${escapeHtml(ds.matrixName)}</div>
-                    <div class="dataset-dims">
-                        ${(Array.isArray(ds.dim_labels_array) ? ds.dim_labels_array : []).map(dim =>
-                            `<span class="tag small" onclick="event.stopPropagation(); filterByDimension('${escapeHtml(dim)}')">${escapeHtml(dim)}</span>`
-                        ).join('')}
+            const dimensionsArray = Array.from(selectedDimensions);
+
+            // Split into two groups
+            const withAll = []; // Datasets with ALL selected dimensions
+            const withSome = []; // Datasets with at least ONE selected dimension
+
+            allDatasets.forEach(ds => {
+                if (!Array.isArray(ds.dim_labels_array)) return;
+
+                const matchCount = dimensionsArray.filter(dim =>
+                    ds.dim_labels_array.includes(dim)
+                ).length;
+
+                if (matchCount === dimensionsArray.length) {
+                    withAll.push(ds);
+                } else if (matchCount > 0) {
+                    withSome.push(ds);
+                }
+            });
+
+            console.log(`Found ${withAll.length} datasets with all dimensions, ${withSome.length} with some`);
+
+            renderDatasets(withAll, withSome);
+        }
+
+        // Load dimensions from URL parameters
+        function loadDimensionsFromURL() {
+            const params = new URLSearchParams(window.location.search);
+            const dims = params.get('dims');
+
+            if (dims) {
+                const dimensionList = dims.split(',').map(d => decodeURIComponent(d));
+                dimensionList.forEach(dim => selectedDimensions.add(dim));
+                updateActiveTags();
+                filterAndRenderDatasets();
+            }
+        }
+
+        // Update URL with selected dimensions
+        function updateURL() {
+            const params = new URLSearchParams();
+
+            if (selectedDimensions.size > 0) {
+                const dims = Array.from(selectedDimensions)
+                    .map(d => encodeURIComponent(d))
+                    .join(',');
+                params.set('dims', dims);
+            }
+
+            const newURL = params.toString()
+                ? `${window.location.pathname}?${params.toString()}`
+                : window.location.pathname;
+
+            window.history.replaceState({}, '', newURL);
+
+            // Show/hide clear button
+            const clearBtn = document.getElementById('clear-selection');
+            if (clearBtn) {
+                clearBtn.style.display = selectedDimensions.size > 0 ? 'inline-block' : 'none';
+            }
+        }
+
+        // Clear all selections
+        function clearSelection() {
+            selectedDimensions.clear();
+            updateURL();
+            updateActiveTags();
+            filterAndRenderDatasets();
+        }
+
+        // Render dataset cards
+        function renderDatasets(withAll = [], withSome = []) {
+            const container = document.getElementById('datasets-list');
+            const totalCount = withAll.length + withSome.length;
+            document.getElementById('dataset-count').textContent = totalCount;
+
+            if (totalCount === 0) {
+                container.innerHTML = '<div class="no-results">No datasets found for selected dimension(s)</div>';
+                return;
+            }
+
+            let html = '';
+
+            // Render datasets with all dimensions
+            if (withAll.length > 0) {
+                if (selectedDimensions.size > 1) {
+                    html += `<h3 style="font-size: 14px; color: #2196f3; margin: 10px 0; padding: 5px 10px; background: #e3f2fd; border-radius: 4px;">
+                        All ${selectedDimensions.size} dimensions (${withAll.length})
+                    </h3>`;
+                }
+
+                html += withAll.map(ds => `
+                    <div class="dataset-card" onclick="openDataset('${escapeHtml(ds.filename)}')">
+                        <div class="dataset-filename">${escapeHtml(ds.filename)}</div>
+                        <div class="dataset-name">${escapeHtml(ds.matrixName)}</div>
+                        <div class="dataset-dims">
+                            ${(Array.isArray(ds.dim_labels_array) ? ds.dim_labels_array : []).map(dim =>
+                                `<span class="tag small ${selectedDimensions.has(dim) ? 'active' : ''}" onclick="event.stopPropagation(); filterByDimension('${escapeHtml(dim)}')">${escapeHtml(dim)}</span>`
+                            ).join('')}
+                        </div>
                     </div>
-                </div>
-            `).join('');
+                `).join('');
+            }
+
+            // Render datasets with some dimensions
+            if (withSome.length > 0 && selectedDimensions.size > 1) {
+                html += `<h3 style="font-size: 14px; color: #666; margin: 20px 0 10px 0; padding: 5px 10px; background: #f5f5f5; border-radius: 4px;">
+                    At least one dimension (${withSome.length})
+                </h3>`;
+
+                html += withSome.map(ds => `
+                    <div class="dataset-card" onclick="openDataset('${escapeHtml(ds.filename)}')">
+                        <div class="dataset-filename">${escapeHtml(ds.filename)}</div>
+                        <div class="dataset-name">${escapeHtml(ds.matrixName)}</div>
+                        <div class="dataset-dims">
+                            ${(Array.isArray(ds.dim_labels_array) ? ds.dim_labels_array : []).map(dim =>
+                                `<span class="tag small ${selectedDimensions.has(dim) ? 'active' : ''}" onclick="event.stopPropagation(); filterByDimension('${escapeHtml(dim)}')">${escapeHtml(dim)}</span>`
+                            ).join('')}
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            container.innerHTML = html;
         }
 
         // Escape HTML

@@ -76,4 +76,4 @@ ui/dim-browser.html
 - [ ] add context nav
 - [ ] permalinks #variables in url
 - [ ] combine labels
-- [ ] show dataset preview
+- [x] show dataset preview
