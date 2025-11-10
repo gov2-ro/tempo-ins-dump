@@ -71,17 +71,23 @@ def load_matrix_definition(file_path: str) -> Dict:
         tqdm.write(f"Error loading matrix definition: {e}")
         raise
 
-def encode_query_parameters(matrix_def: Dict) -> str:
+def encode_query_parameters(matrix_def: Dict, include_totals: bool = False) -> str:
     """
     Convert matrix definition to encoded query format.
     Format: dimension1:value1,value2:value3,value4:...
+
+    Args:
+        matrix_def: Matrix definition dictionary
+        include_totals: If False, filter out "Total" options when alternatives exist.
+                       If True, include all options including "Total".
     """
     encoded_parts = []
 
     for dim in matrix_def["dimensionsMap"]:
-        # Filter out "Total" options when there are alternatives
         options = dim["options"]
-        if len(options) > 1:
+
+        # Filter out "Total" options when there are alternatives (unless include_totals=True)
+        if len(options) > 1 and not include_totals:
             options = [opt for opt in options if opt["label"].strip().lower() != "total"]
 
         if options:
@@ -112,10 +118,18 @@ def count_csv_rows(file_path: str) -> int:
         logger.error(f"Error counting rows in {file_path}: {e}")
         return -1
 
-def convert_to_pivot_payload(matrix_def: Dict, matrix_code: str) -> Dict:
-    """Convert matrix definition to pivot API payload format."""
-    encoded_query = encode_query_parameters(matrix_def)
-    
+def convert_to_pivot_payload(matrix_def: Dict, matrix_code: str, include_totals: bool = False) -> Dict:
+    """
+    Convert matrix definition to pivot API payload format.
+
+    Args:
+        matrix_def: Matrix definition dictionary
+        matrix_code: The matrix code
+        include_totals: If True, include "Total" options in the query
+    """
+    # encoded_query = encode_query_parameters(matrix_def, include_totals=include_totals)
+    encoded_query = encode_query_parameters(matrix_def, include_totals=include_totals)
+
     payload = {
         "language": "ro",
         "encQuery": encoded_query,
@@ -124,7 +138,7 @@ def convert_to_pivot_payload(matrix_def: Dict, matrix_code: str) -> Dict:
         "matUMSpec": matrix_def["details"]["matUMSpec"],
         "matRegJ": matrix_def["details"].get("matRegJ", 0)  # Default to 0 if not present
     }
-    
+
     return payload
 
 def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, force_overwrite: bool = False) -> None:
@@ -204,7 +218,7 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
             response_preview = response_text[:1000] if len(response_text) <= 1000 else response_text[:1000] + '...'
 
             logger.warning(
-                f"{matrix_code}.csv - Empty dataset | "
+                f"{matrix_code}.csv - Empty dataset (excluding Totals) | "
                 f"Content-Length: {content_length} | "
                 f"Content-Type: {content_type} | "
                 f"Status: {response.status_code} | "
@@ -212,15 +226,56 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
                 f"Response content: {response_preview}"
             )
 
-            # Also fetch Excel/HTML version to help diagnose the issue
+            # RETRY with "Total" options included
+            tqdm.write(f"Retrying {matrix_code} WITH 'Total' options included...")
+            logger.info(f"{matrix_code} - Retrying with include_totals=True")
+
             try:
-                tqdm.write(f"Fetching Excel/HTML version for diagnosis...")
-                debug_folder = os.path.join("data/logs/empty-datasets")
-                os.makedirs(debug_folder, exist_ok=True)
-                fetch_insse_excel_data(matrix_code, matrix_def, debug_folder, force_overwrite=True)
-                tqdm.write(f"Saved diagnostic Excel/HTML to {debug_folder}/{matrix_code}.xls")
+                # Create new payload with totals included
+                payload_with_totals = convert_to_pivot_payload(matrix_def, matrix_code, include_totals=True)
+
+                # Make retry request
+                retry_response = requests.post(url, json=payload_with_totals, headers=headers, verify=False)
+                retry_response.raise_for_status()
+
+                # Check for cell limit error on retry
+                retry_text = retry_response.content.decode('utf-8', errors='ignore')
+                if ('celule' in retry_text.lower() and '30000' in retry_text) or \
+                   ('pragul' in retry_text.lower() and 'celule' in retry_text.lower()):
+                    error_msg = f"RETRY FAILED: {matrix_code} - Query with Totals exceeds INS API cell limit (30,000 cells)"
+                    tqdm.write(error_msg)
+                    logger.warning(f"{matrix_code}.csv - {error_msg}")
+                    # Keep the original empty file
+                else:
+                    # Save retry response
+                    with open(output_file, 'wb') as f:
+                        f.write(retry_response.content)
+
+                    # Check if retry produced data
+                    retry_row_count = count_csv_rows(output_file)
+                    if retry_row_count > 0:
+                        success_msg = f"RETRY SUCCESS: {matrix_code} now has {retry_row_count} rows with 'Total' options included"
+                        tqdm.write(success_msg)
+                        logger.info(f"{matrix_code}.csv - {success_msg}")
+                    else:
+                        fail_msg = f"RETRY FAILED: {matrix_code} still has no data even with 'Total' options"
+                        tqdm.write(fail_msg)
+                        logger.warning(f"{matrix_code}.csv - {fail_msg}")
+
+                        # Also fetch Excel/HTML version to help diagnose the issue
+                        try:
+                            tqdm.write(f"Fetching Excel/HTML version for diagnosis...")
+                            debug_folder = os.path.join("data/logs/empty-datasets")
+                            os.makedirs(debug_folder, exist_ok=True)
+                            fetch_insse_excel_data(matrix_code, matrix_def, debug_folder, force_overwrite=True)
+                            tqdm.write(f"Saved diagnostic Excel/HTML to {debug_folder}/{matrix_code}.xls")
+                        except Exception as e:
+                            tqdm.write(f"Failed to fetch diagnostic Excel/HTML: {e}")
+
             except Exception as e:
-                tqdm.write(f"Failed to fetch diagnostic Excel/HTML: {e}")
+                tqdm.write(f"RETRY EXCEPTION: Failed to retry {matrix_code} with Totals: {e}")
+                logger.error(f"{matrix_code}.csv - Retry with Totals failed: {e}")
+
         elif row_count > 0:
             tqdm.write(f"Dataset has {row_count} data rows")
         
