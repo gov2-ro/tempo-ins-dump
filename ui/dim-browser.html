@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dimension Browser</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .container {
+            /* max-width: 1400px; */
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        h2 {
+            font-size: 18px;
+            margin: 30px 0 15px 0;
+            color: #555;
+        }
+
+        .tags-section {
+            background: white;
+            padding: 10px 5px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .drawer {
+            margin-top: 15px;
+            border-top: 1px solid #e0e0e0;
+            padding-top: 15px;
+        }
+
+        .drawer-toggle {
+            cursor: pointer;
+            padding: 8px 12px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: #666;
+            transition: all 0.2s;
+        }
+
+        .drawer-toggle:hover {
+            background: #eeeeee;
+        }
+
+        .drawer-toggle::before {
+            content: '▶';
+            font-size: 10px;
+            transition: transform 0.2s;
+        }
+
+        .drawer-toggle.open::before {
+            transform: rotate(90deg);
+        }
+
+        .drawer-content {
+            display: none;
+            margin-top: 10px;
+        }
+
+        .drawer-content.open {
+            display: block;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 6px 12px;
+            margin: 4px;
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .tag:hover {
+            background: #bbdefb;
+            border-color: #64b5f6;
+        }
+
+        .tag.active {
+            background: #2196f3;
+            color: white;
+            border-color: #1976d2;
+        }
+
+        .tag.small {
+            padding: 3px 6px;
+            font-size: 10px;
+            background: #fff3e0;
+            border-color: #ffb74d;
+            margin: 2px;
+        }
+
+        .tag.small:hover {
+            background: #ffe0b2;
+        }
+
+        .datasets-section {
+            background: white;
+            padding: 10px 5px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        #datasets-list {
+            display: grid; padding: 0;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+            text-align: left; vertical-align: top;
+        }
+h2 {margin: 5px 0}
+        #datasets-list.no-results {
+            display: block;
+        }
+
+        .dataset-card {
+            padding: 4px 6px;
+            background: #fafafa;
+            /* border-left: 3px solid #2196f3; */
+            /* border-radius: 3px; */
+            min-height: 120px;
+            width: 20em; 
+            display: inline-block;
+            flex-direction: column;
+            text-align: left; margin: .5ex; vertical-align: top;
+        }
+
+        .dataset-filename {
+            font-weight: 600;
+            color: #1976d2;
+            margin-bottom: 4px;
+            font-size: 12px;
+        }
+
+        .dataset-name {
+            color: #555;
+            margin-bottom: auto;
+            font-size: 11px;
+            line-height: 1.3;
+            flex-grow: 1;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            line-clamp: 3;
+            -webkit-box-orient: vertical;
+        }
+
+        .dataset-dims {
+            margin-top: 8px;
+            padding-top: 6px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .stats {
+            color: #666;
+            font-size: 13px;
+            margin-bottom: 10px;
+        }
+
+        .loading {
+            /* text-align: center; */
+            /* padding: 40px; */
+            color: #666;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        .dimensions-tags {
+            padding: 1ex;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- <h1>INS TEMPO Dimension Browser</h1> -->
+
+        <div class="tags-section">
+            <h2>Dimensions (<span id="dim-count">0</span>)</h2>
+            <div id="dimensions-tags" class="loading">Loading dimensions...</div>
+
+            <div class="drawer">
+                <div class="drawer-toggle" onclick="toggleDrawer()">
+                    Units of Measure (<span id="um-count">0</span>)
+                </div>
+                <div class="drawer-content" id="um-drawer">
+                </div>
+            </div>
+        </div>
+
+        <div class="datasets-section">
+            <h2>Datasets (<span id="dataset-count">0</span>)</h2>
+            <div id="datasets-list" class="no-results">Click a dimension tag above to see datasets</div>
+        </div>
+    </div>
+
+    <script>
+        let allDimensions = [];
+        let allDatasets = [];
+        let activeDimension = null;
+
+        // Load and parse CSV files
+        async function loadData() {
+            try {
+                // Load datasets
+                const datasetsResponse = await fetch('../data/3-db/ro/csv/datasets.csv');
+                const datasetsText = await datasetsResponse.text();
+                allDatasets = parseCSV(datasetsText, ['filename', 'matrixName', 'dim_labels']);
+
+                // Parse dim_labels JSON strings
+                allDatasets.forEach(ds => {
+                    try {
+                        const parsed = JSON.parse(ds.dim_labels || '[]');
+                        ds.dim_labels_array = Array.isArray(parsed) ? parsed : [];
+                    } catch (e) {
+                        console.warn('Failed to parse dim_labels for', ds.filename, ':', ds.dim_labels, e);
+                        ds.dim_labels_array = [];
+                    }
+                });
+
+                // Build dimension list from actual dataset dimensions
+                const dimSet = new Set();
+                allDatasets.forEach(ds => {
+                    if (Array.isArray(ds.dim_labels_array)) {
+                        ds.dim_labels_array.forEach(dim => dimSet.add(dim));
+                    }
+                });
+                allDimensions = Array.from(dimSet);
+
+                console.log('Loaded', allDatasets.length, 'datasets');
+                console.log('Sample dataset:', allDatasets[0]);
+                console.log('Sample dataset dim_labels field:', allDatasets[0].dim_labels);
+                console.log('Sample dataset dim_labels_array:', allDatasets[0].dim_labels_array);
+                console.log('Loaded', allDimensions.length, 'dimensions');
+                console.log('Sample dimensions:', allDimensions.slice(0, 5));
+
+                renderDimensions();
+            } catch (error) {
+                console.error('Error loading data:', error);
+                document.getElementById('dimensions-tags').innerHTML = '<div class="no-results">Error loading data</div>';
+            }
+        }
+
+        // Simple CSV parser
+        function parseCSV(text, columns) {
+            const lines = text.split('\n');
+            const headers = parseCSVLine(lines[0]).map(h => h.trim());
+            const result = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+
+                const values = parseCSVLine(lines[i]);
+                const row = {};
+
+                columns.forEach(col => {
+                    const index = headers.indexOf(col);
+                    if (index >= 0) {
+                        row[col] = values[index] || '';
+                    }
+                });
+
+                result.push(row);
+            }
+
+            return result;
+        }
+
+        // Parse CSV line handling quoted values
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                const nextChar = line[i + 1];
+
+                if (char === '"' && nextChar === '"') {
+                    // Escaped quote
+                    current += '"';
+                    i++; // Skip next quote
+                } else if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current);
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+
+            result.push(current);
+            return result;
+        }
+
+        // Check if dimension is a unit of measure
+        function isUnitOfMeasure(dim) {
+            const lower = dim.toLowerCase();
+            return lower.startsWith('um:') ||
+                   lower.startsWith('unitati de masura') ||
+                   lower.includes('unități de măsură');
+        }
+
+        // Render dimension tags
+        function renderDimensions() {
+            const container = document.getElementById('dimensions-tags');
+            const umContainer = document.getElementById('um-drawer');
+            const uniqueDims = [...new Set(allDimensions)].sort();
+
+            // Separate regular dimensions from UM dimensions
+            const regularDims = uniqueDims.filter(dim => !isUnitOfMeasure(dim));
+            const umDims = uniqueDims.filter(dim => isUnitOfMeasure(dim));
+
+            document.getElementById('dim-count').textContent = regularDims.length;
+            document.getElementById('um-count').textContent = umDims.length;
+
+            container.innerHTML = regularDims.map(dim =>
+                `<span class="tag" onclick="filterByDimension('${escapeHtml(dim)}')">${escapeHtml(dim)}</span>`
+            ).join('');
+
+            umContainer.innerHTML = umDims.map(dim =>
+                `<span class="tag" onclick="filterByDimension('${escapeHtml(dim)}')">${escapeHtml(dim)}</span>`
+            ).join('');
+        }
+
+        // Toggle drawer
+        function toggleDrawer() {
+            const toggle = document.querySelector('.drawer-toggle');
+            const content = document.getElementById('um-drawer');
+            toggle.classList.toggle('open');
+            content.classList.toggle('open');
+        }
+
+        // Filter datasets by dimension
+        function filterByDimension(dimension) {
+            activeDimension = dimension;
+            console.log('Filtering by dimension:', dimension);
+
+            // Update active tag
+            document.querySelectorAll('.tag').forEach(tag => {
+                if (tag.textContent === dimension) {
+                    tag.classList.add('active');
+                } else {
+                    tag.classList.remove('active');
+                }
+            });
+
+            // Filter datasets
+            const filtered = allDatasets.filter(ds => {
+                const hasArray = Array.isArray(ds.dim_labels_array);
+                const includes = hasArray && ds.dim_labels_array.includes(dimension);
+                return includes;
+            });
+
+            console.log('Found', filtered.length, 'datasets');
+            if (filtered.length > 0) {
+                console.log('First filtered dataset:', filtered[0].filename);
+                console.log('Its dimensions:', filtered[0].dim_labels_array);
+            }
+
+            renderDatasets(filtered);
+        }
+
+        // Render dataset cards
+        function renderDatasets(datasets) {
+            const container = document.getElementById('datasets-list');
+            document.getElementById('dataset-count').textContent = datasets.length;
+
+            if (datasets.length === 0) {
+                container.innerHTML = '<div class="no-results">No datasets found for this dimension</div>';
+                return;
+            }
+
+            container.innerHTML = datasets.map(ds => `
+                <div class="dataset-card">
+                    <div class="dataset-filename">${escapeHtml(ds.filename)}</div>
+                    <div class="dataset-name">${escapeHtml(ds.matrixName)}</div>
+                    <div class="dataset-dims">
+                        ${(Array.isArray(ds.dim_labels_array) ? ds.dim_labels_array : []).map(dim =>
+                            `<span class="tag small" onclick="filterByDimension('${escapeHtml(dim)}')">${escapeHtml(dim)}</span>`
+                        ).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize
+        loadData();
+    </script>
+</body>
+</html>

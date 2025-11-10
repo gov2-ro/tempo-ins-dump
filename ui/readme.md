@@ -6,6 +6,32 @@ The primary objective is to create a modern, intuitive, and value-added web inte
 
 This will be a client-side application built with HTML, CSS, and JavaScript, leveraging the static data provided in the `/data` directory.
 
+------
+
+există datasets fără perioadă? !! **majoritatea** pare că au perioadă. dacă nu toate vezi care! 
+if not ani, luni, trimiestre
+
+
+mark date istorice as such - anything older than 10 years?
+anything before 89?
+
+pe domenii.
+
+geo -> map
+perioade -> timeline
+perioade de tip multiplu -> filter, default - year
+
+counters - 
+
+ACC101B – only geo and year 
+- map with period filter. 
+- tabel w heatmap
+- timeline per judet
+
+ACC101C - simple counter
+CAEN + an
+
+
 ## 1.1. Dimension Index Explorer (NEW)
 
 In addition to the main dataset navigator, we now have a **Dimension Index Explorer** that provides specialized search capabilities for statistical dimensions and options.

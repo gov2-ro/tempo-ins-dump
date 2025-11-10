@@ -41,7 +41,8 @@ cursor.execute('''
         matViews INTEGER,
         matDownloads INTEGER,
         matActive INTEGER,
-        matTime INTEGER
+        matTime INTEGER,
+        dim_labels TEXT
     )
 ''')
 
@@ -106,19 +107,24 @@ for json_file in os.listdir(json_directory):
         matActive = data['details']['matActive']
         matTime = data['details']['matTime']
 
+        # Extract dimension labels and store as JSON array
+        dimensionsMap = data.get('dimensionsMap', [])
+        dim_labels_list = [dimension['label'] for dimension in dimensionsMap]
+        dim_labels_json = json.dumps(dim_labels_list, ensure_ascii=False)
+
         try:
             # have query in separate variable
-    
+
             cursor.execute('''
-                INSERT INTO datasets (filename, ancestors_1_code, ancestors_2_code, ancestors_3_code, ancestors_4_code, matrixName, periodicitati, definitie, ultimaActualizare, metodologie, observatii, persoaneResponsabile, intrerupere_lastPeriod, continuareSerie, nomJud, nomLoc, matMaxDim, matUMSpec, matSiruta, matCaen1, matCaen2, matRegJ, matCharge, matViews, matDownloads, matActive, matTime)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (filename, ancestors_1_code, ancestors_2_code, ancestors_3_code, ancestors_4_code, matrixName, periodicitati, definitie, ultimaActualizare, metodologie, observatii, persoaneResponsabile, intrerupere_lastPeriod, continuareSerie, nomJud, nomLoc, matMaxDim, matUMSpec, matSiruta, matCaen1, matCaen2, matRegJ, matCharge, matViews, matDownloads, matActive, matTime))
-        except sqlite3.Error as e:           
+                INSERT INTO datasets (filename, ancestors_1_code, ancestors_2_code, ancestors_3_code, ancestors_4_code, matrixName, periodicitati, definitie, ultimaActualizare, metodologie, observatii, persoaneResponsabile, intrerupere_lastPeriod, continuareSerie, nomJud, nomLoc, matMaxDim, matUMSpec, matSiruta, matCaen1, matCaen2, matRegJ, matCharge, matViews, matDownloads, matActive, matTime, dim_labels)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (filename, ancestors_1_code, ancestors_2_code, ancestors_3_code, ancestors_4_code, matrixName, periodicitati, definitie, ultimaActualizare, metodologie, observatii, persoaneResponsabile, intrerupere_lastPeriod, continuareSerie, nomJud, nomLoc, matMaxDim, matUMSpec, matSiruta, matCaen1, matCaen2, matRegJ, matCharge, matViews, matDownloads, matActive, matTime, dim_labels_json))
+        except sqlite3.Error as e:
             print(f"E 116 inserting into 'datasets' table: {e}")
             print(filename, intrerupere_lastPeriod, continuareSerie, nomJud)
- 
+
         # Extract data for the "fields" table
-        dimensionsMap = data.get('dimensionsMap', [])
+        # dimensionsMap already extracted above for dim_labels
         optionsCount = 0
         for dimension in dimensionsMap:
             dimCode = dimension['dimCode']
