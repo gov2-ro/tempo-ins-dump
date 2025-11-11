@@ -1,7 +1,11 @@
 """ 
-todo
+### todo
 
-- [ ] add description
+- [ ] count cells
+- [ ] query Localitati Judete
+- [ ] handle batch partial donwloads for larger than 30k cells
+
+- [ ] add description ?
 - [x] add progress bar
 - [x] add Excel/HTML table download functionality
 - [x] add flag to control Excel downloads (disabled by default)
@@ -40,11 +44,13 @@ import json
 import time
 from urllib3.exceptions import InsecureRequestWarning
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import os
 import pathlib
 import argparse
 from tqdm import tqdm
+import csv
+import copy
 
 # Suppress only the single InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
@@ -61,6 +67,15 @@ file_handler = logging.FileHandler(os.path.join(log_folder, 'fetch-csv.log'), en
 file_handler.setLevel(logging.WARNING)
 file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logger.addHandler(file_handler)
+
+# Set up logging for Judet-split datasets
+judet_split_log_file = os.path.join(log_folder, 'judet-split-datasets.log')
+judet_split_logger = logging.FileHandler(judet_split_log_file, encoding='utf-8')
+judet_split_logger.setLevel(logging.INFO)
+judet_split_logger.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+judet_logger = logging.getLogger('judet_split')
+judet_logger.addHandler(judet_split_logger)
+judet_logger.setLevel(logging.INFO)
 
 def load_matrix_definition(file_path: str) -> Dict:
     """Load and parse the matrix definition file."""
@@ -118,6 +133,140 @@ def count_csv_rows(file_path: str) -> int:
         logger.error(f"Error counting rows in {file_path}: {e}")
         return -1
 
+def load_siruta_mapping() -> Dict[str, str]:
+    """
+    Load SIRUTA to Judet mapping from data/meta/uat-siruta.csv
+
+    Returns:
+        Dictionary mapping SIRUTA code to Judet name
+    """
+    siruta_file = "data/meta/uat-siruta.csv"
+    siruta_map = {}
+
+    try:
+        with open(siruta_file, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                siruta_code = row['SIRUTA'].strip()
+                judet_name = row['Judet'].strip()
+                siruta_map[siruta_code] = judet_name
+
+        logger.info(f"Loaded {len(siruta_map)} SIRUTA to Judet mappings")
+        return siruta_map
+    except Exception as e:
+        logger.error(f"Error loading SIRUTA mapping: {e}")
+        raise
+
+def has_judete_and_localitati(matrix_def: Dict) -> tuple[bool, Optional[Dict], Optional[Dict]]:
+    """
+    Check if matrix definition has both 'Judete' and 'Localitati' dimensions.
+
+    Args:
+        matrix_def: Matrix definition dictionary
+
+    Returns:
+        Tuple of (has_both, judete_dim, localitati_dim)
+    """
+    judete_dim = None
+    localitati_dim = None
+
+    for dim in matrix_def.get("dimensionsMap", []):
+        label = dim.get("label", "").strip().lower()
+        if label == "judete":
+            judete_dim = dim
+        elif label in ["localitati", "localitati "]:  # Handle trailing space
+            localitati_dim = dim
+
+    has_both = judete_dim is not None and localitati_dim is not None
+    return has_both, judete_dim, localitati_dim
+
+def extract_siruta_from_label(label: str) -> Optional[str]:
+    """
+    Extract SIRUTA code from a locality label.
+    Format: "1017 MUNICIPIUL ALBA IULIA" -> "1017"
+
+    Args:
+        label: Locality label
+
+    Returns:
+        SIRUTA code or None if not found
+    """
+    parts = label.strip().split()
+    if parts and parts[0].isdigit():
+        return parts[0]
+    return None
+
+def group_localities_by_judet(localitati_dim: Dict, judete_dim: Dict, siruta_map: Dict[str, str]) -> Dict[str, List[Dict]]:
+    """
+    Group localities by their Judet using SIRUTA codes.
+
+    Args:
+        localitati_dim: Localitati dimension dictionary
+        judete_dim: Judete dimension dictionary
+        siruta_map: SIRUTA to Judet mapping
+
+    Returns:
+        Dictionary mapping Judet nomItemId to list of locality options
+    """
+    # Create mapping of Judet names to their nomItemId (case-insensitive)
+    judet_name_to_id = {}
+    for opt in judete_dim.get("options", []):
+        judet_label = opt.get("label", "").strip()
+        if judet_label.lower() != "total":
+            # Store both original and lowercase for matching
+            judet_name_to_id[judet_label.lower()] = {
+                'nomItemId': opt["nomItemId"],
+                'original_name': judet_label
+            }
+
+    # Group localities by Judet
+    judet_localities = {}
+    unmatched_localities = []
+
+    for locality_opt in localitati_dim.get("options", []):
+        label = locality_opt.get("label", "").strip()
+
+        # Skip TOTAL
+        if label.upper() == "TOTAL":
+            continue
+
+        # Extract SIRUTA code
+        siruta_code = extract_siruta_from_label(label)
+        if not siruta_code:
+            unmatched_localities.append(label)
+            continue
+
+        # Find Judet for this SIRUTA code
+        judet_name_from_csv = siruta_map.get(siruta_code)
+        if not judet_name_from_csv:
+            unmatched_localities.append(f"{label} (SIRUTA: {siruta_code})")
+            continue
+
+        # Find Judet nomItemId (case-insensitive lookup)
+        judet_info = judet_name_to_id.get(judet_name_from_csv.lower())
+        if not judet_info:
+            unmatched_localities.append(f"{label} -> {judet_name_from_csv} (no ID)")
+            continue
+
+        judet_id = judet_info['nomItemId']
+        judet_name = judet_info['original_name']
+
+        # Add to group
+        if judet_id not in judet_localities:
+            judet_localities[judet_id] = {
+                'judet_name': judet_name,
+                'judet_id': judet_id,
+                'localities': []
+            }
+        judet_localities[judet_id]['localities'].append(locality_opt)
+
+    if unmatched_localities:
+        logger.warning(f"Could not match {len(unmatched_localities)} localities to Judete")
+        for unmatched in unmatched_localities[:10]:  # Log first 10
+            logger.debug(f"  Unmatched: {unmatched}")
+
+    return judet_localities
+
 def convert_to_pivot_payload(matrix_def: Dict, matrix_code: str, include_totals: bool = False) -> Dict:
     """
     Convert matrix definition to pivot API payload format.
@@ -140,6 +289,136 @@ def convert_to_pivot_payload(matrix_def: Dict, matrix_code: str, include_totals:
     }
 
     return payload
+
+def fetch_by_judet_split(matrix_code: str, matrix_def: Dict, output_dir: str,
+                         judete_dim: Dict, localitati_dim: Dict, siruta_map: Dict[str, str]) -> bool:
+    """
+    Fetch data by splitting into per-Judet requests.
+    Saves partial files and combines them into the final CSV.
+
+    Args:
+        matrix_code: The matrix code
+        matrix_def: Matrix definition dictionary
+        output_dir: Output directory
+        judete_dim: Judete dimension dictionary
+        localitati_dim: Localitati dimension dictionary
+        siruta_map: SIRUTA to Judet mapping
+
+    Returns:
+        True if successful, False otherwise
+    """
+    # Create partial files directory
+    partial_dir = "data/4-datasets/judet-localitate"
+    os.makedirs(partial_dir, exist_ok=True)
+
+    # Group localities by Judet
+    tqdm.write(f"Grouping localities by Judet for {matrix_code}...")
+    judet_groups = group_localities_by_judet(localitati_dim, judete_dim, siruta_map)
+
+    if not judet_groups:
+        tqdm.write(f"ERROR: No localities grouped for {matrix_code}")
+        return False
+
+    tqdm.write(f"Found {len(judet_groups)} Judete to fetch")
+
+    # Prepare request URL and headers
+    url = 'http://statistici.insse.ro:8077/tempo-ins/pivot'
+    headers = {
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-GB,en;q=0.7',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Content-Type': 'application/json',
+        'Origin': 'http://statistici.insse.ro:8077',
+        'Pragma': 'no-cache',
+        'Referer': 'http://statistici.insse.ro:8077/tempo-online/',
+        'Sec-GPC': '1',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+    }
+
+    partial_files = []
+    all_data_rows = []
+    header_row = None
+
+    # Fetch data for each Judet
+    for judet_id, group_info in tqdm(judet_groups.items(), desc=f"Fetching {matrix_code} by Judet", leave=False):
+        judet_name = group_info['judet_name']
+        localities = group_info['localities']
+
+        tqdm.write(f"  Fetching {judet_name} ({len(localities)} localities)...")
+
+        # Create modified matrix definition for this Judet
+        modified_def = copy.deepcopy(matrix_def)
+
+        # Update dimensions: set specific Judet and its localities
+        for dim in modified_def["dimensionsMap"]:
+            dim_label = dim.get("label", "").strip().lower()
+
+            if dim_label == "judete":
+                # Keep only this specific Judet
+                dim["options"] = [opt for opt in dim["options"] if opt["nomItemId"] == judet_id]
+
+            elif dim_label in ["localitati", "localitati "]:
+                # Keep only localities for this Judet
+                dim["options"] = localities
+
+        # Create payload
+        payload = convert_to_pivot_payload(modified_def, matrix_code, include_totals=False)
+
+        # Make request
+        try:
+            response = requests.post(url, json=payload, headers=headers, verify=False)
+            response.raise_for_status()
+
+            # Check for errors
+            response_text = response.content.decode('utf-8', errors='ignore')
+            if ('celule' in response_text.lower() and '30000' in response_text) or \
+               ('pragul' in response_text.lower() and 'celule' in response_text.lower()):
+                tqdm.write(f"    WARNING: {judet_name} exceeds cell limit, skipping")
+                logger.warning(f"{matrix_code} - Judet {judet_name} exceeds cell limit")
+                continue
+
+            # Save partial file
+            partial_file = os.path.join(partial_dir, f"{matrix_code}_{judet_name}.csv")
+            with open(partial_file, 'wb') as f:
+                f.write(response.content)
+            partial_files.append(partial_file)
+
+            # Read and accumulate data
+            with open(partial_file, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+                if lines:
+                    if header_row is None:
+                        header_row = lines[0]
+                    # Add data rows (skip header)
+                    data_rows = [line for line in lines[1:] if line.strip()]
+                    all_data_rows.extend(data_rows)
+                    tqdm.write(f"    Got {len(data_rows)} rows from {judet_name}")
+
+        except Exception as e:
+            tqdm.write(f"    ERROR fetching {judet_name}: {e}")
+            logger.error(f"{matrix_code} - Error fetching Judet {judet_name}: {e}")
+            continue
+
+    # Combine all partial files
+    if not all_data_rows:
+        tqdm.write(f"ERROR: No data collected for {matrix_code}")
+        return False
+
+    combined_file = os.path.join(output_dir, f"{matrix_code}.csv")
+    with open(combined_file, 'w', encoding='utf-8') as f:
+        if header_row:
+            f.write(header_row)
+        for row in all_data_rows:
+            f.write(row)
+
+    tqdm.write(f"SUCCESS: Combined {len(all_data_rows)} rows from {len(partial_files)} Judete")
+    tqdm.write(f"Saved to {combined_file}")
+
+    # Log success
+    judet_logger.info(f"{matrix_code} - Successfully fetched using Judet-split approach ({len(partial_files)} Judete, {len(all_data_rows)} rows)")
+
+    return True
 
 def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, force_overwrite: bool = False) -> None:
     """
@@ -226,7 +505,45 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
                 f"Response content: {response_preview}"
             )
 
-            # RETRY with "Total" options included
+            # Check if this dataset has both Judete and Localitati dimensions
+            has_both, judete_dim, localitati_dim = has_judete_and_localitati(matrix_def)
+
+            if has_both:
+                # RETRY using Judet-split approach
+                tqdm.write(f"Dataset has both Judete and Localitati dimensions")
+                tqdm.write(f"Retrying {matrix_code} using Judet-split approach...")
+                logger.info(f"{matrix_code} - Retrying with Judet-split approach")
+
+                try:
+                    # Load SIRUTA mapping
+                    siruta_map = load_siruta_mapping()
+
+                    # Attempt Judet-split fetch
+                    success = fetch_by_judet_split(
+                        matrix_code, matrix_def, output_dir,
+                        judete_dim, localitati_dim, siruta_map
+                    )
+
+                    if success:
+                        # Verify the combined file has data
+                        retry_row_count = count_csv_rows(output_file)
+                        if retry_row_count > 0:
+                            success_msg = f"JUDET-SPLIT SUCCESS: {matrix_code} now has {retry_row_count} rows"
+                            tqdm.write(success_msg)
+                            logger.info(f"{matrix_code}.csv - {success_msg}")
+                            return  # Success, exit function
+                        else:
+                            tqdm.write(f"JUDET-SPLIT FAILED: {matrix_code} still has no data")
+                            logger.warning(f"{matrix_code}.csv - Judet-split produced no data")
+                    else:
+                        tqdm.write(f"JUDET-SPLIT FAILED: Could not fetch data")
+                        logger.warning(f"{matrix_code}.csv - Judet-split fetch failed")
+
+                except Exception as e:
+                    tqdm.write(f"JUDET-SPLIT EXCEPTION: {e}")
+                    logger.error(f"{matrix_code}.csv - Judet-split retry failed: {e}")
+
+            # FALLBACK: RETRY with "Total" options included
             tqdm.write(f"Retrying {matrix_code} WITH 'Total' options included...")
             logger.info(f"{matrix_code} - Retrying with include_totals=True")
 
