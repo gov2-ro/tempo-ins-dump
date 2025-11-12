@@ -12,14 +12,13 @@ lang = "ro"
 
  
 
-import os, csv, sqlite3, logging
+import os, csv, json, logging, argparse
 from tqdm import tqdm
 
 
 # Configuration variables
 input_csvs = "data/4-datasets/" + lang + "/"
-db_path = "data/3-db/" + lang +  "/tempo-indexes.db"
-db_table = 'fields'
+json_metas = "data/2-metas/" + lang + "/"
 compacted_folder = "data/5-compact-datasets/" + lang + "/"
 logfile = "data/5-compact-datasets/" + lang+ "-compaction.log"
 
@@ -28,25 +27,65 @@ logging.basicConfig(filename=logfile, level=logging.INFO,
                     format='%(asctime)s [%(levelname)s] %(message)s')
 
 
-def main():
-    # Connect to DB
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+def load_mapping_from_json(json_path):
+    """
+    Load dimension mappings from a JSON metadata file.
+    Returns a tuple: (mapping, dim_labels_by_code)
+    - mapping: dict with key (dim_code, opt_label_lower) -> nomItemId
+    - dim_labels_by_code: dict with key dim_code -> dim_label
+    """
+    with open(json_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
 
-    # Get distinct fileids from the fields table
-    cursor.execute(f"SELECT DISTINCT fileid FROM {db_table}")
-    fileids_in_db = [row[0] for row in cursor.fetchall()]
+    mapping = {}
+    dim_labels_by_code = {}
+
+    if 'dimensionsMap' in data:
+        for dimension in data['dimensionsMap']:
+            dim_code = dimension['dimCode']
+            dim_label = dimension['label']
+            dim_labels_by_code[dim_code] = dim_label
+
+            for option in dimension['options']:
+                opt_label = option['label']
+                nom_item_id = option['nomItemId']
+                # Normalize opt_label by stripping and lowercasing
+                key = (dim_code, opt_label.strip().lower())
+                mapping[key] = nom_item_id
+
+    return mapping, dim_labels_by_code
+
+
+def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Compact data from CSV files using JSON metadata')
+    parser.add_argument('--matrix', type=str, help='Process only a specific matrix (fileid) for debugging')
+    args = parser.parse_args()
+
+    # Get list of JSON metadata files (these are the fileids)
+    json_files = [f[:-5] for f in os.listdir(json_metas) if f.endswith('.json')]
+    fileids_available = json_files
+
+    # Filter to specific matrix if requested
+    if args.matrix:
+        if args.matrix in fileids_available:
+            fileids_available = [args.matrix]
+            logging.info(f"Processing only matrix: {args.matrix}")
+        else:
+            logging.error(f"Matrix '{args.matrix}' not found in JSON metadata. Available matrices: {', '.join(fileids_available[:10])}...")
+            print(f"Error: Matrix '{args.matrix}' not found in JSON metadata folder.")
+            return
 
     # Get list of csv files in input folder (without extension)
     input_files = [f[:-4] for f in os.listdir(input_csvs) if f.endswith('.csv')]
-    
-    # Check for files in folder but not in DB
+
+    # Check for files in folder but not in JSON metadata
     for f in input_files:
-        if f not in fileids_in_db:
-            logging.warning(f"File '{f}.csv' found in input folder but not in the DB index.")
+        if f not in fileids_available:
+            logging.warning(f"File '{f}.csv' found in input folder but no matching JSON metadata.")
 
     # Process each fileid
-    for fileid in tqdm(fileids_in_db, desc="Processing files"):
+    for fileid in tqdm(fileids_available, desc="Processing files"):
 
         compacted_file = os.path.join(compacted_folder, f"{fileid}.csv")
         if os.path.exists(compacted_file):
@@ -57,22 +96,20 @@ def main():
         original_file = os.path.join(input_csvs, f"{fileid}.csv")
         if not os.path.exists(original_file):
             # CSV does not exist in input, log warning
-            logging.warning(f"File '{fileid}.csv' present in DB index but not in input folder.")
+            logging.warning(f"File '{fileid}.csv' has JSON metadata but not in input folder.")
             continue
 
-        # Retrieve all field mappings for this fileid
-        # We'll store them in a dictionary keyed by (dim_code, opt_label_lower)
-        cursor.execute(f"SELECT dim_label, dimCode, opt_label, nomItemId FROM {db_table} WHERE fileid=?",
-                       (fileid,))
-        rows = cursor.fetchall()
+        # Load mappings from JSON metadata file
+        json_file = os.path.join(json_metas, f"{fileid}.json")
+        if not os.path.exists(json_file):
+            logging.warning(f"JSON metadata file '{fileid}.json' not found. Skipping.")
+            continue
 
-        mapping = {}
-        dim_labels_by_code = {}
-        for dim_label, dim_code, opt_label, nom_item_id in rows:
-            dim_labels_by_code[dim_code] = dim_label
-            # Normalize opt_label by stripping and lowercasing
-            key = (dim_code, opt_label.strip().lower())
-            mapping[key] = nom_item_id
+        try:
+            mapping, dim_labels_by_code = load_mapping_from_json(json_file)
+        except Exception as e:
+            logging.error(f"Error loading JSON metadata for '{fileid}.json': {e}")
+            continue
 
         # Process the CSV
         os.makedirs(compacted_folder, exist_ok=True)
@@ -109,7 +146,7 @@ def main():
                         else:
                             # No match found, leave unchanged but log a warning
                             logging.warning(
-                                f"No match in DB for '{fileid}.csv' at column '{header[col_index]}' "
+                                f"No match in metadata for '{fileid}.csv' at column '{header[col_index]}' "
                                 f"with value '{original_value}'. Leaving unchanged."
                             )
 
@@ -118,7 +155,6 @@ def main():
 
         logging.info(f"Successfully processed and compacted '{fileid}.csv' into '{compacted_file}'")
 
-    conn.close()
     logging.info("Compaction process completed.")
 
 
