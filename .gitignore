@@ -9,7 +9,8 @@ data*/*
 */data/*
 */data*/*
 _obsolete
-
+.playwright-mcp/*
+.playwright-mcp/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

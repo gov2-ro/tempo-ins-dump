@@ -176,3 +176,18 @@ The application will be built with a two-pane layout, inspired by the supplied `
 -   **Simple Visualization:** For selected datasets, generate basic charts (e.g., bar, line) to visualize the data directly in the interface.
 -   **Bookmark/Favorites:** Allow users to mark datasets as favorites for quick access.
 
+# 202511 Notes
+
+### V3 - alpha / atena
+
+Create documentation style UI:
+
+Dataset browser 
+- left sidebar with context / category hierarchy
+- right sidebar with dimensions browser options
+- main content with list of filtered datasets
+- search bar
+
+Dataset profile
+- shows base data profile charts totals per options / per year? also for the last available data.
+- has right sidebar with nav - parent ctgs and list of sibling datasets - with the same parent

@@ -242,7 +242,7 @@
         async function loadTreeStructure() {
             try {
                 const [contextResponse, metadataResponse] = await Promise.all([
-                    fetch('../data/1-indexes/ro/context.json'),
+                    fetch('data-root/1-indexes/ro/context.json'),
                     fetch('data/dataset-metadata.json')
                 ]);
 
@@ -279,11 +279,16 @@
         function buildTree(contextData, metadataMap) {
             const tree = [];
             const lookup = {};
+            const nameLookup = {}; // Map clean names to codes
 
             // First pass: create lookup table
             contextData.forEach(item => {
                 const code = item.context.code;
                 const level = item.level;
+                let cleanName = cleanHtmlTags(item.context.name).toUpperCase();
+
+                // Remove leading number prefix (e.g., "4. SOMERI" -> "SOMERI")
+                cleanName = cleanName.replace(/^\d+\.\s*/, '');
 
                 lookup[code] = {
                     code,
@@ -293,6 +298,11 @@
                     children: [],
                     datasets: []
                 };
+
+                // Build name lookup for level 2 categories
+                if (level === 2) {
+                    nameLookup[cleanName] = code;
+                }
             });
 
             // Second pass: build parent-child relationships
@@ -311,23 +321,43 @@
             });
 
             // Third pass: attach datasets to level 2 categories
-            Object.entries(metadataMap).forEach(([fileName, metadata]) => {
-                if (metadata.ancestors && metadata.ancestors.length > 0) {
-                    // Get the last ancestor (level 2 category)
-                    const lastAncestor = metadata.ancestors[metadata.ancestors.length - 1];
-                    const categoryCode = lastAncestor.code;
+            if (metadataMap.metadata && Array.isArray(metadataMap.metadata)) {
+                metadataMap.metadata.forEach(item => {
+                    if (item.ancestorPath) {
+                        // Split ancestor path and get the last part (level 2 category)
+                        const parts = item.ancestorPath.split('→').map(p => p.trim().toUpperCase());
 
-                    if (lookup[categoryCode] && lookup[categoryCode].level === 2) {
-                        lookup[categoryCode].datasets.push({
-                            fileName,
-                            name: metadata.matrixName || fileName,
-                            filesize: metadata.filesize || 'N/A'
-                        });
+                        if (parts.length > 0) {
+                            const lastPart = parts[parts.length - 1];
+
+                            // Try to find matching category code by name
+                            const categoryCode = nameLookup[lastPart];
+
+                            if (categoryCode && lookup[categoryCode]) {
+                                lookup[categoryCode].datasets.push({
+                                    fileName: item.matrixCode,
+                                    name: item.matrixCode,
+                                    filesize: formatFileSize(item.fileSizeMB)
+                                });
+                            }
+                        }
                     }
-                }
-            });
+                });
+            }
 
             return tree;
+        }
+
+        function formatFileSize(mb) {
+            if (!mb || isNaN(mb)) return 'N/A';
+
+            if (mb < 1) {
+                return (mb * 1024).toFixed(0) + 'K';
+            } else if (mb < 1024) {
+                return mb.toFixed(1) + 'M';
+            } else {
+                return (mb / 1024).toFixed(2) + 'G';
+            }
         }
 
         function renderTree(tree) {
