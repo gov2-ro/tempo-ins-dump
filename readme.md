@@ -1,4 +1,4 @@
-[https://ins.gov2.ro/](ins.gov2.ro) - scrapes data from _TEMPO-Online_ ([statistici.insse.ro](http://statistici.insse.ro:8077/tempo-online))  
+[ins.gov2.ro](https://ins.gov2.ro/) - scrapes data from _TEMPO-Online_ ([statistici.insse.ro](http://statistici.insse.ro:8077/tempo-online))  
 
 _INS Tempo Online but make it nice._
 
