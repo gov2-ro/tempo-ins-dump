@@ -68,7 +68,7 @@ python query-dimensions.py file ZDP1321   # File details
 
 ### beta
 - [ ] some datasets are not downloaded
-    - [ ] 30k cells limit alert: _Selectia dvs actuala ar solicita 30600 celule. Datorita limitarilor impuse de o aplicatie web, va rugam sa rafinati cautarea Dvs. pentru a cobori sub pragul de 30000 de celule. Va multumim!_ see comments in [6-fetch-csv.py](6-fetch-csv.py)
+    - [x] 30k cells limit alert: _Selectia dvs actuala ar solicita 30600 celule. Datorita limitarilor impuse de o aplicatie web, va rugam sa rafinati cautarea Dvs. pentru a cobori sub pragul de 30000 de celule. Va multumim!_ see comments in [6-fetch-csv.py](6-fetch-csv.py)
 
 ### beta
 - [x] categorise filters
@@ -83,6 +83,8 @@ python query-dimensions.py file ZDP1321   # File details
 - [x] combine labels/dimensions
 - [x] show dataset preview
 - [x] collapse definition
+- [ ] tree nav
+- [ ] basic stats / charts - per all years, per last year - for localitati normeaza la populatie
 
 ![how it started](docs/misc/nonstop-bv-ct.png)
 

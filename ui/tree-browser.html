@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INS TEMPO - Tree Browser</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .tree-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+        }
+
+        .tree-container h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #2196f3;
+        }
+
+        .tree-container h2 {
+            font-size: 20px;
+            margin: 20px 0 10px 20px;
+            padding: 10px;
+            background: #f0f0f0;
+            border-left: 4px solid #2196f3;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .tree-container h2:hover {
+            background: #e3f2fd;
+        }
+
+        .tree-container h3 {
+            font-size: 16px;
+            margin: 5px 0 5px 40px;
+            padding: 8px;
+            background: #fafafa;
+            border-left: 3px solid #90caf9;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .tree-container h3:hover {
+            background: #e3f2fd;
+        }
+
+        .tree-container h3 .code {
+            font-weight: 600;
+            color: #1976d2;
+            margin-right: 8px;
+        }
+
+        /* Dataset list that appears on hover */
+        .tree-container h3 .dataset-list {
+            display: none;
+            position: absolute;
+            left: 100%;
+            top: 0;
+            min-width: 400px;
+            max-width: 600px;
+            background: white;
+            border: 2px solid #2196f3;
+            border-radius: 4px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            margin-left: 10px;
+            padding: 10px;
+        }
+
+        .tree-container h3:hover .dataset-list {
+            display: block;
+        }
+
+        .dataset-list ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .dataset-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .dataset-list li:last-child {
+            border-bottom: none;
+        }
+
+        .dataset-list a {
+            color: #1976d2;
+            text-decoration: none;
+            font-size: 13px;
+        }
+
+        .dataset-list a:hover {
+            text-decoration: underline;
+        }
+
+        .dataset-list .ccode {
+            font-weight: 600;
+            margin-right: 8px;
+        }
+
+        .dataset-list code {
+            font-size: 11px;
+            color: #666;
+            background: #f5f5f5;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+
+        .search-container {
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px;
+            font-size: 14px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #2196f3;
+        }
+
+        .autocomplete-items {
+            position: absolute;
+            border: 1px solid #d4d4d4;
+            border-top: none;
+            z-index: 99;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 400px;
+            overflow-y: auto;
+            background: white;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .autocomplete-item {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .autocomplete-item:hover,
+        .autocomplete-item.active {
+            background-color: #e3f2fd;
+        }
+
+        .type-indicator {
+            display: inline-block;
+            padding: 2px 6px;
+            font-size: 10px;
+            font-weight: 600;
+            border-radius: 3px;
+            margin-right: 8px;
+            text-transform: uppercase;
+        }
+
+        .type-header {
+            background: #2196f3;
+            color: white;
+        }
+
+        .type-dataset {
+            background: #ff9800;
+            color: white;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .nav-sidebar {
+            position: fixed;
+            right: 20px;
+            top: 100px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            max-width: 200px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .nav-sidebar a {
+            display: block;
+            padding: 4px 8px;
+            color: #1976d2;
+            text-decoration: none;
+            font-size: 12px;
+            margin: 2px 0;
+        }
+
+        .nav-sidebar a:hover {
+            background: #e3f2fd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>INS TEMPO - Tree Browser</h1>
+            <div class="nav-links">
+                <a href="category-browser.html" class="nav-link">Categories (old)</a>
+                <a href="tree-browser.html" class="nav-link active">Tree Browser</a>
+                <a href="index.html" class="nav-link">Dimensions</a>
+            </div>
+        </div>
+
+        <div class="tags-section">
+            <div class="search-container">
+                <input type="text" class="search-input" placeholder="Caută în capitole și seturi de date">
+                <div class="autocomplete-items" style="display: none;"></div>
+            </div>
+
+            <div id="tree-container" class="tree-container">
+                <div class="loading">Loading tree structure...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation sidebar -->
+    <div class="nav-sidebar" style="display: none;"></div>
+
+    <script>
+        // Load and process context.json to build tree structure
+        async function loadTreeStructure() {
+            try {
+                const [contextResponse, metadataResponse] = await Promise.all([
+                    fetch('../data/1-indexes/ro/context.json'),
+                    fetch('data/dataset-metadata.json')
+                ]);
+
+                if (!contextResponse.ok || !metadataResponse.ok) {
+                    throw new Error('Failed to load data files');
+                }
+
+                const contextData = await contextResponse.json();
+                const metadataMap = await metadataResponse.json();
+
+                // Build the tree structure
+                const tree = buildTree(contextData, metadataMap);
+
+                // Render the tree
+                renderTree(tree);
+
+                // Build navigation sidebar
+                buildNavSidebar(contextData);
+
+                // Initialize search
+                initializeSearch();
+
+            } catch (error) {
+                console.error('Error loading tree structure:', error);
+                document.getElementById('tree-container').innerHTML = `
+                    <div class="error">
+                        Error loading tree structure: ${error.message}
+                        <br>Please check that the data files are available.
+                    </div>
+                `;
+            }
+        }
+
+        function buildTree(contextData, metadataMap) {
+            const tree = [];
+            const lookup = {};
+
+            // First pass: create lookup table
+            contextData.forEach(item => {
+                const code = item.context.code;
+                const level = item.level;
+
+                lookup[code] = {
+                    code,
+                    name: item.context.name,
+                    level,
+                    parentCode: item.parentCode,
+                    children: [],
+                    datasets: []
+                };
+            });
+
+            // Second pass: build parent-child relationships
+            contextData.forEach(item => {
+                const code = item.context.code;
+                const level = item.level;
+                const parentCode = item.parentCode;
+
+                if (level === 0) {
+                    // Root level (A, B, C, etc.)
+                    tree.push(lookup[code]);
+                } else if (parentCode && lookup[parentCode]) {
+                    // Add as child to parent
+                    lookup[parentCode].children.push(lookup[code]);
+                }
+            });
+
+            // Third pass: attach datasets to level 2 categories
+            Object.entries(metadataMap).forEach(([fileName, metadata]) => {
+                if (metadata.ancestors && metadata.ancestors.length > 0) {
+                    // Get the last ancestor (level 2 category)
+                    const lastAncestor = metadata.ancestors[metadata.ancestors.length - 1];
+                    const categoryCode = lastAncestor.code;
+
+                    if (lookup[categoryCode] && lookup[categoryCode].level === 2) {
+                        lookup[categoryCode].datasets.push({
+                            fileName,
+                            name: metadata.matrixName || fileName,
+                            filesize: metadata.filesize || 'N/A'
+                        });
+                    }
+                }
+            });
+
+            return tree;
+        }
+
+        function renderTree(tree) {
+            const container = document.getElementById('tree-container');
+            let html = '';
+
+            tree.forEach(rootNode => {
+                if (rootNode.level === 0) {
+                    html += renderNode(rootNode);
+                }
+            });
+
+            container.innerHTML = html;
+        }
+
+        function renderNode(node) {
+            let html = '';
+
+            if (node.level === 0) {
+                // Level 0: Root categories (A, B, C, etc.)
+                html += `<h1 id="x-${node.code}">${node.code} ${cleanHtmlTags(node.name)}</h1>\n`;
+
+                node.children.sort((a, b) => a.code.localeCompare(b.code));
+                node.children.forEach(child => {
+                    html += renderNode(child);
+                });
+            } else if (node.level === 1) {
+                // Level 1: Major sections
+                html += `<h2 id="x-${node.code}">${node.code} ${cleanHtmlTags(node.name)}</h2>\n`;
+
+                node.children.sort((a, b) => a.code.localeCompare(b.code));
+                node.children.forEach(child => {
+                    html += renderNode(child);
+                });
+            } else if (node.level === 2) {
+                // Level 2: Subsections with datasets on hover
+                html += `<h3 id="x-${node.code}">`;
+                html += `<span class="code">${node.code}</span>`;
+                html += cleanHtmlTags(node.name);
+
+                // Add dataset list (shown on hover)
+                if (node.datasets && node.datasets.length > 0) {
+                    html += '<div class="dataset-list"><ul>';
+
+                    node.datasets.sort((a, b) => a.fileName.localeCompare(b.fileName));
+                    node.datasets.forEach(dataset => {
+                        html += `<li>`;
+                        html += `<a class="ccode" href="dataset.html#${dataset.fileName}">${dataset.fileName}</a>`;
+                        html += `<a class="cname" href="dataset.html#${dataset.fileName}">${dataset.name}</a>`;
+                        html += ` <code>(${dataset.filesize})</code>`;
+                        html += `</li>`;
+                    });
+
+                    html += '</ul></div>';
+                }
+
+                html += `</h3>\n`;
+            }
+
+            return html;
+        }
+
+        function cleanHtmlTags(text) {
+            // Remove HTML tags but keep the text content
+            return text.replace(/<[^>]*>/g, ' ').trim();
+        }
+
+        function buildNavSidebar(contextData) {
+            const sidebar = document.querySelector('.nav-sidebar');
+            let html = '';
+
+            // Get root level categories
+            const rootCategories = contextData.filter(item => item.level === 0);
+
+            rootCategories.forEach(cat => {
+                const code = cat.context.code;
+                const name = cleanHtmlTags(cat.context.name);
+                html += `<a href="#x-${code}">${code} ${name}</a>`;
+            });
+
+            sidebar.innerHTML = html;
+            sidebar.style.display = 'block';
+        }
+
+        function initializeSearch() {
+            const searchInput = document.querySelector('.search-input');
+            const autocompleteList = document.querySelector('.autocomplete-items');
+            const searchIndex = buildSearchIndex();
+
+            function handleSearch() {
+                const query = searchInput.value.toLowerCase();
+                if (!query) {
+                    autocompleteList.style.display = 'none';
+                    return;
+                }
+
+                const matches = searchIndex.filter(item =>
+                    item.text.toLowerCase().includes(query)
+                ).slice(0, 30);
+
+                if (matches.length === 0) {
+                    autocompleteList.style.display = 'none';
+                    return;
+                }
+
+                autocompleteList.innerHTML = matches.map(item => {
+                    const type = item.type === 'header' ? 'HEADER' : 'DATASET';
+                    const typeClass = `type-${item.type}`;
+                    const highlightedText = highlightMatch(item.text, query);
+
+                    return `
+                        <div class="autocomplete-item" data-type="${item.type}" data-id="${item.id}">
+                            <span class="type-indicator ${typeClass}">${type}</span>
+                            ${highlightedText}
+                        </div>
+                    `;
+                }).join('');
+
+                autocompleteList.style.display = 'block';
+            }
+
+            function highlightMatch(text, query) {
+                if (!query) return text;
+                const regex = new RegExp(`(${query})`, 'gi');
+                return text.replace(regex, '<strong>$1</strong>');
+            }
+
+            searchInput.addEventListener('input', handleSearch);
+
+            // Handle click on autocomplete item
+            autocompleteList.addEventListener('click', (e) => {
+                const item = e.target.closest('.autocomplete-item');
+                if (!item) return;
+
+                const elementId = item.dataset.id;
+                const element = document.getElementById(elementId);
+
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    element.style.backgroundColor = '#fff3cd';
+                    setTimeout(() => element.style.backgroundColor = '', 2000);
+                }
+
+                searchInput.value = '';
+                autocompleteList.style.display = 'none';
+            });
+
+            // Close autocomplete when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.search-container')) {
+                    autocompleteList.style.display = 'none';
+                }
+            });
+
+            // Handle keyboard navigation
+            searchInput.addEventListener('keydown', (e) => {
+                const items = autocompleteList.getElementsByClassName('autocomplete-item');
+                const activeItem = document.querySelector('.autocomplete-item.active');
+                let index = Array.from(items).indexOf(activeItem);
+
+                switch (e.key) {
+                    case 'ArrowDown':
+                        e.preventDefault();
+                        if (index < items.length - 1) index++;
+                        break;
+                    case 'ArrowUp':
+                        e.preventDefault();
+                        if (index > 0) index--;
+                        break;
+                    case 'Enter':
+                        e.preventDefault();
+                        if (activeItem) activeItem.click();
+                        return;
+                    default:
+                        return;
+                }
+
+                Array.from(items).forEach(item => item.classList.remove('active'));
+                if (items[index]) {
+                    items[index].classList.add('active');
+                    items[index].scrollIntoView({ block: 'nearest' });
+                }
+            });
+        }
+
+        function buildSearchIndex() {
+            const searchItems = [];
+
+            // Index all headers (h1, h2, h3)
+            document.querySelectorAll('[id^="x-"]').forEach(header => {
+                const code = header.querySelector('.code')?.textContent || header.textContent.split(' ')[0];
+                const name = header.textContent.replace(code, '').trim();
+
+                searchItems.push({
+                    type: 'header',
+                    text: `${code} ${name}`,
+                    id: header.id
+                });
+            });
+
+            // Index all datasets
+            document.querySelectorAll('.dataset-list a.ccode').forEach(link => {
+                const code = link.textContent;
+                const name = link.nextElementSibling?.textContent || '';
+                const parentHeader = link.closest('h3');
+                const headerId = parentHeader?.id || '';
+
+                searchItems.push({
+                    type: 'dataset',
+                    text: `${code} ${name}`,
+                    id: headerId
+                });
+            });
+
+            return searchItems;
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', loadTreeStructure);
+    </script>
+</body>
+</html>
