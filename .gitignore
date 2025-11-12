@@ -4,6 +4,8 @@ data*/*
 /data/*
 *.code-workspace
 .claude/*
+.claude
+*/.claude*
 .github/*
 */_obsolete
 */*.log
