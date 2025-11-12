@@ -348,17 +348,20 @@
 
                     const fileInfo = ds.fileMetadata ? `
                         <div class="dataset-file-info">
-                            <span class="size ${ds.fileMetadata.fileSizeMB > 5 ? 'large' : ''}">${ds.fileMetadata.fileSizeMB.toFixed(2)} MB</span>
+                            <span class="size ${ds.fileMetadata.fileSizeMB > 5 ? 'large' : ''}">${ds.fileMetadata.fileSizeMB.toFixed(2)} MB</span> &middot; 
                             <span>${ds.fileMetadata.rowCount.toLocaleString()} rows</span>
                         </div>
                     ` : '';
 
-                    return `
+                     return `
                         <div class="dataset-card" onclick="openDataset('${escapeHtml(ds.filename)}')">
+                        ${path}    
+                        <div>
                             <div class="dataset-filename">${escapeHtml(ds.filename)}</div>
-                            <div class="dataset-name">${escapeHtml(ds.matrixName)}</div>xx
-                            ${path}
+                            &emsp; &middot; &emsp;
                             ${fileInfo}
+                        </div>
+                            <h4 class="dataset-name">${escapeHtml(ds.matrixName)}</h4> 
                             <div class="dataset-dims">
                                 ${(Array.isArray(ds.dim_labels_array) ? ds.dim_labels_array : []).map(dim =>
                                     `<span class="tag small ${selectedDimensions.has(dim) ? 'active' : ''}" onclick="event.stopPropagation(); filterByDimension('${escapeHtml(dim)}')">${escapeHtml(dim)}</span>`

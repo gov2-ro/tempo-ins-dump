@@ -9,9 +9,15 @@
       "Bash(cat:*)",
       "Bash(timeout 180 python:*)",
       "Bash(/dev/null)",
-      "Bash(jq:*)"
+      "Bash(jq:*)",
+      "Bash(lsof:*)",
+      "Bash(open http://localhost:8002/category-browser.html)"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "enabledMcpjsonServers": [
+    "browsermcp"
+  ],
+  "enableAllProjectMcpServers": true
 }

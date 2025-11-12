@@ -16,10 +16,49 @@
             margin: 0 auto;
         }
 
+        .header {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
         h1 {
             font-size: 24px;
-            margin-bottom: 20px;
+            margin-bottom: 0;
             color: #333;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 10px;
+        }
+
+        .nav-link {
+            padding: 8px 16px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            text-decoration: none;
+            color: #666;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover {
+            background: #e3f2fd;
+            border-color: #90caf9;
+            color: #1976d2;
+        }
+
+        .nav-link.active {
+            background: #2196f3;
+            color: white;
+            border-color: #1976d2;
         }
 
         h2 {

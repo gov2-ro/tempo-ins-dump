@@ -4,68 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Category Browser - INS TEMPO</title>
+    <link rel="stylesheet" href="style.css">
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            padding: 20px;
-            background: #f5f5f5;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .header {
-            background: white;
-            padding: 15px 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        h1 {
-            font-size: 24px;
-            color: #333;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 10px;
-        }
-
-        .nav-link {
-            padding: 8px 16px;
-            background: #f5f5f5;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            text-decoration: none;
-            color: #666;
-            font-size: 13px;
-            transition: all 0.2s;
-        }
-
-        .nav-link:hover {
-            background: #e3f2fd;
-            border-color: #90caf9;
-            color: #1976d2;
-        }
-
-        .nav-link.active {
-            background: #2196f3;
-            color: white;
-            border-color: #1976d2;
-        }
-
         .search-container {
             background: white;
             padding: 15px 20px;
@@ -143,16 +83,13 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
-        .category-section {
-            margin-bottom: 30px;
-        }
-
         .level-1 h1,
         .level-2 h2,
         .level-3 h3 {
             margin: 20px 0 10px 0;
             padding: 10px;
             border-radius: 4px;
+            transition: background-color 0.3s;
         }
 
         .level-1 h1 {
@@ -225,42 +162,23 @@
             color: #1976d2;
         }
 
-        ul.categories {
-            list-style: none;
-            padding: 0;
-        }
-
-        .file-info {
-            display: inline-block;
-            margin-left: 8px;
+        ul.datasets code {
             font-size: 11px;
-            color: #999;
-        }
-
-        .file-size {
-            font-weight: 600;
+            color: #666;
+            background: #f5f5f5;
             padding: 2px 6px;
             border-radius: 3px;
-            background: #e8f5e9;
-            color: #2e7d32;
+            margin-left: 8px;
         }
 
-        .file-size.large {
+        ul.datasets .size-M.is-much,
+        ul.datasets .size-G {
             background: #ffebee;
             color: #c62828;
+            font-weight: 600;
         }
 
-        .file-size.medium {
-            background: #fff3e0;
-            color: #f57c00;
-        }
-
-        .row-count {
-            margin-left: 6px;
-            color: #666;
-        }
-
-        .warning-badge {
+        ul.datasets .warning-badge {
             display: inline-block;
             margin-left: 8px;
             padding: 2px 8px;
@@ -271,21 +189,11 @@
             font-weight: 600;
         }
 
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #666;
+        ul.categories {
+            list-style: none;
+            padding: 0;
         }
 
-        .error {
-            padding: 20px;
-            background: #ffebee;
-            color: #c62828;
-            border-radius: 4px;
-            margin: 20px 0;
-        }
-
-        /* Hide nested categories by default for better performance */
         ul.categories > li {
             margin-bottom: 10px;
         }
@@ -311,6 +219,20 @@
         .stats-bar strong {
             color: #333;
         }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            padding: 20px;
+            background: #ffebee;
+            color: #c62828;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
     </style>
 </head>
 <body>
@@ -330,59 +252,97 @@
             <span><strong id="large-files-count">0</strong> files > 5MB</span>
         </div>
 
-        <div class="search-container">
-            <input type="text" class="search-input" placeholder="Caută în capitole și seturi de date...">
-            <div class="autocomplete-items" style="display: none;"></div>
-        </div>
-
         <div id="toc-container" class="toc-container">
             <div class="loading">Loading categories...</div>
         </div>
     </div>
 
     <script>
-        let categoriesData = [];
-        let datasetsMetadata = [];
-        let datasetLookup = {};
-        let searchIndex = [];
-
         // CSV Parser function
         function parseCsv(csv) {
-            const lines = csv.split('\n');
-            const headers = lines[0].split(',').map(header => header.trim());
+            const lines = [];
+            let currentLine = '';
+            let inQuotes = false;
+
+            // First, split into lines respecting quotes
+            for (let i = 0; i < csv.length; i++) {
+                const char = csv[i];
+                const nextChar = csv[i + 1];
+
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                    currentLine += char;
+                } else if ((char === '\n' || (char === '\r' && nextChar === '\n')) && !inQuotes) {
+                    if (currentLine.trim()) {
+                        lines.push(currentLine);
+                    }
+                    currentLine = '';
+                    if (char === '\r') i++; // skip \n in \r\n
+                } else {
+                    currentLine += char;
+                }
+            }
+            if (currentLine.trim()) lines.push(currentLine);
+
+            if (lines.length === 0) return [];
+
+            const headers = parseCSVLine(lines[0]);
 
             return lines.slice(1)
                 .filter(line => line.trim())
                 .map(line => {
-                    const values = [];
-                    let inQuotes = false;
-                    let currentValue = '';
-
-                    for (let char of line) {
-                        if (char === '"') {
-                            inQuotes = !inQuotes;
-                        } else if (char === ',' && !inQuotes) {
-                            values.push(currentValue);
-                            currentValue = '';
-                        } else {
-                            currentValue += char;
-                        }
-                    }
-                    values.push(currentValue);
-
+                    const values = parseCSVLine(line);
                     return headers.reduce((obj, header, index) => {
-                        const value = values[index] ? values[index].replace(/^["']|["']$/g, '').trim() : '';
-                        obj[header] = value;
+                        obj[header] = values[index] || '';
                         return obj;
                     }, {});
                 });
+        }
+
+        // Parse a single CSV line
+        function parseCSVLine(line) {
+            const values = [];
+            let currentValue = '';
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                const nextChar = line[i + 1];
+
+                if (char === '"' && nextChar === '"' && inQuotes) {
+                    // Escaped quote
+                    currentValue += '"';
+                    i++; // Skip next quote
+                } else if (char === '"') {
+                    // Toggle quote mode
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    // Field separator
+                    values.push(currentValue.trim());
+                    currentValue = '';
+                } else {
+                    currentValue += char;
+                }
+            }
+            values.push(currentValue.trim());
+
+            return values;
         }
 
         // Build hierarchy from categories
         function buildHierarchy(categories) {
             const hierarchy = [];
             const lookup = {};
+            const level0Codes = new Set();
 
+            // First, identify level 0 codes (root categories)
+            categories.forEach(category => {
+                if (category.level === '0') {
+                    level0Codes.add(category.code);
+                }
+            });
+
+            // Create lookup for all non-level-0 categories
             categories.forEach(category => {
                 if (category.level === '0') return;
 
@@ -392,13 +352,16 @@
                     datasets: []
                 };
 
-                if (!category.parentCode || category.parentCode === '0') {
+                // If parent is level 0, this is a top-level category
+                if (level0Codes.has(category.parentCode)) {
                     hierarchy.push(lookup[category.code]);
                 }
             });
 
+            // Build parent-child relationships for non-root categories
             categories.forEach(category => {
-                if (category.level === '0' || !category.parentCode || category.parentCode === '0') return;
+                if (category.level === '0') return;
+                if (level0Codes.has(category.parentCode)) return; // Skip top-level
 
                 const parent = lookup[category.parentCode];
                 if (parent) {
@@ -410,33 +373,52 @@
         }
 
         // Add datasets to their categories
-        function addDatasetsToCategories(datasets, lookup) {
+        function addDatasetsToCategories(datasets, datasetMetadata, lookup) {
             datasets.forEach(dataset => {
-                // Extract category code from ancestor path (last part)
-                if (!dataset.ancestorPath) return;
-
-                // Try to find matching category by searching in the path
-                for (const [code, category] of Object.entries(lookup)) {
-                    if (dataset.ancestorPath.includes(category.name)) {
-                        category.datasets.push(dataset);
-                        return;
-                    }
+                const parentCategory = lookup[dataset.directAncestor];
+                if (parentCategory) {
+                    // Enrich dataset with metadata
+                    const metadata = datasetMetadata[dataset.fileName];
+                    parentCategory.datasets.push({
+                        ...dataset,
+                        metadata
+                    });
                 }
             });
         }
 
-        // Format file size
-        function formatFileSize(sizeMB) {
-            if (sizeMB < 0.01) return '<0.01 MB';
-            if (sizeMB >= 1000) return (sizeMB / 1000).toFixed(2) + ' GB';
-            return sizeMB.toFixed(2) + ' MB';
+        // Convert human-readable size to MB
+        function humanSizeToMB(human) {
+            if (!human || typeof human !== 'string') return 0;
+
+            const size = parseFloat(human.replace(/[^0-9.]/g, ''));
+            if (isNaN(size)) return 0;
+
+            const unit = human.slice(-1);
+
+            switch (unit) {
+                case 'B': return size / (1024 * 1024);
+                case 'K': return size / 1024;
+                case 'M': return size;
+                case 'G': return size * 1024;
+                default: return 0;
+            }
         }
 
-        // Get size class
-        function getSizeClass(sizeMB) {
-            if (sizeMB > 5) return 'large';
-            if (sizeMB > 1) return 'medium';
-            return '';
+        // Format file size with color coding
+        function formatFileSize(human) {
+            const sizeMB = humanSizeToMB(human);
+            const size = parseFloat(human.replace(/[^0-9.]/g, ''));
+            const unit = human.slice(-1);
+
+            let cssClass = 'size-' + unit;
+            if ((unit === 'M' && size >= 4.2) || unit === 'G') {
+                cssClass += ' is-much';
+            } else if (unit === 'M' || unit === 'K' || (unit === 'B' && size >= 500)) {
+                cssClass += ' not-much';
+            }
+
+            return `<span class="${cssClass}">${human}</span>`;
         }
 
         // Generate HTML for TOC
@@ -456,20 +438,16 @@
             // Add datasets
             if (node.datasets && node.datasets.length > 0) {
                 html += '<ul class="datasets">\n';
-                node.datasets.sort((a, b) => a.matrixCode.localeCompare(b.matrixCode));
+                node.datasets.sort((a, b) => a.fileName.localeCompare(b.fileName));
 
                 node.datasets.forEach(dataset => {
-                    const sizeClass = getSizeClass(dataset.fileSizeMB);
-                    const sizeFormatted = formatFileSize(dataset.fileSizeMB);
-                    const warning = dataset.fileSizeMB > 5 ? '<span class="warning-badge">⚠ Large file</span>' : '';
+                    const sizeMB = humanSizeToMB(dataset.filesize);
+                    const warning = sizeMB > 5 ? '<span class="warning-badge">⚠ Large</span>' : '';
 
                     html += `  <li>
-                        <a class="ccode" href="dataset-profile.html?id=${escapeHtml(dataset.matrixCode)}">${escapeHtml(dataset.matrixCode)}</a>
-                        <a class="cname" href="dataset-profile.html?id=${escapeHtml(dataset.matrixCode)}">${escapeHtml(dataset.matrixCode)}</a>
-                        <span class="file-info">
-                            <span class="file-size ${sizeClass}">${sizeFormatted}</span>
-                            <span class="row-count">${dataset.rowCount.toLocaleString()} rows</span>
-                        </span>
+                        <a class="ccode" href="dataset-profile.html?id=${escapeHtml(dataset.fileName)}">${escapeHtml(dataset.fileName)}</a>
+                        <a class="cname" href="dataset-profile.html?id=${escapeHtml(dataset.fileName)}">${escapeHtml(dataset.matrixName)}</a>
+                        <code>${formatFileSize(dataset.filesize)}</code>
                         ${warning}
                     </li>\n`;
                 });
@@ -482,7 +460,7 @@
 
                 html += '<ul class="categories">\n';
                 node.children.forEach(child => {
-                    html += '<li>\n';
+                    html += '<li class="lx-' + node.level + '">\n';
                     html += generateTocHtml(child);
                     html += '</li>\n';
                 });
@@ -492,15 +470,22 @@
             return html;
         }
 
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
         // Build search index
         function buildSearchIndex() {
-            const items = [];
+            const searchItems = [];
 
-            // Index category headers
+            // Index headers
             document.querySelectorAll('[id^="x-"]').forEach(header => {
                 const code = header.querySelector('.code')?.textContent || '';
                 const name = header.textContent.replace(code, '').trim();
-                items.push({
+                searchItems.push({
                     type: 'header',
                     code,
                     name,
@@ -510,19 +495,21 @@
                 });
             });
 
-            // Index datasets
-            datasetsMetadata.forEach(dataset => {
-                items.push({
+            // Index dataset links
+            document.querySelectorAll('.datasets li').forEach(item => {
+                const code = item.querySelector('.ccode')?.textContent || '';
+                const name = item.querySelector('.cname')?.textContent || '';
+                const link = item.querySelector('a')?.href;
+                searchItems.push({
                     type: 'dataset',
-                    code: dataset.matrixCode,
-                    name: dataset.matrixCode,
-                    link: `dataset-profile.html?id=${dataset.matrixCode}`,
-                    text: `${dataset.matrixCode}`,
-                    fileSizeMB: dataset.fileSizeMB
+                    code,
+                    name,
+                    link,
+                    text: `${code} ${name}`
                 });
             });
 
-            return items;
+            return searchItems;
         }
 
         // Highlight match in text
@@ -537,19 +524,21 @@
             return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         }
 
-        // Escape HTML
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
         // Add search functionality
-        function initializeSearch() {
-            const searchInput = document.querySelector('.search-input');
-            const autocompleteList = document.querySelector('.autocomplete-items');
+        function addSearch() {
+            const searchContainer = document.createElement('div');
+            searchContainer.className = 'search-container';
+            searchContainer.innerHTML = `
+                <input type="text" class="search-input" placeholder="Caută în capitole și seturi de date...">
+                <div class="autocomplete-items" style="display: none;"></div>
+            `;
 
-            searchIndex = buildSearchIndex();
+            const tocContainer = document.getElementById('toc-container');
+            tocContainer.parentNode.insertBefore(searchContainer, tocContainer);
+
+            const searchInput = searchContainer.querySelector('.search-input');
+            const autocompleteList = searchContainer.querySelector('.autocomplete-items');
+            const searchIndex = buildSearchIndex();
 
             function handleSearch() {
                 const query = searchInput.value.toLowerCase();
@@ -567,24 +556,19 @@
                     return;
                 }
 
-                autocompleteList.innerHTML = matches.map(item => {
-                    const warningBadge = item.fileSizeMB > 5 ? '<span class="warning-badge">⚠ Large</span>' : '';
-                    return `
-                        <div class="autocomplete-item" data-type="${item.type}" ${
-                            item.type === 'header' ? `data-id="${item.id}"` :
-                            item.type === 'dataset' ? `data-link="${item.link}"` : ''
-                        }>
-                            <span class="type-indicator type-${item.type}">${item.type}</span>
-                            <span>${highlightMatch(item.code, query)} ${item.name ? '- ' + highlightMatch(item.name, query) : ''}</span>
-                            ${warningBadge}
-                        </div>
-                    `;
-                }).join('');
+                autocompleteList.innerHTML = matches.map(item => `
+                    <div class="autocomplete-item" data-type="${item.type}" ${
+                        item.type === 'header' ? `data-id="${item.id}"` :
+                        item.type === 'dataset' ? `data-link="${item.link}"` : ''
+                    }>
+                        <span class="type-indicator type-${item.type}">${item.type}</span>
+                        ${highlightMatch(item.code, query)} - ${highlightMatch(item.name, query)}
+                    </div>
+                `).join('');
 
                 autocompleteList.style.display = 'block';
             }
 
-            // Handle click on autocomplete item
             autocompleteList.addEventListener('click', (e) => {
                 const item = e.target.closest('.autocomplete-item');
                 if (!item) return;
@@ -604,9 +588,8 @@
 
             searchInput.addEventListener('input', handleSearch);
 
-            // Close autocomplete when clicking outside
             document.addEventListener('click', (e) => {
-                if (!e.target.closest('.search-container')) {
+                if (!searchContainer.contains(e.target)) {
                     autocompleteList.style.display = 'none';
                 }
             });
@@ -643,53 +626,55 @@
         }
 
         // Calculate and display statistics
-        function updateStats() {
-            const stats = {
-                categories: categoriesData.filter(c => c.level !== '0').length,
-                datasets: datasetsMetadata.length,
-                totalSize: datasetsMetadata.reduce((sum, d) => sum + d.fileSizeMB, 0),
-                largeFiles: datasetsMetadata.filter(d => d.fileSizeMB > 5).length
-            };
+        function updateStats(categories, datasets) {
+            const totalSizeMB = datasets.reduce((sum, d) => sum + humanSizeToMB(d.filesize), 0);
+            const largeFiles = datasets.filter(d => humanSizeToMB(d.filesize) > 5).length;
 
-            document.getElementById('category-count').textContent = stats.categories;
-            document.getElementById('dataset-count').textContent = stats.datasets;
-            document.getElementById('total-size').textContent = stats.totalSize.toFixed(2);
-            document.getElementById('large-files-count').textContent = stats.largeFiles;
+            document.getElementById('category-count').textContent = categories.filter(c => c.level !== '0').length;
+            document.getElementById('dataset-count').textContent = datasets.length;
+            document.getElementById('total-size').textContent = totalSizeMB.toFixed(2);
+            document.getElementById('large-files-count').textContent = largeFiles;
             document.getElementById('stats-bar').style.display = 'flex';
         }
 
         // Main initialization
-        async function initialize() {
+        async function initializeTableOfContents() {
             try {
-                // Load categories and metadata
-                const [categoriesResponse, metadataResponse] = await Promise.all([
+                // Load CSV files and metadata
+                const [categoriesResponse, datasetsResponse, metadataResponse] = await Promise.all([
                     fetch('../data/ui-helpers/x-categories.csv'),
+                    fetch('../data/ui-helpers/x-datasets-size.csv'),
                     fetch('data/dataset-metadata.json')
                 ]);
 
-                if (!categoriesResponse.ok || !metadataResponse.ok) {
-                    throw new Error('Failed to load data files');
+                if (!categoriesResponse.ok || !datasetsResponse.ok) {
+                    throw new Error('Failed to load CSV files');
                 }
 
-                const [categoriesCsv, metadataJson] = await Promise.all([
+                const [categoriesCsv, datasetsCsv] = await Promise.all([
                     categoriesResponse.text(),
-                    metadataResponse.json()
+                    datasetsResponse.text()
                 ]);
 
-                categoriesData = parseCsv(categoriesCsv);
-                datasetsMetadata = metadataJson.metadata;
+                // Parse CSV data
+                const categories = parseCsv(categoriesCsv);
+                const datasets = parseCsv(datasetsCsv);
 
-                // Build dataset lookup
-                datasetsMetadata.forEach(ds => {
-                    datasetLookup[ds.matrixCode] = ds;
-                });
+                // Load metadata if available
+                let datasetMetadata = {};
+                if (metadataResponse.ok) {
+                    const metadataJson = await metadataResponse.json();
+                    metadataJson.metadata.forEach(item => {
+                        datasetMetadata[item.matrixCode] = item;
+                    });
+                }
 
                 // Build hierarchy
-                const { hierarchy, lookup } = buildHierarchy(categoriesData);
+                const { hierarchy, lookup } = buildHierarchy(categories);
                 hierarchy.sort((a, b) => a.code.localeCompare(b.code));
 
                 // Add datasets to categories
-                addDatasetsToCategories(datasetsMetadata, lookup);
+                addDatasetsToCategories(datasets, datasetMetadata, lookup);
 
                 // Generate HTML
                 let tocHtml = '<div class="table-of-contents">\n';
@@ -700,25 +685,25 @@
 
                 document.getElementById('toc-container').innerHTML = tocHtml;
 
-                // Initialize search
-                initializeSearch();
+                // Add search
+                addSearch();
 
                 // Update statistics
-                updateStats();
+                updateStats(categories, datasets);
 
             } catch (error) {
                 console.error('Error loading table of contents:', error);
                 document.getElementById('toc-container').innerHTML = `
                     <div class="error">
                         Error loading table of contents: ${error.message}
-                        <br>Please check that the data files are available and properly formatted.
+                        <br>Please check that the CSV files are available and properly formatted.
                     </div>
                 `;
             }
         }
 
         // Initialize when ready
-        document.addEventListener('DOMContentLoaded', initialize);
+        document.addEventListener('DOMContentLoaded', initializeTableOfContents);
     </script>
 </body>
 </html>
