@@ -19,6 +19,7 @@ _INS Tempo Online but make it nice._
 ![dimensions browser](docs/misc/dimensions-browser-1.png)
 ![dataset preview](docs/misc/dataset-profile-1.png)
 
+
 #### Run the initial analysis
 python build-dimension-index.py
 
@@ -83,6 +84,7 @@ python query-dimensions.py file ZDP1321   # File details
 - [x] show dataset preview
 - [x] collapse definition
 
+![how it started](docs/misc/nonstop-bv-ct.png)
 
 ## Notes
 
