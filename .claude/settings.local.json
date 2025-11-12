@@ -12,7 +12,12 @@
       "Bash(jq:*)",
       "Bash(lsof:*)",
       "Bash(open http://localhost:8002/category-browser.html)",
-      "Bash(ln:*)"
+      "Bash(ln:*)",
+      "Bash(sqlite3:*)",
+      "Bash(awk:*)",
+      "Bash(for f in data/5-compact-datasets/ro/*.csv)",
+      "Bash(done)",
+      "Bash(sort:*)"
     ],
     "deny": [],
     "ask": []

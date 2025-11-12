@@ -1,0 +1,92 @@
+DuckDB + Parquet Hybrid - File Manifest
+========================================
+
+TARGET OUTPUTS
+--------------
+data/tempo_metadata.duckdb             [Metadata database, ~50-100 MB]
+data/parquet/ro/*.parquet              [1,892 Parquet files, ~500 MB - 2 GB total]
+
+
+INDEX FILES (Required)
+----------------------
+data/1-indexes/ro/context.csv          [339 rows]
+data/1-indexes/ro/matrices.csv         [1,970 rows]
+
+
+METADATA FILES (Required - 1,888 files)
+---------------------------------------
+data/2-metas/ro/ACC101B.json
+data/2-metas/ro/ACC101C.json
+data/2-metas/ro/ACC102A.json
+... (1,885 more files)
+
+
+COMPACTED DATA FILES (Required - 1,892 files)
+---------------------------------------------
+data/5-compact-datasets/ro/ACC101B.csv
+data/5-compact-datasets/ro/ACC101C.csv
+data/5-compact-datasets/ro/ACC102A.csv
+... (1,889 more files)
+
+Largest files:
+- data/5-compact-datasets/ro/POP107D.csv          [21,589,699 rows]
+- data/5-compact-datasets/ro/zPOP107D.csv         [21,589,699 rows]
+- data/5-compact-datasets/ro/-POP107D-json-version.csv [21,589,699 rows]
+- data/5-compact-datasets/ro/SOM101F.csv          [1,289,621 rows]
+
+
+SCRIPTS TO CREATE
+-----------------
+8-setup-duckdb-schema.py               [Initialize DB and create metadata tables]
+9-csv-to-parquet.py                    [Convert CSV → Parquet with proper schemas]
+10-import-metadata.py                  [Import contexts, matrices, dimensions, options]
+duckdb-config.py                       [Configuration constants]
+query-duckdb.py                        [Query helper tool with Parquet examples]
+
+
+OUTPUT DIRECTORIES (Will be created)
+------------------------------------
+data/parquet/ro/                       [1,892 Parquet files]
+data/logs/parquet-conversion-{timestamp}.log
+data/logs/metadata-import-{timestamp}.log
+
+
+REFERENCE FILES (Existing)
+--------------------------
+5-varstats-db.py                       [Reference for metadata parsing]
+7-data-compactor.py                    [Reference for CSV structure]
+DUCKDB_SPECS.md                        [This specification document]
+
+
+FILE STRUCTURE NOTES
+--------------------
+1. All JSON files follow same structure (see DUCKDB_SPECS.md)
+2. All compacted CSV files have format: dim1,dim2,...,dimN,value
+3. Number of dimension columns varies by matrix (3-7 columns)
+4. Last column is always the value
+5. First row is header with human-readable labels
+6. Data rows contain nom_item_id values (integers)
+
+
+VALIDATION
+----------
+Check file counts:
+  find data/2-metas/ro -name "*.json" | wc -l        # Should be 1,888
+  find data/5-compact-datasets/ro -name "*.csv" | wc -l  # Should be 1,892
+
+Check for missing files:
+  # Compare matrix codes across directories
+  ls data/2-metas/ro/*.json | sed 's/.*\///;s/\.json//' | sort > /tmp/metas.txt
+  ls data/5-compact-datasets/ro/*.csv | sed 's/.*\///;s/\.csv//' | sort > /tmp/csvs.txt
+  diff /tmp/metas.txt /tmp/csvs.txt
+
+
+DEPENDENCIES
+------------
+Python packages required:
+  - duckdb>=0.9.0      (DuckDB with native Parquet support)
+  - pyarrow>=14.0.0    (Parquet library, used by DuckDB)
+
+Install with:
+  source ~/devbox/envs/240826/bin/activate
+  pip install duckdb pyarrow

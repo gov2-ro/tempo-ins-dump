@@ -65,9 +65,9 @@ python query-dimensions.py file ZDP1321   # File details
 - [x] dashboard / charts (alpha)
 - [x] compact data
 
-- [ ] import into DuckDB
-- [ ] api
-- [ ] front end
+- [ ] import into DuckDB / Parquet
+- [ ] api / FastAPI?
+- [ ] front end 
 
 ### beta
 - [ ] some datasets are not downloaded
