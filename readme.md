@@ -84,7 +84,11 @@ ui/dim-browser.html
 - [x] collapse definition
 
 
+![dimensions browser](docs/misc/dimensions-browser-1.png)
+![dataset preview](docs/misc/dataset-profile-1.png)
+
 ## Notes
 
 > Atentie! Nomenclatoarele care prezinta doar optiunea "Total" se vor completa automat cu alte optiuni doar daca nomenclatorului anterior i se deselecteaza optiunea "Total" si i se alege o singura alta optiune,
+
 > Important! Unitatile de masura sunt implicit selectate toate pentru a preveni rezultate goale atunci cand se combina cereri incompatibile (spre exemplu, s-ar putea selecta productia de porumb in litri; sau o valoare in ROL dupa denominarea din 2005, etc.).
