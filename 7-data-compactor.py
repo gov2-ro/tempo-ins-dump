@@ -13,7 +13,6 @@ lang = "ro"
  
 
 import os, csv, json, logging, argparse
-from tqdm import tqdm
 
 
 # Configuration variables
@@ -85,7 +84,7 @@ def main():
             logging.warning(f"File '{f}.csv' found in input folder but no matching JSON metadata.")
 
     # Process each fileid
-    for fileid in tqdm(fileids_available, desc="Processing files"):
+    for fileid in fileids_available:
 
         compacted_file = os.path.join(compacted_folder, f"{fileid}.csv")
         if os.path.exists(compacted_file):
@@ -113,6 +112,9 @@ def main():
 
         # Process the CSV
         os.makedirs(compacted_folder, exist_ok=True)
+        rows_read = 0
+        rows_written = 0
+
         with open(original_file, 'r', newline='', encoding='utf-8') as infile:
             reader = csv.reader(infile)
             header = next(reader)  # Read header line
@@ -125,12 +127,16 @@ def main():
 
                 # Write header unchanged
                 writer.writerow(header)
+                rows_written += 1
 
                 # Process each data row
                 for row_data in reader:
+                    rows_read += 1
+
                     if not row_data:
                         # Empty line or something irregular
                         writer.writerow(row_data)
+                        rows_written += 1
                         continue
 
                     new_row = row_data[:]
@@ -140,7 +146,7 @@ def main():
                         # Normalize the cell value for matching
                         cell_val_normalized = original_value.strip().lower()
                         dim_code = col_index + 1  # since dimCode is 1-based
-                        
+
                         if (dim_code, cell_val_normalized) in mapping:
                             new_row[col_index] = str(mapping[(dim_code, cell_val_normalized)])
                         else:
@@ -152,8 +158,15 @@ def main():
 
                     # Write the processed row
                     writer.writerow(new_row)
+                    rows_written += 1
 
-        logging.info(f"Successfully processed and compacted '{fileid}.csv' into '{compacted_file}'")
+        # Verify row counts match (rows_read doesn't include header, rows_written does)
+        expected_output_rows = rows_read + 1  # +1 for header
+        if rows_written == expected_output_rows:
+            logging.info(f"Successfully processed and compacted '{fileid}.csv': {rows_read} data rows + header = {rows_written} total rows")
+        else:
+            logging.error(f"ROW COUNT MISMATCH for '{fileid}.csv': read {rows_read} data rows but wrote {rows_written} total rows (expected {expected_output_rows})")
+            print(f"WARNING: Row count mismatch for {fileid}.csv - see log for details")
 
     logging.info("Compaction process completed.")
 
