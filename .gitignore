@@ -3,6 +3,10 @@ data*/*
 /tmp
 /data/*
 *.code-workspace
+.vscode
+.vscode/*
+.github
+.github/*
 .claude/*
 .claude
 */.claude*
