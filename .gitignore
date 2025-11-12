@@ -3,6 +3,8 @@ data*/*
 /tmp
 /data/*
 *.code-workspace
+.claude/*
+.github/*
 */_obsolete
 */*.log
 *.log
@@ -15,7 +17,7 @@ _obsolete
 __pycache__/
 *.py[cod]
 *$py.class
-
+.vscode/*
 # C extensions
 *.so
 
