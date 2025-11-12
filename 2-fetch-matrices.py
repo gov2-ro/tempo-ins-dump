@@ -1,5 +1,5 @@
-lang = "ro"
-# lang = "en"
+# lang = "ro"
+lang = "en"
 csv_filename = 'data/1-indexes/' + lang + '/matrices.csv'
 
 import requests

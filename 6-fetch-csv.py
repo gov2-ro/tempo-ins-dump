@@ -2,7 +2,7 @@
 ### todo
 
 - [ ] count cells
-- [ ] query Localitati Judete
+- [x] query Localitati Judete
 - [ ] handle batch partial donwloads for larger than 30k cells
 
 - [ ] add description ?
@@ -77,6 +77,15 @@ judet_logger = logging.getLogger('judet_split')
 judet_logger.addHandler(judet_split_logger)
 judet_logger.setLevel(logging.INFO)
 
+# Set up logging for oversized datasets (exceed cell limit)
+oversized_log_file = os.path.join(log_folder, 'oversized-datasets.log')
+oversized_logger_handler = logging.FileHandler(oversized_log_file, encoding='utf-8')
+oversized_logger_handler.setLevel(logging.WARNING)
+oversized_logger_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+oversized_logger = logging.getLogger('oversized')
+oversized_logger.addHandler(oversized_logger_handler)
+oversized_logger.setLevel(logging.WARNING)
+
 def load_matrix_definition(file_path: str) -> Dict:
     """Load and parse the matrix definition file."""
     try:
@@ -132,6 +141,34 @@ def count_csv_rows(file_path: str) -> int:
     except Exception as e:
         logger.error(f"Error counting rows in {file_path}: {e}")
         return -1
+
+def calculate_cell_count(matrix_def: Dict, include_totals: bool = False) -> int:
+    """
+    Calculate the total number of cells that would be requested.
+    Formula: multiply the count of options for each dimension.
+
+    Args:
+        matrix_def: Matrix definition dictionary
+        include_totals: If False, exclude "Total" options from count
+
+    Returns:
+        Total number of cells
+    """
+    total_cells = 1
+    dimension_counts = []
+
+    for dim in matrix_def["dimensionsMap"]:
+        options = dim["options"]
+
+        # Filter out "Total" options if requested
+        if not include_totals and len(options) > 1:
+            options = [opt for opt in options if opt["label"].strip().lower() != "total"]
+
+        option_count = len(options)
+        dimension_counts.append((dim.get("label", "Unknown"), option_count))
+        total_cells *= option_count
+
+    return total_cells
 
 def load_siruta_mapping() -> Dict[str, str]:
     """
@@ -423,7 +460,7 @@ def fetch_by_judet_split(matrix_code: str, matrix_def: Dict, output_dir: str,
 def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, force_overwrite: bool = False) -> None:
     """
     Fetch data from INSSE Pivot API using the matrix definition.
-    
+
     Args:
         matrix_code: The code of the matrix (e.g., 'POP108B')
         matrix_def: The loaded matrix definition dictionary
@@ -435,7 +472,57 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
     if os.path.exists(output_file) and not force_overwrite:
         tqdm.write(f"File {output_file} already exists, skipping {matrix_code}")
         return
-    
+
+    # Calculate expected cell count BEFORE making request
+    cell_count = calculate_cell_count(matrix_def, include_totals=False)
+    cell_limit = 275000  # Safe margin below actual API limit
+
+    if cell_count > cell_limit:
+        tqdm.write(f"WARNING: Estimated {cell_count:,} cells exceeds limit ({cell_limit:,})")
+
+        # Check if we can use Judet-split approach
+        has_both, judete_dim, localitati_dim = has_judete_and_localitati(matrix_def)
+
+        if has_both:
+            # Use Judet-split approach directly for oversized datasets with both dimensions
+            tqdm.write(f"Dataset has Judete+Localitati dimensions, using Judet-split approach...")
+            logger.info(f"{matrix_code} - Using Judet-split approach for oversized dataset ({cell_count:,} cells)")
+
+            try:
+                # Load SIRUTA mapping
+                siruta_map = load_siruta_mapping()
+
+                # Attempt Judet-split fetch
+                success = fetch_by_judet_split(
+                    matrix_code, matrix_def, output_dir,
+                    judete_dim, localitati_dim, siruta_map
+                )
+
+                if success:
+                    # Verify the combined file has data
+                    retry_row_count = count_csv_rows(output_file)
+                    if retry_row_count > 0:
+                        success_msg = f"JUDET-SPLIT SUCCESS: {matrix_code} fetched {retry_row_count} rows"
+                        tqdm.write(success_msg)
+                        logger.info(f"{matrix_code}.csv - {success_msg}")
+                        return  # Success, exit function
+
+                tqdm.write(f"JUDET-SPLIT FAILED: Could not fetch data")
+                logger.warning(f"{matrix_code}.csv - Judet-split fetch failed for oversized dataset")
+
+            except Exception as e:
+                tqdm.write(f"JUDET-SPLIT EXCEPTION: {e}")
+                logger.error(f"{matrix_code}.csv - Judet-split failed: {e}")
+
+        # Cannot handle this oversized dataset - skip it
+        warning_msg = f"SKIPPED: {matrix_code} - {cell_count:,} cells exceeds limit. Needs sequential dimension processing."
+        tqdm.write(warning_msg)
+        oversized_logger.warning(f"{matrix_code} - {cell_count:,} cells (limit: {cell_limit:,})")
+        logger.warning(warning_msg)
+        return
+
+    tqdm.write(f"Estimated cells: {cell_count:,}")
+
     # Convert to pivot payload format
     tqdm.write(f"Converting matrix definition for {matrix_code} to pivot payload format")
     payload = convert_to_pivot_payload(matrix_def, matrix_code)
