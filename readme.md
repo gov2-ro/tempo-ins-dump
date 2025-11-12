@@ -1,5 +1,7 @@
 [https://tempo-online.gov2.ro/](tempo-online.gov2.ro) - scrapes data from insse/[tempo-online](http://statistici.insse.ro:8077/tempo-online)  
 
+_INS Tempo Online but make it nice._
+
 
 ## Scripts
 
@@ -12,8 +14,10 @@
 - `7-data-compactor.py` – compact csv dimensions - replace `opt_label` with `nomItemId` reference
 - `0-tempoins-fetch-indexes.py` - fetches ctgs and datasets from prev version: [tempoins](http://statistici.insse.ro/tempoins/) - with archived datasets
 - `browser/` - alpha GUI (to be deprecated for [Evidence](https://evidence.dev))
+- `query-dimensions.py`
 
-query-dimensions.py
+![dimensions browser](docs/misc/dimensions-browser-1.png)
+![dataset preview](docs/misc/dataset-profile-1.png)
 
 #### Run the initial analysis
 python build-dimension-index.py
@@ -83,9 +87,6 @@ ui/dim-browser.html
 - [x] show dataset preview
 - [x] collapse definition
 
-
-![dimensions browser](docs/misc/dimensions-browser-1.png)
-![dataset preview](docs/misc/dataset-profile-1.png)
 
 ## Notes
 

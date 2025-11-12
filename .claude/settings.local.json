@@ -5,7 +5,11 @@
       "Bash(source:*)",
       "Bash(python:*)",
       "Bash(php:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(cat:*)",
+      "Bash(timeout 180 python:*)",
+      "Bash(/dev/null)",
+      "Bash(jq:*)"
     ],
     "deny": [],
     "ask": []
