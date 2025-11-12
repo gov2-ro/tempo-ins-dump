@@ -11,13 +11,14 @@
       "Bash(/dev/null)",
       "Bash(jq:*)",
       "Bash(lsof:*)",
-      "Bash(open http://localhost:8002/category-browser.html)"
+      "Bash(open http://localhost:8002/category-browser.html)",
+      "Bash(ln:*)"
     ],
     "deny": [],
     "ask": []
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "browsermcp"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

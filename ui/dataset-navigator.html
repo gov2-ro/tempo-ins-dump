@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INS TEMPO - Dataset Navigator</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f8f9fa;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            background: white;
+            border-bottom: 2px solid #e9ecef;
+            padding: 16px 24px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            color: #212529;
+            margin-bottom: 12px;
+        }
+
+        .search-bar {
+            position: relative;
+            max-width: 800px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 16px;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #2196f3;
+        }
+
+        .search-results {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            max-height: 400px;
+            overflow-y: auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        .search-result-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f3f5;
+            transition: background 0.15s;
+        }
+
+        .search-result-item:hover {
+            background: #f8f9fa;
+        }
+
+        .search-result-type {
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            border-radius: 3px;
+            margin-right: 8px;
+        }
+
+        .type-category {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .type-dataset {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .type-dimension {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        /* Main Layout */
+        .main-layout {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Left Sidebar - Category Navigation */
+        .left-sidebar {
+            width: 280px;
+            background: white;
+            border-right: 1px solid #e9ecef;
+            overflow-y: auto;
+            padding: 16px;
+            flex-shrink: 0;
+        }
+
+        .left-sidebar h2 {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #6c757d;
+            margin-bottom: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .category-tree {
+            list-style: none;
+        }
+
+        .category-item {
+            margin-bottom: 4px;
+        }
+
+        .category-label {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 13px;
+            transition: background 0.15s;
+            user-select: none;
+        }
+
+        .category-label:hover {
+            background: #f8f9fa;
+        }
+
+        .category-label.active {
+            background: #e3f2fd;
+            color: #1976d2;
+            font-weight: 500;
+        }
+
+        .category-toggle {
+            margin-right: 4px;
+            color: #6c757d;
+            font-size: 10px;
+            width: 16px;
+            text-align: center;
+        }
+
+        .category-code {
+            font-weight: 600;
+            margin-right: 6px;
+            color: #495057;
+        }
+
+        .category-children {
+            list-style: none;
+            margin-left: 16px;
+            display: none;
+        }
+
+        .category-children.expanded {
+            display: block;
+        }
+
+        .category-count {
+            margin-left: auto;
+            font-size: 11px;
+            color: #6c757d;
+            background: #f1f3f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        /* Main Content - Datasets */
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+        }
+
+        .content-header {
+            margin-bottom: 20px;
+        }
+
+        .content-header h2 {
+            font-size: 18px;
+            color: #212529;
+            margin-bottom: 8px;
+        }
+
+        .content-meta {
+            font-size: 13px;
+            color: #6c757d;
+        }
+
+        .active-filters {
+            display: none;
+            margin-bottom: 16px;
+            padding: 12px;
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+        }
+
+        .active-filters.visible {
+            display: block;
+        }
+
+        .filter-tag {
+            display: inline-block;
+            padding: 4px 10px;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-right: 6px;
+            margin-bottom: 4px;
+        }
+
+        .filter-tag .remove {
+            margin-left: 6px;
+            cursor: pointer;
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .datasets-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 16px;
+        }
+
+        .dataset-card {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 16px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .dataset-card:hover {
+            border-color: #2196f3;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transform: translateY(-2px);
+        }
+
+        .dataset-code {
+            font-size: 14px;
+            font-weight: 700;
+            color: #1976d2;
+            margin-bottom: 6px;
+        }
+
+        .dataset-name {
+            font-size: 13px;
+            color: #495057;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+
+        .dataset-path {
+            font-size: 11px;
+            color: #868e96;
+            margin-bottom: 10px;
+            line-height: 1.3;
+        }
+
+        .dataset-meta {
+            display: flex;
+            gap: 12px;
+            font-size: 11px;
+            color: #6c757d;
+            margin-bottom: 10px;
+        }
+
+        .dataset-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .dataset-dimensions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .dimension-badge {
+            padding: 3px 8px;
+            background: #f1f3f5;
+            color: #495057;
+            font-size: 10px;
+            border-radius: 3px;
+            border: 1px solid #e9ecef;
+        }
+
+        /* Right Sidebar - Dimensions */
+        .right-sidebar {
+            width: 260px;
+            background: white;
+            border-left: 1px solid #e9ecef;
+            overflow-y: auto;
+            padding: 16px;
+            flex-shrink: 0;
+        }
+
+        .right-sidebar h2 {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #6c757d;
+            margin-bottom: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .dimension-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .dimension-tag {
+            padding: 8px 10px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .dimension-tag:hover {
+            background: #e9ecef;
+            border-color: #adb5bd;
+        }
+
+        .dimension-tag.active {
+            background: #e3f2fd;
+            border-color: #2196f3;
+            color: #1976d2;
+            font-weight: 500;
+        }
+
+        .dimension-tag .count {
+            font-size: 10px;
+            color: #6c757d;
+            background: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+            color: #868e96;
+        }
+
+        .no-results-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f3f5;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #adb5bd;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #868e96;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <h1>INS TEMPO Dataset Navigator</h1>
+        <div class="search-bar">
+            <input type="text" class="search-input" placeholder="Search datasets, categories, or dimensions...">
+            <div class="search-results"></div>
+        </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="main-layout">
+        <!-- Left Sidebar: Categories -->
+        <aside class="left-sidebar">
+            <h2>Categories</h2>
+            <ul class="category-tree" id="category-tree">
+                <div class="loading">Loading categories...</div>
+            </ul>
+        </aside>
+
+        <!-- Main Content: Datasets -->
+        <main class="main-content">
+            <div class="content-header">
+                <h2 id="content-title">All Datasets</h2>
+                <div class="content-meta">
+                    <span id="dataset-count">0</span> datasets
+                </div>
+            </div>
+
+            <div class="active-filters" id="active-filters">
+                <strong>Active Filters:</strong>
+                <div id="filter-tags"></div>
+            </div>
+
+            <div class="datasets-grid" id="datasets-grid">
+                <div class="loading">Loading datasets...</div>
+            </div>
+        </main>
+
+        <!-- Right Sidebar: Dimensions -->
+        <aside class="right-sidebar">
+            <h2>Filter by Dimension</h2>
+            <div class="dimension-list" id="dimension-list">
+                <div class="loading">Loading dimensions...</div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        // Global state
+        const state = {
+            datasets: [],
+            categories: {},
+            dimensions: [],
+            categoryTree: [],
+            filters: {
+                category: null,
+                dimensions: new Set(),
+                search: ''
+            }
+        };
+
+        // Load all data
+        async function loadData() {
+            try {
+                const [metadataResponse, contextResponse] = await Promise.all([
+                    fetch('data/dataset-metadata.json'),
+                    fetch('data-root/1-indexes/ro/context.json')
+                ]);
+
+                if (!metadataResponse.ok || !contextResponse.ok) {
+                    throw new Error('Failed to load data files');
+                }
+
+                const metadataData = await metadataResponse.json();
+                const contextData = await contextResponse.json();
+
+                state.datasets = metadataData.metadata || [];
+                buildCategoryStructure(contextData);
+                buildDimensionList();
+
+                renderCategoryTree();
+                renderDatasets();
+                renderDimensions();
+                initializeSearch();
+
+            } catch (error) {
+                console.error('Error loading data:', error);
+                showError(error.message);
+            }
+        }
+
+        // Build category structure
+        function buildCategoryStructure(contextData) {
+            const lookup = {};
+
+            // Create lookup
+            contextData.forEach(item => {
+                lookup[item.context.code] = {
+                    code: item.context.code,
+                    name: cleanHtmlTags(item.context.name),
+                    level: item.level,
+                    parentCode: item.parentCode,
+                    children: [],
+                    datasetCount: 0
+                };
+            });
+
+            // Build tree
+            contextData.forEach(item => {
+                const node = lookup[item.context.code];
+                if (item.level === 0) {
+                    state.categoryTree.push(node);
+                } else if (item.parentCode && lookup[item.parentCode]) {
+                    lookup[item.parentCode].children.push(node);
+                }
+            });
+
+            // Count datasets per category
+            state.datasets.forEach(dataset => {
+                if (dataset.ancestorPath) {
+                    const parts = dataset.ancestorPath.split('→').map(p => p.trim());
+                    parts.forEach(part => {
+                        const cleanPart = part.replace(/^\d+\.\s*/, '').toUpperCase();
+                        const match = Object.values(lookup).find(cat =>
+                            cleanHtmlTags(cat.name).toUpperCase() === cleanPart
+                        );
+                        if (match) {
+                            match.datasetCount++;
+                        }
+                    });
+                }
+            });
+
+            state.categories = lookup;
+        }
+
+        // Build dimension list
+        function buildDimensionList() {
+            const dimCounts = {};
+
+            state.datasets.forEach(dataset => {
+                if (dataset.dimensions && Array.isArray(dataset.dimensions)) {
+                    dataset.dimensions.forEach(dim => {
+                        dimCounts[dim] = (dimCounts[dim] || 0) + 1;
+                    });
+                }
+            });
+
+            state.dimensions = Object.entries(dimCounts)
+                .map(([name, count]) => ({ name, count }))
+                .sort((a, b) => b.count - a.count);
+        }
+
+        // Render category tree
+        function renderCategoryTree() {
+            const container = document.getElementById('category-tree');
+            container.innerHTML = renderCategoryNode(state.categoryTree);
+        }
+
+        function renderCategoryNode(nodes, depth = 0) {
+            if (!nodes || nodes.length === 0) return '';
+
+            return nodes.map(node => {
+                const hasChildren = node.children && node.children.length > 0;
+                const toggle = hasChildren ? '▸' : '';
+
+                return `
+                    <li class="category-item">
+                        <div class="category-label" data-code="${node.code}" data-level="${node.level}">
+                            <span class="category-toggle">${toggle}</span>
+                            <span class="category-code">${node.code}</span>
+                            <span class="category-name">${node.name}</span>
+                            ${node.datasetCount > 0 ? `<span class="category-count">${node.datasetCount}</span>` : ''}
+                        </div>
+                        ${hasChildren ? `<ul class="category-children">${renderCategoryNode(node.children, depth + 1)}</ul>` : ''}
+                    </li>
+                `;
+            }).join('');
+        }
+
+        // Render datasets
+        function renderDatasets() {
+            const filtered = getFilteredDatasets();
+            const container = document.getElementById('datasets-grid');
+
+            document.getElementById('dataset-count').textContent = filtered.length;
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="no-results">
+                        <div class="no-results-icon">🔍</div>
+                        <div>No datasets found matching your filters</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = filtered.map(dataset => {
+                const dimensions = dataset.dimensions && dataset.dimensions.length > 0
+                    ? dataset.dimensions.slice(0, 5).map(dim =>
+                        `<span class="dimension-badge">${dim}</span>`
+                    ).join('')
+                    : '';
+
+                const moreCount = dataset.dimensions && dataset.dimensions.length > 5
+                    ? `<span class="dimension-badge">+${dataset.dimensions.length - 5} more</span>`
+                    : '';
+
+                return `
+                    <div class="dataset-card" data-code="${dataset.matrixCode}">
+                        <div class="dataset-code">${dataset.matrixCode}</div>
+                        <div class="dataset-name">${dataset.matrixCode}</div>
+                        ${dataset.ancestorPath ? `<div class="dataset-path">${dataset.ancestorPath}</div>` : ''}
+                        <div class="dataset-meta">
+                            <span>📊 ${formatNumber(dataset.rowCount)} rows</span>
+                            <span>💾 ${formatFileSize(dataset.fileSizeMB)}</span>
+                        </div>
+                        <div class="dataset-dimensions">
+                            ${dimensions}
+                            ${moreCount}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            updateActiveFilters();
+        }
+
+        // Render dimensions
+        function renderDimensions() {
+            const container = document.getElementById('dimension-list');
+
+            container.innerHTML = state.dimensions.slice(0, 50).map(dim => `
+                <div class="dimension-tag ${state.filters.dimensions.has(dim.name) ? 'active' : ''}"
+                     data-dimension="${dim.name}">
+                    <span>${dim.name}</span>
+                    <span class="count">${dim.count}</span>
+                </div>
+            `).join('');
+
+            // Add click handlers
+            container.querySelectorAll('.dimension-tag').forEach(tag => {
+                tag.addEventListener('click', () => {
+                    const dimension = tag.dataset.dimension;
+                    if (state.filters.dimensions.has(dimension)) {
+                        state.filters.dimensions.delete(dimension);
+                    } else {
+                        state.filters.dimensions.add(dimension);
+                    }
+                    renderDimensions();
+                    renderDatasets();
+                });
+            });
+        }
+
+        // Get filtered datasets
+        function getFilteredDatasets() {
+            return state.datasets.filter(dataset => {
+                // Category filter
+                if (state.filters.category) {
+                    const categoryNode = state.categories[state.filters.category];
+                    if (!categoryNode) return false;
+
+                    const categoryName = cleanHtmlTags(categoryNode.name).toUpperCase();
+                    if (!dataset.ancestorPath || !dataset.ancestorPath.toUpperCase().includes(categoryName)) {
+                        return false;
+                    }
+                }
+
+                // Dimension filters
+                if (state.filters.dimensions.size > 0) {
+                    if (!dataset.dimensions || !Array.isArray(dataset.dimensions)) return false;
+                    const hasAllDimensions = Array.from(state.filters.dimensions).every(dim =>
+                        dataset.dimensions.includes(dim)
+                    );
+                    if (!hasAllDimensions) return false;
+                }
+
+                // Search filter
+                if (state.filters.search) {
+                    const search = state.filters.search.toLowerCase();
+                    const matchesCode = dataset.matrixCode && dataset.matrixCode.toLowerCase().includes(search);
+                    const matchesPath = dataset.ancestorPath && dataset.ancestorPath.toLowerCase().includes(search);
+                    const matchesDimensions = dataset.dimensions && dataset.dimensions.some(dim =>
+                        dim.toLowerCase().includes(search)
+                    );
+                    return matchesCode || matchesPath || matchesDimensions;
+                }
+
+                return true;
+            });
+        }
+
+        // Update active filters display
+        function updateActiveFilters() {
+            const filtersDiv = document.getElementById('active-filters');
+            const tagsDiv = document.getElementById('filter-tags');
+
+            const hasFilters = state.filters.category || state.filters.dimensions.size > 0;
+
+            if (hasFilters) {
+                filtersDiv.classList.add('visible');
+                let html = '';
+
+                if (state.filters.category) {
+                    const cat = state.categories[state.filters.category];
+                    html += `
+                        <span class="filter-tag">
+                            Category: ${cat.name}
+                            <span class="remove" data-type="category">×</span>
+                        </span>
+                    `;
+                }
+
+                state.filters.dimensions.forEach(dim => {
+                    html += `
+                        <span class="filter-tag">
+                            ${dim}
+                            <span class="remove" data-type="dimension" data-value="${dim}">×</span>
+                        </span>
+                    `;
+                });
+
+                tagsDiv.innerHTML = html;
+
+                // Add remove handlers
+                tagsDiv.querySelectorAll('.remove').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        if (btn.dataset.type === 'category') {
+                            state.filters.category = null;
+                            document.querySelectorAll('.category-label.active').forEach(el =>
+                                el.classList.remove('active')
+                            );
+                        } else if (btn.dataset.type === 'dimension') {
+                            state.filters.dimensions.delete(btn.dataset.value);
+                        }
+                        renderDimensions();
+                        renderDatasets();
+                    });
+                });
+            } else {
+                filtersDiv.classList.remove('visible');
+            }
+        }
+
+        // Initialize search
+        function initializeSearch() {
+            const input = document.querySelector('.search-input');
+            const results = document.querySelector('.search-results');
+
+            input.addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase();
+
+                if (!query) {
+                    results.style.display = 'none';
+                    state.filters.search = '';
+                    renderDatasets();
+                    return;
+                }
+
+                const matches = [];
+
+                // Search categories
+                Object.values(state.categories).forEach(cat => {
+                    if (cat.name.toLowerCase().includes(query) || cat.code.toLowerCase().includes(query)) {
+                        matches.push({
+                            type: 'category',
+                            text: `${cat.code} ${cat.name}`,
+                            data: cat
+                        });
+                    }
+                });
+
+                // Search datasets
+                state.datasets.slice(0, 20).forEach(dataset => {
+                    if (dataset.matrixCode.toLowerCase().includes(query) ||
+                        (dataset.ancestorPath && dataset.ancestorPath.toLowerCase().includes(query))) {
+                        matches.push({
+                            type: 'dataset',
+                            text: `${dataset.matrixCode} - ${dataset.ancestorPath || ''}`,
+                            data: dataset
+                        });
+                    }
+                });
+
+                // Search dimensions
+                state.dimensions.slice(0, 10).forEach(dim => {
+                    if (dim.name.toLowerCase().includes(query)) {
+                        matches.push({
+                            type: 'dimension',
+                            text: `${dim.name} (${dim.count} datasets)`,
+                            data: dim
+                        });
+                    }
+                });
+
+                if (matches.length > 0) {
+                    results.innerHTML = matches.slice(0, 30).map(match => `
+                        <div class="search-result-item" data-type="${match.type}">
+                            <span class="search-result-type type-${match.type}">${match.type}</span>
+                            ${match.text}
+                        </div>
+                    `).join('');
+                    results.style.display = 'block';
+
+                    // Add click handlers
+                    results.querySelectorAll('.search-result-item').forEach((item, idx) => {
+                        item.addEventListener('click', () => {
+                            const match = matches[idx];
+                            handleSearchResultClick(match);
+                            results.style.display = 'none';
+                            input.value = '';
+                        });
+                    });
+                } else {
+                    results.style.display = 'none';
+                }
+            });
+
+            // Close on outside click
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.search-bar')) {
+                    results.style.display = 'none';
+                }
+            });
+        }
+
+        function handleSearchResultClick(match) {
+            if (match.type === 'category') {
+                state.filters.category = match.data.code;
+                document.querySelectorAll('.category-label').forEach(el => {
+                    el.classList.toggle('active', el.dataset.code === match.data.code);
+                });
+                document.getElementById('content-title').textContent = match.data.name;
+            } else if (match.type === 'dimension') {
+                state.filters.dimensions.add(match.data.name);
+                renderDimensions();
+            } else if (match.type === 'dataset') {
+                // Highlight dataset or open detail view
+                console.log('Selected dataset:', match.data.matrixCode);
+            }
+            renderDatasets();
+        }
+
+        // Category tree interaction
+        document.addEventListener('click', (e) => {
+            const categoryLabel = e.target.closest('.category-label');
+            if (categoryLabel) {
+                const toggle = e.target.closest('.category-toggle');
+                const childrenList = categoryLabel.nextElementSibling;
+
+                if (toggle && childrenList) {
+                    // Toggle expand/collapse
+                    childrenList.classList.toggle('expanded');
+                    toggle.textContent = childrenList.classList.contains('expanded') ? '▾' : '▸';
+                } else {
+                    // Select category
+                    document.querySelectorAll('.category-label').forEach(el =>
+                        el.classList.remove('active')
+                    );
+                    categoryLabel.classList.add('active');
+
+                    const code = categoryLabel.dataset.code;
+                    state.filters.category = code;
+
+                    const categoryNode = state.categories[code];
+                    document.getElementById('content-title').textContent = categoryNode.name;
+
+                    renderDatasets();
+                }
+            }
+        });
+
+        // Utility functions
+        function cleanHtmlTags(text) {
+            return text.replace(/<[^>]*>/g, ' ').trim();
+        }
+
+        function formatFileSize(mb) {
+            if (!mb || isNaN(mb)) return 'N/A';
+            if (mb < 1) return (mb * 1024).toFixed(0) + 'K';
+            if (mb < 1024) return mb.toFixed(1) + 'M';
+            return (mb / 1024).toFixed(2) + 'G';
+        }
+
+        function formatNumber(num) {
+            if (!num) return '0';
+            return num.toLocaleString('ro-RO');
+        }
+
+        function showError(message) {
+            document.getElementById('datasets-grid').innerHTML = `
+                <div class="no-results">
+                    <div class="no-results-icon">⚠️</div>
+                    <div>Error loading data: ${message}</div>
+                </div>
+            `;
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html>
