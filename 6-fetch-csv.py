@@ -1,7 +1,7 @@
 """ 
 ### todo
 
-- [ ] count cells
+- [x] count cells
 - [x] query Localitati Judete
 - [ ] handle batch partial donwloads for larger than 30k cells
 

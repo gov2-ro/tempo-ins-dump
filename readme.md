@@ -75,11 +75,7 @@ python query-dimensions.py file ZDP1321   # File details
 - [ ] dataset filtering, charting options
 
 
-## UI 
-
-ui/dim-browser.html 
-
-### Roadmap
+### UI
 - [x] filter datasets by dimension
 - [x] add context info
 - [x] permalinks #variables in url
