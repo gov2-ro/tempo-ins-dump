@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Category Browser - INS TEMPO</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 24px;
+            color: #333;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 10px;
+        }
+
+        .nav-link {
+            padding: 8px 16px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            text-decoration: none;
+            color: #666;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover {
+            background: #e3f2fd;
+            border-color: #90caf9;
+            color: #1976d2;
+        }
+
+        .nav-link.active {
+            background: #2196f3;
+            color: white;
+            border-color: #1976d2;
+        }
+
+        .search-container {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            border-color: #2196f3;
+        }
+
+        .autocomplete-items {
+            position: absolute;
+            top: 100%;
+            left: 20px;
+            right: 20px;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .autocomplete-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .autocomplete-item:hover,
+        .autocomplete-item.active {
+            background: #e3f2fd;
+        }
+
+        .type-indicator {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .type-header {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .type-dataset {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .toc-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .category-section {
+            margin-bottom: 30px;
+        }
+
+        .level-1 h1,
+        .level-2 h2,
+        .level-3 h3 {
+            margin: 20px 0 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .level-1 h1 {
+            font-size: 20px;
+            color: #1976d2;
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+        }
+
+        .level-2 h2 {
+            font-size: 16px;
+            color: #455a64;
+            background: #f5f5f5;
+            border-left: 3px solid #90a4ae;
+            margin-left: 20px;
+        }
+
+        .level-3 h3 {
+            font-size: 14px;
+            color: #666;
+            background: #fafafa;
+            border-left: 2px solid #ccc;
+            margin-left: 40px;
+        }
+
+        .code {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            margin-right: 8px;
+            color: #f57c00;
+        }
+
+        ul.datasets {
+            list-style: none;
+            margin: 10px 0 20px 20px;
+            padding: 0;
+        }
+
+        ul.datasets li {
+            padding: 8px 12px;
+            margin: 4px 0;
+            background: #fafafa;
+            border-left: 3px solid #90caf9;
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+
+        ul.datasets li:hover {
+            background: #e3f2fd;
+            border-left-color: #2196f3;
+        }
+
+        ul.datasets a {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        ul.datasets a.ccode {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            color: #1976d2;
+            margin-right: 8px;
+        }
+
+        ul.datasets a.cname {
+            color: #555;
+        }
+
+        ul.datasets a.cname:hover {
+            color: #1976d2;
+        }
+
+        ul.categories {
+            list-style: none;
+            padding: 0;
+        }
+
+        .file-info {
+            display: inline-block;
+            margin-left: 8px;
+            font-size: 11px;
+            color: #999;
+        }
+
+        .file-size {
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .file-size.large {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .file-size.medium {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .row-count {
+            margin-left: 6px;
+            color: #666;
+        }
+
+        .warning-badge {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 2px 8px;
+            background: #fff3e0;
+            color: #f57c00;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            padding: 20px;
+            background: #ffebee;
+            color: #c62828;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+
+        /* Hide nested categories by default for better performance */
+        ul.categories > li {
+            margin-bottom: 10px;
+        }
+
+        .stats-bar {
+            background: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            font-size: 13px;
+            color: #666;
+            display: flex;
+            gap: 20px;
+        }
+
+        .stats-bar span {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .stats-bar strong {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>INS TEMPO - Category Browser</h1>
+            <div class="nav-links">
+                <a href="category-browser.html" class="nav-link active">Categories</a>
+                <a href="index.html" class="nav-link">Dimensions</a>
+            </div>
+        </div>
+
+        <div class="stats-bar" id="stats-bar" style="display: none;">
+            <span><strong id="category-count">0</strong> categories</span>
+            <span><strong id="dataset-count">0</strong> datasets</span>
+            <span>Total: <strong id="total-size">0</strong> MB</span>
+            <span><strong id="large-files-count">0</strong> files > 5MB</span>
+        </div>
+
+        <div class="search-container">
+            <input type="text" class="search-input" placeholder="Caută în capitole și seturi de date...">
+            <div class="autocomplete-items" style="display: none;"></div>
+        </div>
+
+        <div id="toc-container" class="toc-container">
+            <div class="loading">Loading categories...</div>
+        </div>
+    </div>
+
+    <script>
+        let categoriesData = [];
+        let datasetsMetadata = [];
+        let datasetLookup = {};
+        let searchIndex = [];
+
+        // CSV Parser function
+        function parseCsv(csv) {
+            const lines = csv.split('\n');
+            const headers = lines[0].split(',').map(header => header.trim());
+
+            return lines.slice(1)
+                .filter(line => line.trim())
+                .map(line => {
+                    const values = [];
+                    let inQuotes = false;
+                    let currentValue = '';
+
+                    for (let char of line) {
+                        if (char === '"') {
+                            inQuotes = !inQuotes;
+                        } else if (char === ',' && !inQuotes) {
+                            values.push(currentValue);
+                            currentValue = '';
+                        } else {
+                            currentValue += char;
+                        }
+                    }
+                    values.push(currentValue);
+
+                    return headers.reduce((obj, header, index) => {
+                        const value = values[index] ? values[index].replace(/^["']|["']$/g, '').trim() : '';
+                        obj[header] = value;
+                        return obj;
+                    }, {});
+                });
+        }
+
+        // Build hierarchy from categories
+        function buildHierarchy(categories) {
+            const hierarchy = [];
+            const lookup = {};
+
+            categories.forEach(category => {
+                if (category.level === '0') return;
+
+                lookup[category.code] = {
+                    ...category,
+                    children: [],
+                    datasets: []
+                };
+
+                if (!category.parentCode || category.parentCode === '0') {
+                    hierarchy.push(lookup[category.code]);
+                }
+            });
+
+            categories.forEach(category => {
+                if (category.level === '0' || !category.parentCode || category.parentCode === '0') return;
+
+                const parent = lookup[category.parentCode];
+                if (parent) {
+                    parent.children.push(lookup[category.code]);
+                }
+            });
+
+            return { hierarchy, lookup };
+        }
+
+        // Add datasets to their categories
+        function addDatasetsToCategories(datasets, lookup) {
+            datasets.forEach(dataset => {
+                // Extract category code from ancestor path (last part)
+                if (!dataset.ancestorPath) return;
+
+                // Try to find matching category by searching in the path
+                for (const [code, category] of Object.entries(lookup)) {
+                    if (dataset.ancestorPath.includes(category.name)) {
+                        category.datasets.push(dataset);
+                        return;
+                    }
+                }
+            });
+        }
+
+        // Format file size
+        function formatFileSize(sizeMB) {
+            if (sizeMB < 0.01) return '<0.01 MB';
+            if (sizeMB >= 1000) return (sizeMB / 1000).toFixed(2) + ' GB';
+            return sizeMB.toFixed(2) + ' MB';
+        }
+
+        // Get size class
+        function getSizeClass(sizeMB) {
+            if (sizeMB > 5) return 'large';
+            if (sizeMB > 1) return 'medium';
+            return '';
+        }
+
+        // Generate HTML for TOC
+        function generateTocHtml(node) {
+            let html = '';
+
+            if (node.level) {
+                const levelClass = `level-${node.level}`;
+                html += `<div class="${levelClass}">
+                    <h${node.level} id="x-${escapeHtml(node.code)}">
+                        <span class="code">${escapeHtml(node.code)}</span>
+                        ${escapeHtml(node.name)}
+                    </h${node.level}>
+                </div>\n`;
+            }
+
+            // Add datasets
+            if (node.datasets && node.datasets.length > 0) {
+                html += '<ul class="datasets">\n';
+                node.datasets.sort((a, b) => a.matrixCode.localeCompare(b.matrixCode));
+
+                node.datasets.forEach(dataset => {
+                    const sizeClass = getSizeClass(dataset.fileSizeMB);
+                    const sizeFormatted = formatFileSize(dataset.fileSizeMB);
+                    const warning = dataset.fileSizeMB > 5 ? '<span class="warning-badge">⚠ Large file</span>' : '';
+
+                    html += `  <li>
+                        <a class="ccode" href="dataset-profile.html?id=${escapeHtml(dataset.matrixCode)}">${escapeHtml(dataset.matrixCode)}</a>
+                        <a class="cname" href="dataset-profile.html?id=${escapeHtml(dataset.matrixCode)}">${escapeHtml(dataset.matrixCode)}</a>
+                        <span class="file-info">
+                            <span class="file-size ${sizeClass}">${sizeFormatted}</span>
+                            <span class="row-count">${dataset.rowCount.toLocaleString()} rows</span>
+                        </span>
+                        ${warning}
+                    </li>\n`;
+                });
+                html += '</ul>\n';
+            }
+
+            // Process children
+            if (node.children && node.children.length > 0) {
+                node.children.sort((a, b) => a.code.localeCompare(b.code));
+
+                html += '<ul class="categories">\n';
+                node.children.forEach(child => {
+                    html += '<li>\n';
+                    html += generateTocHtml(child);
+                    html += '</li>\n';
+                });
+                html += '</ul>\n';
+            }
+
+            return html;
+        }
+
+        // Build search index
+        function buildSearchIndex() {
+            const items = [];
+
+            // Index category headers
+            document.querySelectorAll('[id^="x-"]').forEach(header => {
+                const code = header.querySelector('.code')?.textContent || '';
+                const name = header.textContent.replace(code, '').trim();
+                items.push({
+                    type: 'header',
+                    code,
+                    name,
+                    element: header,
+                    text: `${code} ${name}`,
+                    id: header.id
+                });
+            });
+
+            // Index datasets
+            datasetsMetadata.forEach(dataset => {
+                items.push({
+                    type: 'dataset',
+                    code: dataset.matrixCode,
+                    name: dataset.matrixCode,
+                    link: `dataset-profile.html?id=${dataset.matrixCode}`,
+                    text: `${dataset.matrixCode}`,
+                    fileSizeMB: dataset.fileSizeMB
+                });
+            });
+
+            return items;
+        }
+
+        // Highlight match in text
+        function highlightMatch(text, query) {
+            if (!query) return escapeHtml(text);
+            const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+            return escapeHtml(text).replace(regex, '<strong>$1</strong>');
+        }
+
+        // Escape regex special characters
+        function escapeRegex(str) {
+            return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Add search functionality
+        function initializeSearch() {
+            const searchInput = document.querySelector('.search-input');
+            const autocompleteList = document.querySelector('.autocomplete-items');
+
+            searchIndex = buildSearchIndex();
+
+            function handleSearch() {
+                const query = searchInput.value.toLowerCase();
+                if (!query) {
+                    autocompleteList.style.display = 'none';
+                    return;
+                }
+
+                const matches = searchIndex.filter(item =>
+                    item.text.toLowerCase().includes(query)
+                ).slice(0, 30);
+
+                if (matches.length === 0) {
+                    autocompleteList.style.display = 'none';
+                    return;
+                }
+
+                autocompleteList.innerHTML = matches.map(item => {
+                    const warningBadge = item.fileSizeMB > 5 ? '<span class="warning-badge">⚠ Large</span>' : '';
+                    return `
+                        <div class="autocomplete-item" data-type="${item.type}" ${
+                            item.type === 'header' ? `data-id="${item.id}"` :
+                            item.type === 'dataset' ? `data-link="${item.link}"` : ''
+                        }>
+                            <span class="type-indicator type-${item.type}">${item.type}</span>
+                            <span>${highlightMatch(item.code, query)} ${item.name ? '- ' + highlightMatch(item.name, query) : ''}</span>
+                            ${warningBadge}
+                        </div>
+                    `;
+                }).join('');
+
+                autocompleteList.style.display = 'block';
+            }
+
+            // Handle click on autocomplete item
+            autocompleteList.addEventListener('click', (e) => {
+                const item = e.target.closest('.autocomplete-item');
+                if (!item) return;
+
+                if (item.dataset.type === 'header') {
+                    const element = document.getElementById(item.dataset.id);
+                    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    element.style.backgroundColor = '#fff3cd';
+                    setTimeout(() => element.style.backgroundColor = '', 2000);
+                } else if (item.dataset.type === 'dataset') {
+                    window.location.href = item.dataset.link;
+                }
+
+                searchInput.value = '';
+                autocompleteList.style.display = 'none';
+            });
+
+            searchInput.addEventListener('input', handleSearch);
+
+            // Close autocomplete when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.search-container')) {
+                    autocompleteList.style.display = 'none';
+                }
+            });
+
+            // Keyboard navigation
+            searchInput.addEventListener('keydown', (e) => {
+                const items = autocompleteList.getElementsByClassName('autocomplete-item');
+                const activeItem = document.querySelector('.autocomplete-item.active');
+                let index = Array.from(items).indexOf(activeItem);
+
+                switch (e.key) {
+                    case 'ArrowDown':
+                        e.preventDefault();
+                        if (index < items.length - 1) index++;
+                        break;
+                    case 'ArrowUp':
+                        e.preventDefault();
+                        if (index > 0) index--;
+                        break;
+                    case 'Enter':
+                        e.preventDefault();
+                        if (activeItem) activeItem.click();
+                        return;
+                    default:
+                        return;
+                }
+
+                Array.from(items).forEach(item => item.classList.remove('active'));
+                if (items[index]) {
+                    items[index].classList.add('active');
+                    items[index].scrollIntoView({ block: 'nearest' });
+                }
+            });
+        }
+
+        // Calculate and display statistics
+        function updateStats() {
+            const stats = {
+                categories: categoriesData.filter(c => c.level !== '0').length,
+                datasets: datasetsMetadata.length,
+                totalSize: datasetsMetadata.reduce((sum, d) => sum + d.fileSizeMB, 0),
+                largeFiles: datasetsMetadata.filter(d => d.fileSizeMB > 5).length
+            };
+
+            document.getElementById('category-count').textContent = stats.categories;
+            document.getElementById('dataset-count').textContent = stats.datasets;
+            document.getElementById('total-size').textContent = stats.totalSize.toFixed(2);
+            document.getElementById('large-files-count').textContent = stats.largeFiles;
+            document.getElementById('stats-bar').style.display = 'flex';
+        }
+
+        // Main initialization
+        async function initialize() {
+            try {
+                // Load categories and metadata
+                const [categoriesResponse, metadataResponse] = await Promise.all([
+                    fetch('../data/ui-helpers/x-categories.csv'),
+                    fetch('data/dataset-metadata.json')
+                ]);
+
+                if (!categoriesResponse.ok || !metadataResponse.ok) {
+                    throw new Error('Failed to load data files');
+                }
+
+                const [categoriesCsv, metadataJson] = await Promise.all([
+                    categoriesResponse.text(),
+                    metadataResponse.json()
+                ]);
+
+                categoriesData = parseCsv(categoriesCsv);
+                datasetsMetadata = metadataJson.metadata;
+
+                // Build dataset lookup
+                datasetsMetadata.forEach(ds => {
+                    datasetLookup[ds.matrixCode] = ds;
+                });
+
+                // Build hierarchy
+                const { hierarchy, lookup } = buildHierarchy(categoriesData);
+                hierarchy.sort((a, b) => a.code.localeCompare(b.code));
+
+                // Add datasets to categories
+                addDatasetsToCategories(datasetsMetadata, lookup);
+
+                // Generate HTML
+                let tocHtml = '<div class="table-of-contents">\n';
+                hierarchy.forEach(node => {
+                    tocHtml += generateTocHtml(node);
+                });
+                tocHtml += '</div>';
+
+                document.getElementById('toc-container').innerHTML = tocHtml;
+
+                // Initialize search
+                initializeSearch();
+
+                // Update statistics
+                updateStats();
+
+            } catch (error) {
+                console.error('Error loading table of contents:', error);
+                document.getElementById('toc-container').innerHTML = `
+                    <div class="error">
+                        Error loading table of contents: ${error.message}
+                        <br>Please check that the data files are available and properly formatted.
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize when ready
+        document.addEventListener('DOMContentLoaded', initialize);
+    </script>
+</body>
+</html>

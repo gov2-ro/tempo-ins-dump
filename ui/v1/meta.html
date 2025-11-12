@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dataset Metadata Browser</title>
+    <style>
+        body { font-family: system-ui; margin: 20px; line-height: 1.4; }
+        #search-container { margin: 20px 0; position: relative; }
+        #search { width: 300px; padding: 8px; font-size: 16px; }
+        #suggestions { 
+            position: absolute; 
+            width: 300px; 
+            max-height: 200px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #ccc;
+            display: none;
+            z-index: 1000;
+        }
+        .suggestion { padding: 8px; cursor: pointer; }
+        .suggestion:hover { background: #f0f0f0; }
+        
+        .meta-info { margin: 20px 0; }
+        .file-stats { 
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .columns { 
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .column-card {
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        
+        .chart-container {
+            margin-top: 10px;
+            height: 150px;
+        }
+        
+        .bar {
+            height: 20px;
+            background: #4CAF50;
+            margin: 2px 0;
+            transition: width 0.3s;
+        }
+        
+        .bar-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            margin-bottom: 2px;
+        }
+        
+        .warning { color: #ff6b6b; }
+        .type-tag {
+            display: inline-block;
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin: 2px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Dataset Metadata Browser</h1>
+    
+    <div id="search-container">
+        <input type="text" id="search" placeholder="Search dataset ID...">
+        <div id="suggestions"></div>
+    </div>
+    
+    <div id="metadata-display"></div>
+
+    <script>
+        let datasetIds = [];
+        let currentMetadata = null;
+
+        // Load dataset IDs
+        async function loadDatasetIds() {
+            try {
+                const response = await fetch('data/metas/meta-list.csv');
+                const text = await response.text();
+                const lines = text.split('\n');
+                // Skip header and empty lines
+                datasetIds = lines.slice(1).filter(line => line.trim()).map(line => line.trim());
+            } catch (error) {
+                console.error('Error loading dataset IDs:', error);
+            }
+        }
+
+        // Create bar chart for categorical data
+        function createBarChart(valueCounts, total) {
+            const container = document.createElement('div');
+            container.className = 'chart-container';
+            
+            // Get top 7 values
+            let entries = Object.entries(valueCounts);
+            let others = 0;
+            if (entries.length > 7) {
+                others = entries.slice(7).reduce((sum, [_, count]) => sum + count, 0);
+                entries = entries.slice(0, 7);
+            }
+            
+            // Add others if exists
+            if (others > 0) {
+                entries.push(['-others-', others]);
+            }
+            
+            // Find max value for scaling
+            const maxCount = Math.max(...entries.map(([_, count]) => count));
+            
+            // Create bars
+            entries.forEach(([label, count]) => {
+                const barWrapper = document.createElement('div');
+                
+                const labelDiv = document.createElement('div');
+                labelDiv.className = 'bar-label';
+                labelDiv.innerHTML = `
+                    <span>${label}</span>
+                    <span>${count} (${((count/total)*100).toFixed(1)}%)</span>
+                `;
+                
+                const bar = document.createElement('div');
+                bar.className = 'bar';
+                bar.style.width = `${(count/maxCount)*100}%`;
+                
+                barWrapper.appendChild(labelDiv);
+                barWrapper.appendChild(bar);
+                container.appendChild(barWrapper);
+            });
+            
+            return container;
+        }
+
+        // Display metadata for selected dataset
+        async function displayMetadata(datasetId) {
+            try {
+                const response = await fetch(`data/metas/ro/${datasetId}.json`);
+                const metadata = await response.json();
+                currentMetadata = metadata;
+                
+                const display = document.getElementById('metadata-display');
+                display.innerHTML = '';
+                
+                // File stats
+                const statsDiv = document.createElement('div');
+                statsDiv.className = 'file-stats';
+                statsDiv.innerHTML = `
+                    <h2>${metadata.file_stats.filename}</h2>
+                    <p>
+                        Rows: ${metadata.file_stats.row_count.toLocaleString()} | 
+                        Columns: ${metadata.file_stats.column_count} | 
+                        Size: ${metadata.file_stats.file_size_mb.toFixed(2)} MB
+                    </p>
+                    ${metadata.value_column ? `<p>Value column: ${metadata.value_column}</p>` : ''}
+                `;
+                display.appendChild(statsDiv);
+                
+                // Columns
+                const columnsDiv = document.createElement('div');
+                columnsDiv.className = 'columns';
+                
+                for (const [colName, colData] of Object.entries(metadata.columns)) {
+                    const colDiv = document.createElement('div');
+                    colDiv.className = 'column-card';
+                    
+                    // Column header
+                    let typeInfo = `
+                        <span class="type-tag">${colData.type}</span>
+                        ${colData.type2 ? colData.type2.split(',').map(t => `<span class="type-tag">${t}</span>`).join('') : ''}
+                    `;
+                    
+                    colDiv.innerHTML = `
+                        <h3>${colName}</h3>
+                        <div>${typeInfo}</div>
+                        <p>
+                            Unique: ${colData.unique_count.toLocaleString()} | 
+                            Null: ${colData.null_count.toLocaleString()}
+                        </p>
+                        ${colData.warnings ? `<p class="warning">⚠️ ${colData.warnings}</p>` : ''}
+                    `;
+                    
+                    // Add numeric stats if available
+                    if (colData.type === 'numeric' || colData.type === 'numeric+') {
+                        colDiv.innerHTML += `
+                            <p>
+                                Min: ${colData.min.toLocaleString()} | 
+                                Max: ${colData.max.toLocaleString()}<br>
+                                Mean: ${colData.mean.toLocaleString()} | 
+                                Median: ${colData.median.toLocaleString()}
+                            </p>
+                        `;
+                    }
+                    
+                    // Add bar chart for categorical data
+                    if (colData.type === 'categorical' && colData.value_counts) {
+                        const chart = createBarChart(colData.value_counts, colData.total_count);
+                        colDiv.appendChild(chart);
+                    }
+                    
+                    columnsDiv.appendChild(colDiv);
+                }
+                
+                display.appendChild(columnsDiv);
+                
+            } catch (error) {
+                console.error('Error loading metadata:', error);
+                document.getElementById('metadata-display').innerHTML = `
+                    <p class="warning">Error loading metadata for ${datasetId}</p>
+                `;
+            }
+        }
+
+        // Search and autocomplete functionality
+        function setupSearch() {
+            const search = document.getElementById('search');
+            const suggestions = document.getElementById('suggestions');
+            
+            search.addEventListener('input', () => {
+                const value = search.value.toLowerCase();
+                if (!value) {
+                    suggestions.style.display = 'none';
+                    return;
+                }
+                
+                const matches = datasetIds.filter(id => 
+                    id.toLowerCase().includes(value)
+                ).slice(0, 10);
+                
+                if (matches.length > 0) {
+                    suggestions.innerHTML = matches
+                        .map(id => `<div class="suggestion">${id}</div>`)
+                        .join('');
+                    suggestions.style.display = 'block';
+                } else {
+                    suggestions.style.display = 'none';
+                }
+            });
+            
+            suggestions.addEventListener('click', (e) => {
+                if (e.target.className === 'suggestion') {
+                    search.value = e.target.textContent;
+                    suggestions.style.display = 'none';
+                    displayMetadata(e.target.textContent);
+                }
+            });
+            
+            // Hide suggestions when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!search.contains(e.target) && !suggestions.contains(e.target)) {
+                    suggestions.style.display = 'none';
+                }
+            });
+            
+            // Handle enter key
+            search.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && search.value) {
+                    const firstMatch = datasetIds.find(id => 
+                        id.toLowerCase().includes(search.value.toLowerCase())
+                    );
+                    if (firstMatch) {
+                        search.value = firstMatch;
+                        suggestions.style.display = 'none';
+                        displayMetadata(firstMatch);
+                    }
+                }
+            });
+        }
+
+        // Initialize
+        async function init() {
+            await loadDatasetIds();
+            setupSearch();
+        }
+
+        init();
+    </script>
+</body>
+</html>
