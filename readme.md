@@ -49,11 +49,10 @@ python query-dimensions.py file ZDP1321   # File details
     - matrices.csv
     - context.json
     - context.csv
-- 2-metas – jsons
+- 2-metas/<lang>/ – jsons
 - 3-db
     - tempo-indexes.db
-- 4-datasets – csvs 
-    - TKP0961.csv
+- 4-datasets
 - 5-compact-datasets - compact csvs
 
 
@@ -65,6 +64,10 @@ python query-dimensions.py file ZDP1321   # File details
 - [x] refactor csvs -> db
 - [x] dashboard / charts (alpha)
 - [x] compact data
+
+- [ ] import into DuckDB
+- [ ] api
+- [ ] front end
 
 ### beta
 - [ ] some datasets are not downloaded

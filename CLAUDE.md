@@ -18,14 +18,32 @@ Sequential numbered scripts process data through multiple stages:
 7. `7-data-compactor.py` - Compacts CSV dimensions
 
 ### UI Components (ui/ folder)
-Multi-interface web application with several explorers:
+Multi-interface web application with several explorers, all interconnected via navigation links:
 
-#### Main Dataset Navigator
-- `index.html` + `script.js` + `style.css` - Primary interface for browsing datasets
-- Two-pane layout: category tree navigation + dataset cards
-- Modal view for detailed dataset information
+#### Dataset Navigator (Primary Interface)
+- `dataset-navigator.html` - Unified dataset browser with documentation-style layout
+- Three-column layout: left sidebar (category tree), main content (dataset cards grid), right sidebar (dimension filters)
+- Multi-filter system: combine category + dimensions + search
+- Search across categories, datasets, and dimensions
+- Active filter display with removal capability
 
-#### Dimension Index Explorer 
+#### Dimension Browser
+- `index.html` + `app.js` + `style.css` - Top dimensions and unit of measure explorer
+- Tag-based interface showing dimension usage counts
+- Collapsible drawers for "Other Dimensions" and "Units of Measure"
+- Click dimensions to see datasets using them
+
+#### Category Browser
+- `category-browser.html` - Category-centric exploration
+- Grid layout showing all categories with dataset counts
+- Direct navigation to datasets by category
+
+#### Tree Browser
+- `tree-browser.html` - Hierarchical 3-level navigation
+- Shows full category tree structure
+- Hover over level 3 categories to see datasets
+
+#### Dimension Index Explorer
 - `dimensions.html` + `dimensions-script.js` + `dimensions-style.css` - Specialized dimension search
 - Client-side JSON approach for exploring statistical dimensions and options
 
@@ -57,15 +75,24 @@ python query-dimensions.py summary      # File overview
 python query-dimensions.py usage        # Dimension usage stats
 python query-dimensions.py search "grade" # Search options
 python query-dimensions.py file ZDP1321   # File details
+
+# Compact datasets (replace dimension labels with IDs)
+python 7-data-compactor.py                      # Process all files
+python 7-data-compactor.py --matrix ZDP1321     # Process single matrix for debugging
 ```
 
 ### UI Development
 
-#### Main Navigator
+#### Serve All UI Pages
 ```bash
 # Serve static files
 python -m http.server 8000
-# Open: http://localhost:8000/ui/index.html
+
+# Then open any of these pages:
+# http://localhost:8000/ui/dataset-navigator.html  (Primary unified interface)
+# http://localhost:8000/ui/index.html              (Dimension browser)
+# http://localhost:8000/ui/category-browser.html   (Category grid)
+# http://localhost:8000/ui/tree-browser.html       (Hierarchical tree)
 ```
 
 #### Dimension Explorer (Client-side)
@@ -97,8 +124,11 @@ python server.py
 - `data/1-indexes/ro/` - Context and matrices CSV files
 - `data/2-metas/ro/` - Individual dataset JSON metadata files
 - `data/4-datasets/ro/` - Raw CSV dataset files
+- `data/5-compact-datasets/ro/` - Compacted CSV files with dimension IDs
 - `data/dimension_index.db` - SQLite database for dimension search
 - `ui/data/dimension_index.json` - Exported JSON for client-side search
+- `ui/data/context.json` - Category hierarchy for navigation
+- `ui/data/matrices.json` - Dataset metadata with dimensions and stats
 
 ### Data Flow
 1. Scrape contexts and dataset lists from INS

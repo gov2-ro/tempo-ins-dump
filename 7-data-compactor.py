@@ -84,18 +84,29 @@ def main():
             logging.warning(f"File '{f}.csv' found in input folder but no matching JSON metadata.")
 
     # Process each fileid
-    for fileid in fileids_available:
+    total_files = len(fileids_available)
+    processed = 0
+    skipped = 0
+    errors = 0
+
+    print(f"Processing {total_files} files...")
+
+    for idx, fileid in enumerate(fileids_available, 1):
 
         compacted_file = os.path.join(compacted_folder, f"{fileid}.csv")
         if os.path.exists(compacted_file):
             # Already compacted
             logging.info(f"Skipping '{fileid}.csv' because it is already compacted.")
+            skipped += 1
+            if idx % 100 == 0:
+                print(f"Progress: {idx}/{total_files} (skipped: {skipped}, processed: {processed}, errors: {errors})")
             continue
 
         original_file = os.path.join(input_csvs, f"{fileid}.csv")
         if not os.path.exists(original_file):
             # CSV does not exist in input, log warning
             logging.warning(f"File '{fileid}.csv' has JSON metadata but not in input folder.")
+            errors += 1
             continue
 
         # Load mappings from JSON metadata file
@@ -108,6 +119,7 @@ def main():
             mapping, dim_labels_by_code = load_mapping_from_json(json_file)
         except Exception as e:
             logging.error(f"Error loading JSON metadata for '{fileid}.json': {e}")
+            errors += 1
             continue
 
         # Process the CSV
@@ -164,11 +176,16 @@ def main():
         expected_output_rows = rows_read + 1  # +1 for header
         if rows_written == expected_output_rows:
             logging.info(f"Successfully processed and compacted '{fileid}.csv': {rows_read} data rows + header = {rows_written} total rows")
+            processed += 1
+            print(f"✓ {fileid}.csv ({rows_read:,} rows)")
         else:
             logging.error(f"ROW COUNT MISMATCH for '{fileid}.csv': read {rows_read} data rows but wrote {rows_written} total rows (expected {expected_output_rows})")
-            print(f"WARNING: Row count mismatch for {fileid}.csv - see log for details")
+            print(f"✗ ERROR: Row count mismatch for {fileid}.csv - see log for details")
+            errors += 1
 
-    logging.info("Compaction process completed.")
+    print(f"\nCompaction completed!")
+    print(f"Total: {total_files} files | Processed: {processed} | Skipped: {skipped} | Errors: {errors}")
+    logging.info(f"Compaction process completed. Processed: {processed}, Skipped: {skipped}, Errors: {errors}")
 
 
 if __name__ == "__main__":
