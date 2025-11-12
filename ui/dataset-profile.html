@@ -293,6 +293,9 @@
         const datasetId = urlParams.get('id');
         const dims = urlParams.get('dims');
 
+        // Global dataset metadata lookup
+        let datasetMetadataLookup = {};
+
         // Setup back link with dimensions
         const backLink = document.getElementById('back-link');
         if (dims) {
@@ -312,33 +315,82 @@
             document.getElementById('table-content').innerHTML = '<div class="error">No dataset ID provided</div>';
             document.getElementById('sidebar-content').innerHTML = '<div class="error">No dataset ID provided</div>';
         } else {
-            loadDataset(datasetId);
+            initializeAndLoad(datasetId);
+        }
+
+        async function initializeAndLoad(id) {
+            try {
+                // Load dataset metadata index first
+                const metadataIndexResponse = await fetch('data/dataset-metadata.json');
+                if (metadataIndexResponse.ok) {
+                    const metadataIndex = await metadataIndexResponse.json();
+                    // Create lookup by matrixCode
+                    metadataIndex.metadata.forEach(item => {
+                        datasetMetadataLookup[item.matrixCode] = item;
+                    });
+                }
+            } catch (error) {
+                console.warn('Could not load dataset metadata index:', error);
+            }
+
+            // Now load the dataset
+            loadDataset(id);
         }
 
         async function loadDataset(id) {
             try {
-                // Load metadata and CSV in parallel
-                const [metaResponse, csvResponse] = await Promise.all([
-                    fetch(`../data/2-metas/ro/${id}.json`),
-                    fetch(`../data/4-datasets/ro/${id}.csv`)
-                ]);
-
+                // Load metadata first
+                const metaResponse = await fetch(`../data/2-metas/ro/${id}.json`);
                 if (!metaResponse.ok) {
                     throw new Error(`Failed to load metadata: ${metaResponse.status}`);
                 }
-                if (!csvResponse.ok) {
-                    throw new Error(`Failed to load CSV data: ${csvResponse.status}`);
-                }
-
                 const metadata = await metaResponse.json();
-                const csvText = await csvResponse.text();
 
                 // Update header
                 document.getElementById('dataset-name').textContent = metadata.matrixName || id;
                 document.getElementById('dataset-id').textContent = id;
 
-                // Render sidebar
-                renderSidebar(metadata);
+                // Check file size from metadata index
+                const fileMetadata = datasetMetadataLookup[id];
+                const FILE_SIZE_LIMIT_MB = 5;
+
+                // Render sidebar with file info
+                renderSidebar(metadata, fileMetadata);
+
+                // Check if file is too large
+                if (fileMetadata && fileMetadata.fileSizeMB > FILE_SIZE_LIMIT_MB) {
+                    const tableContent = document.getElementById('table-content');
+                    tableContent.innerHTML = `
+                        <div style="padding: 40px; text-align: center;">
+                            <div style="font-size: 48px; margin-bottom: 20px;">⚠️</div>
+                            <h2 style="color: #d32f2f; margin-bottom: 10px;">Dataset Too Large</h2>
+                            <p style="color: #666; margin-bottom: 20px;">
+                                This dataset is <strong>${fileMetadata.fileSizeMB.toFixed(2)} MB</strong> (${fileMetadata.rowCount.toLocaleString()} rows),
+                                which exceeds the ${FILE_SIZE_LIMIT_MB} MB browser loading limit.
+                            </p>
+                            <p style="color: #666;">
+                                Please use alternative tools to analyze this dataset:
+                            </p>
+                            <ul style="list-style: none; padding: 20px; text-align: left; max-width: 500px; margin: 0 auto;">
+                                <li style="padding: 8px 0;">📊 <strong>Python/Pandas:</strong> Load with <code>pd.read_csv()</code></li>
+                                <li style="padding: 8px 0;">💻 <strong>CLI:</strong> Use <code>head</code>, <code>tail</code>, or <code>csvkit</code></li>
+                                <li style="padding: 8px 0;">🗄️ <strong>Database:</strong> Import into SQLite/PostgreSQL</li>
+                            </ul>
+                            <div style="margin-top: 30px; padding: 15px; background: #f5f5f5; border-radius: 4px;">
+                                <strong>File location:</strong><br>
+                                <code style="font-size: 12px; color: #333;">${fileMetadata.filePath}</code>
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Load CSV if not too large
+                const csvResponse = await fetch(`../data/4-datasets/ro/${id}.csv`);
+                if (!csvResponse.ok) {
+                    throw new Error(`Failed to load CSV data: ${csvResponse.status}`);
+                }
+                const csvText = await csvResponse.text();
 
                 // Render table
                 renderTable(csvText);
@@ -350,12 +402,35 @@
             }
         }
 
-        function renderSidebar(meta) {
+        function renderSidebar(meta, fileMetadata) {
             const container = document.getElementById('sidebar-content');
 
             let html = '';
 
-            // Ancestors (compact) - FIRST
+            // File metadata - FIRST
+            if (fileMetadata) {
+                html += `
+                    <div class="meta-field" style="background: #e3f2fd; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+                        <div class="meta-label" style="color: #1976d2;">File Information</div>
+                        <div style="display: flex; justify-content: space-between; margin-top: 8px;">
+                            <div>
+                                <div style="font-size: 10px; color: #666; text-transform: uppercase;">Size</div>
+                                <div style="font-size: 14px; font-weight: 600; color: ${fileMetadata.fileSizeMB > 5 ? '#d32f2f' : '#333'};">
+                                    ${fileMetadata.fileSizeMB.toFixed(2)} MB
+                                </div>
+                            </div>
+                            <div>
+                                <div style="font-size: 10px; color: #666; text-transform: uppercase;">Rows</div>
+                                <div style="font-size: 14px; font-weight: 600; color: #333;">
+                                    ${fileMetadata.rowCount.toLocaleString()}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Ancestors (compact) - SECOND
             if (meta.ancestors && meta.ancestors.length > 0) {
                 // Strip HTML tags and show just the path
                 const ancestorPath = meta.ancestors.map(a => {

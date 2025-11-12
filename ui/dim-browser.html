@@ -189,6 +189,32 @@ h2 {margin: 5px 0}
             -webkit-box-orient: vertical;
         }
 
+        .dataset-file-info {
+            font-size: 9px;
+            color: #999;
+            margin: 4px 0;
+            display: flex;
+            gap: 10px;
+        }
+
+        .dataset-file-info .size {
+            font-weight: 600;
+        }
+
+        .dataset-file-info .size.large {
+            color: #d32f2f;
+        }
+
+        .dataset-path {
+            font-size: 9px;
+            color: #888;
+            margin: 4px 0;
+            line-height: 1.3;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
         .dataset-dims {
             margin-top: 2px;
             /* padding-top: 6px; */
@@ -254,16 +280,32 @@ h2 {margin: 5px 0}
         let allDimensions = [];
         let allDatasets = [];
         let selectedDimensions = new Set();
+        let datasetMetadataLookup = {};
 
         // Load and parse CSV files
         async function loadData() {
             try {
+                // Load dataset metadata index
+                try {
+                    const metadataResponse = await fetch('data/dataset-metadata.json');
+                    if (metadataResponse.ok) {
+                        const metadataIndex = await metadataResponse.json();
+                        // Create lookup by matrixCode
+                        metadataIndex.metadata.forEach(item => {
+                            datasetMetadataLookup[item.matrixCode] = item;
+                        });
+                        console.log('Loaded metadata for', Object.keys(datasetMetadataLookup).length, 'datasets');
+                    }
+                } catch (error) {
+                    console.warn('Could not load dataset metadata:', error);
+                }
+
                 // Load datasets
                 const datasetsResponse = await fetch('../data/3-db/ro/csv/datasets.csv');
                 const datasetsText = await datasetsResponse.text();
                 allDatasets = parseCSV(datasetsText, ['filename', 'matrixName', 'dim_labels']);
 
-                // Parse dim_labels JSON strings
+                // Parse dim_labels JSON strings and attach metadata
                 allDatasets.forEach(ds => {
                     try {
                         const parsed = JSON.parse(ds.dim_labels || '[]');
@@ -272,6 +314,9 @@ h2 {margin: 5px 0}
                         console.warn('Failed to parse dim_labels for', ds.filename, ':', ds.dim_labels, e);
                         ds.dim_labels_array = [];
                     }
+
+                    // Attach file metadata
+                    ds.fileMetadata = datasetMetadataLookup[ds.filename];
                 });
 
                 // Build dimension list from actual dataset dimensions with usage counts
@@ -573,17 +618,34 @@ h2 {margin: 5px 0}
                     </h3>`;
                 }
 
-                html += withAll.map(ds => `
-                    <div class="dataset-card" onclick="openDataset('${escapeHtml(ds.filename)}')">
-                        <div class="dataset-filename">${escapeHtml(ds.filename)}</div>
-                        <div class="dataset-name">${escapeHtml(ds.matrixName)}</div>
-                        <div class="dataset-dims">
-                            ${(Array.isArray(ds.dim_labels_array) ? ds.dim_labels_array : []).map(dim =>
-                                `<span class="tag small ${selectedDimensions.has(dim) ? 'active' : ''}" onclick="event.stopPropagation(); filterByDimension('${escapeHtml(dim)}')">${escapeHtml(dim)}</span>`
-                            ).join('')}
+                html += withAll.map(ds => {
+                    const path = ds.fileMetadata?.ancestorPath ? `
+                        <div class="dataset-path" title="${escapeHtml(ds.fileMetadata.ancestorPath)}">
+                            ${escapeHtml(ds.fileMetadata.ancestorPath)}
                         </div>
-                    </div>
-                `).join('');
+                    ` : '';
+
+                    const fileInfo = ds.fileMetadata ? `
+                        <div class="dataset-file-info">
+                            <span class="size ${ds.fileMetadata.fileSizeMB > 5 ? 'large' : ''}">${ds.fileMetadata.fileSizeMB.toFixed(2)} MB</span>
+                            <span>${ds.fileMetadata.rowCount.toLocaleString()} rows</span>
+                        </div>
+                    ` : '';
+
+                    return `
+                        <div class="dataset-card" onclick="openDataset('${escapeHtml(ds.filename)}')">
+                            <div class="dataset-filename">${escapeHtml(ds.filename)}</div>
+                            <div class="dataset-name">${escapeHtml(ds.matrixName)}</div>
+                            ${path}
+                            ${fileInfo}
+                            <div class="dataset-dims">
+                                ${(Array.isArray(ds.dim_labels_array) ? ds.dim_labels_array : []).map(dim =>
+                                    `<span class="tag small ${selectedDimensions.has(dim) ? 'active' : ''}" onclick="event.stopPropagation(); filterByDimension('${escapeHtml(dim)}')">${escapeHtml(dim)}</span>`
+                                ).join('')}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
             }
 
             // Render datasets with some dimensions
@@ -592,17 +654,34 @@ h2 {margin: 5px 0}
                     At least one dimension (${withSome.length})
                 </h3>`;
 
-                html += withSome.map(ds => `
-                    <div class="dataset-card" onclick="openDataset('${escapeHtml(ds.filename)}')">
-                        <div class="dataset-filename">${escapeHtml(ds.filename)}</div>
-                        <div class="dataset-name">${escapeHtml(ds.matrixName)}</div>
-                        <div class="dataset-dims">
-                            ${(Array.isArray(ds.dim_labels_array) ? ds.dim_labels_array : []).map(dim =>
-                                `<span class="tag small ${selectedDimensions.has(dim) ? 'active' : ''}" onclick="event.stopPropagation(); filterByDimension('${escapeHtml(dim)}')">${escapeHtml(dim)}</span>`
-                            ).join('')}
+                html += withSome.map(ds => {
+                    const path = ds.fileMetadata?.ancestorPath ? `
+                        <div class="dataset-path" title="${escapeHtml(ds.fileMetadata.ancestorPath)}">
+                            ${escapeHtml(ds.fileMetadata.ancestorPath)}
                         </div>
-                    </div>
-                `).join('');
+                    ` : '';
+
+                    const fileInfo = ds.fileMetadata ? `
+                        <div class="dataset-file-info">
+                            <span class="size ${ds.fileMetadata.fileSizeMB > 5 ? 'large' : ''}">${ds.fileMetadata.fileSizeMB.toFixed(2)} MB</span>
+                            <span>${ds.fileMetadata.rowCount.toLocaleString()} rows</span>
+                        </div>
+                    ` : '';
+
+                    return `
+                        <div class="dataset-card" onclick="openDataset('${escapeHtml(ds.filename)}')">
+                            <div class="dataset-filename">${escapeHtml(ds.filename)}</div>
+                            <div class="dataset-name">${escapeHtml(ds.matrixName)}</div>
+                            ${path}
+                            ${fileInfo}
+                            <div class="dataset-dims">
+                                ${(Array.isArray(ds.dim_labels_array) ? ds.dim_labels_array : []).map(dim =>
+                                    `<span class="tag small ${selectedDimensions.has(dim) ? 'active' : ''}" onclick="event.stopPropagation(); filterByDimension('${escapeHtml(dim)}')">${escapeHtml(dim)}</span>`
+                                ).join('')}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
             }
 
             container.innerHTML = html;

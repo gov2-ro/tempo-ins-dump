@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Romanian Statistical Navigator - TEMPO INS</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                <div class="logo">📊</div>
+                <span>Enhanced Statistical Navigator</span>
+            </h1>
+            <p class="subtitle">Advanced explorer for the National Institute of Statistics (INS) - TEMPO Database</p>
+            <div class="stats-bar">
+                <div class="stat">
+                    <span>📈 Total Datasets:</span>
+                    <span class="stat-value" id="total-count">-</span>
+                </div>
+                <div class="stat">
+                    <span>🔍 Filtered:</span>
+                    <span class="stat-value" id="filtered-count">-</span>
+                </div>
+                <div class="stat">
+                    <span>⭐ Avg Quality:</span>
+                    <span class="stat-value" id="quality-avg">-</span>
+                </div>
+                <div class="stat">
+                    <span>🕒 Recent Data:</span>
+                    <span class="stat-value" id="recent-count">-</span>
+                </div>
+            </div>
+        </header>
+        
+        <div class="main-content">
+            <aside class="sidebar">
+                <!-- Navigation Tree -->
+                <div class="sidebar-section">
+                    <div class="section-header">📂 Categories</div>
+                    <div id="navigation-tree" class="tree-container">
+                        <div class="loading">
+                            <div class="loading-spinner"></div>
+                            <div>Loading navigation...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Advanced Filters -->
+                <div class="sidebar-section">
+                    <div class="section-header">🔍 Advanced Filters</div>
+                    <div class="filters-container">
+                        
+                        <!-- Quality Filter -->
+                        <div class="filter-group">
+                            <label class="filter-label">Data Quality</label>
+                            <div class="quality-filter">
+                                <input type="range" id="quality-slider" min="0" max="1" step="0.1" value="0">
+                                <div class="quality-display">
+                                    <span class="quality-stars" id="quality-stars">☆☆☆☆☆</span>
+                                    <span class="quality-value" id="quality-value">Any</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Time Period Filter -->
+                        <div class="filter-group">
+                            <label class="filter-label">Time Period</label>
+                            <div class="time-range">
+                                <input type="number" id="year-from" placeholder="From year" min="1990" max="2030">
+                                <span>to</span>
+                                <input type="number" id="year-to" placeholder="To year" min="1990" max="2030">
+                            </div>
+                        </div>
+                        
+                        <!-- Geographic Level -->
+                        <div class="filter-group">
+                            <label class="filter-label">Geographic Level</label>
+                            <select id="geo-level-filter">
+                                <option value="">All levels</option>
+                                <option value="national">National</option>
+                                <option value="regional">Regional</option>
+                                <option value="county">County</option>
+                                <option value="local">Local</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Periodicity -->
+                        <div class="filter-group">
+                            <label class="filter-label">Update Frequency</label>
+                            <select id="periodicity-filter">
+                                <option value="">All frequencies</option>
+                                <option value="Anuala">Annual</option>
+                                <option value="Trimestriala">Quarterly</option>
+                                <option value="Lunara">Monthly</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Boolean Filters -->
+                        <div class="filter-group">
+                            <label class="filter-label">Data Features</label>
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="recent-data">
+                                    <span class="checkmark"></span>
+                                    Has recent data (last 5 years)
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="has-methodology">
+                                    <span class="checkmark"></span>
+                                    Has methodology documentation
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <!-- Filter Actions -->
+                        <div class="filter-actions">
+                            <button id="clear-filters" class="btn btn-secondary">Clear All</button>
+                            <button id="apply-filters" class="btn btn-primary">Apply Filters</button>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+            
+            <main class="content-area">
+                <!-- Search and Controls -->
+                <div class="search-controls">
+                    <div class="search-container">
+                        <div class="search-input-wrapper">
+                            <input type="text" id="search-input" placeholder="Search datasets, categories, keywords..." 
+                                   autocomplete="off">
+                            <div class="search-suggestions" id="search-suggestions"></div>
+                        </div>
+                        <button id="search-btn" class="btn btn-primary">Search</button>
+                    </div>
+                    
+                    <!-- Sort Controls -->
+                    <div class="sort-controls">
+                        <label for="sort-select">Sort by:</label>
+                        <select id="sort-select">
+                            <option value="title">Title</option>
+                            <option value="quality_score">Quality</option>
+                            <option value="last_update">Last Updated</option>
+                            <option value="dimensions_count">Dimensions</option>
+                        </select>
+                        <button id="sort-order" class="btn btn-icon" data-order="ASC" title="Sort Order">↑</button>
+                    </div>
+                </div>
+                
+                <!-- Active Filters Display -->
+                <div id="active-filters" class="active-filters" style="display: none;">
+                    <div class="filter-chips-container">
+                        <span class="active-filters-label">Active filters:</span>
+                        <div id="filter-chips" class="filter-chips"></div>
+                        <button id="clear-all-filters" class="btn-clear-all">Clear all</button>
+                    </div>
+                </div>
+                
+                <!-- Results Area -->
+                <div class="results-container">
+                    <div class="results-header">
+                        <div class="results-info">
+                            <span id="results-summary">Loading datasets...</span>
+                        </div>
+                        <div class="view-controls">
+                            <button id="view-grid" class="view-btn active" title="Grid View">⊞</button>
+                            <button id="view-list" class="view-btn" title="List View">☰</button>
+                        </div>
+                    </div>
+                    
+                    <div id="datasets-grid" class="datasets-grid">
+                        <div class="loading-container">
+                            <div class="loading-spinner"></div>
+                            <div>Loading datasets...</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    <div id="pagination" class="pagination" style="display: none;">
+                        <button id="prev-page" class="btn btn-secondary">Previous</button>
+                        <div class="page-info">
+                            <span id="page-info-text">Page 1 of 1</span>
+                        </div>
+                        <button id="next-page" class="btn btn-secondary">Next</button>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Dataset Detail Modal -->
+    <div id="dataset-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Dataset Details</h2>
+                <button id="modal-close" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Dataset details will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+                        </div>
+                        <div class="search-container">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="search" placeholder="Search datasets by code, title, or keywords...">
+                        </div>
+                    </div>
+                    <div id="keywords-bar" class="keywords-bar" aria-label="Keyword filter" role="group" style="display:none;">
+                        <!-- Keyword chips will render here -->
+                    </div>
+                </div>
+                
+                <div class="datasets-container">
+                    <div id="breadcrumb" class="path-breadcrumb" style="display: none;"></div>
+                    <div id="datasets-content">
+                        <!-- Datasets will be rendered here -->
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <!-- Modal for Detailed View -->
+    <div id="modal" class="modal-backdrop">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title" class="modal-title">Dataset Details</h3>
+                <button id="modal-close" class="modal-close">&times;</button>
+            </div>
+            <div id="modal-body" class="modal-body">
+                <!-- Modal content will be generated here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
