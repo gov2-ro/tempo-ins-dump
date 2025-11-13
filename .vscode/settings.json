@@ -1,7 +1,0 @@
-{
-    "files.exclude": {
-        "**/_obsolete*": true
-        "**/data/*": true,
-        "**/data*/*": true
-    }
-}
