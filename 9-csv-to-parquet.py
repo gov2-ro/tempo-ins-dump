@@ -18,7 +18,7 @@ from typing import List, Tuple, Dict
 # Import configuration
 from duckdb_config import (
     METAS_DIR,
-    COMPACT_CSV_DIR,
+    CSV_SOURCE_DIR,
     PARQUET_DIR,
     LOGS_DIR,
     PARQUET_COMPRESSION,
@@ -75,6 +75,9 @@ def convert_csv_to_parquet(matrix_code: str, conn: duckdb.DuckDBPyConnection) ->
     """
     Convert a single CSV file to Parquet format
 
+    Note: Using original CSVs with text labels (not compacted IDs)
+    to avoid data quality issues from imperfect compaction.
+
     Args:
         matrix_code: Matrix identifier
         conn: DuckDB connection
@@ -82,7 +85,7 @@ def convert_csv_to_parquet(matrix_code: str, conn: duckdb.DuckDBPyConnection) ->
     Returns:
         Dict with conversion statistics
     """
-    csv_file = COMPACT_CSV_DIR / f"{matrix_code}.csv"
+    csv_file = CSV_SOURCE_DIR / f"{matrix_code}.csv"
     parquet_file = PARQUET_DIR / f"{matrix_code}.parquet"
 
     stats = {
@@ -110,15 +113,45 @@ def convert_csv_to_parquet(matrix_code: str, conn: duckdb.DuckDBPyConnection) ->
             stats['error'] = f"Metadata error: {e}"
             return stats
 
-        # Build column list for SELECT (all as INTEGER except last as DOUBLE)
+        # Verify CSV has expected number of columns
+        expected_cols = len(column_names)  # Includes value column
+        try:
+            # Read first data row to check column count
+            first_row = conn.execute(f"""
+                SELECT * FROM read_csv('{csv_file}',
+                                      header=false,
+                                      skip=1,
+                                      delim=',',
+                                      auto_detect=true,
+                                      sample_size=1)
+                LIMIT 1
+            """).fetchone()
+
+            if first_row is None:
+                stats['error'] = "CSV file is empty"
+                return stats
+
+            actual_cols = len(first_row)
+            if actual_cols != expected_cols:
+                stats['error'] = f"Column count mismatch: expected {expected_cols}, got {actual_cols}"
+                return stats
+        except Exception as e:
+            stats['error'] = f"CSV validation error: {e}"
+            return stats
+
+        # Build column list for SELECT
+        # Using VARCHAR for dimension columns (text labels from original CSVs)
+        # Using DOUBLE for value column
         num_dims = len(column_names) - 1  # Exclude value column
         column_casts = []
 
         for i in range(num_dims):
-            column_casts.append(f"CAST(column{i} AS INTEGER) AS {column_names[i]}")
+            # Store dimension labels as text
+            column_casts.append(f"CAST(column{i} AS VARCHAR) AS {column_names[i]}")
 
-        # Last column is the value
-        column_casts.append(f"CAST(column{num_dims} AS DOUBLE) AS {VALUE_COLUMN}")
+        # Last column is the value (numeric, but handle non-numeric as NULL)
+        # Using TRY_CAST to handle 'c' (confidential) and other non-numeric markers
+        column_casts.append(f"TRY_CAST(column{num_dims} AS DOUBLE) AS {VALUE_COLUMN}")
 
         # Build SQL query
         select_columns = ",\n    ".join(column_casts)

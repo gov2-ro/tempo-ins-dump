@@ -13,7 +13,12 @@ DATA_DIR = BASE_DIR / "data"
 CONTEXT_CSV = DATA_DIR / "1-indexes" / "ro" / "context.csv"
 MATRICES_CSV = DATA_DIR / "1-indexes" / "ro" / "matrices.csv"
 METAS_DIR = DATA_DIR / "2-metas" / "ro"
-COMPACT_CSV_DIR = DATA_DIR / "5-compact-datasets" / "ro"
+ORIGINAL_CSV_DIR = DATA_DIR / "4-datasets" / "ro"  # Original CSVs with text labels
+COMPACT_CSV_DIR = DATA_DIR / "5-compact-datasets" / "ro"  # Compacted CSVs with IDs (TODO: fix compaction issues)
+
+# Which CSV source to use for Parquet conversion
+# Options: ORIGINAL_CSV_DIR (text labels, larger) or COMPACT_CSV_DIR (IDs, smaller but has issues)
+CSV_SOURCE_DIR = ORIGINAL_CSV_DIR  # Using original for reliability
 
 # Output paths
 PARQUET_DIR = DATA_DIR / "parquet" / "ro"
@@ -102,8 +107,8 @@ def validate_inputs():
     if not METAS_DIR.exists():
         errors.append(f"Metadata directory not found: {METAS_DIR}")
 
-    if not COMPACT_CSV_DIR.exists():
-        errors.append(f"Compact CSV directory not found: {COMPACT_CSV_DIR}")
+    if not CSV_SOURCE_DIR.exists():
+        errors.append(f"CSV source directory not found: {CSV_SOURCE_DIR}")
 
     if errors:
         print("❌ Validation errors:")
@@ -113,13 +118,14 @@ def validate_inputs():
 
     # Count files
     json_count = len(list(METAS_DIR.glob("*.json")))
-    csv_count = len(list(COMPACT_CSV_DIR.glob("*.csv")))
+    csv_count = len(list(CSV_SOURCE_DIR.glob("*.csv")))
 
     print(f"✓ Input validation passed:")
     print(f"  - Context CSV: {CONTEXT_CSV}")
     print(f"  - Matrices CSV: {MATRICES_CSV}")
     print(f"  - JSON metadata files: {json_count}")
-    print(f"  - Compact CSV files: {csv_count}")
+    print(f"  - CSV source: {CSV_SOURCE_DIR}")
+    print(f"  - CSV files: {csv_count}")
 
     return True
 

@@ -21,7 +21,7 @@ from duckdb_config import (
     CONTEXT_CSV,
     MATRICES_CSV,
     METAS_DIR,
-    COMPACT_CSV_DIR,
+    CSV_SOURCE_DIR,
     PARQUET_DIR,
     LOGS_DIR,
     TEST_LIMIT,
@@ -141,7 +141,7 @@ def enrich_matrix_metadata(conn: duckdb.DuckDBPyConnection, matrix_code: str) ->
         details = data.get('details', {})
 
         # Get file stats
-        csv_file = COMPACT_CSV_DIR / f"{matrix_code}.csv"
+        csv_file = CSV_SOURCE_DIR / f"{matrix_code}.csv"
         parquet_file = PARQUET_DIR / f"{matrix_code}.parquet"
 
         row_count = None
