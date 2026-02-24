@@ -93,23 +93,7 @@ python query-dimensions.py file ZDP1321   # File details
 - [ ] basic stats / charts - per all years, per last year - for localitati normeaza la populatie
 
 see also: [ui/readme.md](ui/readme.md)
-
-### V3 - alpha / atena
-Create documentation style UI:
-
-Dataset browser 
-- left sidebar with context / category hierarchy
-- right sidebar with dimensions browser options
-- main content with list of filtered datasets
-- search bar
-
-Dataset profile
-- shows base data profile charts totals per options / per year? also for the last available data.
-- has right sidebar with nav - parent ctgs and list of sibling datasets - with the same parent
  
-
-![how it started](docs/misc/nonstop-bv-ct.png)
-
 ## Notes
 
 > Atentie! Nomenclatoarele care prezinta doar optiunea "Total" se vor completa automat cu alte optiuni doar daca nomenclatorului anterior i se deselecteaza optiunea "Total" si i se alege o singura alta optiune,
