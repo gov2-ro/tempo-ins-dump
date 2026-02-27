@@ -13,12 +13,23 @@ You have a comprehensive dataset from the Romanian National Institute of Statist
 - Every dataset follows: `[Category Dimensions] + [Time/Geo] + [Measurement Unit] + [Value]`
 - Metadata provides semantic meaning through `dimensionsMap`
 - Units are standardized (procente, lei, persoane, etc.)
+- **Note:** Some datasets have multiple distinct units in the UM column (see Multi-Unit Datasets below)
 
 **Content Diversity:**
 - **Temporal granularity**: Annual, quarterly, monthly
-- **Geographic hierarchy**: National → Macroregion → Region → County → Locality  
+- **Geographic hierarchy**: National → Macroregion → Region → County → Locality
 - **Thematic domains**: Innovation, labor, demographics, environment, culture, transport
 - **Data types**: Counts, percentages, currencies, rates, indices
+
+**Multi-Unit Datasets:**
+Some datasets (e.g., `BUF113G.csv`) have multiple incompatible units in the same UM column:
+- Example: columns contain Bucati, Kilograme, Litri — each with different scales and meaning
+- **Critical implication**: values cannot be aggregated or compared across unit types
+- **Detection**: In `matrix_profiles`, datasets where `json_array_length(unit_types) > 1`
+- **Handling**: Treat UM as a mandatory categorical filter/pivot axis
+  - Effectively creates sub-datasets — one numeric timeseries per unit
+  - Query pattern: always WHERE unit = 'X' before calculation or visualization
+  - Charting: split into separate charts (one per unit) or provide UM selector in UI
 
 ## Systematic Approach Framework
 
@@ -96,7 +107,7 @@ Demographic Focus → Population pyramids, cohort analysis, distribution charts
 2. **Sparse Data**: How to handle datasets with many null/missing values?
 3. **Scale Variations**: How to handle datasets with vastly different value ranges?
 4. **Temporal Irregularities**: How to handle non-standard time periods or gaps?
-5. **Multi-Unit Datasets**: How to handle datasets with multiple measurement units?
+5. **Multi-Unit Datasets**: Treat UM as a categorical pivot axis; create sub-datasets per unit. Cannot aggregate across incompatible unit types. Always filter/group by unit before calculation or chart.
 6. **User Context**: How much domain knowledge can we assume from end users?
 
 ## Success Metrics
