@@ -235,6 +235,25 @@ HTML_TEMPLATE = """
             font-weight: bold;
             color: #007bff;
         }
+
+        .nav-buttons {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .nav-buttons button {
+            padding: 6px 14px;
+            font-size: 13px;
+        }
+        .nav-buttons button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .nav-position {
+            font-size: 13px;
+            color: #666;
+        }
     </style>
 </head>
 <body>
@@ -266,24 +285,52 @@ HTML_TEMPLATE = """
     <script>
         let currentMatrix = null;
         let allDatasets = [];
+        let filteredDatasets = [];
 
         // Load dataset list
         fetch('/api/datasets')
             .then(r => r.json())
             .then(data => {
                 allDatasets = data.datasets;
-                renderDatasets(allDatasets);
+                filteredDatasets = allDatasets;
+                renderDatasets(filteredDatasets);
             });
 
         // Search functionality
         document.getElementById('searchBox').addEventListener('input', (e) => {
             const query = e.target.value.toLowerCase();
-            const filtered = allDatasets.filter(d =>
+            filteredDatasets = allDatasets.filter(d =>
                 d.matrix_code.toLowerCase().includes(query) ||
                 d.matrix_name.toLowerCase().includes(query)
             );
-            renderDatasets(filtered);
+            renderDatasets(filteredDatasets);
         });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') navigateDataset(-1);
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') navigateDataset(1);
+        });
+
+        function navigateDataset(delta) {
+            if (filteredDatasets.length === 0) return;
+            const idx = filteredDatasets.findIndex(d => d.matrix_code === currentMatrix);
+            let newIdx;
+            if (idx === -1) {
+                newIdx = delta > 0 ? 0 : filteredDatasets.length - 1;
+            } else {
+                newIdx = Math.max(0, Math.min(filteredDatasets.length - 1, idx + delta));
+            }
+            if (newIdx !== idx) {
+                loadDataset(filteredDatasets[newIdx].matrix_code);
+                // Scroll sidebar item into view
+                setTimeout(() => {
+                    const items = document.querySelectorAll('.dataset-item');
+                    if (items[newIdx]) items[newIdx].scrollIntoView({ block: 'nearest' });
+                }, 50);
+            }
+        }
 
         function renderDatasets(datasets) {
             const list = document.getElementById('datasetList');
@@ -300,6 +347,20 @@ HTML_TEMPLATE = """
                     <div class="dataset-stats">${(d.row_count || 0).toLocaleString()} rows • ${d.mat_max_dim} dims</div>
                 </li>
             `).join('');
+        }
+
+        function renderNavButtons() {
+            const idx = filteredDatasets.findIndex(d => d.matrix_code === currentMatrix);
+            const total = filteredDatasets.length;
+            const hasPrev = idx > 0;
+            const hasNext = idx < total - 1;
+            return `
+                <div class="nav-buttons">
+                    <button onclick="navigateDataset(-1)" ${!hasPrev ? 'disabled' : ''} title="Previous (← ↑)">&#8592; Prev</button>
+                    <span class="nav-position">${idx + 1} / ${total}</span>
+                    <button onclick="navigateDataset(1)" ${!hasNext ? 'disabled' : ''} title="Next (→ ↓)">Next &#8594;</button>
+                </div>
+            `;
         }
 
         function loadDataset(matrixCode) {
@@ -326,6 +387,7 @@ HTML_TEMPLATE = """
             const preview = data.preview;
 
             let html = `
+                ${renderNavButtons()}
                 <h1>${d.matrix_code}</h1>
                 <p>${d.matrix_name}</p>
 
@@ -345,12 +407,12 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div class="tab-buttons">
-                    <button class="tab-button active" onclick="switchTab('info')">Info</button>
+                    <button class="tab-button" onclick="switchTab('info')">Info</button>
                     <button class="tab-button" onclick="switchTab('dimensions')">Dimensions</button>
-                    <button class="tab-button" onclick="switchTab('data')">Data Preview</button>
+                    <button class="tab-button active" onclick="switchTab('data')">Data Preview</button>
                 </div>
 
-                <div class="tab-content active" id="tab-info">
+                <div class="tab-content " id="tab-info">
                     <h2>Dataset Information</h2>
                     <div class="info-grid">
                         <div class="info-label">Matrix Code:</div>
@@ -377,7 +439,7 @@ HTML_TEMPLATE = """
                     </ul>
                 </div>
 
-                <div class="tab-content" id="tab-data">
+                <div class="tab-content active" id="tab-data">
                     <h2>Data Preview (first 100 rows)</h2>
                     ${renderDataTable(preview)}
                 </div>

@@ -16,6 +16,8 @@ tari australia
 
 ani luni 
 
+`Anul 2009` - remove Anul
+
 din total: 
 
 sex necunoscut

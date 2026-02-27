@@ -39,6 +39,10 @@ TEST_LIMIT = None  # Set to N to only process N files for testing
 COLUMN_SUFFIX = "_nom_id"  # Suffix for all dimension columns
 VALUE_COLUMN = "value"  # Name of the value column
 
+# Classification tables (created by 10-classify-dimensions.py)
+TABLE_DIM_OPTIONS_PARSED = "dimension_options_parsed"
+TABLE_MATRIX_PROFILES = "matrix_profiles"
+
 
 # Utility functions
 def sanitize_column_name(label: str, max_length: int = MAX_COLUMN_NAME_LENGTH) -> str:
