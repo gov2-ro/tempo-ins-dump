@@ -3,7 +3,7 @@ import json
 from fastapi import APIRouter, Query, HTTPException
 from app.db import get_conn
 from app.config import DEFAULT_PAGE_SIZE
-from app.services.chart_config import build_chart_config
+from app.services.chart_selector import build_signature, select_charts, assign_roles
 
 router = APIRouter()
 
@@ -230,8 +230,47 @@ def get_dataset(matrix_code: str):
                     names.append(r[0])
             context_path = " > ".join(names)
 
-    # Generate chart config
-    chart_config = build_chart_config(profile, dimensions)
+    # Fetch enriched metadata for scoring
+    def fetch_row(table):
+        row = conn.execute(f"SELECT * FROM {table} WHERE matrix_code = ?", [matrix_code]).fetchone()
+        if not row:
+            return {}
+        cols = [d[0] for d in conn.execute(f"DESCRIBE {table}").fetchall()]
+        return dict(zip(cols, row))
+
+    coverage = fetch_row('dataset_coverage')
+    value_profile = fetch_row('dataset_value_profiles')
+    trend = fetch_row('dataset_trends')
+
+    # Build chart config via scoring engine
+    sig = build_signature(profile, dimensions, coverage, value_profile, trend)
+    ranked = select_charts(sig)
+
+    # Roles for each ranked chart
+    for entry in ranked:
+        entry['roles'] = assign_roles(entry['chart_type'], dimensions)
+
+    primary = ranked[0]['chart_type'] if ranked else 'table'
+
+    # Backward-compat fields (frontend still uses these for choropleth/filter logic)
+    geo_dim = next((d for d in dimensions if d['dim_type'] == 'geo'), None)
+    time_dim = next((d for d in dimensions if d['dim_type'] == 'time'), None)
+
+    chart_config = {
+        'ranked_charts': ranked,
+        'primary_chart': primary,
+        'supports': [r['chart_type'] for r in ranked],
+        'archetype': sig['_archetype'],
+        'dataset_signature': {k: v for k, v in sig.items() if not k.startswith('_')},
+        # Backward-compat
+        'geo_dim': geo_dim['dim_column_name'] if geo_dim else None,
+        'time_dim': time_dim['dim_column_name'] if time_dim else None,
+        'multi_unit': profile.get('primary_unit_type') is not None and len(
+            json.loads(profile.get('unit_types', '[]') or '[]')
+        ) > 1,
+        'unit_types': json.loads(profile.get('unit_types', '[]') or '[]'),
+        'primary_unit_type': profile.get('primary_unit_type', 'count'),
+    }
 
     return {
         'matrix_code': m[0],

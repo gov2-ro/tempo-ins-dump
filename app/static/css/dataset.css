@@ -328,6 +328,15 @@
 
 .select-controls a:hover { text-decoration: underline; }
 
+/* Total/aggregate rows — dimmed, visually separated */
+.filter-checkboxes .opt-total {
+    color: var(--text-muted, #999);
+    font-style: italic;
+    border-top: 1px solid var(--border, #eee);
+    margin-top: 4px;
+    padding-top: 4px;
+}
+
 /* Geo hierarchy indent */
 .filter-checkboxes .geo-macroregion { padding-left: 0; font-weight: 600; font-size: 12px; }
 .filter-checkboxes .geo-region { padding-left: 12px; font-weight: 500; }

@@ -125,11 +125,19 @@ class DatasetPage {
         chartTypes.innerHTML = '';
 
         const typeLabels = {
-            line: 'Line', area: 'Area', bar: 'Bar', choropleth: 'Map',
-            grouped_bar: 'Grouped', table: 'Table',
+            line: 'Line', area: 'Area', area_stacked: 'Stacked Area',
+            bar: 'Bar', bar_vertical: 'Bar', horizontal_bar: 'H-Bar',
+            grouped_bar: 'Grouped', stacked_bar: 'Stacked',
+            choropleth: 'Map', population_pyramid: 'Pyramid',
+            heatmap: 'Heatmap', small_multiples: 'Small ×',
+            bubble: 'Bubble', table: 'Table',
         };
 
-        for (const type of (config.supports || ['line', 'table'])) {
+        const chartList = config.ranked_charts
+            ? config.ranked_charts.map(r => r.chart_type)
+            : (config.supports || ['line', 'table']);
+
+        for (const type of chartList) {
             const btn = el('button', {
                 className: `btn ${type === this.currentChartType ? 'active' : ''}`,
                 'data-chart-type': type,

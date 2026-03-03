@@ -1,26 +1,60 @@
 /**
- * Chart factory — dispatches to correct chart builder based on archetype
+ * Chart factory — dispatches to correct chart builder based on chart type.
+ * Resolves dimension roles from ranked_charts[].roles if available.
  */
+
+function resolveRoles(chartConfig) {
+    const type = chartConfig.primary_chart;
+    const ranked = chartConfig.ranked_charts || [];
+    const entry = ranked.find(r => r.chart_type === type);
+    // Merge scored roles with legacy compat fields
+    const roles = entry ? entry.roles : {};
+    return {
+        time_dim:   roles.timeline || roles.x_axis || chartConfig.time_dim || null,
+        geo_dim:    chartConfig.geo_dim || null,
+        series_dim: roles.series || chartConfig.series_dim || null,
+        facet_dim:  roles.facet || null,
+        x_axis_dim: roles.x_axis || null,
+        // legacy compat
+        age_dim:    chartConfig.age_dim || null,
+        gender_dim: chartConfig.gender_dim || null,
+    };
+}
 
 function createChart(container, chartConfig, data, metadata) {
     const chartType = chartConfig.primary_chart;
+    const roles = resolveRoles(chartConfig);
+    const cfg = { ...chartConfig, ...roles };
 
     switch (chartType) {
         case 'line':
         case 'area':
-            return createTimeSeriesChart(container, chartConfig, data, metadata);
+        case 'area_stacked':
+            return createTimeSeriesChart(container, cfg, data, metadata);
         case 'bar':
-            return createTimeSeriesChart(container, chartConfig, data, metadata, 'bar');
+        case 'bar_vertical':
+            return createTimeSeriesChart(container, cfg, data, metadata, 'bar');
+        case 'horizontal_bar':
+            return createHorizontalBarChart(container, cfg, data, metadata);
+        case 'stacked_bar':
+            return createStackedBarChart(container, cfg, data, metadata);
         case 'choropleth':
-            // Fallback to line if no geo data loaded
             if (window._geoDataLoaded) {
-                return createChoroplethChart(container, chartConfig, data, metadata);
+                return createChoroplethChart(container, cfg, data, metadata);
             }
-            return createTimeSeriesChart(container, chartConfig, data, metadata);
+            return createTimeSeriesChart(container, cfg, data, metadata);
         case 'grouped_bar':
-            return createDemographicChart(container, chartConfig, data, metadata);
+            return createDemographicChart(container, cfg, data, metadata);
+        case 'population_pyramid':
+            return createPopulationPyramidChart(container, cfg, data, metadata);
+        case 'heatmap':
+            return createHeatmapChart(container, cfg, data, metadata);
+        case 'bubble':
+            return createBubbleChart(container, cfg, data, metadata);
+        case 'small_multiples':
+            return createSmallMultiplesChart(container, cfg, data, metadata);
         default:
-            return createTimeSeriesChart(container, chartConfig, data, metadata);
+            return createTimeSeriesChart(container, cfg, data, metadata);
     }
 }
 

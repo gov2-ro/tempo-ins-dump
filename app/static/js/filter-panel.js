@@ -13,6 +13,13 @@ class FilterPanel {
         this._suppressCallbacks = false;
     }
 
+    // Labels that represent pre-aggregated totals — excluded from default selection
+    static TOTAL_LABELS = /^(total|toate|ambele sexe|ambele|urban\s*\+\s*rural|m\s*\+\s*f)$/i;
+
+    static isTotal(label) {
+        return FilterPanel.TOTAL_LABELS.test(label.trim());
+    }
+
     render() {
         this.container.innerHTML = '';
 
@@ -29,13 +36,11 @@ class FilterPanel {
 
             if (dim.dim_type === 'time') {
                 this._renderTimeFilter(section, dim);
-            } else if (dim.dim_type === 'gender') {
-                this._renderRadioFilter(section, dim);
-            } else if (dim.dim_type === 'residence') {
-                this._renderRadioFilter(section, dim);
             } else if (dim.dim_type === 'geo') {
                 this._renderGeoFilter(section, dim);
             } else {
+                // gender, residence, age, indicator — all use checkboxes
+                // Total rows are unchecked by default to prevent double-counting
                 this._renderCheckboxFilter(section, dim);
             }
 
@@ -220,13 +225,21 @@ class FilterPanel {
         controls.appendChild(selNone);
         section.appendChild(controls);
 
-        // Default: select first 5 for indicator dims with many options
-        const defaultLimit = (dim.dim_type === 'indicator' && dim.option_count > 10) ? 5 : dim.option_count;
+        // Default selection logic:
+        // - Total/aggregate rows → unchecked (prevents double-counting)
+        // - indicator dims with >10 options → first 5 non-total checked
+        // - everything else → all non-total checked
+        const isTotalExcluded = ['gender', 'age', 'residence'].includes(dim.dim_type);
+        let nonTotalChecked = 0;
+        const indicatorLimit = (dim.dim_type === 'indicator' && dim.option_count > 10) ? 5 : Infinity;
 
-        for (let i = 0; i < dim.options.length; i++) {
-            const opt = dim.options[i];
-            const checked = i < defaultLimit;
-            const label = el('label', {},
+        for (const opt of dim.options) {
+            const isTotal = isTotalExcluded && FilterPanel.isTotal(opt.label);
+            const withinLimit = nonTotalChecked < indicatorLimit;
+            const checked = !isTotal && withinLimit;
+            if (!isTotal) nonTotalChecked++;
+
+            const label = el('label', { className: isTotal ? 'opt-total' : '' },
                 el('input', {
                     type: 'checkbox',
                     value: String(opt.nom_item_id),
@@ -242,8 +255,9 @@ class FilterPanel {
 
         section.appendChild(group);
 
-        // Apply initial filter if we limited defaults
-        if (defaultLimit < dim.option_count) {
+        // Apply initial filter whenever defaults exclude something
+        const anyExcluded = isTotalExcluded || nonTotalChecked < dim.option_count;
+        if (anyExcluded) {
             this._applyCheckboxFilter(dim, group);
         }
     }
