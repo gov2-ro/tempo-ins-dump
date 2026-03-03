@@ -1,0 +1,250 @@
+"""Dataset listing, search, and detail API endpoints."""
+import json
+from fastapi import APIRouter, Query, HTTPException
+from app.db import get_conn
+from app.config import DEFAULT_PAGE_SIZE
+from app.services.chart_config import build_chart_config
+
+router = APIRouter()
+
+
+@router.get("/datasets")
+def list_datasets(
+    q: str = Query(None, description="Search in dataset name"),
+    context: str = Query(None, description="Filter by context_code"),
+    ancestor: str = Query(None, description="Filter by ancestor code"),
+    archetype: str = Query(None, description="Filter by archetype"),
+    has_geo: bool = Query(None),
+    sort: str = Query("updated", description="Sort: updated|name|rows"),
+    limit: int = Query(DEFAULT_PAGE_SIZE, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """List datasets with search and filters."""
+    conn = get_conn()
+
+    where = ["m.parquet_path IS NOT NULL"]
+    params = []
+
+    if q:
+        where.append("LOWER(m.matrix_name) LIKE LOWER(?)")
+        params.append(f"%{q}%")
+
+    if context:
+        where.append("m.context_code = ?")
+        params.append(context)
+
+    if ancestor:
+        where.append("? = ANY(m.ancestor_codes)")
+        params.append(ancestor)
+
+    if archetype:
+        where.append("p.archetype = ?")
+        params.append(archetype)
+
+    if has_geo is not None:
+        where.append(f"p.has_geo = {has_geo}")
+
+    sort_map = {
+        'updated': 'm.ultima_actualizare DESC NULLS LAST',
+        'name': 'm.matrix_name',
+        'rows': 'm.row_count DESC NULLS LAST',
+    }
+    order_by = sort_map.get(sort, sort_map['updated'])
+
+    where_sql = " AND ".join(where)
+
+    # Count total
+    count_sql = f"""
+        SELECT COUNT(*)
+        FROM matrices m
+        LEFT JOIN matrix_profiles p ON m.matrix_code = p.matrix_code
+        WHERE {where_sql}
+    """
+    total = conn.execute(count_sql, params).fetchone()[0]
+
+    # Fetch page
+    data_sql = f"""
+        SELECT
+            m.matrix_code,
+            m.matrix_name,
+            m.context_code,
+            m.ultima_actualizare,
+            m.row_count,
+            m.mat_max_dim as dim_count,
+            p.archetype,
+            p.has_time,
+            p.has_geo,
+            p.time_year_min,
+            p.time_year_max,
+            p.primary_unit_type,
+            p.time_granularity
+        FROM matrices m
+        LEFT JOIN matrix_profiles p ON m.matrix_code = p.matrix_code
+        WHERE {where_sql}
+        ORDER BY {order_by}
+        LIMIT ? OFFSET ?
+    """
+    rows = conn.execute(data_sql, params + [limit, offset]).fetchall()
+
+    datasets = []
+    for r in rows:
+        time_range = None
+        if r[9] and r[10]:
+            time_range = f"{r[9]}-{r[10]}"
+        datasets.append({
+            'matrix_code': r[0],
+            'matrix_name': r[1],
+            'context_code': r[2],
+            'ultima_actualizare': str(r[3]) if r[3] else None,
+            'row_count': r[4],
+            'dim_count': r[5],
+            'archetype': r[6],
+            'has_time': r[7],
+            'has_geo': r[8],
+            'time_range': time_range,
+            'primary_unit_type': r[11],
+            'time_granularity': r[12],
+        })
+
+    return {'total': total, 'datasets': datasets}
+
+
+@router.get("/datasets/{matrix_code}")
+def get_dataset(matrix_code: str):
+    """Get full dataset metadata, dimensions, options, and chart config."""
+    conn = get_conn()
+
+    # Fetch matrix info
+    m = conn.execute("""
+        SELECT matrix_code, matrix_name, context_code, ancestor_codes,
+               definitie, metodologie, ultima_actualizare, observatii,
+               row_count, mat_max_dim
+        FROM matrices
+        WHERE matrix_code = ?
+    """, [matrix_code]).fetchone()
+
+    if not m:
+        raise HTTPException(404, f"Dataset {matrix_code} not found")
+
+    # Fetch profile
+    profile_row = conn.execute("""
+        SELECT * FROM matrix_profiles WHERE matrix_code = ?
+    """, [matrix_code]).fetchone()
+
+    profile = {}
+    if profile_row:
+        profile_cols = [d[0] for d in conn.execute("DESCRIBE matrix_profiles").fetchall()]
+        profile = dict(zip(profile_cols, profile_row))
+
+    # Fetch dimensions with options and parsed metadata
+    dims_raw = conn.execute("""
+        SELECT
+            d.dim_code,
+            d.dim_label,
+            d.dim_column_name,
+            d.option_count,
+            d.dimension_id
+        FROM dimensions d
+        WHERE d.matrix_code = ?
+        ORDER BY d.dim_code
+    """, [matrix_code]).fetchall()
+
+    dimensions = []
+    for dim_code, dim_label, dim_col, opt_count, dim_id in dims_raw:
+        # Get options with parsed fields
+        options = conn.execute("""
+            SELECT
+                o.nom_item_id,
+                o.option_label,
+                o.option_offset,
+                o.parent_id,
+                p.dim_type,
+                p.year,
+                p.quarter,
+                p.month,
+                p.geo_level,
+                p.geo_name_clean,
+                p.gender,
+                p.age_min,
+                p.age_max,
+                p.unit_type,
+                p.unit_scale,
+                p.parse_confidence
+            FROM dimension_options o
+            LEFT JOIN dimension_options_parsed p ON o.nom_item_id = p.nom_item_id
+            WHERE o.dimension_id = ?
+            ORDER BY o.option_offset
+        """, [dim_id]).fetchall()
+
+        # Determine dimension type from majority of parsed options
+        type_counts = {}
+        option_list = []
+        for opt in options:
+            nom_id, label, offset, parent_id, dt, year, q, mo, geo_lvl, geo_name, gender, age_min, age_max, unit_type, unit_scale, conf = opt
+            if dt:
+                type_counts[dt] = type_counts.get(dt, 0) + 1
+
+            parsed = {}
+            if dt == 'time':
+                parsed = {'year': year, 'quarter': q, 'month': mo}
+            elif dt == 'geo':
+                parsed = {'geo_level': geo_lvl, 'geo_name_clean': geo_name}
+            elif dt == 'gender':
+                parsed = {'gender': gender}
+            elif dt == 'age':
+                parsed = {'age_min': age_min, 'age_max': age_max}
+            elif dt == 'unit':
+                parsed = {'unit_type': unit_type, 'unit_scale': unit_scale}
+            elif dt == 'residence':
+                parsed = {'geo_level': geo_lvl, 'geo_name_clean': geo_name}
+
+            option_list.append({
+                'nom_item_id': nom_id,
+                'label': label,
+                'offset': offset,
+                'parent_id': parent_id,
+                'dim_type': dt,
+                'parsed': parsed,
+            })
+
+        dim_type = max(type_counts, key=type_counts.get) if type_counts else 'indicator'
+
+        dimensions.append({
+            'dim_code': dim_code,
+            'dim_label': dim_label,
+            'dim_column_name': dim_col,
+            'dim_type': dim_type,
+            'option_count': opt_count,
+            'options': option_list,
+        })
+
+    # Build context path from ancestor_codes
+    context_path = None
+    if m[3]:  # ancestor_codes
+        ancestor_codes = m[3] if isinstance(m[3], list) else []
+        if ancestor_codes:
+            names = []
+            for ac in ancestor_codes:
+                r = conn.execute("SELECT context_name FROM contexts WHERE context_code = ?", [str(ac)]).fetchone()
+                if r:
+                    names.append(r[0])
+            context_path = " > ".join(names)
+
+    # Generate chart config
+    chart_config = build_chart_config(profile, dimensions)
+
+    return {
+        'matrix_code': m[0],
+        'matrix_name': m[1],
+        'context_code': m[2],
+        'context_path': context_path,
+        'definitie': m[4],
+        'metodologie': m[5],
+        'ultima_actualizare': str(m[6]) if m[6] else None,
+        'observatii': m[7],
+        'row_count': m[8],
+        'dim_count': m[9],
+        'profile': profile,
+        'dimensions': dimensions,
+        'chart_config': chart_config,
+    }

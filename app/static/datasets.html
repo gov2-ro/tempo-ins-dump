@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Datasets — INS TEMPO Explorer</title>
+    <link rel="stylesheet" href="/css/main.css">
+    <link rel="stylesheet" href="/css/datasets.css">
+</head>
+<body>
+    <header class="app-header">
+        <a href="/" class="logo">INS TEMPO Explorer</a>
+        <nav>
+            <a href="/">Home</a>
+            <a href="/datasets.html" class="active">Datasets</a>
+        </nav>
+    </header>
+
+    <div class="datasets-page">
+        <aside id="category-sidebar" class="category-sidebar">
+            <div class="sidebar-header">
+                <h3>Categories</h3>
+            </div>
+            <div id="category-tree" class="category-tree"></div>
+        </aside>
+
+        <main class="datasets-main">
+            <div class="datasets-toolbar">
+                <input type="text" id="search-input" class="search-input"
+                    placeholder="Search datasets by name or code...">
+                <div class="toolbar-info">
+                    <span id="result-count"></span>
+                    <select id="sort-select">
+                        <option value="updated">Recently updated</option>
+                        <option value="name">Name A-Z</option>
+                        <option value="rows">Most data</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="active-filters" class="active-filters"></div>
+
+            <div id="datasets-grid" class="datasets-grid">
+                <div class="loading">Loading datasets...</div>
+            </div>
+
+            <div id="pagination" class="pagination"></div>
+        </main>
+    </div>
+
+    <script src="/js/utils.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/datasets-page.js"></script>
+</body>
+</html>

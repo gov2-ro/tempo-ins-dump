@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INS TEMPO Explorer</title>
+    <link rel="stylesheet" href="/css/main.css">
+    <style>
+        .hero {
+            text-align: center;
+            padding: 48px 24px 32px;
+            background: linear-gradient(135deg, #f0f4ff 0%, #e8edf8 100%);
+            border-bottom: 1px solid var(--border);
+        }
+        .hero h1 { font-size: 28px; margin: 0 0 8px; color: var(--text); }
+        .hero p { color: var(--text-light); font-size: 16px; margin: 0 0 24px; }
+        .hero-search {
+            max-width: 500px;
+            margin: 0 auto;
+            position: relative;
+        }
+        .hero-search input {
+            width: 100%;
+            padding: 12px 16px;
+            font-size: 15px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            outline: none;
+            box-sizing: border-box;
+        }
+        .hero-search input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(26,86,219,0.1);
+        }
+        .hero-stats {
+            display: flex;
+            justify-content: center;
+            gap: 32px;
+            margin-top: 20px;
+        }
+        .stat { text-align: center; }
+        .stat .num { font-size: 24px; font-weight: 700; color: var(--primary); }
+        .stat .label { font-size: 12px; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .home-content { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+        .home-content h2 {
+            font-size: 18px;
+            margin: 0 0 16px;
+            color: var(--text);
+        }
+
+        .category-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 12px;
+            margin-bottom: 40px;
+        }
+        .category-card {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            background: #fff;
+            text-decoration: none;
+            color: inherit;
+            transition: box-shadow 0.15s, border-color 0.15s;
+        }
+        .category-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .category-card h3 { margin: 0 0 4px; font-size: 14px; }
+        .category-card .cat-desc {
+            font-size: 12px;
+            color: var(--text-light);
+        }
+
+        .recent-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 10px;
+        }
+        .recent-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            text-decoration: none;
+            color: inherit;
+            font-size: 13px;
+            line-height: 1.3;
+        }
+        .recent-item:hover {
+            border-color: var(--primary);
+            background: #fafbff;
+        }
+        .recent-item .name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            margin-right: 8px;
+        }
+        .recent-item .date {
+            font-size: 11px;
+            color: var(--text-light);
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <a href="/" class="logo">INS TEMPO Explorer</a>
+        <nav>
+            <a href="/" class="active">Home</a>
+            <a href="/datasets.html">Datasets</a>
+        </nav>
+    </header>
+
+    <div class="hero">
+        <h1>Romanian Statistics Explorer</h1>
+        <p>Explore 1,886 datasets from the National Institute of Statistics (INS TEMPO)</p>
+        <div class="hero-search">
+            <input type="text" id="hero-search" placeholder="Search datasets...">
+        </div>
+        <div class="hero-stats" id="hero-stats"></div>
+    </div>
+
+    <div class="home-content">
+        <h2>Browse by Theme</h2>
+        <div id="category-grid" class="category-grid"></div>
+
+        <h2>Recently Updated</h2>
+        <div id="recent-grid" class="recent-grid"></div>
+    </div>
+
+    <script src="/js/utils.js"></script>
+    <script src="/js/api.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        // Search redirect
+        document.getElementById('hero-search').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.target.value.trim()) {
+                window.location.href = `/datasets.html?q=${encodeURIComponent(e.target.value.trim())}`;
+            }
+        });
+
+        // Load categories
+        try {
+            const catData = await API.getCategories();
+            const grid = document.getElementById('category-grid');
+            const stats = document.getElementById('hero-stats');
+
+            let totalDatasets = 0;
+            let totalCategories = 0;
+
+            for (const root of catData.tree) {
+                totalDatasets += root.total_datasets || 0;
+
+                for (const child of root.children) {
+                    totalCategories++;
+                    const card = el('a', {
+                        className: 'category-card',
+                        href: `/datasets.html?context=${child.code}`,
+                    });
+                    card.appendChild(el('h3', {}, child.name));
+                    card.appendChild(el('div', { className: 'cat-desc' },
+                        `${child.total_datasets} datasets`));
+                    grid.appendChild(card);
+                }
+            }
+
+            stats.innerHTML = '';
+            stats.appendChild(createStat(formatNumber(totalDatasets, 0), 'Datasets'));
+            stats.appendChild(createStat(String(totalCategories), 'Categories'));
+            stats.appendChild(createStat(String(catData.tree.length), 'Themes'));
+        } catch (err) {
+            console.error('Failed to load categories', err);
+        }
+
+        // Load recent datasets
+        try {
+            const resp = await fetch('/api/datasets?sort=updated&limit=12');
+            const data = await resp.json();
+            const grid = document.getElementById('recent-grid');
+            grid.innerHTML = '';
+
+            for (const ds of data.datasets) {
+                const item = el('a', {
+                    className: 'recent-item',
+                    href: `/dataset.html?code=${ds.matrix_code}`,
+                });
+                item.appendChild(el('span', { className: 'name' }, ds.matrix_name));
+                item.appendChild(el('span', { className: 'date' }, ds.ultima_actualizare || ''));
+                grid.appendChild(item);
+            }
+        } catch (err) {
+            console.error('Failed to load recent datasets', err);
+        }
+    });
+
+    function createStat(num, label) {
+        const d = el('div', { className: 'stat' });
+        d.appendChild(el('div', { className: 'num' }, num));
+        d.appendChild(el('div', { className: 'label' }, label));
+        return d;
+    }
+    </script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+/**
+ * API client for INS TEMPO Explorer
+ */
+const API = {
+    base: '/api',
+
+    async fetch(path, params = {}) {
+        const url = new URL(this.base + path, window.location.origin);
+        Object.entries(params).forEach(([k, v]) => {
+            if (v !== null && v !== undefined && v !== '') {
+                url.searchParams.set(k, v);
+            }
+        });
+        const resp = await fetch(url);
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        return resp.json();
+    },
+
+    getCategories() {
+        return this.fetch('/categories');
+    },
+
+    getDatasets(params = {}) {
+        return this.fetch('/datasets', params);
+    },
+
+    getDataset(code) {
+        return this.fetch(`/datasets/${code}`);
+    },
+
+    getDatasetData(code, filters = {}, limit = 5000) {
+        return this.fetch(`/datasets/${code}/data`, {
+            filters: JSON.stringify(filters),
+            limit,
+        });
+    },
+};
