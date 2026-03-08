@@ -3,57 +3,80 @@
 _INS Tempo Online but make it nice._
 
 
-## Scripts
+## Pipeline Scripts
 
-- `1-fetch-context.py` - fetches contexts &rarr; _data/1-indexes/**\<lang\>**/context.csv_ 
-- `2-fetch-matrices.py` - fetches datasets &rarr; _data/1-indexes/**\<lang\>**/matrices.csv_
-- `3-fetch-metas.py` - reads _matrices.csv_ and fetches dataset meta json &rarr; _data/2-metas/**\<lang\>**/**\<dataset-id\>**.json_
-- `3-build-meta-index.py` – 
-- `5-varstats-db.py` - parses downloaded dataset meta and saves fields to SQLite.db
-- `6-fetch-csv.py` - loops through metas jsons and downloads dataset as csv &rarr; _data/3-datasets/**\<lang\>**/**\<dataset-id\>**.csv_
-- `7-data-compactor.py` – compact csv dimensions - replace `opt_label` with `nomItemId` reference
-- `0-tempoins-fetch-indexes.py` - fetches ctgs and datasets from prev version: [tempoins](http://statistici.insse.ro/tempoins/) - with archived datasets
-- `browser/` - alpha GUI (to be deprecated for [Evidence](https://evidence.dev))
-- `query-dimensions.py`
+Sequential data pipeline — run in order:
 
-![dimensions browser](docs/misc/dimensions-browser-1.png)
-![dataset preview](docs/misc/dataset-profile-1.png)
+| Script | Output | Description |
+|---|---|---|
+| `1-fetch-context.py` | `data/1-indexes/ro/context.csv` | Fetches category/context hierarchy from TEMPO API |
+| `2-fetch-matrices.py` | `data/1-indexes/ro/matrices.csv` | Fetches dataset list from TEMPO API |
+| `3-fetch-metas.py` | `data/2-metas/ro/{id}.json` | Downloads JSON metadata for each dataset |
+| `4-build-meta-index.py` | `data/1-indexes/ro/matrices-list.csv` | Builds summary index from metadata JSONs |
+| `5-varstats-db.py` | `data/3-db/ro/tempo-indexes.db` | Creates SQLite DB from metadata |
+| `6-fetch-csv.py` | `data/4-datasets/ro/` | Downloads raw CSV data files from TEMPO API |
+| `7-data-compactor.py` | `data/5-compact-datasets/ro/` | Replaces text labels with numeric IDs in CSVs |
+| `8-setup-duckdb-schema.py` | `data/tempo_metadata.duckdb` | Creates DuckDB schema (contexts, matrices, dimensions) |
+| `9-csv-to-parquet.py` | `data/parquet/ro/` | Converts compacted CSVs to Parquet |
+| `10-import-metadata.py` | DuckDB tables | Imports all metadata into DuckDB |
+| `10-classify-dimensions.py` | `dimension_options_parsed`, `matrix_profiles` | Parses/classifies dimension options, detects archetypes |
+| `10-sdmx-export.py` | `data/6-sdmx-csv/ro/` | Converts compacted CSVs to SDMX-CSV 2.0 |
+| `11-coverage-profiler.py` | `dataset_coverage` DuckDB table | Analyzes data completeness per dataset |
+| `detect_trends.py` | `dataset_trends` DuckDB table | Detects trends, YoY growth, seasonality per dataset |
 
+### Other root-level scripts
 
-#### Run the initial analysis
-python build-dimension-index.py
+| Script | Description |
+|---|---|
+| `duckdb_config.py` | Central config: paths for all DuckDB/Parquet processing |
+| `duckdb-browser.py` | Flask browser for exploring DuckDB + Parquet data |
+| `build-dataset-metadata.py` | Scans CSVs, calculates stats → `ui/data/dataset-metadata.json` |
+| `test_chart_selector.py` | Tests chart selection engine across all 1,886 datasets |
 
-#### Search for specific terms
-python build-dimension-index.py search "Perioade"
-python build-dimension-index.py search "Bucuresti" 
+## utils/
 
-#### Use the query helper for advanced searches
-python query-dimensions.py summary      # File overview
-python query-dimensions.py usage        # Dimension usage stats
-python query-dimensions.py search "grade" # Search options
-python query-dimensions.py file ZDP1321   # File details
+| Script | Description |
+|---|---|
+| `14-parquet-to-ids.py` | Converts Parquet from text labels → numeric IDs → `data/parquet-v2/ro/` |
+| `13-slim-samples-to-markdown.py` | Converts slim-sample CSVs to markdown for LLM analysis |
+| `12-csv-headers-index.py` | Extracts headers from all CSVs → `data/2-metas/csv-headers-index.csv` |
+| `11-slim-samples.py` | Samples up to 100 rows per dataset → `data/4-datasets-slim-samples/` |
+| `build-dimension-index.py` | Builds searchable SQLite index from metadata JSONs |
+| `build-enhanced-navigator-index.py` | Builds optimized SQLite + JSON indexes for the dataset navigator UI |
+| `build-static-index.py` | Generates static JSON indexes for client-side explorer |
+| `query-dimensions.py` | CLI query tool for the dimension index SQLite DB |
+| `query-duckdb.py` | Query helper for DuckDB + Parquet |
+| `explore-data.py` | Exploration script showing DuckDB + Parquet integration patterns |
+| `export-db-to-json.py` | Exports dimension index SQLite → `ui/data/dimension_index.json` |
+| `check-meta-consistency.py` | Validates consistency between metadata directories |
 
-## Profilers
+## profiling/
 
-- `data_profiler.py`
-- `variable_classifier.py`
-- `unit_classifier.py`
-- `rules-dictionaries/`
-    - `unit_rules.csv`
-    - `variable_classification_rules.csv`
-
+| Script | Description |
+|---|---|
+| `data_profiler.py` | Main profiler: validates CSV structure, classifies column types, generates reports |
+| `variable_classifier.py` | Classifies variable labels using a CSV ruleset |
+| `unit_classifier.py` | Classifies unit-of-measure labels semantically |
+| `validation_rules.py` | Modular validation framework (column names, data content, file structure) |
+| `build_indexes.py` | Builds keyword/theme indexes from datasets → `data/indexes/` |
+| `tool-list-headers.py` | Extracts CSV headers → `data/2-csv-cols/ro/` |
+| `tool-sample-csvs.py` | Creates sampled CSVs (first/mid/last 5 rows) → `data/datasets-samples/ro/` |
+| `tool-word-frequency.py` | Romanian word frequency analysis of dataset titles |
 
 ## Data
 
-- 1-indexes/<lang>/
-    - matrices.csv
-    - context.json
-    - context.csv
-- 2-metas/<lang>/ – jsons
-- 3-db
-    - tempo-indexes.db
-- 4-datasets
-- 5-compact-datasets - compact csvs
+```
+data/
+  1-indexes/<lang>/   matrices.csv, context.csv
+  2-metas/<lang>/     {dataset-id}.json — metadata per dataset
+  3-db/               tempo-indexes.db (SQLite, legacy)
+  4-datasets/ro/      raw CSVs from TEMPO API
+  5-compact-datasets/ CSVs with numeric IDs instead of labels
+  6-sdmx-csv/         SDMX-CSV 2.0 output
+  parquet/ro/         Parquet (text labels)
+  parquet-v2/ro/      Parquet (numeric IDs) — used by web app
+  tempo_metadata.duckdb — main metadata DB
+```
 
 
 

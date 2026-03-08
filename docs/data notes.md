@@ -1,4 +1,6 @@
 
+see also [charting notes.md](charting notes.md)
+
 regiuni: MACROREGIUNEA UNU / Regiunea NORD-VEST
 municipiul sebes codlea resita
 Localitati / Municipii si orase
@@ -36,3 +38,21 @@ Medii de rezidenta urban rural
 
 get CAEN codes
 
+when months only, calculate by year
+
+
+## Quirkies
+
+FOM121B 
+prima coloană are și număr și salariu și venit
+Numarul salariatilor cu program complet de lucru care au fost platiti intreaga luna, salariul brut de baza si venitul brut realizat in octombrie, pe grupe de varsta, pe grupe majore de ocupatii (ISCO-08) si pe sexe
+
+Salariati salariul brut de baza si venitul brut realizat
+
+
+TCJ0331
+multiple types of dimensions: Sex/age groups/educational level/development regions
+
+AGR101B
+sometimes dimensions have sub-dimensionsin the adjacent column
+Judete > Localitati

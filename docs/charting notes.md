@@ -1,3 +1,5 @@
+see also [data notes.md](data notes.md)
+
 # Notes on possible charts, by examples
 
 Intentions: 
@@ -8,20 +10,39 @@ Intentions:
 - per chart or per dataset filters?
 - all datasets have a table view
 
+when multiple units, split charts
+
+Chart types, filters.
+Filters are per page, or per chart. Or per chart group.
+
+Either show a timeline (variance throughout time), either show a snapshot - one year at the time. 
+
+option: per capita
+
 ## Chart types
 
 - Map: choropleth
-- timeline
-- stacked
-- bubble chart - w x/y ctgs punch chart - scatter + bubble dimensions: https://echarts.apache.org/examples/en/editor.html?c=scatter-punchCard
+- Population pyramid - when gender + another dimension (like age group)
+- Line
+- Bar
+    - Grouped
+    - Stacked
+- Matrix bubble chart / Categorical scatter plot
+    - option: with pies inside
+- Small multiples, group o charts
+- Sankey
+- Table - include heatmap? 
+
+https://echarts.apache.org/examples/en/editor.html?c=scatter-punchCard
+ 
 
 ## Examples per datasets
 
 
-**POP107B**
+### **POP107B**
 POPULATIA DUPA DOMICILIU in varsta de munca la 1 ianuarie pe medii de rezidenta si sexe, macroregiuni, regiuni de dezvoltare si judete
 
-Dimensions: 
+#### Dimensions: 
 - Medii de rezidenta: Urban | Rural
 - Sexe: Masculin | Feminin
 - Macroregiuni regiuni de dezvoltare si judete: Macroregiuni | Regiuni | Județe
@@ -29,26 +50,35 @@ Dimensions:
 - UM: Numar persoane
 - Valoare
 
-Map: 3 maps, judete, regiuni, macroregiuni
-with filters: choose both or one of the genders or medii de rezidenta. another one for year.
+2 view modes: 1. year snapshot - with selector (includes autoplay option) / 2. time dynamic/variation over time – where years/periods are a dimension
 
-Stacked bar chart: sexe and medii rezidență. option: detachable 
-Also line chart.
-x axis: 
-- years
-- geo
+#### Year snapshot
 
-select/filter judete / regiuni?
+1. Map: 3 maps, judete, regiuni, macroregiuni. 
+with filters: choose both or one of the genders or medii de rezidenta
 
-Timeline: 
-x years,
+2. Bar / line
+Stacked/grouped bar chart. By sexe and medii rezidență
+x: geo
+Similar line chart.
 
-Punch card
+#### Timeline
+1. bar 1: stacked/ grouped bar chart
+    choose y axis: medii de rezidenta, sexe, 
+2. bar 2: geo      marcroregiuni, regiuni
+
+
+
+
 
 ----
 
-**FOM121B**
+
+
+### **FOM121B**
 Numarul salariatilor cu program complet de lucru care au fost platiti intreaga luna, salariul brut de baza si venitul brut realizat in octombrie, pe grupe de varsta, pe grupe majore de ocupatii (ISCO-08) si pe sexe
+
+#### Dimensions: 
 
 - Salariati, salariul brut de baza si venitul brut realizat
     - Numarul salariatilor cu program complet de lucru, care au fost platiti intreaga luna octombrie
@@ -78,8 +108,16 @@ Numarul salariatilor cu program complet de lucru care au fost platiti intreaga l
     - Lei
 
 
-----
+ 
 
 
-**AMG1103**
+### **AMG1103**
 AMIGO - Populatia ocupata si salariatii dupa programul de lucru, pe grupe de varsta si sexe
+
+### **TLS1112**
+
+### TCJ0331
+Tinta 3 - Social - Persoane de 16 ani si peste care nu au putut consulta un medic specialist, in ultimele 12 luni, dupa motivul invocat
+
+### TUR105G
+Innoptari in structuri de primire turistica pe tipuri de structuri, tipuri de turisti, macroregiuni, regiuni de devoltare si judete, pe luni
