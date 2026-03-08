@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StatExplorer — INS TEMPO</title>
+    <link rel="stylesheet" href="/css/explorer.css">
+    <!-- ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <!-- Vue 3 -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+</head>
+<body>
+    <div id="app">
+        <top-nav></top-nav>
+        <div class="app-body" v-if="store.currentDataset">
+            <filter-bar></filter-bar>
+            <div class="main-layout">
+                <left-sidebar></left-sidebar>
+                <chart-canvas></chart-canvas>
+            </div>
+        </div>
+        <dataset-picker v-else></dataset-picker>
+        <footer-bar></footer-bar>
+    </div>
+
+    <!-- Lib -->
+    <script src="/js/lib/api.js"></script>
+    <script src="/js/lib/utils.js"></script>
+    <script src="/js/lib/i18n.js"></script>
+    <!-- Charts -->
+    <script src="/js/charts/chart-line.js"></script>
+    <script src="/js/charts/chart-bar.js"></script>
+    <script src="/js/charts/chart-geo.js"></script>
+    <script src="/js/charts/chart-pyramid.js"></script>
+    <script src="/js/charts/chart-heatmap.js"></script>
+    <script src="/js/charts/chart-bubble.js"></script>
+    <script src="/js/charts/chart-small-multiples.js"></script>
+    <script src="/js/charts/chart-table.js"></script>
+    <script src="/js/charts/chart-factory.js"></script>
+    <!-- Components -->
+    <script src="/js/components/TopNav.js"></script>
+    <script src="/js/components/FilterBar.js"></script>
+    <script src="/js/components/LeftSidebar.js"></script>
+    <script src="/js/components/ChartCanvas.js"></script>
+    <script src="/js/components/DatasetPicker.js"></script>
+    <script src="/js/components/FooterBar.js"></script>
+    <!-- App -->
+    <script src="/js/app.js"></script>
+</body>
+</html>
