@@ -1,4 +1,7 @@
 
+# lang = "ro"
+lang = "en"
+
 import csv
 import requests
 import os
@@ -8,8 +11,8 @@ from tqdm import tqdm
 import argparse
 
 # --- Configuration ---
-INPUT_CSV_PATH = '/Users/pax/devbox/gov2/tempo-ins-dump/data/1-indexes/ro/matrices.csv'
-OUTPUT_DIR = '/Users/pax/devbox/gov2/tempo-ins-dump/data/2-metas/ro/'
+INPUT_CSV_PATH = '/Users/pax/devbox/gov2/tempo-ins-dump/data/1-indexes/' + lang + '/matrices.csv'
+OUTPUT_DIR = '/Users/pax/devbox/gov2/tempo-ins-dump/data/2-metas/' + lang + '/'
 BASE_URL = 'http://statistici.insse.ro:8077/tempo-ins/matrix/'
 
 HEADERS = {
@@ -56,7 +59,7 @@ def fetch_metas():
             tqdm.write(f"Skipping {code}, file already exists.")
             continue
 
-        url = f"{BASE_URL}{code}"
+        url = f"{BASE_URL}{code}?lang={lang}"
 
         try:
             response = requests.get(url, headers=HEADERS)
