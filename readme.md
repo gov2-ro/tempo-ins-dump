@@ -81,6 +81,13 @@ data/
 
 
 ## Roadmap 
+
+### current
+- [x] fetch english labels
+- [ ] revise propfiling
+- [ ] UI
+
+
 ### alpha
 - [x] fetch index
 - [x] download csvs
@@ -89,17 +96,16 @@ data/
 - [x] compact data
 
 ### Prepare for UI
-- [ ] import into DuckDB / Parquet
+- [x] import into DuckDB / Parquet
 - [ ] **split repositories** -> UI (ask 493n7 to look at initial docs, db structure and create clean specs)
     - [ ] api / FastAPI?
     - [ ] front end 
 
 
 ### beta
-- [ ] some datasets are not downloaded
+- [x] some datasets are not downloaded
     - [x] 30k cells limit alert: _Selectia dvs actuala ar solicita 30600 celule. Datorita limitarilor impuse de o aplicatie web, va rugam sa rafinati cautarea Dvs. pentru a cobori sub pragul de 30000 de celule. Va multumim!_ see comments in [6-fetch-csv.py](6-fetch-csv.py)
 
-### beta
 - [x] categorise filters
 - [ ] auto charts
 - [ ] dataset filtering, charting options
@@ -122,3 +128,42 @@ see also: [ui/readme.md](ui/readme.md)
 > Atentie! Nomenclatoarele care prezinta doar optiunea "Total" se vor completa automat cu alte optiuni doar daca nomenclatorului anterior i se deselecteaza optiunea "Total" si i se alege o singura alta optiune,
 
 > Important! Unitatile de masura sunt implicit selectate toate pentru a preveni rezultate goale atunci cand se combina cereri incompatibile (spre exemplu, s-ar putea selecta productia de porumb in litri; sau o valoare in ROL dupa denominarea din 2005, etc.).
+
+---
+
+## docs/ Summary
+
+### Core Architecture
+- **[DUCKDB_SPECS.md](docs/DUCKDB_SPECS.md)** — Schema design for the DuckDB + Parquet hybrid: tables, file structure, query examples. The canonical DB spec.
+- **[DUCKDB_GUIDE.md](docs/DUCKDB_GUIDE.md)** — Practical query patterns and performance tips for DuckDB + Parquet usage.
+- **[classify-dimensions.md](docs/classify-dimensions.md)** — Spec for dimension classification/normalization: semantic types, parsing rules, archetype detection.
+
+### Application Specs
+- **[app-spec.md](docs/app-spec.md)** — Full v1 spec: FastAPI + DuckDB backend, ECharts frontend, all phases from data prep to UI polish.
+- **[app-spec-v2.md](docs/app-spec-v2.md)** — v2 redesign spec. Discovery-first approach leveraging enriched metadata (tags, trends, relationships, chart recommendations).
+- **[chart-framework-spec.md](docs/chart-framework-spec.md)** — Generic chart selection engine: 15 chart types, dimension role assignment, filter system.
+
+### Data & Profiling
+- **[data analysis.md](docs/data%20analysis.md)** — Framework for systematic profiling, classification, and dashboard generation.
+- **[data notes.md](docs/data%20notes.md)** — Raw notes on data quirks, dimension patterns, edge cases.
+- **[TODO_COMPACTION.md](docs/TODO_COMPACTION.md)** — Known issues with CSV compaction and label normalization fixes.
+- **[PROFILING_AND_EXPLORER.md](docs/PROFILING_AND_EXPLORER.md)** — Guide to the CSV profiler and Explorer UI: output paths, validation flags, API endpoints.
+
+### UI / Legacy
+- **[STATIC-CONVERSION-SUMMARY.md](docs/STATIC-CONVERSION-SUMMARY.md)** — Documents conversion from server-based to static site explorer.
+- **[STATIC-VS-PYTHON-COMPARISON.md](docs/STATIC-VS-PYTHON-COMPARISON.md)** — Test results showing 100% feature parity between Python and static versions.
+- **[JUDET-SPLIT-IMPLEMENTATION.md](docs/JUDET-SPLIT-IMPLEMENTATION.md)** — How large datasets are split by county (judet) to stay under the 30k-cell API limit.
+
+### Deployment
+- **[DEPLOY-DREAMHOST.md](docs/DEPLOY-DREAMHOST.md)** — Deployment guide for shared hosting via Passenger WSGI.
+
+### Agents Pipeline (`docs/agents/`)
+- **[README.md](docs/agents/README.md)** — Overview of the 6-agent enrichment pipeline (produces value_profiles, coverage, trends, tags, relationships, chart_recs).
+- **[pipeline.md](docs/agents/pipeline.md)** — Orchestration: 3 phases, 7 agents, execution order and verification steps.
+- **phase1-value-profiler.md** — Agent 1A: min/max/mean/percentiles/distribution per dataset.
+- **phase1-coverage-profiler.md** — Agent 1B: time/geo coverage, fill rate, sparsity.
+- **phase1-trend-detector.md** — Agent 1C: trend direction, YoY growth, seasonality, breakpoints.
+- **phase2-topic-tagger.md** — Agent 2A: bilingual semantic tags from context + dataset names.
+- **phase2-dimension-overlap.md** — Agent 2B: related-dataset discovery via dimension fingerprints.
+- **phase2-chart-recommender.md** — Agent 2C: data-driven chart type recommendations.
+- **phase3-ia-designer.md** — Agent 3A: generates the full information architecture spec from enriched metadata.
