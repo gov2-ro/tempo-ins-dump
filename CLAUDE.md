@@ -9,13 +9,15 @@ This is a Romanian National Institute of Statistics (INS) data scraper and explo
 
 ### Data Pipeline (Python Scripts)
 Sequential numbered scripts process data through multiple stages:
-1. `1-fetch-context.py` - Fetches contexts → `data/1-indexes/ro/context.csv`
-2. `2-fetch-matrices.py` - Fetches datasets → `data/1-indexes/ro/matrices.csv`
-3. `3-fetch-metas.py` - Fetches metadata → `data/2-metas/ro/{dataset-id}.json`
+1. `1-fetch-context.py` - Fetches contexts → `data/1-indexes/{lang}/context.csv`
+2. `2-fetch-matrices.py` - Fetches datasets → `data/1-indexes/{lang}/matrices.csv`
+3. `3-fetch-metas.py` - Fetches metadata → `data/2-metas/{lang}/{dataset-id}.json`
 4. `4-build-meta-index.py` - Builds meta index
 5. `5-varstats-db.py` - Creates SQLite database from metadata
-6. `6-fetch-csv.py` - Downloads CSV data → `data/4-datasets/ro/{dataset-id}.csv`
+6. `6-fetch-csv.py` - Downloads CSV data → `data/4-datasets/{lang}/{dataset-id}.csv`
 7. `7-data-compactor.py` - Compacts CSV dimensions
+
+Note: {lang} can be either `ro` or `eng`
 
 ### UI Components (ui/ folder)
 Multi-interface web application with several explorers, all interconnected via navigation links:
@@ -165,7 +167,7 @@ python server.py
 - When possible run the code in your terminal to verify it works as expected. When possible make the tests short (timewise) - for example, limit the number of events or sources processed while testing. 
 - provide relevant output messages and logging.
 - generally create a debug mode with verbose logging for complex changes. Debug mode should be a flag in the configuration file.
-- use MCP browser when needed to test or debug the final results.
+- use `npx playwright` (Playwright already installed) when needed to test or debug the final results.
 
 ## General Coding Principles
 - Focus on simplicity, readability, performance, maintainability, testability, and reusability.
@@ -193,9 +195,15 @@ When refactoring large files break work into logical, independently functional c
 - Always provide clear stopping points
 
 # important-instruction-reminders
-Do what has been asked; nothing more, nothing less.
-NEVER create files unless they're absolutely necessary for achieving your goal.
-ALWAYS prefer editing an existing file to creating a new one.
-NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+Generally do what has been asked; nothing more, nothing less, but provide suggestions when you think it would be useful/smart – when it would support the intention of this project. 
+Avoid creating files unless they're absolutely necessary for achieving your goal.
+Prefer editing an existing file to creating a new one.
 
-when running Python commands, always first activate the following venv `~/devbox/envs/240826/` (/Users/pax/devbox/envs/240826/bin/activate)
+
+# Other notes
+
+When running Python commands, always first activate the following venv `~/devbox/envs/240826/` (/Users/pax/devbox/envs/240826/bin/activate)
+
+See `data/4-datasets-slim-samples/50` and `data/4-datasets-slim-samples/100` - when samplinga datasets
+
+The git repository is at https://github.com/gov2-ro/tempo-ins-dump/ 

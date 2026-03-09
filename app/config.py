@@ -6,6 +6,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 DB_PATH = DATA_DIR / "tempo_metadata.duckdb"
 PARQUET_DIR = DATA_DIR / "parquet-v2" / "ro"
+PARQUET_V3_DIR = DATA_DIR / "parquet-v3" / "ro"
 
 # API settings
 DEFAULT_PAGE_SIZE = 50

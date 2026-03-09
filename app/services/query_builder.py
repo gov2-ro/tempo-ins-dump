@@ -1,12 +1,20 @@
 """Dynamic SQL builder for parquet queries with filter pushdown."""
-from app.config import PARQUET_DIR, MAX_DATA_ROWS
+from app.config import PARQUET_DIR, PARQUET_V3_DIR, MAX_DATA_ROWS
+
+
+def _resolve_parquet_path(matrix_code: str):
+    """Find the parquet file for a matrix code. Checks v3 (splits) first, then v2."""
+    v3_path = PARQUET_V3_DIR / f"{matrix_code}.parquet"
+    if v3_path.exists():
+        return v3_path
+    return PARQUET_DIR / f"{matrix_code}.parquet"
 
 
 def build_data_query(matrix_code: str, dimensions: list, filters: dict,
                      limit: int = MAX_DATA_ROWS) -> str:
-    """Build a DuckDB query against a parquet-v2 file.
+    """Build a DuckDB query against a parquet file.
 
-    Parquet-v2 columns contain integer nom_item_ids.
+    Parquet columns contain integer nom_item_ids.
     Filters are {column_name: [id1, id2, ...]} dicts.
 
     Args:
@@ -18,7 +26,7 @@ def build_data_query(matrix_code: str, dimensions: list, filters: dict,
     Returns:
         SQL query string
     """
-    parquet_path = PARQUET_DIR / f"{matrix_code}.parquet"
+    parquet_path = _resolve_parquet_path(matrix_code)
     cols = [d['dim_column_name'] for d in dimensions] + ['value']
     select_clause = ", ".join(cols)
 
