@@ -418,6 +418,7 @@ HTML_TEMPLATE = """
             <button class="sort-btn" data-sort="records" onclick="setSort('records')">Records</button>
             <button class="sort-btn" data-sort="dimensions" onclick="setSort('dimensions')">Dims</button>
             <button class="sort-btn" data-sort="cells" onclick="setSort('cells')">Cells</button>
+            <button class="sort-btn" data-sort="options" onclick="setSort('options')">Options</button>
         </div>
         <ul class="dataset-list" id="datasetList">
             <li class="loading">Loading...</li>
@@ -562,6 +563,8 @@ HTML_TEMPLATE = """
                     ? ` • ${d.ultima_actualizare}`
                     : currentSort === 'cells'
                     ? ` • ${((d.row_count||0)*(d.mat_max_dim||0)).toLocaleString()} cells`
+                    : currentSort === 'options' && d.total_options != null
+                    ? ` • ${d.total_options.toLocaleString()} opts`
                     : '';
                 return `
                 <li class="dataset-item ${d.matrix_code === currentMatrix ? 'active' : ''}"
@@ -801,7 +804,15 @@ HTML_TEMPLATE = """
                     <tbody>
                         ${dims.map(dim => `
                             <tr>
-                                <td>${dim.dim_label}</td>
+                                <td>
+                                    ${dim.options && dim.options.length ? `
+                                    <details>
+                                        <summary style="cursor:pointer">${dim.dim_label}</summary>
+                                        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;padding-bottom:4px">
+                                            ${dim.options.map(o => `<span style="background:#e8f0fe;border-radius:3px;padding:1px 6px;font-size:11px;color:#333">${o}</span>`).join('')}
+                                        </div>
+                                    </details>` : dim.dim_label}
+                                </td>
                                 <td><code style="font-size:11px">${dim.dim_column_name}</code></td>
                                 <td style="text-align:right">${dim.option_count}</td>
                             </tr>
@@ -1013,38 +1024,64 @@ def api_datasets():
     """Get list of all datasets"""
     try:
         sort_key = request.args.get('sort', 'name')
-        order_by = SORT_OPTIONS.get(sort_key, SORT_OPTIONS['name'])
 
         conn = duckdb.connect(str(DB_FILE), read_only=True)
-        result = conn.execute(f"""
-            SELECT
-                matrix_code,
-                matrix_name,
-                row_count,
-                mat_max_dim,
-                file_size_bytes,
-                ultima_actualizare,
-                ancestor_codes,
-                context_code
-            FROM matrices
-            WHERE row_count > 0
-            ORDER BY {order_by}
-        """).fetchall()
+
+        if sort_key == 'options':
+            result = conn.execute("""
+                WITH opt_counts AS (
+                    SELECT d.matrix_code,
+                           SUM(d.option_count) AS total_options
+                    FROM dimensions d
+                    WHERE LOWER(d.dim_label) NOT LIKE '%perioade%'
+                      AND LOWER(d.dim_label) NOT LIKE '%trimestre%'
+                      AND LOWER(d.dim_label) NOT LIKE '%luni%'
+                    GROUP BY d.matrix_code
+                )
+                SELECT m.matrix_code, m.matrix_name, m.row_count, m.mat_max_dim,
+                       m.file_size_bytes, m.ultima_actualizare, m.ancestor_codes,
+                       m.context_code, COALESCE(o.total_options, 0) AS total_options
+                FROM matrices m
+                LEFT JOIN opt_counts o ON o.matrix_code = m.matrix_code
+                WHERE m.row_count > 0
+                ORDER BY total_options DESC NULLS LAST
+            """).fetchall()
+            datasets = []
+            for row in result:
+                datasets.append({
+                    'matrix_code': row[0],
+                    'matrix_name': row[1],
+                    'row_count': row[2],
+                    'mat_max_dim': row[3],
+                    'file_size_bytes': row[4],
+                    'ultima_actualizare': str(row[5]) if row[5] else None,
+                    'ancestor_codes': row[6] or [],
+                    'context_code': row[7],
+                    'total_options': row[8],
+                })
+        else:
+            order_by = SORT_OPTIONS.get(sort_key, SORT_OPTIONS['name'])
+            result = conn.execute(f"""
+                SELECT matrix_code, matrix_name, row_count, mat_max_dim,
+                       file_size_bytes, ultima_actualizare, ancestor_codes, context_code
+                FROM matrices
+                WHERE row_count > 0
+                ORDER BY {order_by}
+            """).fetchall()
+            datasets = []
+            for row in result:
+                datasets.append({
+                    'matrix_code': row[0],
+                    'matrix_name': row[1],
+                    'row_count': row[2],
+                    'mat_max_dim': row[3],
+                    'file_size_bytes': row[4],
+                    'ultima_actualizare': str(row[5]) if row[5] else None,
+                    'ancestor_codes': row[6] or [],
+                    'context_code': row[7],
+                })
+
         conn.close()
-
-        datasets = []
-        for row in result:
-            datasets.append({
-                'matrix_code': row[0],
-                'matrix_name': row[1],
-                'row_count': row[2],
-                'mat_max_dim': row[3],
-                'file_size_bytes': row[4],
-                'ultima_actualizare': str(row[5]) if row[5] else None,
-                'ancestor_codes': row[6] or [],
-                'context_code': row[7],
-            })
-
         return jsonify({'datasets': datasets, 'sort': sort_key})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1201,10 +1238,15 @@ def api_dataset(matrix_code):
             FROM dataset_value_profiles WHERE matrix_code = ?
         """, [matrix_code]).fetchone()
 
-        # Dimensions
+        # Dimensions with options
         dimensions = conn_meta.execute("""
-            SELECT dim_label, dim_column_name, option_count
-            FROM dimensions WHERE matrix_code = ? ORDER BY dim_code
+            SELECT d.dim_label, d.dim_column_name, d.option_count,
+                   list(dopt.option_label ORDER BY dopt.option_label) AS options
+            FROM dimensions d
+            LEFT JOIN dimension_options dopt ON dopt.dimension_id = d.dimension_id
+            WHERE d.matrix_code = ?
+            GROUP BY d.dim_label, d.dim_column_name, d.option_count, d.dim_code
+            ORDER BY d.dim_code
         """, [matrix_code]).fetchall()
 
         conn_meta.close()
@@ -1259,7 +1301,7 @@ def api_dataset(matrix_code):
                 'coeff_variation': fmt_num(vp[10]),
             } if vp else {},
             'dimensions': [
-                {'dim_label': d[0], 'dim_column_name': d[1], 'option_count': d[2]}
+                {'dim_label': d[0], 'dim_column_name': d[1], 'option_count': d[2], 'options': d[3] or []}
                 for d in dimensions
             ],
             'preview': preview_data,
