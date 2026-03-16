@@ -101,7 +101,8 @@ def generate_sub_matrix_code(matrix_code: str, suffix: str) -> str:
 
 def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> list[dict]:
     """Split a parquet file based on a SplitRule. Returns list of sub-dataset info dicts."""
-    src = PARQUET_V2_DIR / f"{rule.matrix_code}.parquet"
+    _v1 = DATA_DIR / "parquet" / "ro" / f"{rule.matrix_code}.parquet"
+    src = _v1 if _v1.exists() else PARQUET_V2_DIR / f"{rule.matrix_code}.parquet"
     if not src.exists():
         logger.warning(f"Parquet not found: {src}")
         return []
