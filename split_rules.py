@@ -378,6 +378,100 @@ def detect_hierarchy(conn) -> list[SplitRule]:
     return rules
 
 
+def detect_age_granularity(conn) -> list[SplitRule]:
+    """Pattern E: Age dimension with both single-year and grouped options.
+
+    Creates two sub-datasets per affected parent:
+      <code>_grupe  — 5-year age groups only (e.g. "0-4 ani", "5-9 ani")
+      <code>_varste — single-year ages only   (e.g. "0 ani", "1 ani")
+    "Total" is duplicated into both groups.
+
+    Excludes already-split hierarchy variants (_judet, _localitate) to avoid
+    3-level nesting complexity.
+    """
+    rows = conn.execute("""
+        WITH age_dims AS (
+            SELECT d.matrix_code, d.dimension_id, d.dim_column_name
+            FROM dimensions d
+            WHERE (LOWER(d.dim_label) LIKE '%varst%' OR LOWER(d.dim_label) LIKE '%grupe%')
+              AND d.matrix_code NOT LIKE '%_judet'
+              AND d.matrix_code NOT LIKE '%_localitate'
+              AND d.matrix_code NOT LIKE '%_grupe'
+              AND d.matrix_code NOT LIKE '%_varste'
+        ),
+        age_options AS (
+            SELECT ad.matrix_code, ad.dimension_id, ad.dim_column_name,
+                   dopt.nom_item_id, dopt.option_label,
+                   dop.age_min, dop.age_max
+            FROM age_dims ad
+            JOIN dimension_options dopt ON dopt.dimension_id = ad.dimension_id
+            JOIN dimension_options_parsed dop ON dop.nom_item_id = dopt.nom_item_id
+            WHERE dop.dim_type = 'age' AND dop.age_min IS NOT NULL
+        ),
+        mixed AS (
+            SELECT matrix_code, dimension_id, dim_column_name,
+                   COUNT(CASE WHEN age_min = age_max AND age_min > 0 THEN 1 END) AS singles,
+                   COUNT(CASE WHEN age_min != age_max AND NOT (age_min = 0 AND age_max = 999) THEN 1 END) AS groups
+            FROM age_options
+            GROUP BY matrix_code, dimension_id, dim_column_name
+        )
+        SELECT ao.matrix_code, ao.dimension_id, ao.dim_column_name,
+               ao.nom_item_id, ao.option_label, ao.age_min, ao.age_max
+        FROM age_options ao
+        JOIN mixed m ON m.matrix_code = ao.matrix_code AND m.dimension_id = ao.dimension_id
+        WHERE m.singles > 0 AND m.groups > 0
+        ORDER BY ao.matrix_code, ao.age_min, ao.age_max
+    """).fetchall()
+
+    from collections import defaultdict
+    by_matrix = defaultdict(list)
+    for r in rows:
+        by_matrix[(r[0], r[1], r[2])].append(r)
+
+    rules = []
+    for (mc, dim_id, dim_col), opts in by_matrix.items():
+        grupe_ids, grupe_labels = [], {}
+        varste_ids, varste_labels = [], {}
+        total_ids, total_labels = [], {}
+
+        for r in opts:
+            oid, olabel, age_min, age_max = r[3], r[4], r[5], r[6]
+            if age_min == 0 and age_max == 999:
+                total_ids.append(oid)
+                total_labels[oid] = olabel
+            elif age_min == age_max:
+                varste_ids.append(oid)
+                varste_labels[oid] = olabel
+            else:
+                grupe_ids.append(oid)
+                grupe_labels[oid] = olabel
+
+        # Duplicate totals into both groups
+        for oid, olabel in total_labels.items():
+            grupe_ids.append(oid)
+            grupe_labels[oid] = olabel
+            varste_ids.append(oid)
+            varste_labels[oid] = olabel
+
+        if not grupe_ids or not varste_ids:
+            continue
+
+        groups = [
+            SplitGroup(label="grupe", option_ids=grupe_ids, option_labels=grupe_labels),
+            SplitGroup(label="varste", option_ids=varste_ids, option_labels=varste_labels),
+        ]
+        rules.append(SplitRule(
+            matrix_code=mc,
+            pattern="age_granularity",
+            split_dimension=dim_col,
+            split_dimension_id=dim_id,
+            groups=groups,
+        ))
+
+    logger.info(f"Pattern E (age_granularity): {len(rules)} datasets")
+    return rules
+
+
 def detect_all(conn) -> list[SplitRule]:
     """Run all detectors. Deduplicates: if a dataset matches multi_um AND mixed_metrics,
     prefer mixed_metrics (more specific)."""
@@ -385,12 +479,13 @@ def detect_all(conn) -> list[SplitRule]:
     mixed_metrics = detect_mixed_metrics(conn)
     slash_dims = detect_slash_dims(conn)
     hierarchy = detect_hierarchy(conn)
+    age_gran = detect_age_granularity(conn)
 
     # Deduplicate: mixed_metrics supersedes multi_um for the same dataset
     mixed_metric_codes = {r.matrix_code for r in mixed_metrics}
     multi_um = [r for r in multi_um if r.matrix_code not in mixed_metric_codes]
 
-    all_rules = multi_um + mixed_metrics + slash_dims + hierarchy
+    all_rules = multi_um + mixed_metrics + slash_dims + hierarchy + age_gran
     logger.info(f"Total split rules: {len(all_rules)} across {len(set(r.matrix_code for r in all_rules))} datasets")
     return all_rules
 

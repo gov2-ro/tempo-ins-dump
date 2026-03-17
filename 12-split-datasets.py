@@ -365,7 +365,7 @@ def _next_option_id(conn, count: int = 1) -> int:
 def main():
     parser = argparse.ArgumentParser(description="Split inconsistent datasets into sub-datasets")
     parser.add_argument("--matrix", help="Process a single matrix code")
-    parser.add_argument("--pattern", choices=["multi_um", "mixed_metrics", "slash_dims", "hierarchy"],
+    parser.add_argument("--pattern", choices=["multi_um", "mixed_metrics", "slash_dims", "hierarchy", "age_granularity"],
                         help="Process only one pattern type")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be done without writing")
     parser.add_argument("--debug", action="store_true", help="Verbose logging")
