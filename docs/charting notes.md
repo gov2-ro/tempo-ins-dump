@@ -108,7 +108,19 @@ Numarul salariatilor cu program complet de lucru care au fost platiti intreaga l
     - Lei
 
 
+----
+
+### TLS1112
+Tinta 1 - Social - RATA DEPRIVARII SEVERE DE LOCUIRE
+
+Sexe
+Grupe de varsta
+Statutul de saracie
+Perioade
+UM: Procente
+
  
+---
 
 
 ### **AMG1103**

@@ -204,6 +204,6 @@ Prefer editing an existing file to creating a new one.
 
 When running Python commands, always first activate the following venv `~/devbox/envs/240826/` (/Users/pax/devbox/envs/240826/bin/activate)
 
-See `data/4-datasets-slim-samples/50` and `data/4-datasets-slim-samples/100` - when samplinga datasets
+See `data/4-datasets-slim-samples/50` and `data/4-datasets-slim-samples/100` first - when samplinga datasets, it contains a smaller number of sample records (50 or 100) for analysis with using less context. 
 
 The git repository is at https://github.com/gov2-ro/tempo-ins-dump/ 

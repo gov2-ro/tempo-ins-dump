@@ -40,6 +40,8 @@ get CAEN codes
 
 when months only, calculate by year
 
+varste si grupe de vârstă - pot și și
+
 
 ## Quirkies
 
