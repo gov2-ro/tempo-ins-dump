@@ -42,6 +42,7 @@ when months only, calculate by year
 
 varste si grupe de vârstă - pot și și
 
+nivel national when regiuni, 
 
 ## Quirkies
 

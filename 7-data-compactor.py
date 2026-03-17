@@ -7,23 +7,7 @@ also write a log entry for each succesful file matched and processed. if files a
 
 """
 
-lang = "ro"
-# lang = "en"
-
- 
-
 import os, csv, json, logging, argparse
-
-
-# Configuration variables
-input_csvs = "data/4-datasets/" + lang + "/"
-json_metas = "data/2-metas/" + lang + "/"
-compacted_folder = "data/5-compact-datasets/" + lang + "/"
-logfile = "data/5-compact-datasets/" + lang+ "-compaction.log"
-
-# Setup logging
-logging.basicConfig(filename=logfile, level=logging.INFO,
-                    format='%(asctime)s [%(levelname)s] %(message)s')
 
 
 def load_mapping_from_json(json_path):
@@ -59,7 +43,18 @@ def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Compact data from CSV files using JSON metadata')
     parser.add_argument('--matrix', type=str, help='Process only a specific matrix (fileid) for debugging')
+    parser.add_argument('--lang', default='ro', choices=['ro', 'en'], help='Language (default: ro)')
     args = parser.parse_args()
+
+    lang = args.lang
+    input_csvs = "data/4-datasets/" + lang + "/"
+    json_metas = "data/2-metas/" + lang + "/"
+    compacted_folder = "data/5-compact-datasets/" + lang + "/"
+    logfile = "data/5-compact-datasets/" + lang + "-compaction.log"
+
+    # Setup logging
+    logging.basicConfig(filename=logfile, level=logging.INFO,
+                        format='%(asctime)s [%(levelname)s] %(message)s')
 
     # Get list of JSON metadata files (these are the fileids)
     json_files = [f[:-5] for f in os.listdir(json_metas) if f.endswith('.json')]

@@ -1,7 +1,4 @@
 
-# lang = "ro"
-lang = "en"
-
 import csv
 import requests
 import os
@@ -10,9 +7,6 @@ import random
 from tqdm import tqdm
 import argparse
 
-# --- Configuration ---
-INPUT_CSV_PATH = '/Users/pax/devbox/gov2/tempo-ins-dump/data/1-indexes/' + lang + '/matrices.csv'
-OUTPUT_DIR = '/Users/pax/devbox/gov2/tempo-ins-dump/data/2-metas/' + lang + '/'
 BASE_URL = 'http://statistici.insse.ro:8077/tempo-ins/matrix/'
 
 HEADERS = {
@@ -27,7 +21,12 @@ HEADERS = {
 # --- Argument Parsing ---
 parser = argparse.ArgumentParser(description='Download matrix metadata from tempo-ins.')
 parser.add_argument('--force', action='store_true', help='Force overwrite of existing files.')
+parser.add_argument('--lang', default='ro', choices=['ro', 'en'], help='Language (default: ro)')
 args = parser.parse_args()
+
+lang = args.lang
+INPUT_CSV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', '1-indexes', lang, 'matrices.csv')
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', '2-metas', lang) + '/'
 
 # --- Main Script ---
 def fetch_metas():

@@ -28,16 +28,12 @@ Notes:
 - By default, only CSV files are downloaded. Use --xls flag to also download Excel/HTML files.
 """
 
-lang = "ro"
-# lang = "en"
-
-""" 
+"""
 y not go through indexes/matrices.csv ? - flag?
 """
 
-input_folder="data/2-metas/" + lang
-output_folder="data/4-datasets/" + lang
-xls_output_folder="data/4-datasets/xls"
+# Default lang — overridden at runtime by --lang argument
+lang = "ro"
 
 import requests
 import json
@@ -317,7 +313,7 @@ def convert_to_pivot_payload(matrix_def: Dict, matrix_code: str, include_totals:
     encoded_query = encode_query_parameters(matrix_def, include_totals=include_totals)
 
     payload = {
-        "language": "ro",
+        "language": lang,
         "encQuery": encoded_query,
         "matCode": matrix_code,
         "matMaxDim": matrix_def["details"]["matMaxDim"],
@@ -866,9 +862,14 @@ if __name__ == "__main__":
     parser.add_argument('--matrix', '-m', type=str, help='Process a single matrix by code (e.g., POP107D)')
     parser.add_argument('--force', '-f', action='store_true', help='Force overwrite existing files')
     parser.add_argument('--xls', '-x', action='store_true', help='Also download Excel/HTML files (disabled by default)')
-    
+    parser.add_argument('--lang', '-l', default='ro', choices=['ro', 'en'], help='Language (default: ro)')
+
     args = parser.parse_args()
-    
+    lang = args.lang
+    input_folder = "data/2-metas/" + lang
+    output_folder = "data/4-datasets/" + lang
+    xls_output_folder = "data/4-datasets/xls"
+
     if args.matrix:
         logger.info(f"Processing single matrix: {args.matrix}")
         process_single_matrix(args.matrix, input_folder, output_folder, xls_output_folder, args.force, args.xls)

@@ -5,17 +5,17 @@ _INS Tempo Online but make it nice._
 
 ## Pipeline Scripts
 
-Sequential data pipeline — run in order:
+Sequential data pipeline — run in order. All scripts accept `--lang ro|en` (default: `ro`).
 
 | Script | Output | Description |
 |---|---|---|
-| `1-fetch-context.py` | `data/1-indexes/ro/context.csv` | Fetches category/context hierarchy from TEMPO API |
-| `2-fetch-matrices.py` | `data/1-indexes/ro/matrices.csv` | Fetches dataset list from TEMPO API |
-| `3-fetch-metas.py` | `data/2-metas/ro/{id}.json` | Downloads JSON metadata for each dataset |
-| `4-build-meta-index.py` | `data/1-indexes/ro/matrices-list.csv` | Builds summary index from metadata JSONs |
-| `5-varstats-db.py` | `data/3-db/ro/tempo-indexes.db` | Creates SQLite DB from metadata |
-| `6-fetch-csv.py` | `data/4-datasets/ro/` | Downloads raw CSV data files from TEMPO API |
-| `7-data-compactor.py` | `data/5-compact-datasets/ro/` | Replaces text labels with numeric IDs in CSVs |
+| `1-fetch-context.py` | `data/1-indexes/{lang}/context.csv` | Fetches category/context hierarchy from TEMPO API |
+| `2-fetch-matrices.py` | `data/1-indexes/{lang}/matrices.csv` | Fetches dataset list from TEMPO API |
+| `3-fetch-metas.py` | `data/2-metas/{lang}/{id}.json` | Downloads JSON metadata for each dataset |
+| `4-build-meta-index.py` | `data/1-indexes/{lang}/matrices-list.csv` | Builds summary index from metadata JSONs |
+| `5-varstats-db.py` | `data/3-db/{lang}/tempo-indexes.db` | Creates SQLite DB from metadata |
+| `6-fetch-csv.py` | `data/4-datasets/{lang}/` | Downloads raw CSV data files from TEMPO API |
+| `7-data-compactor.py` | `data/5-compact-datasets/{lang}/` | Replaces text labels with numeric IDs in CSVs |
 | `8-setup-duckdb-schema.py` | `data/tempo_metadata.duckdb` | Creates DuckDB schema (contexts, matrices, dimensions) |
 | `9-csv-to-parquet.py` | `data/parquet/ro/` | Converts compacted CSVs to Parquet |
 | `10-import-metadata.py` | DuckDB tables | Imports all metadata into DuckDB |
