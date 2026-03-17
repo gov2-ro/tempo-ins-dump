@@ -137,17 +137,31 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> lis
             # Special handling: hierarchy splits are row-level, not column-value
             row_count = _split_hierarchy(conn, src, dst, rule, group)
         else:
-            ids_str = ",".join(str(i) for i in group.option_ids)
             # Select all columns except the ones we're dropping
             all_cols = _get_parquet_columns(conn, src)
             keep_cols = [c for c in all_cols if c not in rule.drop_columns]
             select = ", ".join(f'"{c}"' for c in keep_cols)
 
+            # Detect if parquet uses text labels (VARCHAR) or integer IDs
+            col_types = {r[0]: r[1] for r in conn.execute(
+                f"DESCRIBE SELECT * FROM read_parquet('{src}')"
+            ).fetchall()}
+            split_col_type = col_types.get(split_col, "INTEGER")
+
+            if split_col_type == "VARCHAR" and group.option_labels:
+                # Text-label parquet: filter by label strings (strip both sides)
+                labels = [l.strip() for l in group.option_labels.values()]
+                ids_str = ",".join(f"'{l.replace(chr(39), chr(39)+chr(39))}'" for l in labels)
+                where_clause = f'TRIM("{split_col}") IN ({ids_str})'
+            else:
+                ids_str = ",".join(str(i) for i in group.option_ids)
+                where_clause = f'"{split_col}" IN ({ids_str})'
+
             query = f"""
                 COPY (
                     SELECT {select}
                     FROM read_parquet('{src}')
-                    WHERE "{split_col}" IN ({ids_str})
+                    WHERE {where_clause}
                 ) TO '{dst}' (FORMAT PARQUET, COMPRESSION '{PARQUET_COMPRESSION}')
             """
             try:
