@@ -59,3 +59,5 @@ multiple types of dimensions: Sex/age groups/educational level/development regio
 AGR101B
 sometimes dimensions have sub-dimensionsin the adjacent column
 Judete > Localitati
+
+INT109A - dimensions have parents in different columns

@@ -1,4 +1,75 @@
-see also [data notes.md](data notes.md)
+see also [data analysis.md](data analysis.md), [chart-framework-spec.md](chart-framework-spec.md)
+
+
+# 260323
+
+## Rules
+- have both snapshot (one year/period) and trendline/timeline – 2 separate views. then data/table view (datatable + filters, heatmaps)
+- later, 3rd view where one can choose chart type, series/dimensions + filters?
+- if geo, choropleth
+- where bar chart needed, offer stacked/grouped option an line chart - with a toggle
+- where choropleth also stacked bar chart - can be unstacked -> grouped
+- sex + age -> Population pyramid 
+- where multiple (at least 2) categories - bubble matrix. where more than 2, choose pairs. 
+
+options:
+- has geo
+- has age
+- has gender
+- has how many dimensions?
+
+most are simple!
+
+
+- Where CAEN, just one
+
+## TUR105G
+judete, regiuni, macroregiuni
+
+### Dimensions
+
+- Tipuri de structuri de primire turistica (18)
+    - Pensiuni agroturistice; Pensiuni turistice; Apartamente si camere de inchiriat; Bungalouri; Cabane turistice; Campinguri; Casute turistice; Hanuri; Hosteluri; Hoteluri; Hoteluri apartament; Moteluri; Popasuri turistice; Sate de vacanta; Spatii de cazare de pe navele fluviale si maritime; Tabere de elevi si prescolari; Total; Vile turistice; 
+- Tipuri de turisti 
+    - ro / int / total
+- geo
+- timeline (luni)
+
+### Charts
+
+**Snapshot**
+
+1. Choropleth
+    - filter by tipuri de structuri, tipuri de turiști
+2. Bar/line chart, stacked
+   x: tipuri de structuri, series (stacked part): tipuri de turiști
+    - filter by geo
+3. scatter plot/bubble matrix (tipuri structuri x tipuri turiști)
+    - filter by geo
+
+**Trends/Timeline**
+
+x: time
+1. 2 bar/line charts, stacked by tipuri structuri or tipuri de turiști, filter by the other
+
+
+## SAR118B
+
+Snapshot: Choropleth + bar-chart
+Timeline: bar/line chart
+
+## PTT102A
+
+Snapshot: Choropleth (filter by categorii - single select), bar-chart (stacked/grouped by categorii), matrix bubble chart
+Timeline: 2 bar charts, stacked with categorii or geo as series (filter by the other dimension)
+
+## LOC108A
+
+
+----
+
+
+
 
 # Notes on possible charts, by examples
 
@@ -10,14 +81,14 @@ Intentions:
 - per chart or per dataset filters?
 - all datasets have a table view
 
-when multiple units, split charts
+- [x] when multiple units, split charts - DONE
 
 Chart types, filters.
 Filters are per page, or per chart. Or per chart group.
 
 Either show a timeline (variance throughout time), either show a snapshot - one year at the time. 
 
-option: per capita
+option (later): per capita
 
 ## Chart types
 
@@ -133,3 +204,8 @@ Tinta 3 - Social - Persoane de 16 ani si peste care nu au putut consulta un medi
 
 ### TUR105G
 Innoptari in structuri de primire turistica pe tipuri de structuri, tipuri de turisti, macroregiuni, regiuni de devoltare si judete, pe luni
+
+
+# quirkies
+
+INT109A - dimensions have parents in different columns
