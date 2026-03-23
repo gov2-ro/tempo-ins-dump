@@ -1,0 +1,126 @@
+{
+  "datasetId": "TLS1112",
+  "version": "1.0",
+  "schema": {
+    "columns": [
+      { "id": "sex", "type": "string" },
+      { "id": "age_group", "type": "string" },
+      { "id": "poverty_status", "type": "string" },
+      { "id": "period", "type": "string" },
+      { "id": "unit", "type": "string" },
+      { "id": "value", "type": "number" }
+    ],
+    "valueColumn": "value",
+    "unitColumn": "unit",
+    "flagColumns": []
+  },
+  "semantics": {
+    "time": {
+      "column": "period",
+      "granularity": "year",
+      "parser": "romanian_year_label"
+    },
+    "geo": null,
+    "dimensions": {
+      "sex": {
+        "column": "sex",
+        "role": "sex",
+        "values": ["Masculin", "Feminin"],
+        "order": ["Masculin", "Feminin"]
+      },
+      "age": {
+        "column": "age_group",
+        "role": "age",
+        "ordered": true,
+        "order": ["0-17 ani", "18-64 ani", "65 ani si peste", "Total persoane"]
+      },
+      "status": {
+        "column": "poverty_status",
+        "role": "status"
+      }
+    },
+    "totals": {
+      "preferredMembers": {
+        "age": "Total persoane"
+      }
+    }
+  },
+  "defaults": {
+    "measure": null,
+    "time": { "strategy": "latest" },
+    "filters": {
+      "status": "In risc de saracie"
+    },
+    "comparison": {
+      "primary": "age",
+      "secondary": "sex"
+    },
+    "topN": 8,
+    "showOther": false
+  },
+  "rules": {
+    "candidateCharts": [
+      "population_pyramid",
+      "line",
+      "small_multiples",
+      "grouped_bar",
+      "table"
+    ],
+    "selection": [
+      {
+        "id": "pyramid_when_sex_plus_age",
+        "when": {
+          "hasTime": true,
+          "hasGeo": false,
+          "rolesPresent": ["sex", "age"],
+          "ageOrdered": true,
+          "visibleDistinct.sex.lte": 2
+        },
+        "chart": "population_pyramid",
+        "priority": 100
+      },
+      {
+        "id": "line_when_time_primary",
+        "when": {
+          "hasTime": true,
+          "compareRole": "status",
+          "visibleDistinct.status.lte": 6
+        },
+        "chart": "line",
+        "priority": 60
+      },
+      {
+        "id": "small_multiples_when_too_many_series",
+        "when": {
+          "hasTime": true,
+          "visibleSeries.gt": 6
+        },
+        "chart": "small_multiples",
+        "priority": 50
+      }
+    ],
+    "complements": [
+      {
+        "whenPrimary": "population_pyramid",
+        "add": "line",
+        "mapping": {
+          "x": "time",
+          "series": "sex",
+          "facet": "age"
+        }
+      }
+    ]
+  },
+  "ui": {
+    "mode": "minimal",
+    "visibleControls": ["time"],
+    "optionalControls": ["status"],
+    "hiddenAdvancedControls": ["series", "facet"],
+    "table": {
+      "enabled": true,
+      "heatmap": false
+    },
+    "chips": true,
+    "searchableDimensions": []
+  }
+}
