@@ -19,19 +19,23 @@ from duckdb_config import DB_FILE, LOGS_DIR, ensure_directories
 SCHEMA_SQL = """
 -- Table 1: contexts
 CREATE TABLE IF NOT EXISTS contexts (
-    context_code TEXT PRIMARY KEY,
+    context_code TEXT NOT NULL,
+    lang TEXT NOT NULL DEFAULT 'ro',
     parent_code TEXT,
     level INTEGER,
     context_name TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (context_code, lang)
 );
 
 CREATE INDEX IF NOT EXISTS idx_contexts_parent ON contexts(parent_code);
 CREATE INDEX IF NOT EXISTS idx_contexts_level ON contexts(level);
+CREATE INDEX IF NOT EXISTS idx_contexts_lang ON contexts(lang);
 
 -- Table 2: matrices
 CREATE TABLE IF NOT EXISTS matrices (
-    matrix_code TEXT PRIMARY KEY,
+    matrix_code TEXT NOT NULL,
+    lang TEXT NOT NULL DEFAULT 'ro',
     matrix_name TEXT NOT NULL,
     context_code TEXT,
     ancestor_codes TEXT[],
@@ -61,11 +65,11 @@ CREATE TABLE IF NOT EXISTS matrices (
     file_size_bytes BIGINT,
     parquet_path TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    FOREIGN KEY (context_code) REFERENCES contexts(context_code)
+    PRIMARY KEY (matrix_code, lang)
 );
 
 CREATE INDEX IF NOT EXISTS idx_matrices_context ON matrices(context_code);
+CREATE INDEX IF NOT EXISTS idx_matrices_lang ON matrices(lang);
 CREATE INDEX IF NOT EXISTS idx_matrices_active ON matrices(mat_active);
 CREATE INDEX IF NOT EXISTS idx_matrices_dims ON matrices(mat_max_dim);
 
@@ -73,16 +77,17 @@ CREATE INDEX IF NOT EXISTS idx_matrices_dims ON matrices(mat_max_dim);
 CREATE TABLE IF NOT EXISTS dimensions (
     dimension_id INTEGER PRIMARY KEY,
     matrix_code TEXT NOT NULL,
+    lang TEXT NOT NULL DEFAULT 'ro',
     dim_code INTEGER NOT NULL,
     dim_label TEXT NOT NULL,
     dim_column_name TEXT NOT NULL,
     option_count INTEGER,
 
-    FOREIGN KEY (matrix_code) REFERENCES matrices(matrix_code),
-    UNIQUE(matrix_code, dim_code)
+    UNIQUE(matrix_code, lang, dim_code)
 );
 
 CREATE INDEX IF NOT EXISTS idx_dimensions_matrix ON dimensions(matrix_code);
+CREATE INDEX IF NOT EXISTS idx_dimensions_lang ON dimensions(lang);
 CREATE INDEX IF NOT EXISTS idx_dimensions_label ON dimensions(dim_label);
 CREATE INDEX IF NOT EXISTS idx_dimensions_column ON dimensions(dim_column_name);
 

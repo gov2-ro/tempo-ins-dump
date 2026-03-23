@@ -18,6 +18,7 @@ from typing import List, Dict, Any
 # Import configuration and utilities
 from duckdb_config import (
     DB_FILE,
+    LANG,
     CONTEXT_CSV,
     MATRICES_CSV,
     METAS_DIR,
@@ -41,9 +42,10 @@ def import_contexts(conn: duckdb.DuckDBPyConnection) -> int:
 
     # Read and import CSV (note: CSV uses camelCase column names)
     conn.execute(f"""
-        INSERT INTO contexts (context_code, parent_code, level, context_name)
+        INSERT INTO contexts (context_code, lang, parent_code, level, context_name)
         SELECT
             context_code,
+            '{LANG}' as lang,
             "parentCode" as parent_code,
             level,
             context_name
@@ -51,10 +53,14 @@ def import_contexts(conn: duckdb.DuckDBPyConnection) -> int:
                       header=true,
                       delim=',',
                       auto_detect=true)
+        ON CONFLICT (context_code, lang) DO UPDATE SET
+            parent_code = excluded.parent_code,
+            level = excluded.level,
+            context_name = excluded.context_name
     """)
 
-    count = conn.execute("SELECT COUNT(*) FROM contexts").fetchone()[0]
-    print(f"✓ Imported {count} contexts")
+    count = conn.execute("SELECT COUNT(*) FROM contexts WHERE lang = ?", [LANG]).fetchone()[0]
+    print(f"✓ Imported {count} contexts [{LANG}]")
 
     return count
 
@@ -70,18 +76,21 @@ def import_matrices_basic(conn: duckdb.DuckDBPyConnection) -> int:
 
     # Read and import CSV (just code and name for now)
     conn.execute(f"""
-        INSERT INTO matrices (matrix_code, matrix_name)
+        INSERT INTO matrices (matrix_code, lang, matrix_name)
         SELECT
             code as matrix_code,
+            '{LANG}' as lang,
             name as matrix_name
         FROM read_csv('{MATRICES_CSV}',
                       header=true,
                       delim=',',
                       auto_detect=true)
+        ON CONFLICT (matrix_code, lang) DO UPDATE SET
+            matrix_name = excluded.matrix_name
     """)
 
-    count = conn.execute("SELECT COUNT(*) FROM matrices").fetchone()[0]
-    print(f"✓ Imported {count} matrices (basic info)")
+    count = conn.execute("SELECT COUNT(*) FROM matrices WHERE lang = ?", [LANG]).fetchone()[0]
+    print(f"✓ Imported {count} matrices (basic info) [{LANG}]")
 
     return count
 
@@ -193,7 +202,7 @@ def enrich_matrix_metadata(conn: duckdb.DuckDBPyConnection, matrix_code: str) ->
                 row_count = ?,
                 file_size_bytes = ?,
                 parquet_path = ?
-            WHERE matrix_code = ?
+            WHERE matrix_code = ? AND lang = ?
         """, [
             context_code,
             ancestor_codes,
@@ -220,7 +229,8 @@ def enrich_matrix_metadata(conn: duckdb.DuckDBPyConnection, matrix_code: str) ->
             row_count,
             file_size_bytes,
             parquet_path,
-            matrix_code
+            matrix_code,
+            LANG
         ])
 
         return True
@@ -269,9 +279,9 @@ def import_dimensions(conn: duckdb.DuckDBPyConnection, matrix_code: str) -> int:
             # Insert dimension
             conn.execute("""
                 INSERT INTO dimensions
-                (dimension_id, matrix_code, dim_code, dim_label, dim_column_name, option_count)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, [dim_id, matrix_code, dim_idx, dim_label, dim_column_name, option_count])
+                (dimension_id, matrix_code, lang, dim_code, dim_label, dim_column_name, option_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, [dim_id, matrix_code, LANG, dim_idx, dim_label, dim_column_name, option_count])
 
             # Insert dimension options
             for option in options:
@@ -338,8 +348,8 @@ def main():
             matrices_count = import_matrices_basic(conn)
             log.write(f"Matrices imported (basic): {matrices_count}\n\n")
 
-            # Get list of matrices to enrich
-            matrices = conn.execute("SELECT matrix_code FROM matrices ORDER BY matrix_code").fetchall()
+            # Get list of matrices to enrich (for current lang only)
+            matrices = conn.execute("SELECT matrix_code FROM matrices WHERE lang = ? ORDER BY matrix_code", [LANG]).fetchall()
             matrices_to_process = [m[0] for m in matrices]
 
             if TEST_LIMIT:

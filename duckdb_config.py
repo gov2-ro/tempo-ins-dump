@@ -9,19 +9,25 @@ from pathlib import Path
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
 
+# Language selection — set via TEMPO_LANG env var (default: ro)
+LANG = os.environ.get("TEMPO_LANG", "ro")
+if LANG not in ("ro", "en"):
+    raise ValueError(f"TEMPO_LANG must be 'ro' or 'en', got: {LANG!r}")
+
 # Input paths
-CONTEXT_CSV = DATA_DIR / "1-indexes" / "ro" / "context.csv"
-MATRICES_CSV = DATA_DIR / "1-indexes" / "ro" / "matrices.csv"
-METAS_DIR = DATA_DIR / "2-metas" / "ro"
-ORIGINAL_CSV_DIR = DATA_DIR / "4-datasets" / "ro"  # Original CSVs with text labels
-COMPACT_CSV_DIR = DATA_DIR / "5-compact-datasets" / "ro"  # Compacted CSVs with IDs (TODO: fix compaction issues)
+CONTEXT_CSV = DATA_DIR / "1-indexes" / LANG / "context.csv"
+MATRICES_CSV = DATA_DIR / "1-indexes" / LANG / "matrices.csv"
+METAS_DIR = DATA_DIR / "2-metas" / LANG
+ORIGINAL_CSV_DIR = DATA_DIR / "4-datasets" / LANG  # Original CSVs with text labels
+COMPACT_CSV_DIR = DATA_DIR / "5-compact-datasets" / LANG  # Compacted CSVs with IDs (TODO: fix compaction issues)
 
 # Which CSV source to use for Parquet conversion
 # Options: ORIGINAL_CSV_DIR (text labels, larger) or COMPACT_CSV_DIR (IDs, smaller but has issues)
 CSV_SOURCE_DIR = ORIGINAL_CSV_DIR  # Using original for reliability
 
 # Output paths
-PARQUET_DIR = DATA_DIR / "parquet" / "ro"
+PARQUET_DIR = DATA_DIR / "parquet" / LANG
+PARQUET_V2_DIR = DATA_DIR / "parquet-v2" / LANG
 DB_FILE = DATA_DIR / "tempo_metadata.duckdb"
 LOGS_DIR = DATA_DIR / "logs"
 
