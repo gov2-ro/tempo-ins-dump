@@ -1,6 +1,5 @@
 see also [data analysis.md](data analysis.md), [chart-framework-spec.md](chart-framework-spec.md)
 
-
 # 260323
 
 ## Rules
@@ -10,18 +9,17 @@ see also [data analysis.md](data analysis.md), [chart-framework-spec.md](chart-f
 - where bar chart needed, offer stacked/grouped option an line chart - with a toggle
 - where choropleth also stacked bar chart - can be unstacked -> grouped
 - sex + age -> Population pyramid 
-- where multiple (at least 2) categories - bubble matrix. where more than 2, choose pairs. 
+- where multiple (at least 2) categories - bubble matrix. where more than 2, choose pairs with a toggle
 
-options:
-- has geo
-- has age
-- has gender
-- has how many dimensions?
+where there are more dimensions add a toggler for charts. either chose one dimension or dimension pairs
 
-most are simple!
+where one dimensino has only one option (excluding total) ignore it - specify somewhere
 
+Where CAEN equivalents, pick just one (offer a selector at the top)
 
-- Where CAEN, just one
+INT109A - dimensions have parents in different columns, offer a tree like selector on top. and in the charts show only the selected dimension, can be a parent or a child
+
+---
 
 ## TUR105G
 judete, regiuni, macroregiuni
@@ -64,14 +62,43 @@ Snapshot: Choropleth (filter by categorii - single select), bar-chart (stacked/g
 Timeline: 2 bar charts, stacked with categorii or geo as series (filter by the other dimension)
 
 ## LOC108A
+2 dimensions besides classics
+
+**snapshot**
+
+choropleth - filter by both categorii and medii de rezistenta
+2 bar/line - x: geo, series, categorii or medii de rezidenta
+Matrix bubble categorii vs medii rezidenta
+
+
+**timeline**
+one bar/line chart with 3 modes/toggles, by categorii, medii, geo
+Matrix bubble: x: timeline, y one of the 3 dimensions, then toggles 
+
+
+## TEC101B
+
+caen, tip firma, varsta, statut 
+
+**snapshot**
+
+?
+
+**timeline**
+
+?
+
+
+## INT109A
+dimensions have parents in previous column
+
+have a top filter for this case then treat like before?
 
 
 ----
 
 
-
-
-# Notes on possible charts, by examples
+# Notes on possible charts, by examples (previous)
 
 Intentions: 
 - display relevant charts and filters relative to data 

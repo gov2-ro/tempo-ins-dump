@@ -202,6 +202,10 @@ Prefer editing an existing file to creating a new one.
 
 # Other notes
 
+When detecting things that need to be adressed later, add to docs/backlog.md
+
+to do: create a docs/actvoty-history.md as an activity history. Look into the commits and recreate that from the past. For now add a timestamp and current activities.
+
 When running Python commands, always first activate the following venv `~/devbox/envs/240826/` (/Users/pax/devbox/envs/240826/bin/activate)
 
 See `data/4-datasets-slim-samples/50` and `data/4-datasets-slim-samples/100` first - when samplinga datasets, it contains a smaller number of sample records (50 or 100) for analysis with using less context. 
