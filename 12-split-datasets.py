@@ -10,6 +10,13 @@ Patterns handled:
   B) mixed_metrics  — Split by first dimension (different measured variables)
   C) slash_dims     — Split by semantic category within a mixed dimension
   D) hierarchy      — Split into county-level and locality-level views
+  E) age_granularity — Split age dimension into single-year vs grouped ages
+  F) geo_hierarchy  — Split macroregions/regions/counties into separate datasets
+  G) mixed_time_granularity — Split annual vs monthly Perioade options
+
+When multiple rules fire on the same dataset (e.g. geo + time + um), a
+cross-product of all groups is produced: e.g. LOC108A → 3×2×2 = 12 sub-datasets,
+each clean on all split dimensions simultaneously.
 
 Usage:
     python 12-split-datasets.py                    # Process all
@@ -20,9 +27,11 @@ Usage:
 """
 
 import argparse
+import json
 import logging
 import sys
 import time
+from itertools import product as iterproduct
 from pathlib import Path
 from collections import defaultdict
 
@@ -61,7 +70,8 @@ def ensure_schema(conn):
             parquet_path VARCHAR,
             row_count BIGINT,
             suffix_label VARCHAR,
-            display_name VARCHAR
+            display_name VARCHAR,
+            split_dimensions VARCHAR   -- JSON {col: group_label} for cross-product entries
         )
     """)
 
@@ -264,7 +274,10 @@ def register_sub_dataset(conn, rule: SplitRule, sub_info: dict):
 
     # Insert into dataset_splits
     conn.execute("""
-        INSERT INTO dataset_splits VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO dataset_splits
+            (parent_matrix_code, sub_matrix_code, split_pattern, split_dimension,
+             split_value, parquet_path, row_count, suffix_label, display_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, [rule.matrix_code, sub_code, rule.pattern, rule.split_dimension,
           group.label, sub_info["path"], sub_info["row_count"],
           group.label, display_name])
@@ -306,8 +319,8 @@ def _copy_dimensions(conn, rule: SplitRule, sub_code: str, sub_info: dict):
         if sub_cols is not None and dim_col not in sub_cols:
             continue
 
-        # For slash_dims, filter options to only this group's IDs
-        if rule.pattern == "slash_dims" and parent_dim_id == rule.split_dimension_id:
+        # For slash_dims, geo_hierarchy, mixed_time_granularity: filter options to this group's IDs
+        if rule.pattern in ("slash_dims", "geo_hierarchy", "mixed_time_granularity") and parent_dim_id == rule.split_dimension_id:
             group = sub_info["group"]
             new_dim_id = _next_dim_id(conn)
             conn.execute("""
@@ -355,6 +368,223 @@ def _copy_dimensions(conn, rule: SplitRule, sub_code: str, sub_info: dict):
         new_dim_code += 1
 
 
+# Consistent naming order for cross-product suffixes
+_PATTERN_ORDER = [
+    "geo_hierarchy", "mixed_time_granularity", "multi_um",
+    "mixed_metrics", "slash_dims", "age_granularity", "hierarchy",
+]
+
+
+def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bool = False) -> list[dict]:
+    """Split a parquet on multiple dimensions simultaneously (cross-product).
+
+    Returns list of dicts with keys: sub_code, path, row_count, combo, rules.
+    """
+    _v1 = DATA_DIR / "parquet" / "ro" / f"{matrix_code}.parquet"
+    src = _v1 if _v1.exists() else PARQUET_V2_DIR / f"{matrix_code}.parquet"
+    if not src.exists():
+        logger.warning(f"Parquet not found: {src}")
+        return []
+
+    # Sort rules for consistent suffix ordering: geo → time → um → others
+    sorted_rules = sorted(
+        rules,
+        key=lambda r: _PATTERN_ORDER.index(r.pattern) if r.pattern in _PATTERN_ORDER else 99,
+    )
+
+    all_drop_cols = set()
+    for rule in sorted_rules:
+        all_drop_cols.update(rule.drop_columns)
+
+    results = []
+    combos = list(iterproduct(*[rule.groups for rule in sorted_rules]))
+    logger.info(f"  Cross-product: {' × '.join(str(len(r.groups)) for r in sorted_rules)} = {len(combos)} sub-datasets")
+
+    for combo in combos:
+        suffix = "_".join(g.label for g in combo)
+        sub_code = f"{matrix_code}_{suffix}"
+        dst = PARQUET_V3_DIR / f"{sub_code}.parquet"
+
+        if dry_run:
+            logger.info(f"  [DRY-RUN] {matrix_code} -> {sub_code}")
+            results.append({
+                "sub_code": sub_code, "path": str(dst),
+                "row_count": 0, "combo": combo, "rules": sorted_rules,
+            })
+            continue
+
+        all_cols = _get_parquet_columns(conn, src)
+        keep_cols = [c for c in all_cols if c not in all_drop_cols]
+        select = ", ".join(f'"{c}"' for c in keep_cols)
+
+        col_types = {r[0]: r[1] for r in conn.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{src}')"
+        ).fetchall()}
+
+        where_parts = []
+        for rule, group in zip(sorted_rules, combo):
+            split_col = rule.split_dimension
+            split_col_type = col_types.get(split_col, "INTEGER")
+
+            if split_col_type == "VARCHAR" and group.option_labels:
+                labels = [l.strip() for l in group.option_labels.values()]
+                ids_str = ",".join(f"'{l.replace(chr(39), chr(39)+chr(39))}'" for l in labels)
+                where_parts.append(f'TRIM("{split_col}") IN ({ids_str})')
+            else:
+                ids_str = ",".join(str(i) for i in group.option_ids)
+                where_parts.append(f'"{split_col}" IN ({ids_str})')
+
+        where_clause = " AND ".join(where_parts)
+        query = f"""
+            COPY (
+                SELECT {select}
+                FROM read_parquet('{src}')
+                WHERE {where_clause}
+            ) TO '{dst}' (FORMAT PARQUET, COMPRESSION '{PARQUET_COMPRESSION}')
+        """
+        try:
+            conn.execute(query)
+            row_count = conn.execute(
+                f"SELECT COUNT(*) FROM read_parquet('{dst}')"
+            ).fetchone()[0]
+        except Exception as e:
+            logger.error(f"Failed to split {matrix_code} -> {sub_code}: {e}")
+            continue
+
+        logger.debug(f"  {sub_code}: {row_count} rows -> {dst.name}")
+        results.append({
+            "sub_code": sub_code, "path": str(dst),
+            "row_count": row_count, "combo": combo, "rules": sorted_rules,
+        })
+
+    return results
+
+
+def register_cross_product_sub_dataset(conn, matrix_code: str, sub_info: dict):
+    """Register a cross-product sub-dataset in DuckDB metadata."""
+    sub_code = sub_info["sub_code"]
+    combo = sub_info["combo"]
+    rules = sub_info["rules"]
+
+    parent = conn.execute(f"""
+        SELECT matrix_name, context_code FROM matrices WHERE matrix_code = '{matrix_code}'
+    """).fetchone()
+    if not parent:
+        logger.warning(f"Parent matrix {matrix_code} not found")
+        return
+
+    parent_name, context_code = parent
+    display_suffix = " × ".join(g.label for g in combo)
+    display_name = f"{parent_name} [{display_suffix}]"
+
+    split_dims_json = json.dumps(
+        {rule.split_dimension: group.label for rule, group in zip(rules, combo)},
+        ensure_ascii=False,
+    )
+
+    conn.execute("""
+        INSERT INTO matrices (matrix_code, matrix_name, context_code,
+                              parquet_path, row_count, is_split, parent_matrix_code)
+        VALUES (?, ?, ?, ?, ?, TRUE, ?)
+    """, [sub_code, display_name, context_code,
+          sub_info["path"], sub_info["row_count"], matrix_code])
+
+    conn.execute("""
+        INSERT INTO dataset_splits
+            (parent_matrix_code, sub_matrix_code, split_pattern, split_dimension,
+             split_value, parquet_path, row_count, suffix_label, display_name, split_dimensions)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, [matrix_code, sub_code, "cross_product",
+          json.dumps([r.split_dimension for r in rules]),
+          display_suffix,
+          sub_info["path"], sub_info["row_count"],
+          display_suffix, display_name, split_dims_json])
+
+    _copy_dimensions_multi(conn, matrix_code, sub_code, rules, combo, sub_info)
+
+
+def _copy_dimensions_multi(conn, matrix_code: str, sub_code: str,
+                            rules: list, combo: tuple, sub_info: dict):
+    """Copy dimension + option metadata for a cross-product sub-dataset."""
+    if sub_info["row_count"] == 0:
+        return
+
+    try:
+        sub_cols = set(_get_parquet_columns(conn, Path(sub_info["path"])))
+    except Exception:
+        sub_cols = None
+
+    # dim_id -> (rule, group) for split dimensions
+    split_dim_map = {
+        rule.split_dimension_id: (rule, group)
+        for rule, group in zip(rules, combo)
+    }
+    all_drop_cols = set()
+    for rule in rules:
+        all_drop_cols.update(rule.drop_columns)
+
+    parent_dims = conn.execute(f"""
+        SELECT dimension_id, dim_code, dim_label, dim_column_name, option_count
+        FROM dimensions WHERE matrix_code = '{matrix_code}'
+        ORDER BY dim_code
+    """).fetchall()
+
+    new_dim_code = 1
+    for dim in parent_dims:
+        parent_dim_id = dim[0]
+        dim_col = dim[3]
+
+        if dim_col in all_drop_cols:
+            continue
+        if sub_cols is not None and dim_col not in sub_cols:
+            continue
+
+        new_dim_id = _next_dim_id(conn)
+
+        if parent_dim_id in split_dim_map:
+            rule, group = split_dim_map[parent_dim_id]
+            conn.execute("""
+                INSERT INTO dimensions (dimension_id, matrix_code, dim_code,
+                                        dim_label, dim_column_name, option_count)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, [new_dim_id, sub_code, new_dim_code,
+                  group.label, dim_col, len(group.option_ids)])
+
+            for oid in group.option_ids:
+                opts = conn.execute(f"""
+                    SELECT nom_item_id, option_label, option_offset, parent_id
+                    FROM dimension_options WHERE dimension_id = {parent_dim_id}
+                    AND nom_item_id = {oid}
+                """).fetchall()
+                for o in opts:
+                    new_oid = _next_option_id(conn)
+                    conn.execute("""
+                        INSERT INTO dimension_options
+                            (option_id, dimension_id, nom_item_id, option_label, option_offset, parent_id)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, [new_oid, new_dim_id, o[0], o[1], o[2], o[3]])
+        else:
+            conn.execute("""
+                INSERT INTO dimensions (dimension_id, matrix_code, dim_code,
+                                        dim_label, dim_column_name, option_count)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, [new_dim_id, sub_code, new_dim_code, dim[2], dim_col, dim[4]])
+
+            parent_opts = conn.execute(f"""
+                SELECT nom_item_id, option_label, option_offset, parent_id
+                FROM dimension_options WHERE dimension_id = {parent_dim_id}
+            """).fetchall()
+            start_oid = _next_option_id(conn, len(parent_opts))
+            for idx, o in enumerate(parent_opts):
+                conn.execute("""
+                    INSERT INTO dimension_options
+                        (option_id, dimension_id, nom_item_id, option_label, option_offset, parent_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, [start_oid + idx, new_dim_id, o[0], o[1], o[2], o[3]])
+
+        new_dim_code += 1
+
+
 _dim_id_counter = None
 _option_id_counter = None
 
@@ -379,7 +609,8 @@ def _next_option_id(conn, count: int = 1) -> int:
 def main():
     parser = argparse.ArgumentParser(description="Split inconsistent datasets into sub-datasets")
     parser.add_argument("--matrix", help="Process a single matrix code")
-    parser.add_argument("--pattern", choices=["multi_um", "mixed_metrics", "slash_dims", "hierarchy", "age_granularity"],
+    parser.add_argument("--pattern", choices=["multi_um", "mixed_metrics", "slash_dims", "hierarchy",
+                                              "age_granularity", "geo_hierarchy", "mixed_time_granularity"],
                         help="Process only one pattern type")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be done without writing")
     parser.add_argument("--debug", action="store_true", help="Verbose logging")
@@ -426,33 +657,57 @@ def main():
             ensure_schema(conn)
             clean_previous_splits(conn)
 
-        # Process each rule
+        # Group rules by matrix_code — multi-rule datasets get cross-product treatment
+        matrix_rules = defaultdict(list)
+        for rule in rules:
+            matrix_rules[rule.matrix_code].append(rule)
+
+        # Process each matrix
         t0 = time.time()
         total_sub = 0
         total_rows = 0
         errors = 0
+        matrix_list = list(matrix_rules.items())
 
-        for i, rule in enumerate(rules, 1):
-            logger.info(f"\n[{i}/{len(rules)}] {rule.matrix_code} ({rule.pattern}) "
-                        f"-> {len(rule.groups)} sub-datasets")
-
-            sub_results = split_parquet_by_filter(conn, rule, dry_run=args.dry_run)
-
-            if not args.dry_run:
-                for sub in sub_results:
-                    if sub["row_count"] > 0:
-                        register_sub_dataset(conn, rule, sub)
-                        total_sub += 1
-                        total_rows += sub["row_count"]
-                    else:
-                        errors += 1
+        for i, (matrix_code, mrules) in enumerate(matrix_list, 1):
+            if len(mrules) == 1:
+                rule = mrules[0]
+                logger.info(f"\n[{i}/{len(matrix_list)}] {rule.matrix_code} ({rule.pattern}) "
+                            f"-> {len(rule.groups)} sub-datasets")
+                sub_results = split_parquet_by_filter(conn, rule, dry_run=args.dry_run)
+                if not args.dry_run:
+                    for sub in sub_results:
+                        if sub["row_count"] > 0:
+                            register_sub_dataset(conn, rule, sub)
+                            total_sub += 1
+                            total_rows += sub["row_count"]
+                        else:
+                            errors += 1
+            else:
+                patterns = "+".join(r.pattern for r in mrules)
+                logger.info(f"\n[{i}/{len(matrix_list)}] {matrix_code} (cross-product: {patterns})")
+                sub_results = split_parquet_cross_product(conn, matrix_code, mrules, dry_run=args.dry_run)
+                if not args.dry_run:
+                    for sub in sub_results:
+                        if sub["row_count"] > 0:
+                            register_cross_product_sub_dataset(conn, matrix_code, sub)
+                            total_sub += 1
+                            total_rows += sub["row_count"]
+                        else:
+                            errors += 1
 
         elapsed = time.time() - t0
 
         # Summary
         logger.info("\n" + "=" * 60)
         if args.dry_run:
-            logger.info(f"DRY RUN complete. Would create {sum(len(r.groups) for r in rules)} sub-datasets.")
+            total_expected = sum(
+                (len(mrules[0].groups) if len(mrules) == 1
+                 else sum(1 for _ in iterproduct(*[r.groups for r in mrules])))
+                for mrules in matrix_rules.values()
+            )
+            logger.info(f"DRY RUN complete. Would create {total_expected} sub-datasets "
+                        f"from {len(matrix_rules)} parent datasets.")
         else:
             logger.info(f"Done in {elapsed:.1f}s")
             logger.info(f"  Sub-datasets created: {total_sub}")

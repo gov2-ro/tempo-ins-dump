@@ -1,11 +1,14 @@
 """
 Split rules engine — detects and classifies datasets needing structural splits.
 
-Four patterns:
+Patterns:
   A) multi_um      — Multiple units of measure in UM dimension
   B) mixed_metrics — First dimension contains fundamentally different variables
   C) slash_dims    — One dimension packs multiple semantic types (sex/age/region)
   D) hierarchy     — Parent-child geo columns (Judete + Localitati)
+  E) age_granularity — Age dimension mixes single-year and grouped ages
+  F) geo_hierarchy — Single dimension packs macroregions + dev regions + counties
+  G) mixed_time_granularity — Perioade mixes annual and monthly options
 
 Uses hybrid classification:
   1. dimension_options_parsed.dim_type (primary)
@@ -472,21 +475,179 @@ def detect_age_granularity(conn) -> list[SplitRule]:
     return rules
 
 
+def detect_geo_hierarchy(conn) -> list[SplitRule]:
+    """Pattern F: Single dimension packs macroregions + dev regions + counties.
+
+    Targets dimensions whose label contains 'macroregiuni' AND ('judete' OR 'regiuni'),
+    e.g. "Macroregiuni, regiuni de dezvoltare si judete" (405 datasets)
+    or   "Macroregiuni si regiuni de dezvoltare" (60 datasets, no county level).
+
+    Creates up to 3 sub-datasets per parent:
+      <code>_judete       — county-level rows only   (geo_level='county')
+      <code>_regiuni      — dev-region rows only     (geo_level='region')
+      <code>_macroregiuni — macroregion rows only    (geo_level='macroregion')
+
+    Uses dimension_options_parsed.geo_level for classification.
+    Excludes datasets that are already split sub-datasets.
+    """
+    # Find candidate dimensions
+    dim_rows = conn.execute("""
+        SELECT d.matrix_code, d.dimension_id, d.dim_column_name, d.dim_label
+        FROM dimensions d
+        JOIN matrices m ON m.matrix_code = d.matrix_code
+        WHERE LOWER(d.dim_label) LIKE '%macroregiuni%'
+          AND (LOWER(d.dim_label) LIKE '%judete%' OR LOWER(d.dim_label) LIKE '%regiuni%')
+          AND (m.is_split IS NULL OR m.is_split = FALSE)
+        ORDER BY d.matrix_code
+    """).fetchall()
+
+    if not dim_rows:
+        logger.info("Pattern F (geo_hierarchy): 0 datasets")
+        return []
+
+    # Load geo_level classifications from dimension_options_parsed
+    # geo_level values: 'county', 'region', 'macroregion', 'national'
+    try:
+        geo_parsed = {}
+        for r in conn.execute("""
+            SELECT nom_item_id, geo_level
+            FROM dimension_options_parsed
+            WHERE geo_level IS NOT NULL
+        """).fetchall():
+            geo_parsed[r[0]] = r[1]
+    except Exception:
+        logger.warning("dimension_options_parsed.geo_level not available — skipping Pattern F")
+        return []
+
+    rules = []
+    seen = set()
+
+    for mc, dim_id, dim_col, dim_label in dim_rows:
+        if mc in seen:
+            continue
+        seen.add(mc)
+
+        # Get all option IDs for this dimension
+        opts = conn.execute(f"""
+            SELECT nom_item_id, option_label
+            FROM dimension_options
+            WHERE dimension_id = {dim_id}
+        """).fetchall()
+
+        # Classify each option by geo_level
+        by_level = {"county": {}, "region": {}, "macroregion": {}}
+        for nom_id, label in opts:
+            level = geo_parsed.get(nom_id)
+            if level in by_level:
+                by_level[level][nom_id] = label
+
+        # Build groups — only emit levels that have options
+        groups = []
+        level_map = [
+            ("judete",       "county"),
+            ("regiuni",      "region"),
+            ("macroregiuni", "macroregion"),
+        ]
+        for suffix, level in level_map:
+            ids = by_level[level]
+            if ids:
+                groups.append(SplitGroup(
+                    label=suffix,
+                    option_ids=list(ids.keys()),
+                    option_labels=ids,
+                ))
+
+        if len(groups) < 2:
+            logger.debug(f"  {mc}: skipped (< 2 classifiable geo levels)")
+            continue
+
+        rules.append(SplitRule(
+            matrix_code=mc,
+            pattern="geo_hierarchy",
+            split_dimension=dim_col,
+            split_dimension_id=dim_id,
+            groups=groups,
+        ))
+
+    logger.info(f"Pattern F (geo_hierarchy): {len(rules)} datasets")
+    return rules
+
+
+def detect_mixed_time_granularity(conn) -> list[SplitRule]:
+    """Pattern G: Perioade dimension has both annual and monthly options.
+
+    Creates two sub-datasets per affected parent:
+      <code>_anual — annual rows only  (time_granularity='annual')
+      <code>_lunar — monthly rows only (time_granularity='monthly')
+
+    Uses dimension_options_parsed.time_granularity for classification.
+    Excludes datasets that are already split sub-datasets.
+    """
+    try:
+        rows = conn.execute("""
+            SELECT d.matrix_code, d.dimension_id, d.dim_column_name,
+                   o.nom_item_id, o.option_label, p.time_granularity
+            FROM dimensions d
+            JOIN matrices m ON m.matrix_code = d.matrix_code
+            JOIN dimension_options o ON o.dimension_id = d.dimension_id
+            LEFT JOIN dimension_options_parsed p ON p.nom_item_id = o.nom_item_id
+            WHERE LOWER(d.dim_label) LIKE '%perioade%'
+              AND (m.is_split IS NULL OR m.is_split = FALSE)
+              AND p.time_granularity IN ('annual', 'monthly')
+            ORDER BY d.matrix_code, p.time_granularity, o.option_label
+        """).fetchall()
+    except Exception as e:
+        logger.warning(f"Pattern G: query failed ({e}) — skipping")
+        return []
+
+    from collections import defaultdict
+    by_matrix = defaultdict(lambda: {"dim_id": None, "dim_col": None, "annual": {}, "monthly": {}})
+    for mc, dim_id, dim_col, nom_id, label, granularity in rows:
+        entry = by_matrix[mc]
+        entry["dim_id"] = dim_id
+        entry["dim_col"] = dim_col
+        entry[granularity][nom_id] = label
+
+    rules = []
+    for mc, data in by_matrix.items():
+        if not data["annual"] or not data["monthly"]:
+            continue
+        groups = [
+            SplitGroup(label="anual", option_ids=list(data["annual"].keys()), option_labels=data["annual"]),
+            SplitGroup(label="lunar", option_ids=list(data["monthly"].keys()), option_labels=data["monthly"]),
+        ]
+        rules.append(SplitRule(
+            matrix_code=mc,
+            pattern="mixed_time_granularity",
+            split_dimension=data["dim_col"],
+            split_dimension_id=data["dim_id"],
+            groups=groups,
+        ))
+
+    logger.info(f"Pattern G (mixed_time_granularity): {len(rules)} datasets")
+    return rules
+
+
 def detect_all(conn) -> list[SplitRule]:
     """Run all detectors. Deduplicates: if a dataset matches multi_um AND mixed_metrics,
-    prefer mixed_metrics (more specific)."""
+    prefer mixed_metrics (more specific). Multiple rules per matrix_code are allowed
+    when they target different dimensions (e.g. geo + time + um) — the executor will
+    produce cross-product sub-datasets in that case."""
     multi_um = detect_multi_um(conn)
     mixed_metrics = detect_mixed_metrics(conn)
     slash_dims = detect_slash_dims(conn)
     hierarchy = detect_hierarchy(conn)
     age_gran = detect_age_granularity(conn)
+    geo_hier = detect_geo_hierarchy(conn)
+    mixed_time = detect_mixed_time_granularity(conn)
 
     # Deduplicate: mixed_metrics supersedes multi_um for the same dataset
     mixed_metric_codes = {r.matrix_code for r in mixed_metrics}
     multi_um = [r for r in multi_um if r.matrix_code not in mixed_metric_codes]
 
-    all_rules = multi_um + mixed_metrics + slash_dims + hierarchy + age_gran
-    logger.info(f"Total split rules: {len(all_rules)} across {len(set(r.matrix_code for r in all_rules))} datasets")
+    all_rules = multi_um + mixed_metrics + slash_dims + hierarchy + age_gran + geo_hier + mixed_time
+    total_datasets = len(set(r.matrix_code for r in all_rules))
+    logger.info(f"Total split rules: {len(all_rules)} across {total_datasets} datasets")
     return all_rules
 
 
