@@ -114,7 +114,7 @@ def detect_multi_um(conn) -> list[SplitRule]:
                dopt.nom_item_id, dopt.option_label
         FROM dimensions d
         JOIN dimension_options dopt ON d.dimension_id = dopt.dimension_id
-        WHERE LOWER(d.dim_label) LIKE 'um:%'
+        WHERE (LOWER(d.dim_label) LIKE 'um:%' OR LOWER(d.dim_label) LIKE 'unitati de masura%')
         ORDER BY d.matrix_code, dopt.option_label
     """).fetchall()
 

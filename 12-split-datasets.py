@@ -85,18 +85,29 @@ def ensure_schema(conn):
     logger.info("Schema ready (dataset_splits table created)")
 
 
-def clean_previous_splits(conn):
-    """Remove previously generated split entries from matrices, dimensions, dimension_options."""
-    # Find existing splits
-    existing = conn.execute("""
-        SELECT matrix_code FROM matrices WHERE is_split = TRUE
-    """).fetchall()
+def clean_previous_splits(conn, parent_matrix_code: str = None):
+    """Remove previously generated split entries from matrices, dimensions, dimension_options.
 
-    if not existing:
-        return
-
-    codes = [r[0] for r in existing]
-    logger.info(f"Cleaning {len(codes)} previous split entries from metadata")
+    If parent_matrix_code is given, only remove splits for that parent.
+    """
+    if parent_matrix_code:
+        existing = conn.execute("""
+            SELECT sub_matrix_code FROM dataset_splits WHERE parent_matrix_code = ?
+        """, [parent_matrix_code]).fetchall()
+        codes = [r[0] for r in existing]
+        if not codes:
+            return
+        logger.info(f"Cleaning {len(codes)} previous splits for {parent_matrix_code}")
+        conn.execute("DELETE FROM dataset_splits WHERE parent_matrix_code = ?", [parent_matrix_code])
+    else:
+        existing = conn.execute("""
+            SELECT matrix_code FROM matrices WHERE is_split = TRUE
+        """).fetchall()
+        if not existing:
+            return
+        codes = [r[0] for r in existing]
+        logger.info(f"Cleaning {len(codes)} previous split entries from metadata")
+        conn.execute("DELETE FROM dataset_splits WHERE sub_matrix_code IN (" + ",".join(f"'{c}'" for c in codes) + ")")
 
     placeholders = ",".join(f"'{c}'" for c in codes)
     conn.execute(f"DELETE FROM dimension_options WHERE dimension_id IN (SELECT dimension_id FROM dimensions WHERE matrix_code IN ({placeholders}))")
@@ -237,6 +248,33 @@ def _get_parquet_columns(conn, parquet_path: Path) -> list[str]:
     return [r[0] for r in schema]
 
 
+def _get_active_option_ids(conn, parquet_path: Path, dim_col: str, parent_opts: list) -> set:
+    """Return set of nom_item_ids that actually appear in the sub-parquet for dim_col.
+    Used to prune dimension options with no data from split sub-dataset metadata."""
+    try:
+        col_types = {r[0]: r[1] for r in conn.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{parquet_path}')"
+        ).fetchall()}
+
+        if dim_col not in col_types:
+            return {o[0] for o in parent_opts}  # column was dropped, keep all
+
+        if col_types[dim_col] == "VARCHAR":
+            label_to_id = {o[1].strip(): o[0] for o in parent_opts}
+            active_labels = {r[0] for r in conn.execute(
+                f'SELECT DISTINCT TRIM("{dim_col}") FROM read_parquet(\'{parquet_path}\')'
+            ).fetchall() if r[0] is not None}
+            return {label_to_id[l] for l in active_labels if l in label_to_id}
+        else:
+            active_ids = {r[0] for r in conn.execute(
+                f'SELECT DISTINCT "{dim_col}" FROM read_parquet(\'{parquet_path}\')'
+            ).fetchall() if r[0] is not None}
+            return active_ids & {o[0] for o in parent_opts}
+    except Exception as e:
+        logger.debug(f"Could not prune options for {dim_col}: {e}")
+        return {o[0] for o in parent_opts}  # fallback: keep all
+
+
 def register_sub_dataset(conn, rule: SplitRule, sub_info: dict):
     """Register a sub-dataset in DuckDB metadata."""
     sub_code = sub_info["sub_code"]
@@ -344,20 +382,25 @@ def _copy_dimensions(conn, rule: SplitRule, sub_code: str, sub_info: dict):
                         VALUES (?, ?, ?, ?, ?, ?)
                     """, [new_oid, new_dim_id, o[0], o[1], o[2], o[3]])
         else:
-            # Copy dimension and all its options as-is
+            # Copy dimension options, pruning any that have no data in the sub-parquet
+            parent_opts = conn.execute(f"""
+                SELECT nom_item_id, option_label, option_offset, parent_id
+                FROM dimension_options WHERE dimension_id = {parent_dim_id}
+            """).fetchall()
+            if sub_info.get("path") and sub_info.get("row_count", 0) > 0:
+                active_ids = _get_active_option_ids(
+                    conn, Path(sub_info["path"]), dim_col, parent_opts
+                )
+                parent_opts = [o for o in parent_opts if o[0] in active_ids]
+
             new_dim_id = _next_dim_id(conn)
             conn.execute("""
                 INSERT INTO dimensions (dimension_id, matrix_code, dim_code,
                                         dim_label, dim_column_name, option_count)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, [new_dim_id, sub_code, new_dim_code,
-                  dim[2], dim_col, dim[4]])
+                  dim[2], dim_col, len(parent_opts)])
 
-            # Copy all options with new option_ids
-            parent_opts = conn.execute(f"""
-                SELECT nom_item_id, option_label, option_offset, parent_id
-                FROM dimension_options WHERE dimension_id = {parent_dim_id}
-            """).fetchall()
             start_oid = _next_option_id(conn, len(parent_opts))
             for idx, o in enumerate(parent_opts):
                 conn.execute("""
@@ -564,16 +607,22 @@ def _copy_dimensions_multi(conn, matrix_code: str, sub_code: str,
                         VALUES (?, ?, ?, ?, ?, ?)
                     """, [new_oid, new_dim_id, o[0], o[1], o[2], o[3]])
         else:
-            conn.execute("""
-                INSERT INTO dimensions (dimension_id, matrix_code, dim_code,
-                                        dim_label, dim_column_name, option_count)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, [new_dim_id, sub_code, new_dim_code, dim[2], dim_col, dim[4]])
-
             parent_opts = conn.execute(f"""
                 SELECT nom_item_id, option_label, option_offset, parent_id
                 FROM dimension_options WHERE dimension_id = {parent_dim_id}
             """).fetchall()
+            if sub_info.get("path") and sub_info.get("row_count", 0) > 0:
+                active_ids = _get_active_option_ids(
+                    conn, Path(sub_info["path"]), dim_col, parent_opts
+                )
+                parent_opts = [o for o in parent_opts if o[0] in active_ids]
+
+            conn.execute("""
+                INSERT INTO dimensions (dimension_id, matrix_code, dim_code,
+                                        dim_label, dim_column_name, option_count)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, [new_dim_id, sub_code, new_dim_code, dim[2], dim_col, len(parent_opts)])
+
             start_oid = _next_option_id(conn, len(parent_opts))
             for idx, o in enumerate(parent_opts):
                 conn.execute("""
@@ -655,7 +704,7 @@ def main():
         if not args.dry_run:
             # Prepare schema
             ensure_schema(conn)
-            clean_previous_splits(conn)
+            clean_previous_splits(conn, parent_matrix_code=args.matrix)
 
         # Group rules by matrix_code — multi-rule datasets get cross-product treatment
         matrix_rules = defaultdict(list)

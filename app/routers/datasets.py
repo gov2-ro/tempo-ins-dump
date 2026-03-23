@@ -26,8 +26,8 @@ def list_datasets(
     params = []
 
     if q:
-        where.append("LOWER(m.matrix_name) LIKE LOWER(?)")
-        params.append(f"%{q}%")
+        where.append("(LOWER(m.matrix_name) LIKE LOWER(?) OR LOWER(m.matrix_code) LIKE LOWER(?))")
+        params.extend([f"%{q}%", f"%{q}%"])
 
     if context:
         where.append("m.context_code = ?")
@@ -55,7 +55,7 @@ def list_datasets(
 
     # Count total
     count_sql = f"""
-        SELECT COUNT(*)
+        SELECT COUNT(DISTINCT m.matrix_code)
         FROM matrices m
         LEFT JOIN matrix_profiles p ON m.matrix_code = p.matrix_code
         WHERE {where_sql}
@@ -77,10 +77,18 @@ def list_datasets(
             p.time_year_min,
             p.time_year_max,
             p.primary_unit_type,
-            p.time_granularity
+            p.time_granularity,
+            m.is_split,
+            m.parent_matrix_code,
+            COUNT(ds.sub_matrix_code) as split_count
         FROM matrices m
         LEFT JOIN matrix_profiles p ON m.matrix_code = p.matrix_code
+        LEFT JOIN dataset_splits ds ON ds.parent_matrix_code = m.matrix_code
         WHERE {where_sql}
+        GROUP BY m.matrix_code, m.matrix_name, m.context_code, m.ultima_actualizare,
+                 m.row_count, m.mat_max_dim, p.archetype, p.has_time, p.has_geo,
+                 p.time_year_min, p.time_year_max, p.primary_unit_type, p.time_granularity,
+                 m.is_split, m.parent_matrix_code
         ORDER BY {order_by}
         LIMIT ? OFFSET ?
     """
@@ -104,6 +112,9 @@ def list_datasets(
             'time_range': time_range,
             'primary_unit_type': r[11],
             'time_granularity': r[12],
+            'is_split': bool(r[13]),
+            'parent_matrix_code': r[14],
+            'split_count': r[15] or 0,
         })
 
     return {'total': total, 'datasets': datasets}
@@ -118,7 +129,7 @@ def get_dataset(matrix_code: str):
     m = conn.execute("""
         SELECT matrix_code, matrix_name, context_code, ancestor_codes,
                definitie, metodologie, ultima_actualizare, observatii,
-               row_count, mat_max_dim
+               row_count, mat_max_dim, is_split, parent_matrix_code
         FROM matrices
         WHERE matrix_code = ?
     """, [matrix_code]).fetchone()
@@ -230,6 +241,33 @@ def get_dataset(matrix_code: str):
                     names.append(r[0])
             context_path = " > ".join(names)
 
+    # Split variant relationships
+    is_split = bool(m[10])
+    parent_matrix_code = m[11]
+
+    splits = []
+    try:
+        split_rows = conn.execute("""
+            SELECT sub_matrix_code, split_value, row_count, split_dimensions
+            FROM dataset_splits WHERE parent_matrix_code = ?
+            ORDER BY sub_matrix_code
+        """, [matrix_code]).fetchall()
+        splits = [
+            {"matrix_code": r[0], "label": r[1], "row_count": r[2],
+             "split_dimensions": json.loads(r[3]) if r[3] else None}
+            for r in split_rows
+        ]
+    except Exception:
+        pass
+
+    parent_info = None
+    if is_split and parent_matrix_code:
+        pr = conn.execute("""
+            SELECT matrix_code, matrix_name FROM matrices WHERE matrix_code = ?
+        """, [parent_matrix_code]).fetchone()
+        if pr:
+            parent_info = {"matrix_code": pr[0], "matrix_name": pr[1]}
+
     # Fetch enriched metadata for scoring
     def fetch_row(table):
         row = conn.execute(f"SELECT * FROM {table} WHERE matrix_code = ?", [matrix_code]).fetchone()
@@ -283,6 +321,10 @@ def get_dataset(matrix_code: str):
         'observatii': m[7],
         'row_count': m[8],
         'dim_count': m[9],
+        'is_split': is_split,
+        'parent_matrix_code': parent_matrix_code,
+        'splits': splits,
+        'parent': parent_info,
         'profile': profile,
         'dimensions': dimensions,
         'chart_config': chart_config,
