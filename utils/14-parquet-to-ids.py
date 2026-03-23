@@ -18,12 +18,22 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 DB_FILE = DATA_DIR / "tempo_metadata.duckdb"
-PARQUET_DIR = DATA_DIR / "parquet" / "ro"
-PARQUET_V2_DIR = DATA_DIR / "parquet-v2" / "ro"
 PARQUET_COMPRESSION = 'snappy'
 VALUE_COLUMN = 'value'
 
 DEBUG = '--debug' in sys.argv
+
+# Language selection
+import argparse as _ap
+_parser = _ap.ArgumentParser(add_help=False)
+_parser.add_argument('--lang', default='ro', choices=['ro', 'en'])
+_parser.add_argument('--matrix')
+_parser.add_argument('--force', action='store_true')
+_parser.add_argument('--debug', action='store_true')
+_known, _ = _parser.parse_known_args()
+LANG = _known.lang
+PARQUET_DIR = DATA_DIR / "parquet" / LANG
+PARQUET_V2_DIR = DATA_DIR / "parquet-v2" / LANG
 
 
 def build_label_to_id_map(conn):
@@ -52,13 +62,13 @@ def convert_matrix(matrix_code, conn, label_map):
     if not src.exists():
         return {'error': f"Source parquet not found: {src}"}
 
-    # Get dimensions for this matrix
+    # Get dimensions for this matrix (lang-specific)
     dims = conn.execute("""
         SELECT dimension_id, dim_code, dim_column_name
         FROM dimensions
-        WHERE matrix_code = ?
+        WHERE matrix_code = ? AND lang = ?
         ORDER BY dim_code
-    """, [matrix_code]).fetchall()
+    """, [matrix_code, LANG]).fetchall()
 
     if not dims:
         return {'error': "No dimensions found in metadata"}
@@ -125,13 +135,12 @@ def main():
     print(f"  Output: {PARQUET_V2_DIR}")
     print(f"  DB:     {DB_FILE}")
 
+    print(f"  Lang:   {LANG}")
+
     # Single matrix mode
-    single_matrix = None
-    if '--matrix' in sys.argv:
-        idx = sys.argv.index('--matrix')
-        if idx + 1 < len(sys.argv):
-            single_matrix = sys.argv[idx + 1]
-            print(f"\n  Single matrix mode: {single_matrix}")
+    single_matrix = _known.matrix
+    if single_matrix:
+        print(f"\n  Single matrix mode: {single_matrix}")
 
     conn = duckdb.connect(str(DB_FILE), read_only=False)
 
@@ -146,9 +155,9 @@ def main():
         matrices = conn.execute("""
             SELECT matrix_code
             FROM matrices
-            WHERE parquet_path IS NOT NULL
+            WHERE parquet_path IS NOT NULL AND lang = ?
             ORDER BY matrix_code
-        """).fetchall()
+        """, [LANG]).fetchall()
 
     total = len(matrices)
     print(f"\nConverting {total} parquet files...\n")
@@ -164,7 +173,7 @@ def main():
     for i, (matrix_code,) in enumerate(matrices, 1):
         # Skip if already converted (unless --force)
         dst = PARQUET_V2_DIR / f"{matrix_code}.parquet"
-        if dst.exists() and '--force' not in sys.argv:
+        if dst.exists() and not _known.force:
             skipped += 1
             continue
 
