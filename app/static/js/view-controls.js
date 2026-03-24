@@ -224,7 +224,7 @@ class ViewControlsPanel {
 
         const btn = document.createElement('button');
         btn.className = 'multi-select-btn';
-        const allMode = defaults.length === 0;
+        const allMode = defaults.length === 0 || defaults.length === filtered.length;
         btn.textContent = allMode ? 'All' : `Select (${defaults.length})`;
 
         const dropdown = document.createElement('div');
@@ -266,10 +266,7 @@ class ViewControlsPanel {
         return {
             element: wrapper,
             getValue: () => {
-                const total = dropdown.querySelectorAll('input').length;
                 const checked = dropdown.querySelectorAll('input:checked');
-                // All checked = no filter needed
-                if (checked.length === total) return [];
                 return Array.from(checked).map(cb => parseInt(cb.value));
             },
         };

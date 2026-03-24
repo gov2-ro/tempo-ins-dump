@@ -437,9 +437,12 @@ class DatasetPageV2 {
     async fetchTableData() {
         this.showLoading(true);
         try {
-            const data = await API.getDatasetData(this.matrixCode, this.pageFilters, 5000);
+            const filters = this.buildFilters();
+            const data = await API.getDatasetData(this.matrixCode, filters, 5000);
             this.dataTable.update(data, this.metadata);
         } catch (err) {
+            document.getElementById('data-table').innerHTML =
+                `<div class="error-msg" style="padding:20px">${err.message}</div>`;
             console.error('Table fetch error:', err);
         } finally {
             this.showLoading(false);
