@@ -70,11 +70,22 @@ function createChoroplethChart(container, config, data, metadata) {
         }
     }
 
-    // Filter to county-level geo IDs only (for map)
+    // Filter to county-level geo IDs only (for map) — v2 integer nom_item_id case
     const countyIds = new Set();
     for (const [id, info] of Object.entries(geoNameMap)) {
         if (info.geo_level === 'county') {
             countyIds.add(Number(id));
+        }
+    }
+
+    // For v3 SDMX data where geoId is a string (county name), build a name-based set
+    const countyStringNames = new Set();
+    if (geoDimMeta) {
+        for (const opt of geoDimMeta.options) {
+            if (opt.parsed?.geo_level === 'county') {
+                const name = opt.parsed.geo_name_clean || opt.label;
+                if (name) countyStringNames.add(name);
+            }
         }
     }
 
@@ -88,19 +99,32 @@ function createChoroplethChart(container, config, data, metadata) {
 
     // Build data frames: { timeId: {countyName: value} }
     // Uses last-write-wins per county to deduplicate multiple dimension combos
+    // Handles both v2 (integer nom_item_id) and v3 (SDMX string) geo values
     const framesMaps = {};
     for (const row of rows) {
         const geoId = row[geoIdx];
-        if (!countyIds.has(geoId)) continue;
+
+        let countyName;
+        const isStringGeo = typeof geoId === 'string' && isNaN(Number(geoId));
+        if (isStringGeo) {
+            // v3 SDMX: geoId is already the county name string
+            if (!countyStringNames.has(geoId)) continue;
+            countyName = geoId;
+        } else {
+            // v2: geoId is a nom_item_id integer
+            const numId = Number(geoId);
+            if (!countyIds.has(numId)) continue;
+            const info = geoNameMap[numId];
+            countyName = info ? info.geo_name_clean : null;
+        }
+        if (!countyName) continue;
 
         const timeId = timeIdx !== -1 ? row[timeIdx] : null;
         const value = row[valueIdx];
         if (value === null || value === undefined) continue;
 
         if (!framesMaps[timeId]) framesMaps[timeId] = {};
-        const info = geoNameMap[geoId];
-        const name = info ? info.geo_name_clean : String(geoId);
-        framesMaps[timeId][name] = value;
+        framesMaps[timeId][countyName] = value;
     }
     // Convert to array format
     const frames = {};

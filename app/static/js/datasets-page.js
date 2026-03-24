@@ -179,6 +179,9 @@ class DatasetsPage {
         if (ds.has_geo) {
             meta.appendChild(el('span', { className: 'badge badge-muted badge-sm' }, 'geo'));
         }
+        if (ds.split_count > 0) {
+            meta.appendChild(el('span', { className: 'badge badge-variants badge-sm' }, `${ds.split_count} variants`));
+        }
         card.appendChild(meta);
 
         const footer = el('div', { className: 'card-footer' });

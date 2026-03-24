@@ -44,12 +44,20 @@ class DatasetPageV2 {
             this.parentCode = this.matrixCode;
             this.parentProfile = profile;
 
+            // If this is a sub-dataset, load parent's profile for sibling navigation
+            if (metadata.is_split && metadata.parent_matrix_code) {
+                try {
+                    const parentProf = await API.getViewProfile(metadata.parent_matrix_code);
+                    if (parentProf) {
+                        this.parentProfile = parentProf;
+                        this.parentCode = metadata.parent_matrix_code;
+                    }
+                } catch {}
+            }
+
             if (!this.profile) {
                 console.warn('No view profile found, falling back to v1 layout');
             }
-
-            // Sub-dataset switching deferred — render bar but don't auto-switch
-            // TODO: auto-switch to first sub-dataset once sub-dataset profiles/data are ready
 
             // Load GeoJSON if geo archetype
             if (this.profile?.archetype === 'geo_time') {

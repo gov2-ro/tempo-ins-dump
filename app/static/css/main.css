@@ -116,6 +116,7 @@ a:hover { text-decoration: underline; }
 .badge-primary { background: var(--primary-light); color: var(--primary); }
 .badge-accent { background: #fef3c7; color: #92400e; }
 .badge-muted { background: var(--border-light); color: var(--text-light); }
+.badge-variants { background: #e8f0fe; color: #1a56db; }
 .badge-sm { padding: 2px 6px; font-size: 10px; }
 
 /* Buttons */
