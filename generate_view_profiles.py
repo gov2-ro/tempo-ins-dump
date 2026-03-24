@@ -53,6 +53,29 @@ TOTAL_PATTERNS = [
     re.compile(r'^ambele\s+sexe', re.IGNORECASE),
 ]
 
+# Composite dimension detection: column name has 2+ of these keywords
+COMPOSITE_KEYWORDS = {
+    'gender':    re.compile(r'\bsexe?\b', re.IGNORECASE),
+    'age':       re.compile(r'grupe_de_varst|varst', re.IGNORECASE),
+    'education': re.compile(r'nivel_de_educ|educatie', re.IGNORECASE),
+    'region':    re.compile(r'regi(uni)?', re.IGNORECASE),
+}
+
+SUBGROUP_LABELS = {
+    'gender': 'Gen',
+    'age': 'Grupe de varsta',
+    'education': 'Nivel de educatie',
+    'region': 'Regiuni',
+}
+
+# Option label → sub-group classification
+OPTION_LABEL_PATTERNS = [
+    ('gender',    re.compile(r'^(masculin|feminin|b[aă]rba[tț]i|femei)$', re.IGNORECASE)),
+    ('age',       re.compile(r'^\d{1,3}\s*[-\u2013]\s*\d{1,3}\s*ani|\d+\s*ani\s*(si|și)\s*peste', re.IGNORECASE)),
+    ('education', re.compile(r'nivel\s*de\s*educa', re.IGNORECASE)),
+    ('region',    re.compile(r'^(macroregiunea|regiunea)\s', re.IGNORECASE)),
+]
+
 log = logging.getLogger("view-profiler")
 
 
@@ -130,6 +153,22 @@ class MetadataLoader:
         """).fetchall()
         return {r[0] for r in rows}
 
+    def load_options_for_dims(self, dim_ids: list) -> dict:
+        """Returns {dimension_id: [(nom_item_id, option_label), ...]} for given dim IDs."""
+        if not dim_ids:
+            return {}
+        placeholders = ', '.join(['?' for _ in dim_ids])
+        rows = self.conn.execute(f"""
+            SELECT dimension_id, nom_item_id, option_label
+            FROM dimension_options
+            WHERE dimension_id IN ({placeholders})
+            ORDER BY dimension_id, option_id
+        """, dim_ids).fetchall()
+        result = {}
+        for dim_id, nom_item_id, label in rows:
+            result.setdefault(dim_id, []).append((nom_item_id, label))
+        return result
+
     def load_hierarchy_dims(self) -> set:
         """Return set of dimension_ids where >50% options have parent_id."""
         rows = self.conn.execute("""
@@ -141,6 +180,29 @@ class MetadataLoader:
         """).fetchall()
         return {dim_id for dim_id, total, with_parent in rows
                 if total > 0 and with_parent / total > 0.5}
+
+    def load_splits(self) -> dict:
+        """Load dataset_splits: {parent_code: [{code, label, pattern, row_count}, ...]}"""
+        rows = self.conn.execute("""
+            SELECT parent_matrix_code, sub_matrix_code, suffix_label, split_pattern, row_count
+            FROM dataset_splits
+            ORDER BY parent_matrix_code, sub_matrix_code
+        """).fetchall()
+        result = {}
+        for parent, sub, label, pattern, row_count in rows:
+            result.setdefault(parent, []).append({
+                'code': sub, 'label': label or sub,
+                'split_pattern': pattern, 'row_count': row_count,
+            })
+        return result
+
+    def load_split_matrices(self) -> dict:
+        """Load is_split=TRUE matrices with their parent_matrix_code."""
+        rows = self.conn.execute("""
+            SELECT matrix_code, matrix_name, parent_matrix_code
+            FROM matrices WHERE is_split = TRUE
+        """).fetchall()
+        return {r[0]: {'matrix_name': r[1], 'parent_matrix_code': r[2]} for r in rows}
 
     def load_coverage(self) -> dict:
         """Load dataset_coverage keyed by matrix_code."""
@@ -192,6 +254,37 @@ def classify_cardinality(option_count: int) -> str:
     if option_count <= CARD_HIGH[1]:
         return "high"
     return "very_high"
+
+
+def detect_composite_keys(col_name: str) -> list:
+    """Return list of sub-category keys found in column name. Composite if len >= 2."""
+    return [key for key, pat in COMPOSITE_KEYWORDS.items() if pat.search(col_name or '')]
+
+
+def classify_option_label(label: str) -> str | None:
+    """Classify an option label into a sub-category key, or None if unclassified."""
+    for key, pat in OPTION_LABEL_PATTERNS:
+        if pat.search(label or ''):
+            return key
+    return None
+
+
+def build_subgroups(options: list) -> list:
+    """Classify (nom_item_id, label) pairs into sub-groups. Returns [{key, label, ids}]."""
+    groups = {}
+    order = []
+    for nom_item_id, label in options:
+        key = classify_option_label(label)
+        if key is None:
+            continue
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(nom_item_id)
+    return [
+        {'key': k, 'label': SUBGROUP_LABELS.get(k, k), 'ids': groups[k]}
+        for k in order if groups[k]
+    ]
 
 
 def is_caen_label(label: str) -> bool:
@@ -346,7 +439,7 @@ def build_timeline_view(time_dim: dict, analysis_dims: list, geo_dim: dict | Non
         toggles.append("area_stacked")
 
     max_series = None
-    if series_dim and series_dim['option_count'] > 8:
+    if series_dim and series_dim['option_count'] > 8 and not series_dim.get('is_composite'):
         max_series = 8
 
     chart = {
@@ -659,7 +752,19 @@ class ProfileGenerator:
         self.coverage = self.loader.load_coverage()
         self.value_profiles = self.loader.load_value_profiles()
         self.trends = self.loader.load_trends()
-        log.info("Loaded %d datasets", len(self.profiles))
+        self.splits = self.loader.load_splits()
+        self.split_matrices = self.loader.load_split_matrices()
+        log.info("Loaded %d datasets, %d parents with splits",
+                 len(self.profiles), len(self.splits))
+
+        # Pre-detect composite dims and batch-load their options
+        composite_dim_ids = []
+        for dims_raw in self.dimensions.values():
+            for d in dims_raw:
+                if len(detect_composite_keys(d['dim_column_name'] or '')) >= 2:
+                    composite_dim_ids.append(d['dimension_id'])
+        self.composite_options = self.loader.load_options_for_dims(composite_dim_ids)
+        log.info("Found %d composite dimensions", len(composite_dim_ids))
 
     def close(self):
         self.loader.close()
@@ -682,7 +787,17 @@ class ProfileGenerator:
             dtype = self.dim_types.get(dim_id, 'indicator')
             has_total = dim_id in self.has_total_set
             has_hier = dim_id in self.hierarchy_set
-            classified.append(classify_dimension(d, dtype, has_total, has_hier))
+            cd = classify_dimension(d, dtype, has_total, has_hier)
+
+            # Composite detection: column name has 2+ sub-category keywords
+            comp_keys = detect_composite_keys(d['dim_column_name'] or '')
+            if len(comp_keys) >= 2 and dim_id in self.composite_options:
+                sg = build_subgroups(self.composite_options[dim_id])
+                if len(sg) >= 2:
+                    cd['is_composite'] = True
+                    cd['subgroups'] = sg
+
+            classified.append(cd)
 
         # Separate by type
         time_dim = next((d for d in classified if d['dim_type'] == 'time'), None)
@@ -735,6 +850,7 @@ class ProfileGenerator:
                     "cardinality": d['cardinality'],
                     "is_caen": d['is_caen'],
                     "has_hierarchy": d['has_hierarchy'],
+                    **({"is_composite": True, "subgroups": d['subgroups']} if d.get('is_composite') else {}),
                 }
                 for d in analysis_dims if not d['is_singleton']
             ],
@@ -797,6 +913,10 @@ class ProfileGenerator:
             },
         }
 
+        # Add sub_datasets reference if this parent has splits
+        if matrix_code in self.splits:
+            result["sub_datasets"] = self.splits[matrix_code]
+
         # Remove None values at top level for cleaner JSON
         result = {k: v for k, v in result.items() if v is not None}
 
@@ -809,9 +929,149 @@ class ProfileGenerator:
 
         return result
 
+    def generate_sub_profile(self, matrix_code: str) -> dict | None:
+        """Generate a lightweight view profile for a sub-dataset (is_split=TRUE).
+
+        Sub-datasets don't have matrix_profiles entries, so we build a profile
+        from their dimensions and inherit coverage/trend from the parent.
+        """
+        split_info = self.split_matrices.get(matrix_code)
+        if not split_info:
+            return None
+
+        parent_code = split_info['parent_matrix_code']
+        parent_profile = self.profiles.get(parent_code)
+        if not parent_profile:
+            log.debug("No parent profile for sub-dataset %s (parent=%s)", matrix_code, parent_code)
+            return None
+
+        dims_raw = self.dimensions.get(matrix_code, [])
+        if not dims_raw:
+            log.debug("No dimensions for sub-dataset %s", matrix_code)
+            return None
+
+        # Use parent's coverage and value profile as fallback
+        cov = self.coverage.get(matrix_code, self.coverage.get(parent_code, {}))
+        vp = self.value_profiles.get(matrix_code, self.value_profiles.get(parent_code, {}))
+        trend = self.trends.get(matrix_code, self.trends.get(parent_code, {}))
+
+        # Classify dims
+        classified = []
+        for d in dims_raw:
+            dim_id = d['dimension_id']
+            dtype = self.dim_types.get(dim_id, 'indicator')
+            has_total = dim_id in self.has_total_set
+            has_hier = dim_id in self.hierarchy_set
+            cd = classify_dimension(d, dtype, has_total, has_hier)
+            classified.append(cd)
+
+        # Separate by type
+        time_dim = next((d for d in classified if d['dim_type'] == 'time'), None)
+        geo_dim = next((d for d in classified if d['dim_type'] == 'geo'), None)
+        unit_dim = next((d for d in classified if d['dim_type'] == 'unit'), None)
+        gender_dim = next((d for d in classified if d['dim_type'] == 'gender'), None)
+        age_dim = next((d for d in classified if d['dim_type'] == 'age'), None)
+        residence_dim = next((d for d in classified if d['dim_type'] == 'residence'), None)
+
+        analysis_dims = [d for d in classified
+                         if d['dim_type'] in ('indicator', 'gender', 'age', 'residence')]
+        singleton_dims = [d['column'] for d in classified if d['is_singleton']]
+
+        multi_unit = False
+        if unit_dim and unit_dim['option_count'] > 1:
+            multi_unit = True
+
+        granularity = cov.get('time_granularity') or parent_profile.get('time_granularity')
+        yr_min = cov.get('time_min_year') or parent_profile.get('time_year_min')
+        yr_max = cov.get('time_max_year') or parent_profile.get('time_year_max')
+
+        dimensions_section = {
+            "time": {
+                "column": time_dim['column'],
+                "label": time_dim['label'],
+                "option_count": time_dim['option_count'],
+                "granularity": granularity,
+                "year_range": [yr_min, yr_max] if yr_min and yr_max else None,
+            } if time_dim else None,
+            "geo": {
+                "column": geo_dim['column'],
+                "label": geo_dim['label'],
+                "option_count": geo_dim['option_count'],
+            } if geo_dim and not geo_dim['is_singleton'] else None,
+            "categories": [
+                {
+                    "column": d['column'],
+                    "label": d['label'],
+                    "option_count": d['option_count'],
+                    "has_total": d['has_total'],
+                    "cardinality": d['cardinality'],
+                    "is_caen": d['is_caen'],
+                    "has_hierarchy": d['has_hierarchy'],
+                }
+                for d in analysis_dims if not d['is_singleton']
+            ],
+            "unit": {
+                "column": unit_dim['column'],
+                "option_count": unit_dim['option_count'],
+                "multi_unit": multi_unit,
+            } if unit_dim else None,
+            "singleton_dims": singleton_dims,
+        }
+
+        # Build views using parent profile fields
+        timeline = build_timeline_view(
+            time_dim, analysis_dims, geo_dim, unit_dim, parent_profile, vp, cov
+        ) if time_dim else None
+
+        snapshot = build_snapshot_view(
+            time_dim, analysis_dims, geo_dim, unit_dim, parent_profile, vp, cov
+        )
+
+        page_controls = []
+        if multi_unit and unit_dim:
+            page_controls.append({
+                "type": "single_select",
+                "column": unit_dim['column'],
+                "label": "Unitate de masura",
+                "scope": "page",
+                "default": "first",
+                "mandatory": True,
+            })
+
+        warnings = generate_warnings(parent_profile, cov, vp, classified)
+
+        result = {
+            "matrix_code": matrix_code,
+            "matrix_name": split_info['matrix_name'],
+            "parent_matrix_code": parent_code,
+            "archetype": parent_profile.get('archetype', 'time_series'),
+            "dim_count": len(dims_raw),
+            "dimensions": dimensions_section,
+            "page_controls": page_controls if page_controls else None,
+            "views": {
+                "timeline": timeline if timeline else {"available": False},
+                "snapshot": snapshot,
+                "table": {"available": True},
+            },
+            "warnings": warnings,
+            "meta": {
+                "profile_version": PROFILE_VERSION,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "fill_rate": round(cov.get('fill_rate') or 0, 3),
+                "row_count": vp.get('row_count'),
+                "trend_direction": trend.get('trend_direction'),
+                "distribution_shape": vp.get('distribution_shape'),
+            },
+        }
+
+        result = {k: v for k, v in result.items() if v is not None}
+        return result
+
     def generate_all(self) -> dict:
         results = {}
         errors = []
+
+        # Parent datasets (from matrix_profiles)
         for code in sorted(self.profiles.keys()):
             try:
                 p = self.generate_profile(code)
@@ -820,6 +1080,20 @@ class ProfileGenerator:
             except Exception as e:
                 log.error("Error generating profile for %s: %s", code, e)
                 errors.append((code, str(e)))
+
+        # Sub-datasets (is_split=TRUE)
+        sub_count = 0
+        for code in sorted(self.split_matrices.keys()):
+            try:
+                p = self.generate_sub_profile(code)
+                if p:
+                    results[code] = p
+                    sub_count += 1
+            except Exception as e:
+                log.error("Error generating sub-profile for %s: %s", code, e)
+                errors.append((code, str(e)))
+        log.info("Generated %d sub-dataset profiles", sub_count)
+
         if errors:
             log.warning("%d errors during generation", len(errors))
             for code, err in errors[:10]:
@@ -936,6 +1210,8 @@ def main():
     try:
         if args.matrix:
             profile = gen.generate_profile(args.matrix)
+            if not profile and args.matrix in gen.split_matrices:
+                profile = gen.generate_sub_profile(args.matrix)
             if profile:
                 out_dir = Path(args.output)
                 out_dir.mkdir(parents=True, exist_ok=True)

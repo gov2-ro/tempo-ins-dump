@@ -86,6 +86,17 @@ data/
 - [x] fetch english labels
 - [ ] revise propfiling
 - [ ] UI
+    - [x] define charting rules
+    - [x] json chart profiles for each dataset
+    - [ ] when charts are split use the children - flag splitted charts
+
+### later 
+- [ ] sdmx ready
+- [ ] ui shortcuts
+- [ ] static site generator + OG previews
+- [ ] generic sdmx ui framewok. md, id etc
+- [ ] nl2sql
+- [ ] notebook ready, publish to kaggle etc
 
 
 ### alpha

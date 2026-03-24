@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dataset — INS TEMPO Explorer</title>
+    <link rel="stylesheet" href="/css/main.css">
+    <link rel="stylesheet" href="/css/dataset.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+</head>
+<body>
+    <header class="app-header">
+        <a href="/" class="logo">INS TEMPO Explorer</a>
+        <nav>
+            <a href="/">Home</a>
+            <a href="/datasets.html">Datasets</a>
+        </nav>
+    </header>
+
+    <div class="breadcrumb" id="breadcrumb">
+        <a href="/">Home</a>
+    </div>
+
+    <div class="dataset-page">
+        <div id="dataset-header" class="dataset-header">
+            <h1>Loading...</h1>
+            <div class="meta-badges"></div>
+        </div>
+
+        <div id="toolbar" class="toolbar">
+            <div class="chart-types"></div>
+            <div class="unit-selector"></div>
+            <div class="spacer"></div>
+        </div>
+
+        <div id="dataset-content" class="dataset-content">
+            <div id="filter-panel" class="filter-panel"></div>
+
+            <div class="chart-area">
+                <div class="chart-container" style="position:relative">
+                    <div id="loading-overlay" class="loading-overlay" style="display:none">
+                        <div class="spinner"></div>
+                    </div>
+                    <div id="main-chart" style="width:100%;height:100%"></div>
+                </div>
+
+                <div id="data-table" class="data-table-container"></div>
+                <div id="table-footer" class="table-footer"></div>
+            </div>
+        </div>
+
+        <div id="dataset-footer" class="dataset-footer"></div>
+    </div>
+
+    <script src="/js/utils.js?v=3"></script>
+    <script src="/js/api.js?v=3"></script>
+    <script src="/js/filter-panel.js?v=3"></script>
+    <script src="/js/chart-geo.js?v=3"></script>
+    <script src="/js/chart-demographic.js?v=3"></script>
+    <script src="/js/chart-new-types.js?v=3"></script>
+    <script src="/js/chart-factory.js?v=3"></script>
+    <script src="/js/data-table.js?v=3"></script>
+    <script src="/js/dataset-page.js?v=3"></script>
+</body>
+</html>

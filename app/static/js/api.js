@@ -37,4 +37,10 @@ const API = {
             limit,
         });
     },
+
+    async getViewProfile(code) {
+        const resp = await fetch(`/view-profiles/${code}.json`);
+        if (!resp.ok) return null;
+        return resp.json();
+    },
 };

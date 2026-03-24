@@ -1,0 +1,451 @@
+/* Dataset V2 — Tabbed 4-View Layout */
+
+/* Inherit dataset.css for shared components (table, filter, chart) */
+
+/* Tab bar */
+.tab-bar {
+    display: flex;
+    gap: 0;
+    padding: 0 24px;
+    background: var(--bg-white);
+    border-bottom: 2px solid var(--border);
+}
+
+.tab-bar .tab {
+    border: none;
+    background: transparent;
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-light);
+    cursor: pointer;
+    position: relative;
+    transition: color 0.15s;
+}
+
+.tab-bar .tab:hover { color: var(--text); }
+
+.tab-bar .tab.active {
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.tab-bar .tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--primary);
+}
+
+.tab-bar .tab:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+/* Page controls (UM selector — above tabs, always visible) */
+.page-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 24px;
+    background: var(--bg-white);
+}
+
+.page-controls:empty { display: none; }
+
+.page-controls label {
+    font-size: 12px;
+    color: var(--text-light);
+    font-weight: 500;
+}
+
+.page-controls select {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px 8px;
+    font-size: 12px;
+    background: var(--bg-white);
+}
+
+/* View controls bar */
+.view-controls-bar {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 10px 24px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border-light);
+    flex-wrap: wrap;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.control-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--text-muted);
+}
+
+/* Pill group */
+.pill-group {
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+}
+
+.pill {
+    border: 1px solid var(--border);
+    background: var(--bg-white);
+    border-radius: 14px;
+    padding: 3px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--text);
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.pill:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.pill.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+}
+
+/* Sub-dataset bar — pill selector for split datasets */
+.sub-dataset-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 24px;
+    background: var(--bg-light, #f8f9fa);
+    border-bottom: 1px solid var(--border);
+}
+
+.sub-dataset-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-light);
+    white-space: nowrap;
+}
+
+.sub-dataset-bar .pill-group {
+    gap: 4px;
+}
+
+.sub-dataset-bar .pill {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.sub-dataset-bar .pill.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+}
+
+/* Select controls */
+.control-select {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 5px 8px;
+    font-size: 12px;
+    background: var(--bg-white);
+    min-width: 160px;
+    max-width: 300px;
+}
+
+.control-select:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+/* Multi-select dropdown */
+.multi-select-wrap {
+    position: relative;
+}
+
+.multi-select-btn {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 5px 12px;
+    font-size: 12px;
+    background: var(--bg-white);
+    cursor: pointer;
+    min-width: 120px;
+    text-align: left;
+}
+
+.multi-select-btn:hover { border-color: var(--primary); }
+
+.multi-select-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 50;
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
+    max-height: 240px;
+    overflow-y: auto;
+    min-width: 200px;
+    padding: 4px 0;
+}
+
+.multi-select-dropdown.hidden { display: none; }
+
+.multi-opt {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.multi-opt:hover { background: var(--primary-light); }
+
+/* Typeahead */
+.typeahead-wrap {
+    position: relative;
+    min-width: 200px;
+}
+
+.typeahead-input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 5px 8px;
+    font-size: 12px;
+    outline: none;
+}
+
+.typeahead-input:focus { border-color: var(--primary); }
+
+.typeahead-tags {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+}
+
+.typeahead-tags:empty { margin-bottom: 0; }
+
+.typeahead-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: var(--primary-light);
+    color: var(--primary);
+    border-radius: 10px;
+    font-size: 11px;
+}
+
+.tag-remove {
+    cursor: pointer;
+    font-size: 13px;
+    opacity: 0.6;
+}
+
+.tag-remove:hover { opacity: 1; }
+
+.typeahead-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 50;
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
+    max-height: 200px;
+    overflow-y: auto;
+    width: 100%;
+}
+
+.typeahead-list.hidden { display: none; }
+
+.typeahead-item {
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.typeahead-item:hover { background: var(--primary-light); }
+
+/* Period browser */
+.period-browser {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.period-btn {
+    border: 1px solid var(--border);
+    background: var(--bg-white);
+    border-radius: var(--radius-sm);
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text);
+    transition: all 0.15s;
+}
+
+.period-btn:hover:not(:disabled) {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.period-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.period-label {
+    font-size: 15px;
+    font-weight: 600;
+    min-width: 120px;
+    text-align: center;
+    color: var(--text);
+}
+
+/* Chart selector (type toggles within a view) */
+.chart-selector {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 24px;
+    background: var(--bg-white);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.chart-selector:empty { display: none; }
+
+.chart-selector .sep {
+    width: 1px;
+    height: 18px;
+    background: var(--border);
+    margin: 0 4px;
+}
+
+.chart-selector .chart-btn {
+    border: 1px solid var(--border);
+    background: var(--bg-white);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--text-light);
+    transition: all 0.15s;
+}
+
+.chart-selector .chart-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.chart-selector .chart-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+}
+
+.chart-selector .variant-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-left: 8px;
+}
+
+/* Warning badges */
+.warning-badges {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.warning-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.warning-badge.info {
+    background: var(--primary-light);
+    color: var(--primary);
+}
+
+.warning-badge.warn {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.warning-badge.error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* View content — full-height layout */
+.v2-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+}
+
+.v2-chart-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.v2-chart-container {
+    flex: 1;
+    min-height: 460px;
+    position: relative;
+    padding: 12px 16px;
+}
+
+.v2-chart-container #main-chart {
+    width: 100%;
+    height: 100%;
+}
+
+/* Table view layout — full width, no sidebar */
+.v2-table-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.v2-table-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}

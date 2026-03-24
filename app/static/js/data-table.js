@@ -1,5 +1,5 @@
 /**
- * Data table component — sortable, paginated, filterable per column
+ * Data table component — sortable, paginated, filterable per column (multiselect)
  */
 class DataTable {
     constructor(container, footerContainer) {
@@ -11,7 +11,15 @@ class DataTable {
         this.sortAsc = true;
         this.page = 0;
         this.pageSize = 50;
-        this.colFilters = {};  // { colIndex: string }
+        this.colFilters = {};  // { colIndex: Set<string> }  empty set = show all
+        this._openDropdown = null;
+        this._closeHandler = (e) => {
+            if (this._openDropdown && !this._openDropdown.contains(e.target)) {
+                this._openDropdown.querySelector('.multiselect-dropdown').style.display = 'none';
+                this._openDropdown = null;
+            }
+        };
+        document.addEventListener('click', this._closeHandler);
     }
 
     update(data, metadata) {
@@ -24,17 +32,109 @@ class DataTable {
     }
 
     _getFilteredRows(rows, columns, labels) {
-        const active = Object.entries(this.colFilters).filter(([, v]) => v.trim());
+        const active = Object.entries(this.colFilters).filter(([, s]) => s.size > 0);
         if (!active.length) return rows;
-        return rows.filter(row => active.every(([idx, term]) => {
+        return rows.filter(row => active.every(([idx, selectedSet]) => {
             const i = Number(idx);
             const col = columns[i];
             const raw = row[i];
             const text = col === 'value'
                 ? String(raw ?? '')
-                : resolveLabel(labels, col, raw).toLowerCase();
-            return text.includes(term.trim().toLowerCase());
+                : resolveLabel(labels, col, raw);
+            return selectedSet.has(text);
         }));
+    }
+
+    _buildSelectOptions(colIdx, columns, labels) {
+        const col = columns[colIdx];
+        const vals = [...new Set(this.data.rows.map(r => {
+            const raw = r[colIdx];
+            return col === 'value' ? String(raw ?? '') : resolveLabel(labels, col, raw);
+        }))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        return vals;
+    }
+
+    _createMultiselect(colIdx, columns, labels, table) {
+        const opts = this._buildSelectOptions(colIdx, columns, labels);
+        const selected = this.colFilters[colIdx] || new Set();
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'multiselect-wrapper';
+
+        // Toggle button
+        const btn = document.createElement('button');
+        btn.className = 'multiselect-btn';
+        btn.textContent = selected.size === 0 ? 'All' : `${selected.size} sel.`;
+        if (selected.size > 0) btn.classList.add('has-filter');
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const dd = wrapper.querySelector('.multiselect-dropdown');
+            const isOpen = dd.style.display === 'block';
+            // Close any other open dropdown
+            if (this._openDropdown && this._openDropdown !== wrapper) {
+                this._openDropdown.querySelector('.multiselect-dropdown').style.display = 'none';
+            }
+            dd.style.display = isOpen ? 'none' : 'block';
+            this._openDropdown = isOpen ? null : wrapper;
+        });
+        wrapper.appendChild(btn);
+
+        // Dropdown panel
+        const dd = document.createElement('div');
+        dd.className = 'multiselect-dropdown';
+        dd.style.display = 'none';
+        dd.addEventListener('click', e => e.stopPropagation());
+
+        // "All" option
+        const allLabel = document.createElement('label');
+        allLabel.className = 'multiselect-option';
+        const allCb = document.createElement('input');
+        allCb.type = 'checkbox';
+        allCb.checked = selected.size === 0;
+        allCb.addEventListener('change', () => {
+            this.colFilters[colIdx] = new Set();
+            this.page = 0;
+            this._rerenderBody(table, columns);
+            // Update button text
+            btn.textContent = 'All';
+            btn.classList.remove('has-filter');
+            // Uncheck all individual checkboxes
+            dd.querySelectorAll('.multiselect-item-cb').forEach(cb => cb.checked = false);
+            allCb.checked = true;
+        });
+        allLabel.appendChild(allCb);
+        allLabel.appendChild(document.createTextNode(' All'));
+        dd.appendChild(allLabel);
+
+        // Individual options
+        for (const val of opts) {
+            const label = document.createElement('label');
+            label.className = 'multiselect-option';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'multiselect-item-cb';
+            cb.checked = selected.has(val);
+            cb.addEventListener('change', () => {
+                if (!this.colFilters[colIdx]) this.colFilters[colIdx] = new Set();
+                if (cb.checked) {
+                    this.colFilters[colIdx].add(val);
+                } else {
+                    this.colFilters[colIdx].delete(val);
+                }
+                const sz = this.colFilters[colIdx].size;
+                btn.textContent = sz === 0 ? 'All' : `${sz} sel.`;
+                btn.classList.toggle('has-filter', sz > 0);
+                allCb.checked = sz === 0;
+                this.page = 0;
+                this._rerenderBody(table, columns);
+            });
+            label.appendChild(cb);
+            label.appendChild(document.createTextNode(' ' + val));
+            dd.appendChild(label);
+        }
+
+        wrapper.appendChild(dd);
+        return wrapper;
     }
 
     render() {
@@ -94,25 +194,13 @@ class DataTable {
             headerRow.appendChild(th);
         }
 
-        // Filter row (skip value column)
+        // Filter row — multiselect dropdowns per column (skip value column)
         const filterRow = thead.insertRow();
         filterRow.className = 'filter-row';
         for (let i = 0; i < columns.length; i++) {
             const td = document.createElement('td');
             if (columns[i] !== 'value') {
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.placeholder = '🔍';
-                input.className = 'col-filter-input';
-                input.value = this.colFilters[i] || '';
-                input.addEventListener('input', (e) => {
-                    this.colFilters[i] = e.target.value;
-                    this.page = 0;
-                    this._rerenderBody(table, columns);
-                });
-                // Prevent sort when clicking filter input
-                input.addEventListener('click', e => e.stopPropagation());
-                td.appendChild(input);
+                td.appendChild(this._createMultiselect(i, columns, labels, table));
             }
             filterRow.appendChild(td);
         }
@@ -146,7 +234,6 @@ class DataTable {
     }
 
     _rerenderBody(table, columns) {
-        // Re-filter with current state (colFilters may have changed)
         const { column_labels: lbls, rows } = this.data;
         let sortedRows = [...rows];
         if (this.sortCol >= 0) {
@@ -191,5 +278,4 @@ class DataTable {
             this.footer.appendChild(pag);
         }
     }
-
 }

@@ -169,49 +169,14 @@ function createChoroplethChart(container, config, data, metadata) {
         animationDurationUpdate: 300,
     };
 
-    // Add timeline if multiple time points
-    if (timeIds.length > 1) {
+    // Show year label for the displayed time point
+    if (timeIds.length > 0) {
         option.title = {
             text: timeLabelsClean[defaultTimeIdx] || '',
             right: 20,
             top: 10,
             textStyle: { fontSize: 22, fontWeight: 300, color: '#9ca3af' },
         };
-        option.timeline = {
-            axisType: 'category',
-            data: timeLabelsClean,
-            autoPlay: false,
-            playInterval: 1000,
-            currentIndex: defaultTimeIdx,
-            bottom: 10,
-            left: 80,
-            right: 80,
-            height: 36,
-            label: { fontSize: 11 },
-            controlStyle: { itemSize: 18 },
-        };
-
-        // Build options for each time point
-        option.baseOption = {
-            timeline: option.timeline,
-            title: option.title,
-            tooltip: option.tooltip,
-            visualMap: option.visualMap,
-            series: option.series,
-        };
-        option.options = timeIds.map((tid, i) => ({
-            title: { text: timeLabelsClean[i] || '' },
-            series: [{
-                data: frames[tid] || [],
-            }],
-        }));
-
-        // Remove top-level duplicates since we're using baseOption
-        delete option.title;
-        delete option.tooltip;
-        delete option.visualMap;
-        delete option.series;
-        delete option.timeline;
     }
 
     chart.setOption(option);

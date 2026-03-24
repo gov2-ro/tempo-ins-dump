@@ -2,7 +2,7 @@
 .dataset-page {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 56px);
+    height: calc(100vh - 97px); /* 56px header + 41px breadcrumb */
 }
 
 /* Dataset header */
@@ -238,7 +238,7 @@
 /* Data table */
 .data-table-container {
     border-top: 1px solid var(--border);
-    max-height: 300px;
+    flex: 1;
     overflow: auto;
 }
 
@@ -273,20 +273,58 @@
     border-bottom: 1px solid var(--border);
 }
 .data-table-container .filter-row:hover td { background: var(--bg); }
-.col-filter-input {
+/* Multiselect column filter */
+.multiselect-wrapper {
+    position: relative;
+}
+.multiselect-btn {
     width: 100%;
-    padding: 2px 5px;
+    padding: 2px 6px;
     font-size: 11px;
     border: 1px solid var(--border);
     border-radius: 3px;
     background: var(--bg-secondary, #f5f5f5);
     color: var(--text);
-    box-sizing: border-box;
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
-.col-filter-input:focus {
-    outline: none;
+.multiselect-btn.has-filter {
     border-color: var(--primary);
-    background: var(--bg);
+    background: var(--primary-light, #e0f2fe);
+    font-weight: 600;
+}
+.multiselect-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 100;
+    min-width: 180px;
+    max-height: 240px;
+    overflow-y: auto;
+    background: var(--bg-white, #fff);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    padding: 4px 0;
+}
+.multiselect-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.multiselect-option:hover {
+    background: var(--primary-light, #e0f2fe);
+}
+.multiselect-option input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
 }
 
 .data-table-container td {

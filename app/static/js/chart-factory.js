@@ -73,8 +73,18 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
     const timeDim = config.time_dim;
     const seriesDim = config.series_dim;
 
-    const timeIdx = timeDim ? cols.indexOf(timeDim) : -1;
+    let timeIdx = timeDim ? cols.indexOf(timeDim) : -1;
     const seriesIdx = seriesDim ? cols.indexOf(seriesDim) : -1;
+
+    // Fallback: try x_axis_dim if time_dim not found in columns
+    if (timeIdx === -1 && config.x_axis_dim) {
+        timeIdx = cols.indexOf(config.x_axis_dim);
+    }
+    // Last resort: use first dimension column as x-axis
+    if (timeIdx === -1 && cols.length > 1) {
+        timeIdx = 0;
+        console.warn('Time dim not found in data, using first column as x-axis:', cols[0]);
+    }
 
     if (timeIdx === -1) {
         // No time dimension — generic bar chart

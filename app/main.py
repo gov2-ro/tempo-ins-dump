@@ -21,6 +21,11 @@ app.include_router(categories.router, prefix="/api", tags=["categories"])
 app.include_router(datasets.router, prefix="/api", tags=["datasets"])
 app.include_router(dataset_data.router, prefix="/api", tags=["data"])
 
+# Serve view profiles (must come before catch-all static mount)
+view_profiles_dir = Path(__file__).parent.parent / "data" / "view-profiles"
+if view_profiles_dir.exists():
+    app.mount("/view-profiles", StaticFiles(directory=str(view_profiles_dir)), name="view-profiles")
+
 # Serve static frontend
 static_dir = Path(__file__).parent / "static"
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
