@@ -2,6 +2,21 @@
 
 Future tasks and intentions for the TEMPO INS data explorer.
 
+## SDMX / Multi-Source
+
+- [ ] **Phase 5: NL2SQL preparation** — Generate per-dataset JSON schema files, create
+  DuckDB views for all parquet-v3 files, build corpus description for LLM context.
+
+- [ ] **Phase 6: Multi-source adapter** — Eurostat/OECD data ingestion alongside INS data.
+  Design `dataset_registry` table, build Eurostat SDMX-CSV adapter.
+
+- [ ] **English parquet-v3 generation** — Run `12-parquet-to-sdmx.py --lang en` to
+  produce English-language SDMX parquets. Requires English `sdmx_codes` entries
+  (display_label_en already partially populated).
+
+- [ ] **Clean up stale split profile files** — `data/view-profiles/` has ~1,600 old
+  split profiles with `_nom_id` column names. Remove orphaned files not in `dataset_splits` table.
+
 ## Data Pipeline
 
 - [ ] **Replicate geo_hierarchy split for English (`eng`) parquet files**
