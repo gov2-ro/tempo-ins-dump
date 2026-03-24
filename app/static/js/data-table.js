@@ -1,3 +1,5 @@
+function isValueCol(col) { return col === 'value' || col === 'OBS_VALUE'; }
+
 /**
  * Data table component — sortable, paginated, filterable per column (multiselect)
  */
@@ -38,7 +40,7 @@ class DataTable {
             const i = Number(idx);
             const col = columns[i];
             const raw = row[i];
-            const text = col === 'value'
+            const text = isValueCol(col)
                 ? String(raw ?? '')
                 : resolveLabel(labels, col, raw);
             return selectedSet.has(text);
@@ -49,7 +51,7 @@ class DataTable {
         const col = columns[colIdx];
         const vals = [...new Set(this.data.rows.map(r => {
             const raw = r[colIdx];
-            return col === 'value' ? String(raw ?? '') : resolveLabel(labels, col, raw);
+            return isValueCol(col) ? String(raw ?? '') : resolveLabel(labels, col, raw);
         }))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
         return vals;
     }
@@ -177,7 +179,7 @@ class DataTable {
             const th = document.createElement('th');
             const col = columns[i];
             const dim = dims.find(d => d.dim_column_name === col);
-            th.textContent = col === 'value' ? 'Value' : (dim?.dim_label || col);
+            th.textContent = isValueCol(col) ? 'Value' : (dim?.dim_label || col);
             if (this.sortCol === i) {
                 th.innerHTML += `<span class="sort-arrow">${this.sortAsc ? '▲' : '▼'}</span>`;
             }
@@ -199,7 +201,7 @@ class DataTable {
         filterRow.className = 'filter-row';
         for (let i = 0; i < columns.length; i++) {
             const td = document.createElement('td');
-            if (columns[i] !== 'value') {
+            if (!isValueCol(columns[i])) {
                 td.appendChild(this._createMultiselect(i, columns, labels, table));
             }
             filterRow.appendChild(td);
@@ -223,7 +225,7 @@ class DataTable {
             for (let i = 0; i < columns.length; i++) {
                 const td = tr.insertCell();
                 const col = columns[i];
-                if (col === 'value') {
+                if (isValueCol(col)) {
                     td.className = 'value-cell';
                     td.textContent = formatNumber(row[i]);
                 } else {

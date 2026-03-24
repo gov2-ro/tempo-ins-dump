@@ -3,6 +3,7 @@ import json
 from fastapi import APIRouter, Query, HTTPException
 from app.db import get_conn
 from app.config import MAX_DATA_ROWS, LARGE_DATASET_THRESHOLD
+
 from app.services.query_builder import build_data_query
 
 router = APIRouter()
@@ -11,12 +12,13 @@ router = APIRouter()
 @router.get("/datasets/{matrix_code}/data")
 def get_dataset_data(
     matrix_code: str,
-    filters: str = Query("{}", description="JSON: {column_name: [nom_item_id, ...]}"),
+    filters: str = Query("{}", description="JSON: {column_name: [value, ...]}"),
     limit: int = Query(MAX_DATA_ROWS, le=MAX_DATA_ROWS),
 ):
     """Query dataset parquet with dimension filters.
 
-    Returns compact format: rows as ID arrays + column_labels dict.
+    Returns compact format: rows as value arrays + column_labels dict.
+    Parquet-v3 values are human-readable strings (SDMX format).
     """
     conn = get_conn()
 
@@ -67,28 +69,39 @@ def get_dataset_data(
     truncated = len(result) > limit
     rows = result[:limit]
 
-    # Build column_labels: map nom_item_ids to display labels
-    # Collect all unique IDs per dimension column
+    # Build column_labels: map data values to display labels.
+    # Detect v3 (SDMX) vs v2 (nomItemId) by checking if values are strings.
     column_labels = {}
     for i, dim in enumerate(dimensions):
         col = dim['dim_column_name']
-        ids = set()
+        values = set()
         for row in rows:
             if row[i] is not None:
-                ids.add(int(row[i]))
+                values.add(row[i])
 
-        if ids:
-            # Fetch labels from dimension_options
-            id_list = ",".join(str(x) for x in ids)
-            labels = conn.execute(f"""
-                SELECT nom_item_id, option_label
-                FROM dimension_options
-                WHERE nom_item_id IN ({id_list})
-            """).fetchall()
-            column_labels[col] = {str(nom_id): label for nom_id, label in labels}
+        if not values:
+            continue
+
+        # Check if values are strings (v3 SDMX) or integers (v2 nomItemIds)
+        has_string_values = any(isinstance(v, str) for v in values)
+
+        if has_string_values:
+            # v3: values are human-readable labels — identity mapping
+            column_labels[col] = {str(v): str(v) for v in values}
+        else:
+            # v2 fallback: values are integer nomItemIds — resolve via DB
+            int_values = [int(v) for v in values if v is not None]
+            if int_values:
+                id_list = ",".join(str(x) for x in int_values)
+                labels = conn.execute(f"""
+                    SELECT nom_item_id, option_label
+                    FROM dimension_options
+                    WHERE nom_item_id IN ({id_list})
+                """).fetchall()
+                column_labels[col] = {str(nom_id): label for nom_id, label in labels}
 
     # Format column names
-    columns = [d['dim_column_name'] for d in dimensions] + ['value']
+    columns = [d['dim_column_name'] for d in dimensions] + ['OBS_VALUE']
 
     # Convert rows to plain lists
     data_rows = [list(r) for r in rows]
