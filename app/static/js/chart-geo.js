@@ -5,12 +5,52 @@
 
 let _geoJsonData = null;
 let _geoRegistered = false;
+let _regionsData = null;
+let _regionsRegistered = false;
+let _macrosData = null;
+let _macrosRegistered = false;
 
 /**
  * Load and register Romania GeoJSON with ECharts.
+ * geoLevel: 'county' (default) | 'region' | 'macroregion'
  * Returns true if successful.
  */
-async function loadRomaniaGeoJSON() {
+async function loadRomaniaGeoJSON(geoLevel = 'county') {
+    if (geoLevel === 'region') {
+        if (_regionsRegistered) return true;
+        try {
+            if (!_regionsData) {
+                const resp = await fetch('/geo/romania-regions.geojson');
+                if (!resp.ok) throw new Error(`GeoJSON fetch failed: ${resp.status}`);
+                _regionsData = await resp.json();
+            }
+            echarts.registerMap('Romania-regions', _regionsData);
+            _regionsRegistered = true;
+            window._geoDataLoaded = true;
+            return true;
+        } catch (err) {
+            console.error('Failed to load Romania regions GeoJSON:', err);
+            return false;
+        }
+    }
+    if (geoLevel === 'macroregion') {
+        if (_macrosRegistered) return true;
+        try {
+            if (!_macrosData) {
+                const resp = await fetch('/geo/romania-macroregions.geojson');
+                if (!resp.ok) throw new Error(`GeoJSON fetch failed: ${resp.status}`);
+                _macrosData = await resp.json();
+            }
+            echarts.registerMap('Romania-macroregions', _macrosData);
+            _macrosRegistered = true;
+            window._geoDataLoaded = true;
+            return true;
+        } catch (err) {
+            console.error('Failed to load Romania macroregions GeoJSON:', err);
+            return false;
+        }
+    }
+    // county (default)
     if (_geoRegistered) return true;
     try {
         if (!_geoJsonData) {
@@ -70,21 +110,35 @@ function createChoroplethChart(container, config, data, metadata) {
         }
     }
 
-    // Filter to county-level geo IDs only (for map) — v2 integer nom_item_id case
-    const countyIds = new Set();
-    for (const [id, info] of Object.entries(geoNameMap)) {
-        if (info.geo_level === 'county') {
-            countyIds.add(Number(id));
-        }
-    }
-
-    // For v3 SDMX data where geoId is a string (county name), build a name-based set
-    const countyStringNames = new Set();
+    // Detect primary geo level of this dataset
+    const levelCounts = {};
     if (geoDimMeta) {
         for (const opt of geoDimMeta.options) {
-            if (opt.parsed?.geo_level === 'county') {
+            const lvl = opt.parsed?.geo_level;
+            if (lvl) levelCounts[lvl] = (levelCounts[lvl] || 0) + 1;
+        }
+    }
+    const geoLevel = levelCounts['county'] > 0 ? 'county'
+        : levelCounts['region'] > 0 ? 'region'
+        : levelCounts['macroregion'] > 0 ? 'macroregion'
+        : 'county';
+    const mapName = geoLevel === 'county' ? 'Romania'
+        : geoLevel === 'region' ? 'Romania-regions'
+        : 'Romania-macroregions';
+
+    // v2: integer nom_item_id set for detected level
+    const geoIds = new Set();
+    for (const [id, info] of Object.entries(geoNameMap)) {
+        if (info.geo_level === geoLevel) geoIds.add(Number(id));
+    }
+
+    // v3 SDMX: string name set for detected level
+    const geoStringNames = new Set();
+    if (geoDimMeta) {
+        for (const opt of geoDimMeta.options) {
+            if (opt.parsed?.geo_level === geoLevel) {
                 const name = opt.parsed.geo_name_clean || opt.label;
-                if (name) countyStringNames.add(name);
+                if (name) geoStringNames.add(name);
             }
         }
     }
@@ -107,13 +161,13 @@ function createChoroplethChart(container, config, data, metadata) {
         let countyName;
         const isStringGeo = typeof geoId === 'string' && isNaN(Number(geoId));
         if (isStringGeo) {
-            // v3 SDMX: geoId is already the county name string
-            if (!countyStringNames.has(geoId)) continue;
+            // v3 SDMX: geoId is already the geo name string
+            if (!geoStringNames.has(geoId)) continue;
             countyName = geoId;
         } else {
             // v2: geoId is a nom_item_id integer
             const numId = Number(geoId);
-            if (!countyIds.has(numId)) continue;
+            if (!geoIds.has(numId)) continue;
             const info = geoNameMap[numId];
             countyName = info ? info.geo_name_clean : null;
         }
@@ -132,7 +186,7 @@ function createChoroplethChart(container, config, data, metadata) {
         frames[timeId] = Object.entries(map).map(([name, value]) => ({ name, value }));
     }
 
-    // If no county data, fall back to line
+    // If no geo data, fall back to line
     if (Object.keys(frames).length === 0) {
         return createTimeSeriesChart(container, config, data, metadata);
     }
@@ -179,7 +233,7 @@ function createChoroplethChart(container, config, data, metadata) {
         series: [{
             name: metadata.matrix_name || 'Value',
             type: 'map',
-            map: 'Romania',
+            map: mapName,
             roam: true,
             emphasis: {
                 label: { show: true, fontSize: 12 },

@@ -59,9 +59,13 @@ class DatasetPageV2 {
                 console.warn('No view profile found, falling back to v1 layout');
             }
 
-            // Load GeoJSON if geo archetype
+            // Load all GeoJSON levels if geo archetype (supports county/region/macroregion)
             if (this.profile?.archetype === 'geo_time') {
-                await loadRomaniaGeoJSON();
+                await Promise.all([
+                    loadRomaniaGeoJSON('county'),
+                    loadRomaniaGeoJSON('region'),
+                    loadRomaniaGeoJSON('macroregion'),
+                ]);
             }
 
             this.renderHeader();
@@ -230,9 +234,13 @@ class DatasetPageV2 {
                     this.parentProfile.sub_datasets.find(s => s.code === subCode)?.label === p.textContent);
             });
 
-            // Load GeoJSON if needed
+            // Load all GeoJSON levels if needed
             if (this.profile?.archetype === 'geo_time') {
-                await loadRomaniaGeoJSON();
+                await Promise.all([
+                    loadRomaniaGeoJSON('county'),
+                    loadRomaniaGeoJSON('region'),
+                    loadRomaniaGeoJSON('macroregion'),
+                ]);
             }
 
             this.renderPageControls();
@@ -512,19 +520,28 @@ class DatasetPageV2 {
 
         const chartType = this.getActiveChartType();
 
-        // Choropleth overrides: include all counties, strip non-geo/non-time
+        // Choropleth overrides: include all geo features for the detected level
         if (chartType === 'choropleth' && this.profile.dimensions.geo) {
             const geoCol = this.profile.dimensions.geo.column;
             const timeCol = this.profile.dimensions.time?.column;
 
-            // Get county IDs from metadata
+            // Detect actual geo level from options, then include all IDs for that level
             const geoDim = this.metadata.dimensions.find(d => d.dim_column_name === geoCol);
             if (geoDim) {
-                const countyIds = geoDim.options
-                    .filter(o => o.parsed && o.parsed.geo_level === 'county')
+                const levelCounts = {};
+                for (const o of geoDim.options) {
+                    const lvl = o.parsed?.geo_level;
+                    if (lvl) levelCounts[lvl] = (levelCounts[lvl] || 0) + 1;
+                }
+                const targetLevel = levelCounts['county'] > 0 ? 'county'
+                    : levelCounts['region'] > 0 ? 'region'
+                    : levelCounts['macroregion'] > 0 ? 'macroregion'
+                    : 'county';
+                const geoIds = geoDim.options
+                    .filter(o => o.parsed?.geo_level === targetLevel)
                     .map(o => o.nom_item_id);
-                if (countyIds.length > 0) {
-                    filters[geoCol] = countyIds;
+                if (geoIds.length > 0) {
+                    filters[geoCol] = geoIds;
                 }
             }
 
