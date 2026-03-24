@@ -335,6 +335,8 @@ def control_type_for_dim(dim_info: dict, role: str = "filter") -> str:
             return "multi_select"
         return "pill_group"
     # filter role
+    if dim_info['dim_type'] == 'geo':
+        return "multi_select"
     if dim_info['cardinality'] == 'low':
         return "pill_group"
     if dim_info['cardinality'] == 'medium':
@@ -346,6 +348,8 @@ def control_type_for_dim(dim_info: dict, role: str = "filter") -> str:
 
 def default_for_dim(dim_info: dict) -> str:
     """Determine default selection for a dimension."""
+    if dim_info['dim_type'] == 'geo':
+        return "all"
     if dim_info['has_total']:
         return "total"
     return "first"

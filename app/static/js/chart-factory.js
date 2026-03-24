@@ -10,7 +10,7 @@ function resolveRoles(chartConfig) {
     // Merge scored roles with legacy compat fields
     const roles = entry ? entry.roles : {};
     return {
-        time_dim:   roles.timeline || roles.x_axis || chartConfig.time_dim || null,
+        time_dim:   roles.timeline || chartConfig.time_dim || roles.x_axis || null,
         geo_dim:    chartConfig.geo_dim || null,
         series_dim: roles.series || chartConfig.series_dim || null,
         facet_dim:  roles.facet || null,
