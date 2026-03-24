@@ -131,10 +131,24 @@ def generate_sub_matrix_code(matrix_code: str, suffix: str) -> str:
     return f"{matrix_code}_{suffix}"
 
 
+def _nom_ids_to_sdmx(conn, nom_ids: list) -> list:
+    """Translate nom_item_ids → SDMX string values via sdmx_codes table."""
+    if not nom_ids:
+        return []
+    placeholders = ",".join(str(int(i)) for i in nom_ids)
+    rows = conn.execute(
+        f"SELECT sdmx_value FROM sdmx_codes WHERE nom_item_id IN ({placeholders})"
+    ).fetchall()
+    return [r[0] for r in rows if r[0] is not None]
+
+
 def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> list[dict]:
     """Split a parquet file based on a SplitRule. Returns list of sub-dataset info dicts."""
-    # Use parquet-v2 (integer IDs) — parquet v1 has label strings which break the query builder
-    src = PARQUET_V2_DIR / f"{rule.matrix_code}.parquet"
+    # Prefer v3 SDMX source if available; fall back to v2
+    v3_src = PARQUET_V3_DIR / f"{rule.matrix_code}.parquet"
+    v2_src = PARQUET_V2_DIR / f"{rule.matrix_code}.parquet"
+    src = v3_src if v3_src.exists() else v2_src
+    is_src_v3 = (src == v3_src)
     if not src.exists():
         logger.warning(f"Parquet not found: {src}")
         return []
@@ -169,29 +183,41 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> lis
             # Special handling: hierarchy splits are row-level, not column-value
             row_count = _split_hierarchy(conn, src, dst, rule, group)
         else:
-            # Select all columns except the ones we're dropping
-            all_cols = _get_parquet_columns(conn, src)
-            # Map SDMX names → actual v2 parquet column names
-            sdmx_map = _sdmx_to_v2_col_map(conn, rule.matrix_code, src)
-            v2_split_col = sdmx_map.get(split_col, split_col)
-            mapped_drop = {sdmx_map.get(c, c) for c in rule.drop_columns}
-            keep_cols = [c for c in all_cols if c not in mapped_drop]
-            select = ", ".join(f'"{c}"' for c in keep_cols)
-
-            # Detect if parquet uses text labels (VARCHAR) or integer IDs
-            col_types = {r[0]: r[1] for r in conn.execute(
-                f"DESCRIBE SELECT * FROM read_parquet('{src}')"
-            ).fetchall()}
-            split_col_type = col_types.get(v2_split_col, "INTEGER")
-
-            if split_col_type == "VARCHAR" and group.option_labels:
-                # Text-label parquet: filter by label strings (strip both sides)
-                labels = [l.strip() for l in group.option_labels.values()]
-                ids_str = ",".join(f"'{l.replace(chr(39), chr(39)+chr(39))}'" for l in labels)
-                where_clause = f'TRIM("{v2_split_col}") IN ({ids_str})'
+            if is_src_v3:
+                # V3 SDMX source: split_col is already SDMX name (e.g. REF_AREA)
+                # Translate nom_item_ids → SDMX string values for WHERE clause
+                sdmx_values = _nom_ids_to_sdmx(conn, group.option_ids)
+                if not sdmx_values:
+                    logger.warning(f"  No SDMX values found for {rule.matrix_code}/{group.label}")
+                    continue
+                ids_str = ", ".join(f"'{v.replace(chr(39), chr(39)*2)}'" for v in sdmx_values)
+                where_clause = f'CAST("{split_col}" AS VARCHAR) IN ({ids_str})'
+                all_cols = _get_parquet_columns(conn, src)
+                keep_cols = [c for c in all_cols if c not in rule.drop_columns]
+                select = ", ".join(f'"{c}"' for c in keep_cols)
             else:
-                ids_str = ",".join(str(i) for i in group.option_ids)
-                where_clause = f'"{v2_split_col}" IN ({ids_str})'
+                # V2 source: map SDMX names → actual v2 parquet column names
+                all_cols = _get_parquet_columns(conn, src)
+                sdmx_map = _sdmx_to_v2_col_map(conn, rule.matrix_code, src)
+                v2_split_col = sdmx_map.get(split_col, split_col)
+                mapped_drop = {sdmx_map.get(c, c) for c in rule.drop_columns}
+                keep_cols = [c for c in all_cols if c not in mapped_drop]
+                select = ", ".join(f'"{c}"' for c in keep_cols)
+
+                # Detect if parquet uses text labels (VARCHAR) or integer IDs
+                col_types = {r[0]: r[1] for r in conn.execute(
+                    f"DESCRIBE SELECT * FROM read_parquet('{src}')"
+                ).fetchall()}
+                split_col_type = col_types.get(v2_split_col, "INTEGER")
+
+                if split_col_type == "VARCHAR" and group.option_labels:
+                    # Text-label parquet: filter by label strings (strip both sides)
+                    labels = [l.strip() for l in group.option_labels.values()]
+                    ids_str = ",".join(f"'{l.replace(chr(39), chr(39)+chr(39))}'" for l in labels)
+                    where_clause = f'TRIM("{v2_split_col}") IN ({ids_str})'
+                else:
+                    ids_str = ",".join(str(i) for i in group.option_ids)
+                    where_clause = f'"{v2_split_col}" IN ({ids_str})'
 
             query = f"""
                 COPY (
@@ -293,7 +319,9 @@ def _get_active_option_ids(conn, parquet_path: Path, dim_col: str, parent_opts: 
             active_labels = {r[0] for r in conn.execute(
                 f'SELECT DISTINCT TRIM("{dim_col}") FROM read_parquet(\'{parquet_path}\')'
             ).fetchall() if r[0] is not None}
-            return {label_to_id[l] for l in active_labels if l in label_to_id}
+            matched = {label_to_id[l] for l in active_labels if l in label_to_id}
+            # Fallback: if v3 SDMX values don't match Romanian labels, keep all parent options
+            return matched if matched else {o[0] for o in parent_opts}
         else:
             active_ids = {r[0] for r in conn.execute(
                 f'SELECT DISTINCT "{dim_col}" FROM read_parquet(\'{parquet_path}\')'
