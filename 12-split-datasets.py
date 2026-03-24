@@ -122,8 +122,8 @@ def generate_sub_matrix_code(matrix_code: str, suffix: str) -> str:
 
 def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> list[dict]:
     """Split a parquet file based on a SplitRule. Returns list of sub-dataset info dicts."""
-    _v1 = DATA_DIR / "parquet" / "ro" / f"{rule.matrix_code}.parquet"
-    src = _v1 if _v1.exists() else PARQUET_V2_DIR / f"{rule.matrix_code}.parquet"
+    # Use parquet-v2 (integer IDs) — parquet v1 has label strings which break the query builder
+    src = PARQUET_V2_DIR / f"{rule.matrix_code}.parquet"
     if not src.exists():
         logger.warning(f"Parquet not found: {src}")
         return []
@@ -423,8 +423,8 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
 
     Returns list of dicts with keys: sub_code, path, row_count, combo, rules.
     """
-    _v1 = DATA_DIR / "parquet" / "ro" / f"{matrix_code}.parquet"
-    src = _v1 if _v1.exists() else PARQUET_V2_DIR / f"{matrix_code}.parquet"
+    # Use parquet-v2 (integer IDs)
+    src = PARQUET_V2_DIR / f"{matrix_code}.parquet"
     if not src.exists():
         logger.warning(f"Parquet not found: {src}")
         return []
@@ -443,9 +443,16 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
     combos = list(iterproduct(*[rule.groups for rule in sorted_rules]))
     logger.info(f"  Cross-product: {' × '.join(str(len(r.groups)) for r in sorted_rules)} = {len(combos)} sub-datasets")
 
+    seen_codes = {}  # track duplicate sub_codes
     for combo in combos:
         suffix = "_".join(g.label for g in combo)
         sub_code = f"{matrix_code}_{suffix}"
+        # Deduplicate: append _2, _3, etc. if sub_code already used
+        if sub_code in seen_codes:
+            seen_codes[sub_code] += 1
+            sub_code = f"{sub_code}_{seen_codes[sub_code]}"
+        else:
+            seen_codes[sub_code] = 1
         dst = PARQUET_V3_DIR / f"{sub_code}.parquet"
 
         if dry_run:
