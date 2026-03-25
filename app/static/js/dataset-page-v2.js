@@ -181,7 +181,11 @@ class DatasetPageV2 {
 
     async renderSubDatasetBar() {
         const bar = document.getElementById('sub-dataset-bar');
-        const subs = this.parentProfile?.sub_datasets;
+        // Try view profile first, fall back to API metadata splits
+        const subs = this.parentProfile?.sub_datasets
+            || (this.metadata.splits?.length > 0
+                ? this.metadata.splits.map(s => ({ code: s.matrix_code, label: s.label }))
+                : null);
         if (!subs || subs.length === 0) {
             bar.style.display = 'none';
             return;

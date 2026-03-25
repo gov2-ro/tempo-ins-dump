@@ -30,30 +30,16 @@ class ViewControlsPanel {
         const def = control.default;
         if (Array.isArray(def)) return def;
 
-        // Find first non-total option
-        const firstReal = options.find(o => !ViewControlsPanel.TOTAL_RE.test(o.label));
-
-        if (def === 'all') {
-            return options
-                .filter(o => !ViewControlsPanel.TOTAL_RE.test(o.label))
-                .map(o => o.nom_item_id);
-        }
-        if (def === 'total') {
-            // For single_select: pick first real option (can't send empty = too many rows)
-            // For pill_group / multi_select with few opts: empty = all is fine
-            if (control.type === 'single_select') {
-                return firstReal ? [firstReal.nom_item_id] : (options.length ? [options[0].nom_item_id] : []);
-            }
-            // For pill/multi: empty means "no filter" (all values)
-            return [];
-        }
-        if (def === 'first') {
-            return firstReal ? [firstReal.nom_item_id] : (options.length ? [options[0].nom_item_id] : []);
-        }
+        // "latest" — period browser needs last time point
         if (def === 'latest') {
             return options.length ? [options[options.length - 1].nom_item_id] : [];
         }
-        return firstReal ? [firstReal.nom_item_id] : (options.length ? [options[0].nom_item_id] : []);
+
+        // Everything else: select ALL non-Total options by default
+        const allNonTotal = options
+            .filter(o => !ViewControlsPanel.TOTAL_RE.test(o.label))
+            .map(o => o.nom_item_id);
+        return allNonTotal;
     }
 
     render() {
@@ -140,32 +126,50 @@ class ViewControlsPanel {
     renderPillGroup(group, ctrl, options, defaults) {
         const pillWrap = document.createElement('div');
         pillWrap.className = 'pill-group';
-        const selected = new Set(defaults);
 
-        // "All" pill — shown when default is empty (no filter)
-        const showAll = defaults.length === 0;
+        const filtered = options.filter(o => !ViewControlsPanel.TOTAL_RE.test(o.label));
+        const selected = new Set(defaults);
+        const allSelected = () => filtered.every(o => selected.has(o.nom_item_id));
+
+        const updatePillStates = () => {
+            allPill.classList.toggle('active', allSelected());
+            pillWrap.querySelectorAll('.pill:not([data-id="_all"])').forEach(p => {
+                p.classList.toggle('active', selected.has(parseInt(p.dataset.id)));
+            });
+        };
+
+        // "All" pill — toggles all on/off
         const allPill = document.createElement('button');
-        allPill.className = 'pill' + (showAll ? ' active' : '');
+        allPill.className = 'pill' + (allSelected() ? ' active' : '');
         allPill.textContent = 'All';
         allPill.dataset.id = '_all';
         allPill.addEventListener('click', () => {
-            pillWrap.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
-            allPill.classList.add('active');
+            if (allSelected()) {
+                // Deselect all — keep just first
+                selected.clear();
+                if (filtered.length > 0) selected.add(filtered[0].nom_item_id);
+            } else {
+                // Select all
+                for (const o of filtered) selected.add(o.nom_item_id);
+            }
+            updatePillStates();
             this.onChange();
         });
         pillWrap.appendChild(allPill);
 
-        for (const opt of options) {
-            // Skip Total-like options (not in parquet)
-            if (ViewControlsPanel.TOTAL_RE.test(opt.label)) continue;
-
+        for (const opt of filtered) {
             const pill = document.createElement('button');
             pill.className = 'pill' + (selected.has(opt.nom_item_id) ? ' active' : '');
             pill.textContent = opt.label;
             pill.dataset.id = opt.nom_item_id;
             pill.addEventListener('click', () => {
-                pillWrap.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
-                pill.classList.add('active');
+                if (selected.has(opt.nom_item_id)) {
+                    // Don't allow deselecting the last one
+                    if (selected.size > 1) selected.delete(opt.nom_item_id);
+                } else {
+                    selected.add(opt.nom_item_id);
+                }
+                updatePillStates();
                 this.onChange();
             });
             pillWrap.appendChild(pill);
@@ -175,9 +179,9 @@ class ViewControlsPanel {
         return {
             element: pillWrap,
             getValue: () => {
-                const active = pillWrap.querySelector('.pill.active');
-                if (!active || active.dataset.id === '_all') return [];
-                return [parseInt(active.dataset.id)];
+                // All selected = no filter needed (efficient)
+                if (allSelected()) return [];
+                return Array.from(selected);
             },
         };
     }

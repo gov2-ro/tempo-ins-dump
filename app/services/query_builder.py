@@ -31,8 +31,21 @@ def _resolve_parquet_path(matrix_code: str):
     return v3_path  # Will fail at query time with clear error
 
 
+_v3_cache = {}
+
 def _is_v3(parquet_path) -> bool:
-    return "parquet-v3" in str(parquet_path)
+    """Detect v3 SDMX format by checking for OBS_VALUE column (cached)."""
+    key = str(parquet_path)
+    if key not in _v3_cache:
+        try:
+            conn = get_conn()
+            cols = {r[0] for r in conn.execute(
+                f"DESCRIBE SELECT * FROM read_parquet('{key}')"
+            ).fetchall()}
+            _v3_cache[key] = "OBS_VALUE" in cols
+        except Exception:
+            _v3_cache[key] = False
+    return _v3_cache[key]
 
 
 def build_data_query(matrix_code: str, dimensions: list, filters: dict,

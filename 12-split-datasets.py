@@ -167,7 +167,7 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> lis
 
     for group in rule.groups:
         sub_code = generate_sub_matrix_code(rule.matrix_code, group.label)
-        dst = PARQUET_V3_DIR / f"{sub_code}.parquet"
+        dst = (PARQUET_V3_DIR if is_src_v3 else PARQUET_V2_DIR) / f"{sub_code}.parquet"
 
         if dry_run:
             logger.info(f"  [DRY-RUN] {rule.matrix_code} -> {sub_code} "
@@ -395,6 +395,14 @@ def _copy_dimensions(conn, rule: SplitRule, sub_code: str, sub_info: dict):
         # Fallback: use parent dims minus dropped
         sub_cols = None
 
+    # Build SDMX → v2 column name map if sub-parquet uses v2 naming
+    is_sub_v2 = sub_cols is not None and any(c.endswith('_nom_id') for c in sub_cols)
+    sdmx_to_v2 = {}
+    if is_sub_v2:
+        src_path = PARQUET_V2_DIR / f"{rule.matrix_code}.parquet"
+        if src_path.exists():
+            sdmx_to_v2 = _sdmx_to_v2_col_map(conn, rule.matrix_code, src_path)
+
     # Schema: dimension_id, matrix_code, dim_code, dim_label, dim_column_name, option_count
     parent_dims = conn.execute(f"""
         SELECT dimension_id, dim_code, dim_label, dim_column_name, option_count
@@ -407,12 +415,17 @@ def _copy_dimensions(conn, rule: SplitRule, sub_code: str, sub_info: dict):
     for dim in parent_dims:
         parent_dim_id = dim[0]
         dim_col = dim[3]
+        # Resolve actual column name in sub-parquet (may differ from SDMX name)
+        actual_col = sdmx_to_v2.get(dim_col, dim_col)
 
         # Skip dropped columns
         if dim_col in rule.drop_columns:
             continue
-        if sub_cols is not None and dim_col not in sub_cols:
+        if sub_cols is not None and dim_col not in sub_cols and actual_col not in sub_cols:
             continue
+
+        # Use actual parquet column name for DB storage (v2 names for v2-sourced splits)
+        store_col = actual_col if is_sub_v2 else dim_col
 
         # For slash_dims, geo_hierarchy, mixed_time_granularity: filter options to this group's IDs
         if rule.pattern in ("slash_dims", "geo_hierarchy", "mixed_time_granularity") and parent_dim_id == rule.split_dimension_id:
@@ -423,7 +436,7 @@ def _copy_dimensions(conn, rule: SplitRule, sub_code: str, sub_info: dict):
                                         dim_label, dim_column_name, option_count)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, [new_dim_id, sub_code, new_dim_code,
-                  group.label, dim_col, len(group.option_ids)])
+                  group.label, store_col, len(group.option_ids)])
 
             # Copy only matching options
             for oid in group.option_ids:
@@ -445,8 +458,10 @@ def _copy_dimensions(conn, rule: SplitRule, sub_code: str, sub_info: dict):
                 FROM dimension_options WHERE dimension_id = {parent_dim_id}
             """).fetchall()
             if sub_info.get("path") and sub_info.get("row_count", 0) > 0:
+                # Use actual parquet column name for option pruning
+                check_col = actual_col if is_sub_v2 else dim_col
                 active_ids = _get_active_option_ids(
-                    conn, Path(sub_info["path"]), dim_col, parent_opts
+                    conn, Path(sub_info["path"]), check_col, parent_opts
                 )
                 parent_opts = [o for o in parent_opts if o[0] in active_ids]
 
@@ -456,7 +471,7 @@ def _copy_dimensions(conn, rule: SplitRule, sub_code: str, sub_info: dict):
                                         dim_label, dim_column_name, option_count)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, [new_dim_id, sub_code, new_dim_code,
-                  dim[2], dim_col, len(parent_opts)])
+                  dim[2], store_col, len(parent_opts)])
 
             start_oid = _next_option_id(conn, len(parent_opts))
             for idx, o in enumerate(parent_opts):
@@ -510,7 +525,7 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
             sub_code = f"{sub_code}_{seen_codes[sub_code]}"
         else:
             seen_codes[sub_code] = 1
-        dst = PARQUET_V3_DIR / f"{sub_code}.parquet"
+        dst = PARQUET_V2_DIR / f"{sub_code}.parquet"
 
         if dry_run:
             logger.info(f"  [DRY-RUN] {matrix_code} -> {sub_code}")
@@ -624,6 +639,14 @@ def _copy_dimensions_multi(conn, matrix_code: str, sub_code: str,
     except Exception:
         sub_cols = None
 
+    # Build SDMX → v2 column name map if sub-parquet uses v2 naming
+    is_sub_v2 = sub_cols is not None and any(c.endswith('_nom_id') for c in sub_cols)
+    sdmx_to_v2 = {}
+    if is_sub_v2:
+        src_path = PARQUET_V2_DIR / f"{matrix_code}.parquet"
+        if src_path.exists():
+            sdmx_to_v2 = _sdmx_to_v2_col_map(conn, matrix_code, src_path)
+
     # dim_id -> (rule, group) for split dimensions
     split_dim_map = {
         rule.split_dimension_id: (rule, group)
@@ -643,13 +666,16 @@ def _copy_dimensions_multi(conn, matrix_code: str, sub_code: str,
     for dim in parent_dims:
         parent_dim_id = dim[0]
         dim_col = dim[3]
+        actual_col = sdmx_to_v2.get(dim_col, dim_col)
 
         if dim_col in all_drop_cols:
             continue
-        if sub_cols is not None and dim_col not in sub_cols:
+        if sub_cols is not None and dim_col not in sub_cols and actual_col not in sub_cols:
             continue
 
         new_dim_id = _next_dim_id(conn)
+        # Use actual parquet column name for DB storage
+        store_col = actual_col if is_sub_v2 else dim_col
 
         if parent_dim_id in split_dim_map:
             rule, group = split_dim_map[parent_dim_id]
@@ -658,7 +684,7 @@ def _copy_dimensions_multi(conn, matrix_code: str, sub_code: str,
                                         dim_label, dim_column_name, option_count)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, [new_dim_id, sub_code, new_dim_code,
-                  group.label, dim_col, len(group.option_ids)])
+                  group.label, store_col, len(group.option_ids)])
 
             for oid in group.option_ids:
                 opts = conn.execute(f"""
@@ -679,8 +705,9 @@ def _copy_dimensions_multi(conn, matrix_code: str, sub_code: str,
                 FROM dimension_options WHERE dimension_id = {parent_dim_id}
             """).fetchall()
             if sub_info.get("path") and sub_info.get("row_count", 0) > 0:
+                check_col = actual_col if is_sub_v2 else dim_col
                 active_ids = _get_active_option_ids(
-                    conn, Path(sub_info["path"]), dim_col, parent_opts
+                    conn, Path(sub_info["path"]), check_col, parent_opts
                 )
                 parent_opts = [o for o in parent_opts if o[0] in active_ids]
 
@@ -688,7 +715,7 @@ def _copy_dimensions_multi(conn, matrix_code: str, sub_code: str,
                 INSERT INTO dimensions (dimension_id, matrix_code, dim_code,
                                         dim_label, dim_column_name, option_count)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, [new_dim_id, sub_code, new_dim_code, dim[2], dim_col, len(parent_opts)])
+            """, [new_dim_id, sub_code, new_dim_code, dim[2], store_col, len(parent_opts)])
 
             start_oid = _next_option_id(conn, len(parent_opts))
             for idx, o in enumerate(parent_opts):

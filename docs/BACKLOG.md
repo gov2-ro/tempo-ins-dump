@@ -36,13 +36,16 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 - [ ] **v2 UI build** — see `docs/app-spec-v2.md` for full spec
 
-- [ ] **Choropleth: support region-level map** (`_regiuni` sub-datasets)
-  Currently only county-level choropleth is wired up. Dev regions (8) need a separate
-  GeoJSON and chart path.
+- [x] **Choropleth: support region-level map** (`_regiuni` sub-datasets)
+  Done — region + macroregion GeoJSON files generated, multi-level choropleth in chart-geo.js.
 
-- [ ] **Dataset page: show split siblings**
-  When viewing `POP107B_judete`, show links to `POP107B_regiuni` and `POP107B_macroregiuni`.
+- [x] **Dataset page: show split siblings**
+  Done — sub-dataset bar with pills in dataset-page-v2.js, variant drawer in datasets-page.js.
 
 ## Data Quality
+
+- [ ] **Remove Total/aggregate rows from parquet files** — Rows like "Total", "Ambele sexe",
+  "Urban + Rural" cause double-counting when all options are selected. Verify they are actual
+  sums before removing. This would simplify filter logic (no need to exclude Totals in UI).
 
 - [ ] Review `docs/TODO_COMPACTION.md` — label normalisation issues in 7-data-compactor.py

@@ -161,12 +161,11 @@ class DatasetsPage {
     }
 
     renderCard(ds) {
-        const card = el('a', {
-            className: 'dataset-card',
-            href: `/dataset.html?code=${ds.matrix_code}`,
-        });
+        const card = el('div', { className: 'dataset-card' });
 
-        card.appendChild(el('h4', {}, ds.matrix_name));
+        const titleLink = el('a', { href: `/dataset.html?code=${ds.matrix_code}` });
+        titleLink.appendChild(el('h4', {}, ds.matrix_name));
+        card.appendChild(titleLink);
 
         const meta = el('div', { className: 'card-meta' });
         meta.appendChild(el('span', { className: 'badge badge-primary badge-sm' }, ds.archetype));
@@ -180,7 +179,15 @@ class DatasetsPage {
             meta.appendChild(el('span', { className: 'badge badge-muted badge-sm' }, 'geo'));
         }
         if (ds.split_count > 0) {
-            meta.appendChild(el('span', { className: 'badge badge-variants badge-sm' }, `${ds.split_count} variants`));
+            const variantsBadge = el('span', { className: 'badge badge-variants badge-sm' },
+                `${ds.split_count} variants \u25be`);
+            variantsBadge.style.cursor = 'pointer';
+            variantsBadge.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.toggleVariants(card, ds);
+            });
+            meta.appendChild(variantsBadge);
         }
         card.appendChild(meta);
 
@@ -197,6 +204,33 @@ class DatasetsPage {
         }
 
         return card;
+    }
+
+    async toggleVariants(card, ds) {
+        let drawer = card.querySelector('.variants-drawer');
+        if (drawer) {
+            drawer.remove();
+            return;
+        }
+        drawer = el('div', { className: 'variants-drawer' });
+        drawer.textContent = 'Loading...';
+        card.appendChild(drawer);
+
+        try {
+            const detail = await API.getDataset(ds.matrix_code);
+            drawer.innerHTML = '';
+            for (const split of (detail.splits || [])) {
+                drawer.appendChild(el('a', {
+                    className: 'variant-link',
+                    href: `/dataset.html?code=${split.matrix_code}`,
+                }, split.label));
+            }
+            if (!detail.splits?.length) {
+                drawer.textContent = 'No variants found';
+            }
+        } catch (err) {
+            drawer.textContent = 'Failed to load variants';
+        }
     }
 
     renderPagination() {
