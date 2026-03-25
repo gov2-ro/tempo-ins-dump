@@ -106,10 +106,15 @@ def build_data_query(matrix_code: str, dimensions: list, filters: dict,
 
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
 
+    # Sort by time dimension if present
+    col_names = {d['dim_column_name'] for d in dimensions}
+    order_clause = 'ORDER BY "TIME_PERIOD" ASC' if "TIME_PERIOD" in col_names else ""
+
     return f"""
         SELECT {select_clause}
         FROM read_parquet('{parquet_path}')
         {where_sql}
+        {order_clause}
         LIMIT {int(limit)}
     """
 

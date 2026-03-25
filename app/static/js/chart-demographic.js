@@ -38,11 +38,29 @@ function createDemographicChart(container, config, data, metadata) {
         return lbl.replace(/^Anul\s+/, '').replace(/^Trim\w*\s+([IVX]+)\s+/, 'Q$1 ');
     });
 
-    // Get age groups (as ordered in metadata options, not sorted numerically)
+    // Get age groups — detect v3 (string labels) vs v2 (integer nomItemIds)
     const ageDimMeta = metadata.dimensions.find(d => d.dim_column_name === ageDim);
-    const ageOrder = ageDimMeta
-        ? ageDimMeta.options.map(o => o.nom_item_id)
-        : uniqueValues(rows, ageIdx);
+    const sampleVal = rows.find(r => r[ageIdx] !== null)?.[ageIdx];
+    const isStringData = typeof sampleVal === 'string' && isNaN(Number(sampleVal));
+
+    let ageOrder;
+    if (ageDimMeta && isStringData) {
+        // v3: metadata has nomItemIds but data has string labels
+        // Use metadata ordering, match by label
+        const dataVals = new Set(rows.map(r => r[ageIdx]).filter(v => v !== null));
+        ageOrder = ageDimMeta.options
+            .map(o => o.label || o.option_label)
+            .filter(lbl => lbl && dataVals.has(lbl));
+        // Add any data values not in metadata
+        for (const v of dataVals) {
+            if (!ageOrder.includes(v)) ageOrder.push(v);
+        }
+    } else if (ageDimMeta) {
+        // v2: nomItemIds match data values
+        ageOrder = ageDimMeta.options.map(o => o.nom_item_id);
+    } else {
+        ageOrder = uniqueValues(rows, ageIdx);
+    }
     const ageCats = ageOrder.map(id => ageLabels[String(id)] || String(id));
 
     // Get series IDs (genders, etc.)
@@ -82,6 +100,7 @@ function createDemographicChart(container, config, data, metadata) {
                 type: 'bar',
                 data: ageOrder.map(aid => sData[aid] ?? null),
                 itemStyle: { color: colors[i % colors.length] },
+                ...(config._stacked && { stack: 'total' }),
             };
         });
     }

@@ -38,7 +38,11 @@ function groupBy(rows, colIndex) {
 /** Get unique sorted values from a column */
 function uniqueValues(rows, colIndex) {
     const set = new Set(rows.map(r => r[colIndex]).filter(v => v !== null));
-    return [...set].sort((a, b) => a - b);
+    return [...set].sort((a, b) => {
+        const na = Number(a), nb = Number(b);
+        if (!isNaN(na) && !isNaN(nb)) return na - nb;
+        return String(a).localeCompare(String(b));
+    });
 }
 
 /** Create an element with attributes and children */

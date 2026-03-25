@@ -37,6 +37,11 @@ function createChart(container, chartConfig, data, metadata) {
         case 'horizontal_bar':
             return createHorizontalBarChart(container, cfg, data, metadata);
         case 'stacked_bar':
+            // If x_axis is a category (not time), use demographic chart with stacking
+            if (cfg.x_axis_dim && cfg.x_axis_dim !== cfg.time_dim) {
+                cfg._stacked = true;
+                return createDemographicChart(container, cfg, data, metadata);
+            }
             return createStackedBarChart(container, cfg, data, metadata);
         case 'choropleth':
             if (window._geoDataLoaded) {
@@ -102,6 +107,9 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
     });
 
     let series = [];
+    const chartType = config.primary_chart;
+    const isArea = chartType === 'area' || chartType === 'area_stacked';
+    const isStacked = chartType === 'area_stacked';
 
     if (seriesIdx !== -1) {
         // Multiple series
@@ -133,6 +141,8 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
                 smooth: true,
                 data: timeIds.map(tid => dataMap[tid] ?? null),
                 connectNulls: true,
+                ...(isArea && { areaStyle: { opacity: 0.35 } }),
+                ...(isStacked && { stack: 'total' }),
             });
         }
     } else {
@@ -146,6 +156,7 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
             type: forceType || 'line',
             smooth: true,
             data: timeIds.map(tid => dataMap[tid] ?? null),
+            ...(isArea && { areaStyle: { opacity: 0.35 } }),
         });
     }
 

@@ -430,6 +430,7 @@ class DatasetPageV2 {
             // Toggle variants (e.g., line → area_stacked)
             if (chart.toggles) {
                 for (const toggle of chart.toggles) {
+                    if (toggle === chart.chart_type) continue; // Skip self-toggle
                     const tbtn = this.createChartBtn(
                         TYPE_LABELS[toggle] || toggle,
                         i, toggle
