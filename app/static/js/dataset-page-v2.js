@@ -40,9 +40,9 @@ class DatasetPageV2 {
             ]);
 
             this.metadata = metadata;
-            this.profile = profile;
+            this.profile = this.enrichProfile(profile);
             this.parentCode = this.matrixCode;
-            this.parentProfile = profile;
+            this.parentProfile = this.profile;
 
             // If this is a sub-dataset, load parent's profile for sibling navigation
             if (metadata.is_split && metadata.parent_matrix_code) {
@@ -286,6 +286,23 @@ class DatasetPageV2 {
         });
     }
 
+    // --- Profile enrichment ---
+
+    enrichProfile(profile) {
+        // Inject bar/stacked_bar toggles on all line/area charts
+        const BAR_TOGGLES = ['bar', 'stacked_bar'];
+        for (const view of Object.values(profile.views || {})) {
+            for (const chart of view.charts || []) {
+                if (['line', 'area', 'area_stacked'].includes(chart.chart_type)) {
+                    const existing = chart.toggles || [];
+                    const toAdd = BAR_TOGGLES.filter(t => !existing.includes(t));
+                    if (toAdd.length) chart.toggles = [...existing, ...toAdd];
+                }
+            }
+        }
+        return profile;
+    }
+
     // --- View switching ---
 
     switchView(viewName) {
@@ -368,7 +385,7 @@ class DatasetPageV2 {
 
         const TYPE_LABELS = {
             line: 'Line', area: 'Area', area_stacked: 'Stacked Area',
-            bar: 'Bar', horizontal_bar: 'H-Bar',
+            bar: 'Grouped', horizontal_bar: 'H-Bar',
             grouped_bar: 'Grouped', stacked_bar: 'Stacked',
             choropleth: 'Map', population_pyramid: 'Pyramid',
             heatmap: 'Heatmap', bubble: 'Bubble',
