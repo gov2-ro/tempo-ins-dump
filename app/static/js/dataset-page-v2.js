@@ -412,11 +412,21 @@ class DatasetPageV2 {
                 container.appendChild(sep);
             }
 
-            // Variant label
+            // Variant label — resolve column names to dimension labels
             if (chart.variant) {
                 const vl = document.createElement('span');
                 vl.className = 'variant-label';
-                vl.textContent = chart.variant.replace(/^by_/, '').replace(/_/g, ' ');
+                const dimLabel = (col) => {
+                    const cats = this.profile?.dimensions?.categories || [];
+                    const d = cats.find(c => c.column === col);
+                    return d ? d.label.trim() : col.replace(/_/g, ' ');
+                };
+                const m = chart.variant.match(/^(.+?)_by_(.+)$/);
+                if (m) {
+                    vl.textContent = `${dimLabel(m[1])} × ${dimLabel(m[2])}`;
+                } else {
+                    vl.textContent = chart.variant.replace(/^by_/, '').replace(/_/g, ' ');
+                }
                 container.appendChild(vl);
             }
 
@@ -477,6 +487,38 @@ class DatasetPageV2 {
                 this.fetchAndRender();
             });
             container.appendChild(sel);
+        }
+
+        // Dimension pair toggle for bubble chart
+        if (activeChart?.dimension_pair_toggle && this.getActiveChartType() === 'bubble') {
+            const cats = (this.profile.dimensions.categories || [])
+                .filter(d => d.option_count >= 3);
+            if (cats.length > 2) {
+                const sep = document.createElement('span');
+                sep.className = 'sep';
+                container.appendChild(sep);
+
+                const sel = document.createElement('select');
+                sel.className = 'chart-btn';
+                const currentX = this._bubbleRoles?.x_axis || activeChart.roles?.x_axis;
+                const currentS = this._bubbleRoles?.series || activeChart.roles?.series;
+                for (let a = 0; a < cats.length; a++) {
+                    for (let b = a + 1; b < cats.length; b++) {
+                        const opt = document.createElement('option');
+                        opt.value = `${cats[a].column}|${cats[b].column}`;
+                        opt.textContent = `${cats[a].label.trim()} × ${cats[b].label.trim()}`;
+                        if (cats[a].column === currentX && cats[b].column === currentS) opt.selected = true;
+                        if (cats[b].column === currentX && cats[a].column === currentS) opt.selected = true;
+                        sel.appendChild(opt);
+                    }
+                }
+                sel.addEventListener('change', () => {
+                    const [x, s] = sel.value.split('|');
+                    this._bubbleRoles = { x_axis: x, series: s };
+                    this.fetchAndRender();
+                });
+                container.appendChild(sel);
+            }
         }
     }
 
@@ -662,13 +704,19 @@ class DatasetPageV2 {
             ? this._stackByDim
             : (chart?.roles?.series || null);
 
+        // Bubble dim-pair override
+        const bubbleX = (chartType === 'bubble' && this._bubbleRoles)
+            ? this._bubbleRoles.x_axis : null;
+        const bubbleS = (chartType === 'bubble' && this._bubbleRoles)
+            ? this._bubbleRoles.series : null;
+
         return {
             primary_chart: chartType,
             ranked_charts: [{
                 chart_type: chartType,
                 roles: {
-                    x_axis: chart?.roles?.x_axis || null,
-                    series: effectiveSeries,
+                    x_axis: bubbleX || chart?.roles?.x_axis || null,
+                    series: bubbleS || effectiveSeries,
                     timeline: (this.activeView === 'timeline')
                         ? (dims.time?.column || chart?.roles?.x_axis || null)
                         : null,
@@ -677,7 +725,7 @@ class DatasetPageV2 {
             }],
             geo_dim: dims.geo?.column || null,
             time_dim: dims.time?.column || null,
-            series_dim: effectiveSeries,
+            series_dim: bubbleS || effectiveSeries,
             age_dim: dims.age || null,
             gender_dim: dims.gender || null,
             archetype: this.profile.archetype,

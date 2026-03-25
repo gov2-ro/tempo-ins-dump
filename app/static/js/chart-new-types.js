@@ -4,6 +4,59 @@
  */
 
 // ---------------------------------------------------------------------------
+// Shared: metadata-aware dimension value ordering
+// ---------------------------------------------------------------------------
+
+/**
+ * Return ordered unique values for a dimension column, using metadata option
+ * ordering when available.  Handles both v2 (integer nomItemId) and v3 (string
+ * label) data transparently.
+ *
+ * @param {Array} rows       – data rows
+ * @param {number} colIdx    – column index in rows
+ * @param {string} dimName   – dimension column name (e.g. "VARSTA")
+ * @param {object} metadata  – full metadata object with .dimensions[]
+ * @returns {Array} ordered unique values present in data
+ */
+function orderedDimValues(rows, colIdx, dimName, metadata) {
+    if (colIdx === -1) return [];
+    const dataVals = new Set(rows.map(r => r[colIdx]).filter(v => v !== null && v !== undefined));
+    if (dataVals.size === 0) return [];
+
+    const dimMeta = metadata && metadata.dimensions
+        ? metadata.dimensions.find(d => d.dim_column_name === dimName)
+        : null;
+
+    if (!dimMeta || !dimMeta.options || dimMeta.options.length === 0) {
+        return uniqueValues(rows, colIdx);
+    }
+
+    const sampleVal = [...dataVals][0];
+    const isStringData = typeof sampleVal === 'string' && isNaN(Number(sampleVal));
+
+    let ordered;
+    if (isStringData) {
+        // v3: data has string labels, metadata has nomItemIds — match by label
+        ordered = dimMeta.options
+            .map(o => o.label || o.option_label)
+            .filter(lbl => lbl && dataVals.has(lbl));
+        // Append any data values not in metadata
+        for (const v of dataVals) {
+            if (!ordered.includes(v)) ordered.push(v);
+        }
+    } else {
+        // v2: nomItemIds match data values
+        ordered = dimMeta.options
+            .map(o => o.nom_item_id)
+            .filter(id => dataVals.has(id));
+        for (const v of dataVals) {
+            if (!ordered.includes(v)) ordered.push(v);
+        }
+    }
+    return ordered;
+}
+
+// ---------------------------------------------------------------------------
 // Population Pyramid
 // ---------------------------------------------------------------------------
 
@@ -50,8 +103,8 @@ function createPopulationPyramidChart(container, config, data, metadata) {
         ? nonTotalGenders.slice(0, 2)
         : genderIds.slice(0, 2);
 
-    // Age groups in order (exclude "Total" age)
-    const ageIds = uniqueValues(activeRows, ageIdx).filter(id => {
+    // Age groups in order (exclude "Total" age) — use metadata ordering
+    const ageIds = orderedDimValues(activeRows, ageIdx, ageDim, metadata).filter(id => {
         const lbl = (ageLabels[String(id)] || '').trim().toLowerCase();
         return lbl !== 'total' && lbl !== 'toate';
     });
@@ -557,6 +610,84 @@ function createBubbleChart(container, config, data, metadata) {
             animationDuration: 300,
         });
         return chart;
+    }
+
+    // ---- Category bubble matrix mode (dim × dim) ----
+    const xAxisDim = config.x_axis_dim;
+    const xAxisIdx = xAxisDim ? cols.indexOf(xAxisDim) : -1;
+    const catSeriesIdx = seriesIdx !== -1 ? seriesIdx : -1;
+
+    if (xAxisIdx !== -1 && catSeriesIdx !== -1) {
+        const xLbls = labels[xAxisDim] || {};
+        const sLbls = labels[seriesDim] || {};
+
+        const xVals = orderedDimValues(rows, xAxisIdx, xAxisDim, metadata);
+        const yVals = orderedDimValues(rows, catSeriesIdx, seriesDim, metadata);
+
+        // Filter out "Total"-like values
+        const isTotal = lbl => {
+            const l = (lbl || '').trim().toLowerCase();
+            return l === 'total' || l === 'toate' || l === 'ambele sexe';
+        };
+        const xCats = xVals.filter(v => !isTotal(xLbls[String(v)] || String(v)));
+        const yCats = yVals.filter(v => !isTotal(sLbls[String(v)] || String(v)));
+
+        const xCatLabels = xCats.map(v => xLbls[String(v)] || String(v));
+        const yCatLabels = yCats.map(v => sLbls[String(v)] || String(v));
+
+        // Build value matrix
+        const dataPoints = [];
+        let maxVal = 0;
+        for (const row of rows) {
+            const xi = xCats.indexOf(row[xAxisIdx]);
+            const yi = yCats.indexOf(row[catSeriesIdx]);
+            if (xi === -1 || yi === -1) continue;
+            const v = row[valueIdx] || 0;
+            if (v > maxVal) maxVal = v;
+            dataPoints.push([xi, yi, v]);
+        }
+
+        if (dataPoints.length > 0) {
+            const maxSize = Math.min(50, Math.max(500 / Math.max(xCats.length, yCats.length), 12));
+            chart.setOption({
+                tooltip: {
+                    formatter: p => {
+                        const [xi, yi, v] = p.value;
+                        return `<b>${xCatLabels[xi]}</b> × <b>${yCatLabels[yi]}</b><br/>${formatNumber(v)}`;
+                    },
+                },
+                grid: {
+                    left: Math.min(140, 12 * Math.max(...yCatLabels.map(l => l.length))),
+                    right: 60, top: 20,
+                    bottom: xCatLabels.some(l => l.length > 6) ? 80 : 40,
+                },
+                xAxis: {
+                    type: 'category', data: xCatLabels,
+                    axisLabel: { fontSize: 11, rotate: xCatLabels.length > 8 ? 35 : 0, interval: 0 },
+                },
+                yAxis: {
+                    type: 'category', data: yCatLabels,
+                    axisLabel: { fontSize: 11 },
+                },
+                visualMap: {
+                    show: true, min: 0, max: maxVal, dimension: 2,
+                    orient: 'vertical', right: 0, top: 'center',
+                    textStyle: { fontSize: 10 },
+                    formatter: v => formatNumber(v),
+                    inRange: { color: ['#eff6ff', '#3b82f6', '#1a56db'] },
+                },
+                series: [{
+                    type: 'scatter',
+                    data: dataPoints,
+                    symbolSize: val => {
+                        const v = Array.isArray(val) ? val[2] : val;
+                        return 4 + maxSize * Math.sqrt(v / (maxVal || 1));
+                    },
+                }],
+                animationDuration: 300,
+            });
+            return chart;
+        }
     }
 
     // ---- Scatter-bubble mode (time × category) ----
