@@ -3,6 +3,14 @@
 _INS Tempo Online but make it nice._
 
 
+## UIs
+dataset chart profile
+    py -m http.server 8000
+main UI
+    uvicorn app.main:app --reload --port 8080
+duckdb browser
+    py duckdb-browser.py
+
 ## Pipeline Scripts
 
 Sequential data pipeline — run in order. All scripts accept `--lang ro|en` (default: `ro`).

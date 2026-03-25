@@ -69,6 +69,7 @@ class DatasetPageV2 {
             }
 
             this.renderHeader();
+            this.initSidebar();
             this.renderSubDatasetBar();
             this.renderPageControls();
             this.renderTabBar();
@@ -102,8 +103,12 @@ class DatasetPageV2 {
     renderHeader() {
         const m = this.metadata;
         const breadcrumb = document.getElementById('breadcrumb');
-        if (m.context_path) {
-            breadcrumb.innerHTML = `<a href="/">Home</a><span>›</span>${m.context_path}`;
+        if (m.context_path && Array.isArray(m.context_path) && m.context_path.length > 0) {
+            let html = '<a href="/">Home</a>';
+            for (const seg of m.context_path) {
+                html += `<span>\u203a</span><a href="/datasets.html?context=${seg.code}">${seg.name}</a>`;
+            }
+            breadcrumb.innerHTML = html;
         }
 
         const header = document.getElementById('dataset-header');
@@ -607,6 +612,171 @@ class DatasetPageV2 {
         if (m.metodologie) html += `<details><summary>Methodology</summary><p>${m.metodologie}</p></details>`;
         if (m.observatii) html += `<details><summary>Notes</summary><p>${m.observatii}</p></details>`;
         footer.innerHTML = html;
+    }
+
+    // --- Sidebar ---
+
+    initSidebar() {
+        const toggle = document.getElementById('sidebar-toggle');
+        const sidebar = document.getElementById('dataset-sidebar');
+        const close = document.getElementById('sidebar-close');
+
+        toggle?.addEventListener('click', () => {
+            const opening = sidebar.classList.contains('hidden');
+            sidebar.classList.toggle('hidden');
+            toggle.classList.toggle('sidebar-open');
+            if (opening && !this._sidebarLoaded) {
+                this.renderSidebar();
+                this._sidebarLoaded = true;
+            }
+            sessionStorage.setItem('sidebarOpen', opening ? '1' : '');
+        });
+        close?.addEventListener('click', () => {
+            sidebar.classList.add('hidden');
+            toggle.classList.remove('sidebar-open');
+            sessionStorage.setItem('sidebarOpen', '');
+        });
+
+        // Auto-open if was open on previous page
+        if (sessionStorage.getItem('sidebarOpen') === '1') {
+            sidebar.classList.remove('hidden');
+            toggle.classList.add('sidebar-open');
+            this.renderSidebar();
+            this._sidebarLoaded = true;
+        }
+    }
+
+    async renderSidebar() {
+        const tree = document.getElementById('sidebar-tree');
+        if (!tree) return;
+
+        tree.innerHTML = '<div style="padding:12px;font-size:12px;color:#999">Loading...</div>';
+
+        try {
+            const data = await API.getCategories();
+            tree.innerHTML = '';
+
+            const currentContext = this.metadata.context_code;
+            const ancestors = new Set(
+                (this.metadata.context_path || []).map(s => s.code)
+            );
+
+            for (const root of data.tree) {
+                // L1: section header
+                const rootEl = document.createElement('div');
+                rootEl.className = 'cat-item cat-section';
+                rootEl.dataset.level = '1';
+                rootEl.textContent = root.name;
+                tree.appendChild(rootEl);
+
+                for (const child of root.children) {
+                    const isAncestor = ancestors.has(child.code);
+                    const hasChildren = child.children && child.children.length > 0;
+
+                    // L2: category row
+                    const item = document.createElement('a');
+                    item.className = 'cat-item' + (isAncestor ? ' expanded' : '');
+                    item.dataset.level = '2';
+                    item.dataset.code = child.code;
+                    item.href = `/datasets.html?context=${child.code}`;
+
+                    // L3 children container (created before arrow handler needs it)
+                    let childWrap = null;
+                    if (hasChildren) {
+                        childWrap = document.createElement('div');
+                        childWrap.className = 'cat-children' + (isAncestor ? '' : ' collapsed');
+
+                        const arrow = document.createElement('span');
+                        arrow.className = 'cat-arrow';
+                        arrow.textContent = isAncestor ? '\u25be' : '\u25b8';
+                        arrow.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const expanded = childWrap.classList.toggle('collapsed');
+                            arrow.textContent = expanded ? '\u25b8' : '\u25be';
+                        });
+                        item.appendChild(arrow);
+                    }
+
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = child.name;
+                    item.appendChild(nameSpan);
+
+                    const count = document.createElement('span');
+                    count.className = 'cat-count';
+                    count.textContent = child.total_datasets;
+                    item.appendChild(count);
+
+                    tree.appendChild(item);
+
+                    // Append L3 children
+                    if (hasChildren && childWrap) {
+                        for (const gc of child.children) {
+                            const isActiveL3 = String(gc.code) === String(currentContext);
+                            const gcItem = document.createElement('a');
+                            gcItem.className = 'cat-item' + (isActiveL3 ? ' active' : '');
+                            gcItem.dataset.level = '3';
+
+                            const gcName = document.createElement('span');
+                            gcName.textContent = gc.name;
+                            gcItem.appendChild(gcName);
+
+                            const gcCount = document.createElement('span');
+                            gcCount.className = 'cat-count';
+                            gcCount.textContent = gc.dataset_count;
+                            gcItem.appendChild(gcCount);
+
+                            childWrap.appendChild(gcItem);
+
+                            if (isActiveL3) {
+                                // Active L3: don't link away, expand inline with datasets
+                                gcItem.href = 'javascript:void(0)';
+
+                                const datasetWrap = document.createElement('div');
+                                datasetWrap.className = 'cat-children cat-datasets';
+                                datasetWrap.innerHTML = '<div class="cat-loading">Loading datasets...</div>';
+                                childWrap.appendChild(datasetWrap);
+
+                                API.getDatasets({ context: gc.code, limit: 200, sort: 'name' }).then(result => {
+                                    datasetWrap.innerHTML = '';
+                                    const datasets = result.datasets || [];
+                                    for (const ds of datasets) {
+                                        if (ds.is_split) continue;
+                                        const isCurrent = ds.matrix_code === this.matrixCode
+                                            || ds.matrix_code === (this.metadata.parent_matrix_code || '');
+                                        const dsItem = document.createElement('a');
+                                        dsItem.className = 'cat-item cat-dataset-item' + (isCurrent ? ' active' : '');
+                                        dsItem.dataset.level = '4';
+                                        dsItem.href = `/dataset.html?code=${ds.matrix_code}`;
+                                        dsItem.textContent = ds.matrix_name;
+                                        dsItem.addEventListener('click', () => {
+                                            sessionStorage.setItem('sidebarOpen', '1');
+                                        });
+                                        datasetWrap.appendChild(dsItem);
+                                    }
+                                    const activeDsItem = datasetWrap.querySelector('.cat-dataset-item.active');
+                                    if (activeDsItem) activeDsItem.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                                }).catch(err => {
+                                    datasetWrap.innerHTML = '<div class="cat-loading" style="color:#c00">Failed to load</div>';
+                                    console.error('Failed to load sidebar datasets', err);
+                                });
+                            } else {
+                                gcItem.href = `/datasets.html?context=${gc.code}`;
+                            }
+                        }
+                        tree.appendChild(childWrap);
+                    }
+                }
+            }
+
+            // Scroll active item into view
+            const active = tree.querySelector('.cat-item.active');
+            if (active) active.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+        } catch (err) {
+            tree.innerHTML = '<div style="padding:12px;font-size:12px;color:#c00">Failed to load categories</div>';
+            console.error('Sidebar load failed', err);
+        }
     }
 
     showLoading(show) {

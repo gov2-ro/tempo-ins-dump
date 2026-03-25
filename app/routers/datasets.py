@@ -229,17 +229,23 @@ def get_dataset(matrix_code: str):
             'options': option_list,
         })
 
-    # Build context path from ancestor_codes
-    context_path = None
-    if m[3]:  # ancestor_codes
-        ancestor_codes = m[3] if isinstance(m[3], list) else []
-        if ancestor_codes:
-            names = []
-            for ac in ancestor_codes:
-                r = conn.execute("SELECT context_name FROM contexts WHERE context_code = ?", [str(ac)]).fetchone()
-                if r:
-                    names.append(r[0])
-            context_path = " > ".join(names)
+    # Build context path from ancestor_codes as structured array
+    # For sub-datasets without ancestor_codes, inherit from parent
+    ancestor_codes_raw = m[3]
+    if not ancestor_codes_raw and m[11]:  # no ancestors but has parent_matrix_code
+        parent_row = conn.execute(
+            "SELECT ancestor_codes FROM matrices WHERE matrix_code = ?", [m[11]]
+        ).fetchone()
+        if parent_row:
+            ancestor_codes_raw = parent_row[0]
+
+    context_path = []
+    if ancestor_codes_raw:
+        ancestor_codes = ancestor_codes_raw if isinstance(ancestor_codes_raw, list) else []
+        for ac in ancestor_codes:
+            r = conn.execute("SELECT context_name FROM contexts WHERE context_code = ?", [str(ac)]).fetchone()
+            if r:
+                context_path.append({'code': str(ac), 'name': r[0]})
 
     # Split variant relationships
     is_split = bool(m[10])
