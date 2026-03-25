@@ -803,8 +803,10 @@ class ProfileGenerator:
 
             classified.append(cd)
 
-        # Separate by type
-        time_dim = next((d for d in classified if d['dim_type'] == 'time'), None)
+        # Separate by type — prefer time dim with most options when multiple exist
+        # (e.g. TIME_PERIOD=1 opt is indicator name, TIME_PERIOD_2=10 opts is actual years)
+        _time_dims = [d for d in classified if d['dim_type'] == 'time']
+        time_dim = max(_time_dims, key=lambda d: d['option_count']) if _time_dims else None
         geo_dim = next((d for d in classified if d['dim_type'] == 'geo'), None)
         unit_dim = next((d for d in classified if d['dim_type'] == 'unit'), None)
         gender_dim = next((d for d in classified if d['dim_type'] == 'gender'), None)
@@ -969,8 +971,10 @@ class ProfileGenerator:
             cd = classify_dimension(d, dtype, has_total, has_hier)
             classified.append(cd)
 
-        # Separate by type
-        time_dim = next((d for d in classified if d['dim_type'] == 'time'), None)
+        # Separate by type — prefer time dim with most options when multiple exist
+        # (e.g. TIME_PERIOD=1 opt is indicator name, TIME_PERIOD_2=10 opts is actual years)
+        _time_dims = [d for d in classified if d['dim_type'] == 'time']
+        time_dim = max(_time_dims, key=lambda d: d['option_count']) if _time_dims else None
         geo_dim = next((d for d in classified if d['dim_type'] == 'geo'), None)
         unit_dim = next((d for d in classified if d['dim_type'] == 'unit'), None)
         gender_dim = next((d for d in classified if d['dim_type'] == 'gender'), None)

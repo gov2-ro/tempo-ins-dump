@@ -8,12 +8,117 @@ This demonstrates:
 - Filtering data by dimensions
 """
 from flask import Flask, render_template_string, request, jsonify
+import csv
 import duckdb
 import math
 from pathlib import Path
 from duckdb_config import DB_FILE, PARQUET_DIR
 
 app = Flask(__name__)
+
+
+# ── i18n: load English translations at startup ────────────────────────────────
+EN_MATRICES = {}   # code → english name
+EN_CONTEXTS = {}   # context_code → english name
+
+def _load_translations():
+    en_mat = Path('data/1-indexes/en/matrices.csv')
+    en_ctx = Path('data/1-indexes/en/context.csv')
+    if en_mat.exists():
+        with open(en_mat, encoding='utf-8') as f:
+            for row in csv.DictReader(f):
+                EN_MATRICES[row['code']] = row['name']
+    if en_ctx.exists():
+        with open(en_ctx, encoding='utf-8') as f:
+            for row in csv.DictReader(f):
+                EN_CONTEXTS[row['context_code']] = row['context_name']
+    print(f"  Translations: {len(EN_MATRICES)} matrices, {len(EN_CONTEXTS)} contexts (EN)")
+
+_load_translations()
+
+# UI strings
+UI_STRINGS = {
+    'ro': {
+        'title': 'INS TEMPO — Date Statistice',
+        'subtitle': 'Navigare seturi de date statistice romanesti',
+        'datasets': 'Seturi de date',
+        'search': 'Cautare seturi de date...',
+        'sort': 'Ordonare:',
+        'name': 'Nume', 'updated': 'Actualizat', 'records': 'Inregistrari',
+        'dims': 'Dim.', 'cells': 'Celule', 'options': 'Optiuni',
+        'themes': 'Teme',
+        'browse_by_theme': 'Navigare dupa teme',
+        'sub_themes': 'sub-teme',
+        'categories': 'categorii',
+        'datasets_lc': 'seturi de date',
+        'rows': 'randuri',
+        'home': 'Acasa',
+        'info': 'Info', 'dimensions': 'Dimensiuni', 'data': 'Date',
+        'general': 'General', 'coverage': 'Acoperire', 'value_profile': 'Profil valori',
+        'definition': 'Definitie', 'methodology': 'Metodologie',
+        'notes': 'Observatii', 'responsible': 'Responsabil',
+        'code': 'Cod', 'category': 'Categorie', 'path': 'Cale',
+        'periodicity': 'Periodicitate', 'last_updated': 'Ultima actualizare',
+        'active': 'Activ', 'yes': 'Da', 'no': 'Nu',
+        'views_downloads': 'Vizualizari / Descarcari',
+        'has_counties': 'Are judete', 'has_localities': 'Are localitati',
+        'has_siruta': 'Are SIRUTA', 'file_size': 'Dimensiune fisier',
+        'time_range': 'Interval timp', 'granularity': 'Granularitate',
+        'geo_coverage': 'Acoperire geo', 'fill_rate': 'Rata umplere',
+        'freshness': 'Vechime', 'years_old': 'ani',
+        'range': 'Interval', 'mean_median': 'Medie / Mediana',
+        'std_dev': 'Dev. Std.', 'coeff_var': 'Coef. Variatie',
+        'magnitude': 'Magnitudine', 'distribution': 'Distributie',
+        'null_pct': 'Null %', 'zero_pct': 'Zero %', 'negative_pct': 'Negativ %',
+        'prev': '← Prec', 'next': 'Urm →',
+        'sibling_splits': 'Seturi inrudite', 'sub_datasets': 'Sub-seturi de date',
+        'parent': 'Parinte',
+        'counties': 'judete', 'national': 'national',
+        'total_rows': 'total randuri', 'no_data': 'Date indisponibile',
+        'no_datasets': 'Niciun set de date', 'loading': 'Se incarca...',
+        'lang_toggle': 'EN',
+    },
+    'en': {
+        'title': 'INS TEMPO — Statistical Data',
+        'subtitle': 'Browse Romanian National Statistics datasets',
+        'datasets': 'Datasets',
+        'search': 'Search datasets...',
+        'sort': 'Sort:',
+        'name': 'Name', 'updated': 'Updated', 'records': 'Records',
+        'dims': 'Dims', 'cells': 'Cells', 'options': 'Options',
+        'themes': 'Themes',
+        'browse_by_theme': 'Browse by Theme',
+        'sub_themes': 'sub-themes',
+        'categories': 'categories',
+        'datasets_lc': 'datasets',
+        'rows': 'rows',
+        'home': 'Home',
+        'info': 'Info', 'dimensions': 'Dimensions', 'data': 'Data',
+        'general': 'General', 'coverage': 'Coverage', 'value_profile': 'Value Profile',
+        'definition': 'Definition', 'methodology': 'Methodology',
+        'notes': 'Notes', 'responsible': 'Responsible',
+        'code': 'Code', 'category': 'Category', 'path': 'Path',
+        'periodicity': 'Periodicity', 'last_updated': 'Last Updated',
+        'active': 'Active', 'yes': 'Yes', 'no': 'No',
+        'views_downloads': 'Views / Downloads',
+        'has_counties': 'Has Counties', 'has_localities': 'Has Localities',
+        'has_siruta': 'Has SIRUTA', 'file_size': 'File Size',
+        'time_range': 'Time Range', 'granularity': 'Granularity',
+        'geo_coverage': 'Geo Coverage', 'fill_rate': 'Fill Rate',
+        'freshness': 'Freshness', 'years_old': 'years old',
+        'range': 'Range', 'mean_median': 'Mean / Median',
+        'std_dev': 'Std Dev', 'coeff_var': 'Coeff. Variation',
+        'magnitude': 'Magnitude', 'distribution': 'Distribution',
+        'null_pct': 'Null %', 'zero_pct': 'Zero %', 'negative_pct': 'Negative %',
+        'prev': '← Prev', 'next': 'Next →',
+        'sibling_splits': 'Sibling Splits', 'sub_datasets': 'Sub-datasets',
+        'parent': 'Parent',
+        'counties': 'counties', 'national': 'national',
+        'total_rows': 'total rows', 'no_data': 'No data available',
+        'no_datasets': 'No datasets found', 'loading': 'Loading...',
+        'lang_toggle': 'RO',
+    },
+}
 
 
 # HTML Template
@@ -483,13 +588,36 @@ HTML_TEMPLATE = """
         .dataset-grid-item .dname { color: #444; flex: 1; }
         .dataset-grid-item .drows { color: #aaa; font-size: 11px; white-space: nowrap; }
         .datasets-in-context { display: flex; flex-direction: column; gap: 4px; }
+
+        /* Language toggle */
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .sidebar-header h1 { margin: 0; }
+        .lang-toggle {
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #e9ecef;
+            color: #555;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .lang-toggle:hover { background: #dee2e6; }
     </style>
 </head>
 <body>
     <div id="sidebar">
-        <h1>Datasets</h1>
+        <div class="sidebar-header">
+            <h1 id="sidebarTitle">Datasets</h1>
+            <button class="lang-toggle" id="langToggle" onclick="toggleLang()">EN</button>
+        </div>
         <input type="text" class="search-box" id="searchBox" placeholder="Search datasets..." />
-        <div class="sort-bar">
+        <div class="sort-bar" id="sortBar">
             <span>Sort:</span>
             <button class="sort-btn active" data-sort="name" onclick="setSort('name')">Name</button>
             <button class="sort-btn" data-sort="updated" onclick="setSort('updated')">Updated</button>
@@ -516,29 +644,66 @@ HTML_TEMPLATE = """
         let currentSort = 'name';
         let contextTree = null;   // loaded once at startup
         let contextMap = {};      // code → node, built from tree
+        let currentLang = localStorage.getItem('tempo_lang') || 'ro';
+        let S = {};               // UI strings
+
+        function langParam(extra) {
+            const sep = extra ? '&' : '?';
+            return (extra ? extra + '&' : '?') + 'lang=' + currentLang;
+        }
+        function apiUrl(path, params) {
+            const sep = path.includes('?') ? '&' : '?';
+            return path + sep + 'lang=' + currentLang + (params ? '&' + params : '');
+        }
 
         // ─── Bootstrap ─────────────────────────────────────────────────────────
-        Promise.all([
-            fetch('/api/datasets?sort=name').then(r => r.json()),
-            fetch('/api/contexts').then(r => r.json()),
-        ]).then(([dsData, ctxData]) => {
-            allDatasets = dsData.datasets;
-            filteredDatasets = allDatasets;
-            renderDatasets(filteredDatasets);
+        function bootstrap() {
+            Promise.all([
+                fetch(apiUrl('/api/datasets', 'sort=' + currentSort)).then(r => r.json()),
+                fetch(apiUrl('/api/contexts')).then(r => r.json()),
+                fetch(apiUrl('/api/strings')).then(r => r.json()),
+            ]).then(([dsData, ctxData, strings]) => {
+                S = strings;
+                allDatasets = dsData.datasets;
+                filteredDatasets = allDatasets;
+                updateSidebarStrings();
+                renderDatasets(filteredDatasets);
 
-            contextTree = ctxData.themes;
-            // Build flat map: code → node
-            function walkTree(nodes) {
-                nodes.forEach(n => {
-                    contextMap[n.code] = n;
-                    if (n.children) walkTree(n.children);
-                });
-            }
-            walkTree(contextTree);
+                contextTree = ctxData.themes;
+                contextMap = {};
+                function walkTree(nodes) {
+                    nodes.forEach(n => {
+                        contextMap[n.code] = n;
+                        if (n.children) walkTree(n.children);
+                    });
+                }
+                walkTree(contextTree);
 
-            // Hash routing — handle initial load
-            handleHash();
-        });
+                handleHash();
+            });
+        }
+
+        function updateSidebarStrings() {
+            document.getElementById('sidebarTitle').textContent = S.datasets || 'Datasets';
+            document.getElementById('searchBox').placeholder = S.search || 'Search datasets...';
+            document.getElementById('langToggle').textContent = S.lang_toggle || 'EN';
+            // Sort buttons
+            const sortLabels = {name: S.name, updated: S.updated, records: S.records,
+                                dimensions: S.dims, cells: S.cells, options: S.options};
+            document.querySelectorAll('.sort-btn').forEach(btn => {
+                const key = btn.dataset.sort;
+                if (sortLabels[key]) btn.textContent = sortLabels[key];
+            });
+            document.querySelector('#sortBar span').textContent = S.sort || 'Sort:';
+        }
+
+        function toggleLang() {
+            currentLang = currentLang === 'ro' ? 'en' : 'ro';
+            localStorage.setItem('tempo_lang', currentLang);
+            bootstrap();
+        }
+
+        bootstrap();
 
         // ─── Hash routing ───────────────────────────────────────────────────────
         window.addEventListener('hashchange', handleHash);
@@ -567,12 +732,11 @@ HTML_TEMPLATE = """
         // ─── Sort / search ──────────────────────────────────────────────────────
         function loadDatasetList(sort) {
             if (sort === currentSort && allDatasets.length) {
-                // already loaded; just re-filter
                 applySearch();
                 return;
             }
             currentSort = sort;
-            fetch(`/api/datasets?sort=${currentSort}`)
+            fetch(apiUrl('/api/datasets', `sort=${currentSort}`))
                 .then(r => r.json())
                 .then(data => {
                     allDatasets = data.datasets;
@@ -585,7 +749,7 @@ HTML_TEMPLATE = """
             document.querySelectorAll('.sort-btn').forEach(b => {
                 b.classList.toggle('active', b.dataset.sort === key);
             });
-            fetch(`/api/datasets?sort=${key}`)
+            fetch(apiUrl('/api/datasets', `sort=${key}`))
                 .then(r => r.json())
                 .then(data => {
                     allDatasets = data.datasets;
@@ -651,7 +815,7 @@ HTML_TEMPLATE = """
                     onclick="setHash('${d.matrix_code}')">
                     <div class="dataset-code">${d.matrix_code}${splitBadge}</div>
                     <div class="dataset-name">${d.matrix_name}</div>
-                    <div class="dataset-stats">${(d.row_count || 0).toLocaleString()} rows • ${d.mat_max_dim} dims${extra}</div>
+                    <div class="dataset-stats">${(d.row_count || 0).toLocaleString()} ${S.rows || 'rows'} • ${d.mat_max_dim} ${S.dims || 'dims'}${extra}</div>
                 </li>`;
             }).join('');
         }
@@ -673,22 +837,22 @@ HTML_TEMPLATE = """
             const cardsHtml = contextTree.map(theme => `
                 <div class="theme-card" onclick="setHash('ctx/${theme.code}')">
                     <h3>${theme.name}</h3>
-                    <div class="count">${theme.count.toLocaleString()} datasets</div>
-                    <div class="sub-count">${(theme.children || []).length} sub-themes</div>
+                    <div class="count">${theme.count.toLocaleString()} ${S.datasets_lc}</div>
+                    <div class="sub-count">${(theme.children || []).length} ${S.sub_themes}</div>
                 </div>
             `).join('');
 
             document.getElementById('content').innerHTML = `
                 <div class="hero">
-                    <h1>INS TEMPO — Date Statistice</h1>
-                    <p>Browse Romanian National Statistics datasets</p>
+                    <h1>${S.title}</h1>
+                    <p>${S.subtitle}</p>
                     <div class="hero-stats">
-                        <div class="hero-stat"><div class="num">${totalDatasets.toLocaleString()}</div><div class="lbl">Datasets</div></div>
-                        <div class="hero-stat"><div class="num">${(totalRows/1e6).toFixed(1)}M</div><div class="lbl">Total Rows</div></div>
-                        <div class="hero-stat"><div class="num">${contextTree.length}</div><div class="lbl">Themes</div></div>
+                        <div class="hero-stat"><div class="num">${totalDatasets.toLocaleString()}</div><div class="lbl">${S.datasets}</div></div>
+                        <div class="hero-stat"><div class="num">${(totalRows/1e6).toFixed(1)}M</div><div class="lbl">${S.rows}</div></div>
+                        <div class="hero-stat"><div class="num">${contextTree.length}</div><div class="lbl">${S.themes}</div></div>
                     </div>
                 </div>
-                <h2 style="margin-bottom:14px">Browse by Theme</h2>
+                <h2 style="margin-bottom:14px">${S.browse_by_theme}</h2>
                 <div class="theme-grid">${cardsHtml}</div>
             `;
         }
@@ -706,29 +870,29 @@ HTML_TEMPLATE = """
                 const childCards = (node.children || []).map(child => `
                     <div class="theme-card" onclick="setHash('ctx/${child.code}')">
                         <h3>${child.name}</h3>
-                        <div class="count">${child.count.toLocaleString()} datasets</div>
-                        <div class="sub-count">${(child.children || []).length} categories</div>
+                        <div class="count">${child.count.toLocaleString()} ${S.datasets_lc}</div>
+                        <div class="sub-count">${(child.children || []).length} ${S.categories}</div>
                     </div>
                 `).join('');
 
                 document.getElementById('content').innerHTML = `
                     <div class="breadcrumbs">${crumbs}</div>
                     <div class="context-header"><h2>${node.name}</h2></div>
-                    <div class="theme-grid">${childCards || '<p style="color:#999">No sub-themes</p>'}</div>
+                    <div class="theme-grid">${childCards || '<p style="color:#999">' + S.no_datasets + '</p>'}</div>
                 `;
             } else if (node.level === 1) {
                 // Show leaf categories as cards
                 const childCards = (node.children || []).map(child => `
                     <div class="theme-card" onclick="setHash('ctx/${child.code}')">
                         <h3>${child.name}</h3>
-                        <div class="count">${child.count.toLocaleString()} datasets</div>
+                        <div class="count">${child.count.toLocaleString()} ${S.datasets_lc}</div>
                     </div>
                 `).join('');
 
                 document.getElementById('content').innerHTML = `
                     <div class="breadcrumbs">${crumbs}</div>
                     <div class="context-header"><h2>${node.name}</h2></div>
-                    <div class="theme-grid">${childCards || '<p style="color:#999">No categories</p>'}</div>
+                    <div class="theme-grid">${childCards || '<p style="color:#999">' + S.no_datasets + '</p>'}</div>
                 `;
             } else {
                 // Level 2 — show dataset list
@@ -744,15 +908,15 @@ HTML_TEMPLATE = """
                         <div class="dataset-grid-item" onclick="setHash('${d.matrix_code}')">
                             <span class="dcode">${d.matrix_code}</span>
                             <span class="dname">${d.matrix_name}</span>
-                            <span class="drows">${(d.row_count||0).toLocaleString()} rows</span>
+                            <span class="drows">${(d.row_count||0).toLocaleString()} ${S.rows}</span>
                         </div>
                     `).join('')
-                    : '<p style="color:#999">No datasets in this category</p>';
+                    : '<p style="color:#999">' + S.no_datasets + '</p>';
 
                 document.getElementById('content').innerHTML = `
                     <div class="breadcrumbs">${crumbs}</div>
                     <div class="context-header"><h2>${node.name}</h2>
-                        <span style="color:#999;font-size:13px">${dsForCtx.length} datasets</span>
+                        <span style="color:#999;font-size:13px">${dsForCtx.length} ${S.datasets_lc}</span>
                     </div>
                     <div class="datasets-in-context">${dsHtml}</div>
                 `;
@@ -767,7 +931,7 @@ HTML_TEMPLATE = """
                 path.unshift(cur);
                 cur = cur.parent_code ? contextMap[cur.parent_code] : null;
             }
-            const parts = [`<a onclick="setHash('')">Home</a>`];
+            const parts = [`<a onclick="setHash('')">${S.home || 'Home'}</a>`];
             path.forEach((node, i) => {
                 parts.push('<span class="sep">›</span>');
                 if (i < path.length - 1) {
@@ -789,7 +953,7 @@ HTML_TEMPLATE = """
             renderDatasets(filteredDatasets);
             document.getElementById('content').innerHTML = '<div class="loading">Loading...</div>';
 
-            fetch(`/api/dataset/${matrixCode}`)
+            fetch(apiUrl(`/api/dataset/${matrixCode}`))
                 .then(r => r.json())
                 .then(data => {
                     if (data.error) {
@@ -801,15 +965,21 @@ HTML_TEMPLATE = """
                 });
         }
 
-        function buildBreadcrumbs(ancestorCodes) {
-            if (!ancestorCodes || !ancestorCodes.length || !Object.keys(contextMap).length) return '';
-            const parts = [`<a onclick="setHash('')">Home</a>`];
-            ancestorCodes.forEach(code => {
-                const node = contextMap[code];
-                if (!node) return;
+        function buildBreadcrumbs(ancestorCodes, currentCode) {
+            if (!Object.keys(contextMap).length) return '';
+            const parts = [`<a onclick="setHash('')">${S.home || 'Home'}</a>`];
+            if (ancestorCodes && ancestorCodes.length) {
+                ancestorCodes.forEach(code => {
+                    const node = contextMap[code];
+                    if (!node) return;
+                    parts.push('<span class="sep">›</span>');
+                    parts.push(`<a onclick="setHash('ctx/${code}')">${node.name}</a>`);
+                });
+            }
+            if (currentCode) {
                 parts.push('<span class="sep">›</span>');
-                parts.push(`<a onclick="setHash('ctx/${code}')">${node.name}</a>`);
-            });
+                parts.push(`<span>${currentCode}</span>`);
+            }
             return `<div class="breadcrumbs">${parts.join('')}</div>`;
         }
 
@@ -820,7 +990,7 @@ HTML_TEMPLATE = """
             const vp = data.value_profile || {};
             const preview = data.preview;
 
-            const breadcrumbs = buildBreadcrumbs(d.ancestor_codes);
+            const breadcrumbs = buildBreadcrumbs(d.ancestor_codes, d.matrix_code);
 
             // --- Info tab ---
             function row2(lbl, val) {
@@ -832,55 +1002,55 @@ HTML_TEMPLATE = """
             }
 
             const timeRange = (cov.time_min_year && cov.time_max_year)
-                ? `${cov.time_min_year} – ${cov.time_max_year}` + (cov.time_year_count ? ` (${cov.time_year_count} years)` : '')
+                ? `${cov.time_min_year} – ${cov.time_max_year}` + (cov.time_year_count ? ` (${cov.time_year_count} ${S.years_old})` : '')
                 : 'N/A';
             const geoInfo = cov.geo_county_count
-                ? `${cov.geo_county_count} counties` + (cov.geo_has_national ? ' + national' : '')
+                ? `${cov.geo_county_count} ${S.counties}` + (cov.geo_has_national ? ` + ${S.national}` : '')
                 : 'N/A';
 
             const infoHtml = `
-                ${section('General', `<div class="info-grid2">
-                    ${row2('Code', d.matrix_code)}
-                    ${row2('Category', d.context_code)}
-                    ${row2('Path', d.ancestor_path ? `<small>${d.ancestor_path}</small>` : null)}
-                    ${row2('Periodicity', Array.isArray(d.periodicitati) ? d.periodicitati.join(', ') : d.periodicitati)}
-                    ${row2('Last Updated', d.ultima_actualizare)}
-                    ${row2('Active', d.mat_active ? 'Yes' : 'No')}
-                    ${row2('Views / Downloads', d.mat_views != null ? `${d.mat_views} / ${d.mat_downloads}` : null)}
-                    ${row2('Has Counties', d.nom_jud ? 'Yes' : null)}
-                    ${row2('Has Localities', d.nom_loc ? 'Yes' : null)}
-                    ${row2('Has SIRUTA', d.mat_siruta ? 'Yes' : null)}
-                    ${row2('File Size', formatBytes(d.file_size_bytes))}
+                ${section(S.general, `<div class="info-grid2">
+                    ${row2(S.code, d.matrix_code)}
+                    ${row2(S.category, d.context_code)}
+                    ${row2(S.path, d.ancestor_path ? `<small>${d.ancestor_path}</small>` : null)}
+                    ${row2(S.periodicity, Array.isArray(d.periodicitati) ? d.periodicitati.join(', ') : d.periodicitati)}
+                    ${row2(S.last_updated, d.ultima_actualizare)}
+                    ${row2(S.active, d.mat_active ? S.yes : S.no)}
+                    ${row2(S.views_downloads, d.mat_views != null ? `${d.mat_views} / ${d.mat_downloads}` : null)}
+                    ${row2(S.has_counties, d.nom_jud ? S.yes : null)}
+                    ${row2(S.has_localities, d.nom_loc ? S.yes : null)}
+                    ${row2(S.has_siruta, d.mat_siruta ? S.yes : null)}
+                    ${row2(S.file_size, formatBytes(d.file_size_bytes))}
                 </div>`)}
-                ${section('Coverage', `<div class="info-grid2">
-                    ${row2('Time Range', timeRange)}
-                    ${row2('Granularity', cov.time_granularity)}
-                    ${row2('Geo Coverage', geoInfo)}
-                    ${row2('Fill Rate', cov.fill_rate)}
-                    ${row2('Freshness', cov.freshness_years != null ? `${cov.freshness_years} years old` : null)}
+                ${section(S.coverage, `<div class="info-grid2">
+                    ${row2(S.time_range, timeRange)}
+                    ${row2(S.granularity, cov.time_granularity)}
+                    ${row2(S.geo_coverage, geoInfo)}
+                    ${row2(S.fill_rate, cov.fill_rate)}
+                    ${row2(S.freshness, cov.freshness_years != null ? `${cov.freshness_years} ${S.years_old}` : null)}
                 </div>`)}
-                ${vp.val_min != null ? section('Value Profile', `<div class="info-grid2">
-                    ${row2('Range', `${vp.val_min} – ${vp.val_max}`)}
-                    ${row2('Mean / Median', `${vp.val_mean} / ${vp.val_median}`)}
-                    ${row2('Std Dev', vp.val_stddev)}
-                    ${row2('Coeff. Variation', vp.coeff_variation)}
-                    ${row2('Magnitude', vp.magnitude)}
-                    ${row2('Distribution', vp.distribution_shape)}
-                    ${row2('Null %', vp.null_pct)}
-                    ${row2('Zero %', vp.zero_pct)}
-                    ${row2('Negative %', vp.negative_pct)}
+                ${vp.val_min != null ? section(S.value_profile, `<div class="info-grid2">
+                    ${row2(S.range, `${vp.val_min} – ${vp.val_max}`)}
+                    ${row2(S.mean_median, `${vp.val_mean} / ${vp.val_median}`)}
+                    ${row2(S.std_dev, vp.val_stddev)}
+                    ${row2(S.coeff_var, vp.coeff_variation)}
+                    ${row2(S.magnitude, vp.magnitude)}
+                    ${row2(S.distribution, vp.distribution_shape)}
+                    ${row2(S.null_pct, vp.null_pct)}
+                    ${row2(S.zero_pct, vp.zero_pct)}
+                    ${row2(S.negative_pct, vp.negative_pct)}
                 </div>`) : ''}
-                ${d.definitie ? section('Definition', `<p class="info-text">${d.definitie}</p>`) : ''}
-                ${d.metodologie ? section('Methodology', `<p class="info-text">${d.metodologie}</p>`) : ''}
-                ${d.observatii ? section('Notes', `<p class="info-text">${d.observatii}</p>`) : ''}
-                ${d.persoane_responsabile ? section('Responsible', `<p class="info-text">${d.persoane_responsabile}</p>`) : ''}
+                ${d.definitie ? section(S.definition, `<p class="info-text">${d.definitie}</p>`) : ''}
+                ${d.metodologie ? section(S.methodology, `<p class="info-text">${d.metodologie}</p>`) : ''}
+                ${d.observatii ? section(S.notes, `<p class="info-text">${d.observatii}</p>`) : ''}
+                ${d.persoane_responsabile ? section(S.responsible, `<p class="info-text">${d.persoane_responsabile}</p>`) : ''}
             `;
 
             // --- Dimensions tab ---
             const dimsHtml = `
-                <h2>Dimensions (${dims.length})</h2>
+                <h2>${S.dimensions} (${dims.length})</h2>
                 <table>
-                    <thead><tr><th>Label</th><th>Column</th><th style="text-align:right">Options</th></tr></thead>
+                    <thead><tr><th>Label</th><th>Column</th><th style="text-align:right">${S.options}</th></tr></thead>
                     <tbody>
                         ${dims.map(dim => `
                             <tr>
@@ -906,16 +1076,16 @@ HTML_TEMPLATE = """
             let splitFamilyHtml = '';
             if (sf && sf.siblings && sf.siblings.length) {
                 const isChild = sf.is_split && sf.parent_matrix_code;
-                const title = isChild ? 'Sibling Splits' : 'Sub-datasets';
+                const title = isChild ? S.sibling_splits : S.sub_datasets;
                 const parentLink = isChild
-                    ? `<div class="parent-link">Parent: <a onclick="setHash('${sf.parent_matrix_code}')">${sf.parent_matrix_code}</a></div>`
+                    ? `<div class="parent-link">${S.parent}: <a onclick="setHash('${sf.parent_matrix_code}')">${sf.parent_matrix_code}</a></div>`
                     : '';
                 const items = sf.siblings.map(s => `
                     <div class="sibling-item ${s.is_current ? 'current' : ''}"
                          onclick="setHash('${s.matrix_code}')">
                         <span class="s-label">${s.suffix_label || s.matrix_code}</span>
                         <span class="s-pattern">${s.split_pattern.replace(/_/g, ' ')}</span>
-                        <span class="s-rows">${(s.row_count||0).toLocaleString()} rows</span>
+                        <span class="s-rows">${(s.row_count||0).toLocaleString()} ${S.rows}</span>
                     </div>
                 `).join('');
                 splitFamilyHtml = `
@@ -954,15 +1124,15 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div class="tab-buttons">
-                    <button class="tab-button" onclick="switchTab('info', event)">Info</button>
-                    <button class="tab-button" onclick="switchTab('dimensions', event)">Dimensions</button>
-                    <button class="tab-button active" onclick="switchTab('data', event)">Data</button>
+                    <button class="tab-button" onclick="switchTab('info', event)">${S.info}</button>
+                    <button class="tab-button" onclick="switchTab('dimensions', event)">${S.dimensions}</button>
+                    <button class="tab-button active" onclick="switchTab('data', event)">${S.data}</button>
                 </div>
 
                 <div class="tab-content" id="tab-info">${infoHtml}</div>
                 <div class="tab-content" id="tab-dimensions">${dimsHtml}</div>
                 <div class="tab-content active" id="tab-data">
-                    <div id="data-table-area">${renderDataTable(preview, d.matrix_code)}</div>
+                    <div id="data-table-area">${renderDataTable(preview, d.matrix_code, data.column_labels)}</div>
                 </div>
             `;
         }
@@ -974,20 +1144,21 @@ HTML_TEMPLATE = """
             const hasNext = idx < total - 1;
             return `
                 <div class="nav-buttons">
-                    <button onclick="setHash('')" style="background:#6c757d">⌂ Home</button>
-                    <button onclick="navigateDataset(-1)" ${!hasPrev ? 'disabled' : ''} title="Previous (← ↑)">&#8592; Prev</button>
+                    <button onclick="setHash('')" style="background:#6c757d">⌂ ${S.home}</button>
+                    <button onclick="navigateDataset(-1)" ${!hasPrev ? 'disabled' : ''}>&#8592; ${S.prev}</button>
                     <span class="nav-position">${idx + 1} / ${total}</span>
-                    <button onclick="navigateDataset(1)" ${!hasNext ? 'disabled' : ''} title="Next (→ ↓)">Next &#8594;</button>
+                    <button onclick="navigateDataset(1)" ${!hasNext ? 'disabled' : ''}>&#8594; ${S.next}</button>
                 </div>
             `;
         }
 
-        function renderDataTable(data, matrixCode) {
+        function renderDataTable(data, matrixCode, columnLabels) {
             if (!data || !data.columns || data.columns.length === 0) {
                 return '<p>No data available</p>';
             }
 
             const columns = data.columns;
+            const colLabels = columnLabels || {};
             const serverUniques = data.unique_vals || {};
             const colFilters = {};
             let currentPage = data.page || 0;
@@ -1021,7 +1192,11 @@ HTML_TEMPLATE = """
             const uid = 'tbl_' + Date.now();
             let html = `<div id="${uid}">`;
             html += '<table><thead><tr>';
-            columns.forEach(col => { html += `<th>${col}</th>`; });
+            columns.forEach(col => {
+                const label = colLabels[col] || col;
+                const tooltip = label !== col ? ` title="${col}"` : '';
+                html += `<th${tooltip}>${label}</th>`;
+            });
             html += '</tr><tr class="filter-row">';
             columns.forEach((col, i) => {
                 if (col === 'value') { html += '<td></td>'; return; }
@@ -1117,6 +1292,34 @@ def index():
     return render_template_string(HTML_TEMPLATE)
 
 
+def _get_lang():
+    return request.args.get('lang', 'ro') if request.args.get('lang') in ('ro', 'en') else 'ro'
+
+def _translate_matrix_name(name, code, lang):
+    if lang == 'en':
+        # For splits, translate the parent part and keep the suffix
+        base_code = code.split('_')[0] if '_' in code else code
+        en_name = EN_MATRICES.get(base_code)
+        if en_name:
+            # If it's a split, append the suffix label from the RO name
+            bracket_idx = name.find('[')
+            if bracket_idx > 0:
+                return en_name + ' ' + name[bracket_idx:]
+            return en_name
+    return name
+
+def _translate_context_name(name, code, lang):
+    if lang == 'en':
+        return EN_CONTEXTS.get(code, name)
+    return name
+
+
+@app.route('/api/strings')
+def api_strings():
+    lang = _get_lang()
+    return jsonify(UI_STRINGS.get(lang, UI_STRINGS['ro']))
+
+
 SORT_OPTIONS = {
     'name':       'matrix_name ASC',
     'updated':    'ultima_actualizare DESC NULLS LAST',
@@ -1130,6 +1333,7 @@ def api_datasets():
     """Get list of all datasets"""
     try:
         sort_key = request.args.get('sort', 'name')
+        lang = _get_lang()
 
         conn = duckdb.connect(str(DB_FILE), read_only=True)
 
@@ -1155,9 +1359,10 @@ def api_datasets():
             """).fetchall()
             datasets = []
             for row in result:
+                code, name = row[0], row[1]
                 datasets.append({
-                    'matrix_code': row[0],
-                    'matrix_name': row[1],
+                    'matrix_code': code,
+                    'matrix_name': _translate_matrix_name(name, code, lang),
                     'row_count': row[2],
                     'mat_max_dim': row[3],
                     'file_size_bytes': row[4],
@@ -1180,9 +1385,10 @@ def api_datasets():
             """).fetchall()
             datasets = []
             for row in result:
+                code, name = row[0], row[1]
                 datasets.append({
-                    'matrix_code': row[0],
-                    'matrix_name': row[1],
+                    'matrix_code': code,
+                    'matrix_name': _translate_matrix_name(name, code, lang),
                     'row_count': row[2],
                     'mat_max_dim': row[3],
                     'file_size_bytes': row[4],
@@ -1194,7 +1400,7 @@ def api_datasets():
                 })
 
         conn.close()
-        return jsonify({'datasets': datasets, 'sort': sort_key})
+        return jsonify({'datasets': datasets, 'sort': sort_key, 'lang': lang})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1203,6 +1409,7 @@ def api_datasets():
 def api_contexts():
     """Return full context tree (3 levels) with dataset counts."""
     try:
+        lang = _get_lang()
         conn = duckdb.connect(str(DB_FILE), read_only=True)
         rows = conn.execute("""
             SELECT c.context_code, c.context_name, c.level, c.parent_code,
@@ -1220,7 +1427,7 @@ def api_contexts():
         for code, name, level, parent_code, cnt in rows:
             nodes[code] = {
                 'code': code,
-                'name': name,
+                'name': _translate_context_name(name, code, lang),
                 'level': level,
                 'parent_code': parent_code,
                 'count': cnt,
@@ -1264,6 +1471,62 @@ def _resolve_parquet(matrix_code, parquet_path_hint):
     return PARQUET_DIR / f'{matrix_code}.parquet'
 
 
+def _resolve_en_csv(matrix_code):
+    """Return EN CSV path if it exists, else None."""
+    p = Path('data') / '4-datasets' / 'en' / f'{matrix_code}.csv'
+    return p if p.exists() else None
+
+
+def _csv_data(csv_file, page=0, page_size=50):
+    """Read EN CSV file and return paged data in same format as _parquet_data."""
+    conn = duckdb.connect()
+    # DuckDB can query CSVs directly
+    total_rows = conn.execute(f"SELECT COUNT(*) FROM read_csv_auto('{csv_file}')").fetchone()[0]
+    offset = page * page_size
+    df = conn.execute(
+        f"SELECT * FROM read_csv_auto('{csv_file}') LIMIT {page_size} OFFSET {offset}"
+    ).fetchdf()
+    # Strip leading/trailing spaces from column names and string values
+    df.columns = [c.strip() for c in df.columns]
+    # Rename last column from Romanian "Valoare" / "Value" to "value" for consistency
+    last_col = df.columns[-1]
+    if last_col.lower() in ('valoare', 'value'):
+        df = df.rename(columns={last_col: 'value'})
+
+    unique_vals = {}
+    for col in df.columns:
+        if col == 'value':
+            continue
+        vals = conn.execute(
+            f'SELECT DISTINCT "{col}" FROM read_csv_auto(\'{csv_file}\') ORDER BY 1'
+        ).fetchall()
+        unique_vals[col] = [str(r[0]).strip() for r in vals if r[0] is not None]
+
+    conn.close()
+
+    def clean(v):
+        if v is None:
+            return None
+        if isinstance(v, float):
+            if str(v) == 'nan':
+                return None
+            return int(v) if v == int(v) else v
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    return {
+        'columns': df.columns.tolist(),
+        'rows': [[clean(v) for v in row] for row in df.values.tolist()],
+        'total_rows': total_rows,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': math.ceil(total_rows / page_size) if total_rows else 1,
+        'unique_vals': unique_vals,
+        'source': 'en_csv',
+    }
+
+
 def _parquet_data(parquet_file, page=0, page_size=50):
     """Fetch one page + full unique values from parquet."""
     conn = duckdb.connect()
@@ -1299,6 +1562,12 @@ def api_dataset_data(matrix_code):
     try:
         page = int(request.args.get('page', 0))
         page_size = int(request.args.get('page_size', 50))
+        lang = _get_lang()
+
+        # Prefer EN CSV for pagination too
+        en_csv = _resolve_en_csv(matrix_code) if lang == 'en' else None
+        if en_csv:
+            return jsonify(_csv_data(en_csv, page, page_size))
 
         conn_meta = duckdb.connect(str(DB_FILE), read_only=True)
         row = conn_meta.execute(
@@ -1316,10 +1585,44 @@ def api_dataset_data(matrix_code):
         return jsonify({'error': str(e)}), 500
 
 
+def _build_column_labels(dimensions, preview_data):
+    """Map parquet column names to human-readable dimension labels."""
+    labels = {}
+    if not preview_data:
+        return labels
+    columns = preview_data.get('columns', [])
+    # dim_column_name → dim_label (works for v3 parquets)
+    # dimensions tuples: (dim_label, dim_column_name, option_count, options)
+    sdmx_map = {d[1]: d[0] for d in dimensions}  # dim_column_name → dim_label
+    # For legacy *_nom_id columns: strip _nom_id, match loosely against dim labels
+    for col in columns:
+        if col in sdmx_map:
+            labels[col] = sdmx_map[col]
+        elif col == 'OBS_VALUE' or col == 'value':
+            labels[col] = 'Value'
+        elif col.endswith('_nom_id'):
+            # Try to match by finding a dim whose label normalizes similarly
+            stem = col.replace('_nom_id', '').replace('_', ' ').lower()
+            matched = False
+            for dim_col, dim_label in sdmx_map.items():
+                label_norm = dim_label.lower().replace(',', '').replace(':', '').strip()
+                # Check if stem is a prefix/substring of the normalized label
+                if label_norm.startswith(stem) or stem.startswith(label_norm.split()[0]):
+                    labels[col] = dim_label
+                    matched = True
+                    break
+            if not matched:
+                # Fallback: prettify the column name
+                labels[col] = col.replace('_nom_id', '').replace('_', ' ').title()
+        # else: leave unmapped, frontend will use raw name
+    return labels
+
+
 @app.route('/api/dataset/<matrix_code>')
 def api_dataset(matrix_code):
     """Get full details for a specific dataset."""
     try:
+        lang = _get_lang()
         conn_meta = duckdb.connect(str(DB_FILE), read_only=True)
 
         # Full metadata
@@ -1351,15 +1654,25 @@ def api_dataset(matrix_code):
         """, [matrix_code]).fetchone()
 
         # Split family: siblings (if this is a split) or children (if this is a parent)
-        is_split = meta_row[14] if len(meta_row) > 14 else False  # reuse existing field
         parent_code = None
         siblings = []
-        # Re-fetch split info specifically
         split_info = conn_meta.execute("""
             SELECT is_split, parent_matrix_code FROM matrices WHERE matrix_code = ?
         """, [matrix_code]).fetchone()
         if split_info:
             is_split_flag, parent_code = split_info
+            # Inherit ancestor_codes from parent if this is a split with empty ancestors
+            if is_split_flag and parent_code and not meta_row[21]:
+                parent_ancestors = conn_meta.execute(
+                    "SELECT ancestor_codes, ancestor_path FROM matrices WHERE matrix_code = ?",
+                    [parent_code]
+                ).fetchone()
+                if parent_ancestors:
+                    # Patch into a mutable copy
+                    meta_row = list(meta_row)
+                    meta_row[21] = parent_ancestors[0]  # ancestor_codes
+                    if not meta_row[3]:  # ancestor_path
+                        meta_row[3] = parent_ancestors[1]
             if is_split_flag and parent_code:
                 # This is a split child — get siblings (other children of same parent)
                 sib_rows = conn_meta.execute("""
@@ -1372,7 +1685,7 @@ def api_dataset(matrix_code):
                 """, [parent_code]).fetchall()
                 siblings = [{
                     'matrix_code': r[0], 'suffix_label': r[1], 'split_pattern': r[2],
-                    'row_count': r[3], 'matrix_name': r[4], 'is_current': r[0] == matrix_code,
+                    'row_count': r[3], 'matrix_name': _translate_matrix_name(r[4], r[0], lang), 'is_current': r[0] == matrix_code,
                 } for r in sib_rows]
             else:
                 # This is a parent — get children
@@ -1386,7 +1699,7 @@ def api_dataset(matrix_code):
                 """, [matrix_code]).fetchall()
                 siblings = [{
                     'matrix_code': r[0], 'suffix_label': r[1], 'split_pattern': r[2],
-                    'row_count': r[3], 'matrix_name': r[4], 'is_current': False,
+                    'row_count': r[3], 'matrix_name': _translate_matrix_name(r[4], r[0], lang), 'is_current': False,
                 } for r in child_rows]
 
         # Dimensions with options
@@ -1402,11 +1715,15 @@ def api_dataset(matrix_code):
 
         conn_meta.close()
 
-        # First page of data
-        parquet_file = _resolve_parquet(matrix_code, meta_row[13])
+        # First page of data — prefer EN CSV when lang=en
         page = int(request.args.get('page', 0))
         page_size = int(request.args.get('page_size', 50))
-        preview_data = _parquet_data(parquet_file, page, page_size) if parquet_file.exists() else None
+        en_csv = _resolve_en_csv(matrix_code) if lang == 'en' else None
+        if en_csv:
+            preview_data = _csv_data(en_csv, page, page_size)
+        else:
+            parquet_file = _resolve_parquet(matrix_code, meta_row[13])
+            preview_data = _parquet_data(parquet_file, page, page_size) if parquet_file.exists() else None
 
         def fmt_date(d): return str(d) if d else None
         def fmt_pct(v): return f'{v:.1%}' if v is not None else None
@@ -1415,7 +1732,7 @@ def api_dataset(matrix_code):
         return jsonify({
             'metadata': {
                 'matrix_code': meta_row[0],
-                'matrix_name': meta_row[1],
+                'matrix_name': _translate_matrix_name(meta_row[1], meta_row[0], lang),
                 'context_code': meta_row[2],
                 'ancestor_path': meta_row[3],
                 'periodicitati': meta_row[4],
@@ -1455,6 +1772,7 @@ def api_dataset(matrix_code):
                 {'dim_label': d[0], 'dim_column_name': d[1], 'option_count': d[2], 'options': d[3] or []}
                 for d in dimensions
             ],
+            'column_labels': {} if (preview_data and preview_data.get('source') == 'en_csv') else _build_column_labels(dimensions, preview_data),
             'preview': preview_data,
             'split_family': {
                 'is_split': bool(split_info[0]) if split_info else False,

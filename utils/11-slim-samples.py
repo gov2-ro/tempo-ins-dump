@@ -22,9 +22,9 @@ from pathlib import Path
 
 from duckdb_config import BASE_DIR
 
-MATRICES_LIST = BASE_DIR / "data" / "1-indexes" / "ro" / "matrices-list.csv"
-SOURCE_DIR    = BASE_DIR / "data" / "4-datasets" / "ro"
-OUTPUT_DIR    = BASE_DIR / "data" / "4-datasets-slim-samples"
+MATRICES_LIST = BASE_DIR / "data" / "1-indexes" / "en" / "matrices-list.csv"
+SOURCE_DIR    = BASE_DIR / "data" / "4-datasets" / "en"
+OUTPUT_DIR    = BASE_DIR / "data" / "4-datasets-slim-samples" / "en"
 
 
 def sample_rows(rows: list, limit: int) -> list:
