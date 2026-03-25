@@ -289,14 +289,19 @@ class DatasetPageV2 {
     // --- Profile enrichment ---
 
     enrichProfile(profile) {
-        // Inject bar/stacked_bar toggles on all line/area charts
         const BAR_TOGGLES = ['bar', 'stacked_bar'];
+        const cats = profile.dimensions?.categories || [];
         for (const view of Object.values(profile.views || {})) {
             for (const chart of view.charts || []) {
+                // Inject bar/stacked_bar toggles on all line/area charts
                 if (['line', 'area', 'area_stacked'].includes(chart.chart_type)) {
                     const existing = chart.toggles || [];
                     const toAdd = BAR_TOGGLES.filter(t => !existing.includes(t));
                     if (toAdd.length) chart.toggles = [...existing, ...toAdd];
+                }
+                // Annotate horizontal_bar charts with stackable dimensions
+                if (chart.chart_type === 'horizontal_bar' && cats.length > 0) {
+                    chart._stackable_dims = cats.map(c => ({ column: c.column, label: c.label }));
                 }
             }
         }
@@ -354,6 +359,12 @@ class DatasetPageV2 {
         // Restore saved state
         if (this.viewStates[viewName] && this.controlsPanel) {
             this.controlsPanel.restoreState(this.viewStates[viewName]);
+        }
+
+        if (charts.length === 0) {
+            document.getElementById('main-chart').innerHTML =
+                '<div class="error-msg" style="padding:20px;color:var(--text-light)">No chart available for this view.</div>';
+            return;
         }
 
         this.fetchAndRender();
@@ -427,6 +438,45 @@ class DatasetPageV2 {
                 }
             }
         }
+
+        // "Stack by" dropdown for horizontal_bar charts with stackable dims
+        const activeChart = charts[this.activeChartIdx];
+        if (activeChart?._stackable_dims?.length > 0 &&
+            this.getActiveChartType() === 'horizontal_bar') {
+            const defaultDim = this._stackByDim !== undefined
+                ? this._stackByDim
+                : (activeChart.roles?.series || null);
+
+            const sep = document.createElement('span');
+            sep.className = 'sep';
+            container.appendChild(sep);
+
+            const lbl = document.createElement('span');
+            lbl.className = 'variant-label';
+            lbl.textContent = 'STACK BY';
+            container.appendChild(lbl);
+
+            const sel = document.createElement('select');
+            sel.className = 'stack-by-select';
+            const noneOpt = document.createElement('option');
+            noneOpt.value = '';
+            noneOpt.textContent = '(none)';
+            if (!defaultDim) noneOpt.selected = true;
+            sel.appendChild(noneOpt);
+
+            for (const dim of activeChart._stackable_dims) {
+                const opt = document.createElement('option');
+                opt.value = dim.column;
+                opt.textContent = dim.label;
+                if (dim.column === defaultDim) opt.selected = true;
+                sel.appendChild(opt);
+            }
+            sel.addEventListener('change', () => {
+                this._stackByDim = sel.value || null;
+                this.fetchAndRender();
+            });
+            container.appendChild(sel);
+        }
     }
 
     createChartBtn(label, chartIdx, chartType) {
@@ -444,11 +494,9 @@ class DatasetPageV2 {
         btn.addEventListener('click', () => {
             this.activeChartIdx = chartIdx;
             this._toggleType = chartType;
-            // Update active states
-            document.querySelectorAll('.chart-selector .chart-btn').forEach(b => {
-                b.classList.toggle('active',
-                    parseInt(b.dataset.chartIdx) === chartIdx && b.dataset.chartType === chartType);
-            });
+            // Re-render chart selector to show/hide stack-by dropdown
+            const view = this.profile?.views?.[this.activeView];
+            this.renderChartSelector(view?.charts || []);
             this.fetchAndRender();
         });
 
@@ -581,6 +629,21 @@ class DatasetPageV2 {
             }
         }
 
+        // Population pyramid needs ALL ages and ALL genders
+        if (chartType === 'population_pyramid') {
+            const ageDim = this.profile.dimensions.age;
+            const genderDim = this.profile.dimensions.gender;
+            if (ageDim) delete filters[ageDim];
+            if (genderDim) delete filters[genderDim];
+        }
+
+        // When stacking by a dimension, remove it from filters (need all values)
+        const stackDim = (chartType === 'horizontal_bar' && this._stackByDim !== undefined)
+            ? this._stackByDim : null;
+        if (stackDim && filters[stackDim]) {
+            delete filters[stackDim];
+        }
+
         return filters;
     }
 
@@ -593,25 +656,31 @@ class DatasetPageV2 {
         const chartType = this.getActiveChartType();
         const dims = this.profile.dimensions;
 
+        // Stack-by override for h-bar: replaces both roles.series and series_dim
+        const effectiveSeries = (chartType === 'horizontal_bar' && this._stackByDim !== undefined)
+            ? this._stackByDim
+            : (chart?.roles?.series || null);
+
         return {
             primary_chart: chartType,
             ranked_charts: [{
                 chart_type: chartType,
                 roles: {
-                    x_axis: chart.roles?.x_axis || null,
-                    series: chart.roles?.series || null,
+                    x_axis: chart?.roles?.x_axis || null,
+                    series: effectiveSeries,
                     timeline: (this.activeView === 'timeline')
-                        ? (dims.time?.column || chart.roles?.x_axis || null)
+                        ? (dims.time?.column || chart?.roles?.x_axis || null)
                         : null,
-                    facet: chart.roles?.facet || null,
+                    facet: chart?.roles?.facet || null,
                 },
             }],
             geo_dim: dims.geo?.column || null,
             time_dim: dims.time?.column || null,
-            series_dim: chart.roles?.series || null,
+            series_dim: effectiveSeries,
             age_dim: dims.age || null,
             gender_dim: dims.gender || null,
             archetype: this.profile.archetype,
+            max_series: chart?.max_series || null,
             // Legacy compat fields
             multi_unit: dims.unit?.multi_unit || false,
         };

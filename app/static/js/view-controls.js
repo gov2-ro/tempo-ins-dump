@@ -190,21 +190,21 @@ class ViewControlsPanel {
         const select = document.createElement('select');
         select.className = 'control-select';
 
-        // "All" option when default is empty (no filter)
+        const filtered = options.filter(o => !ViewControlsPanel.TOTAL_RE.test(o.label));
+        // Default to "All" when resolveDefault returned all options (e.g. default:"total")
+        const isAllDefault = defaults.length === 0 || defaults.length >= filtered.length;
+
         const allOpt = document.createElement('option');
         allOpt.value = '_all';
         allOpt.textContent = '— All —';
-        if (defaults.length === 0) allOpt.selected = true;
+        if (isAllDefault) allOpt.selected = true;
         select.appendChild(allOpt);
 
-        for (const opt of options) {
-            // Skip Total-like options (not in parquet)
-            if (ViewControlsPanel.TOTAL_RE.test(opt.label)) continue;
-
+        for (const opt of filtered) {
             const option = document.createElement('option');
             option.value = opt.nom_item_id;
             option.textContent = opt.label;
-            if (defaults.includes(opt.nom_item_id)) option.selected = true;
+            if (!isAllDefault && defaults.includes(opt.nom_item_id)) option.selected = true;
             select.appendChild(option);
         }
         select.addEventListener('change', () => this.onChange());

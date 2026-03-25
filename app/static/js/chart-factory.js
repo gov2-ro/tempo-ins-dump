@@ -108,7 +108,19 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
         const groups = groupBy(rows, seriesIdx);
         const seriesLabelsMap = labels[seriesDim] || {};
 
-        for (const [seriesId, groupRows] of Object.entries(groups)) {
+        // Cap high-cardinality series — keep top N by sum
+        let entries = Object.entries(groups);
+        const MAX_SERIES = config.max_series || 12;
+        if (entries.length > MAX_SERIES) {
+            entries.sort((a, b) => {
+                const sumA = a[1].reduce((s, r) => s + (r[valueIdx] || 0), 0);
+                const sumB = b[1].reduce((s, r) => s + (r[valueIdx] || 0), 0);
+                return sumB - sumA;
+            });
+            entries = entries.slice(0, MAX_SERIES);
+        }
+
+        for (const [seriesId, groupRows] of entries) {
             const seriesLabel = seriesLabelsMap[String(seriesId)] || String(seriesId);
             const dataMap = {};
             for (const row of groupRows) {

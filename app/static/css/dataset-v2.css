@@ -584,3 +584,14 @@
     font-size: 11px;
     color: var(--text-light);
 }
+
+/* Stack by dropdown in chart selector */
+.stack-by-select {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px 8px;
+    font-size: 11px;
+    background: var(--bg-white);
+    margin-left: 4px;
+}
+.stack-by-select:focus { outline: none; border-color: var(--primary); }

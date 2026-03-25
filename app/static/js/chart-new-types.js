@@ -148,62 +148,94 @@ function createHorizontalBarChart(container, config, data, metadata) {
     const rows     = data.rows;
     const valueIdx = cols.length - 1;
 
-    // Use x_axis_dim (highest-cardinality categorical) or geo, fallback to first col
     const catDim = config.x_axis_dim || config.geo_dim || cols[0];
     const catIdx = cols.indexOf(catDim);
     const catLabels = labels[catDim] || {};
 
-    // Aggregate: sum values per category
-    const totals = {};
-    for (const row of rows) {
-        const key = row[catIdx];
-        totals[key] = (totals[key] || 0) + (row[valueIdx] || 0);
+    const seriesDim = config.series_dim;
+    const seriesIdx = seriesDim ? cols.indexOf(seriesDim) : -1;
+
+    // --- No series: single-color bars (original behavior) ---
+    if (seriesIdx === -1) {
+        const totals = {};
+        for (const row of rows) {
+            const key = row[catIdx];
+            totals[key] = (totals[key] || 0) + (row[valueIdx] || 0);
+        }
+        const items = Object.entries(totals)
+            .map(([id, val]) => ({ name: catLabels[String(id)] || String(id), value: val, id }))
+            .filter(d => { const l = d.name.trim().toLowerCase(); return l !== 'total' && l !== 'toate'; })
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 40)
+            .reverse();
+
+        chart.setOption({
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' },
+                formatter: params => `${params[0].name}<br/>${params[0].marker} <b>${formatNumber(params[0].value)}</b>` },
+            grid: { left: 160, right: 20, top: 10, bottom: 30 },
+            xAxis: { type: 'value', axisLabel: { fontSize: 11, formatter: v => formatNumber(v) } },
+            yAxis: { type: 'category', data: items.map(d => d.name), axisLabel: { fontSize: 11, width: 145, overflow: 'truncate' } },
+            series: [{ type: 'bar', data: items.map(d => d.value), itemStyle: { color: '#1a56db' },
+                label: { show: items.length <= 20, position: 'right', fontSize: 10, formatter: p => formatNumber(p.value) } }],
+            animationDuration: 300,
+        });
+        return chart;
     }
 
-    // Sort by value desc, take top 40
-    const items = Object.entries(totals)
-        .map(([id, val]) => ({ name: catLabels[String(id)] || String(id), value: val }))
-        .filter(d => {
-            const lbl = d.name.trim().toLowerCase();
-            return lbl !== 'total' && lbl !== 'toate';
-        })
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 40);
+    // --- Stacked horizontal bars by series dimension ---
+    const seriesLabels = labels[seriesDim] || {};
+    const TOTAL_RE = /^(total|toate|ambele sexe|ambele|urban\s*\+\s*rural|m\s*\+\s*f)$/i;
 
-    // Reverse so largest is at top
-    items.reverse();
+    const allSeriesIds = uniqueValues(rows, seriesIdx);
+    const seriesIds = allSeriesIds.filter(id => !TOTAL_RE.test((seriesLabels[String(id)] || '').trim()));
 
-    const option = {
-        tooltip: {
-            trigger: 'axis',
-            axisPointer: { type: 'shadow' },
-            formatter: params => `${params[0].name}<br/>${params[0].marker} <b>${formatNumber(params[0].value)}</b>`,
-        },
-        grid: { left: 160, right: 20, top: 10, bottom: 30 },
-        xAxis: {
-            type: 'value',
-            axisLabel: { fontSize: 11, formatter: v => formatNumber(v) },
-        },
-        yAxis: {
-            type: 'category',
-            data: items.map(d => d.name),
-            axisLabel: { fontSize: 11, width: 145, overflow: 'truncate' },
-        },
-        series: [{
-            type: 'bar',
-            data: items.map(d => d.value),
-            itemStyle: { color: '#1a56db' },
-            label: {
-                show: items.length <= 20,
-                position: 'right',
-                fontSize: 10,
-                formatter: p => formatNumber(p.value),
-            },
-        }],
+    // Build data: { catId: { seriesId: value } }
+    const dataMap = {};
+    const catTotals = {};
+    for (const row of rows) {
+        const cat = row[catIdx];
+        const ser = row[seriesIdx];
+        if (!seriesIds.includes(ser)) continue;
+        if (!dataMap[cat]) dataMap[cat] = {};
+        dataMap[cat][ser] = (dataMap[cat][ser] || 0) + (row[valueIdx] || 0);
+        catTotals[cat] = (catTotals[cat] || 0) + (row[valueIdx] || 0);
+    }
+
+    const catIds = Object.keys(dataMap)
+        .filter(id => !TOTAL_RE.test((catLabels[String(id)] || '').trim()))
+        .sort((a, b) => (catTotals[b] || 0) - (catTotals[a] || 0))
+        .slice(0, 40)
+        .reverse();
+
+    const yData = catIds.map(id => catLabels[String(id)] || String(id));
+    const COLORS = ['#1a56db', '#e74694', '#0ea5e9', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#64748b'];
+
+    const series = seriesIds.map((sid, i) => ({
+        name: seriesLabels[String(sid)] || String(sid),
+        type: 'bar',
+        stack: 'total',
+        data: catIds.map(cid => dataMap[cid]?.[sid] ?? null),
+        itemStyle: { color: COLORS[i % COLORS.length] },
+    }));
+
+    chart.setOption({
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' },
+            formatter(params) {
+                let html = `<b>${params[0].name}</b><br/>`;
+                for (const p of params) {
+                    if (p.value !== null && p.value !== undefined) {
+                        html += `${p.marker} ${p.seriesName}: <b>${formatNumber(p.value)}</b><br/>`;
+                    }
+                }
+                return html;
+            } },
+        legend: { show: series.length > 1 && series.length <= 20, type: 'scroll', bottom: 0, textStyle: { fontSize: 11 } },
+        grid: { left: 160, right: 20, top: 10, bottom: series.length > 1 ? 50 : 30 },
+        xAxis: { type: 'value', axisLabel: { fontSize: 11, formatter: v => formatNumber(v) } },
+        yAxis: { type: 'category', data: yData, axisLabel: { fontSize: 11, width: 145, overflow: 'truncate' } },
+        series,
         animationDuration: 300,
-    };
-
-    chart.setOption(option);
+    });
     return chart;
 }
 
@@ -246,6 +278,18 @@ function createStackedBarChart(container, config, data, metadata) {
         const lbl = (seriesLabels[String(id)] || '').trim().toLowerCase();
         return lbl !== 'total' && lbl !== 'toate' && lbl !== 'ambele sexe';
     });
+
+    // Cap high-cardinality series — keep top N by sum
+    const MAX_SERIES = config.max_series || 8;
+    if (seriesIds.length > MAX_SERIES) {
+        const sums = {};
+        for (const row of rows) {
+            const sid = row[seriesIdx];
+            if (seriesIds.includes(sid)) sums[sid] = (sums[sid] || 0) + (row[valueIdx] || 0);
+        }
+        seriesIds.sort((a, b) => (sums[b] || 0) - (sums[a] || 0));
+        seriesIds.length = MAX_SERIES;
+    }
 
     const COLORS = ['#1a56db', '#e74694', '#0ea5e9', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#64748b'];
 
