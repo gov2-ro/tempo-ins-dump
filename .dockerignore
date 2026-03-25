@@ -1,0 +1,13 @@
+data/
+data-*/
+_obsolete/
+docs/
+ui/
+profiling/
+*.py[cod]
+__pycache__/
+.git/
+.claude/
+.venv/
+*.log
+*.tar.gz
