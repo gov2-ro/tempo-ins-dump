@@ -1,15 +1,47 @@
-[ins.gov2.ro](https://ins.gov2.ro/) - scrapes data from _TEMPO-Online_ ([statistici.insse.ro](http://statistici.insse.ro:8077/tempo-online))  
+[ins.gov2.ro](https://ins.gov2.ro/) — scrapes and explores ~1,900 statistical datasets from _TEMPO-Online_ ([statistici.insse.ro](http://statistici.insse.ro:8077/tempo-online))
 
 _INS Tempo Online but make it nice._
 
 
-## UIs
-dataset chart profile
-    py -m http.server 8000
-main UI
-    uvicorn app.main:app --reload --port 8080
-duckdb browser
-    py duckdb-browser.py
+## Running
+
+| What | Command | URL |
+|---|---|---|
+| **Main app** (FastAPI + DuckDB) | `uvicorn app.main:app --reload --port 8080` | http://localhost:8080 |
+| Static UI explorers | `python -m http.server 8000` | http://localhost:8000/ui/dataset-navigator.html |
+| StatExplorer (alt) | `uvicorn explorer.main:app --reload --port 8081` | http://localhost:8081 |
+| DuckDB browser | `python duckdb-browser.py` | http://localhost:5000 |
+
+Activate venv first: `source ~/devbox/envs/240826/bin/activate`
+
+## Web Application (`app/`)
+
+FastAPI backend with DuckDB + Parquet, Vanilla JS + ECharts frontend.
+
+```
+app/
+  main.py             — FastAPI entry, mounts API routers + static files
+  config.py           — DB_PATH, PARQUET_DIR (v3), MAX_DATA_ROWS=50000
+  db.py               — DuckDB cursor-per-request (concurrency-safe)
+  routers/            — /api/categories, /api/datasets, /api/datasets/{id}/data
+  services/           — chart_config, chart_selector, query_builder
+  static/js/          — dataset-page, chart-factory, chart-geo, chart-demographic, filter-panel
+  static/css/         — dataset.css, datasets.css, main.css
+  static/geo/         — romania-counties/regions/macroregions.geojson
+```
+
+### StatExplorer (`explorer/`)
+
+Alternative Tableau-inspired explorer with i18n and component-based JS architecture.
+
+```
+explorer/
+  main.py             — FastAPI ("StatExplorer")
+  services/           — chart_selector, query_builder, translations
+  static/js/charts/   — bar, geo, line, heatmap, pyramid, bubble, small-multiples, table
+  static/js/components/ — ChartCanvas, DatasetPicker, FilterBar, LeftSidebar, TopNav
+  static/js/lib/      — api, i18n, utils
+```
 
 ## Pipeline Scripts
 
@@ -29,17 +61,24 @@ Sequential data pipeline — run in order. All scripts accept `--lang ro|en` (de
 | `10-import-metadata.py` | DuckDB tables | Imports all metadata into DuckDB |
 | `10-classify-dimensions.py` | `dimension_options_parsed`, `matrix_profiles` | Parses/classifies dimension options, detects archetypes |
 | `10-sdmx-export.py` | `data/6-sdmx-csv/ro/` | Converts compacted CSVs to SDMX-CSV 2.0 |
+| `11-build-sdmx-codes.py` | DuckDB code mapping tables | Builds SDMX code mappings in DuckDB |
 | `11-coverage-profiler.py` | `dataset_coverage` DuckDB table | Analyzes data completeness per dataset |
-| `detect_trends.py` | `dataset_trends` DuckDB table | Detects trends, YoY growth, seasonality per dataset |
+| `12-parquet-to-sdmx.py` | `data/parquet-v3/ro/` | Transforms parquet-v2 to SDMX-native parquet-v3 |
+| `12-split-datasets.py` | `data/parquet-v3/ro/` | Splits inconsistent datasets into clean sub-datasets |
 
 ### Other root-level scripts
 
 | Script | Description |
 |---|---|
+| `generate_view_profiles.py` | Generates per-dataset JSON view profiles → `data/view-profiles/` |
+| `build-geo-regions.py` | Dissolves county GeoJSON into regions + macroregions |
+| `split_rules.py` | Split rules engine — classifies datasets needing structural splits |
+| `detect_trends.py` | Detects trends, YoY growth, seasonality → `dataset_trends` DuckDB table |
 | `duckdb_config.py` | Central config: paths for all DuckDB/Parquet processing |
 | `duckdb-browser.py` | Flask browser for exploring DuckDB + Parquet data |
 | `build-dataset-metadata.py` | Scans CSVs, calculates stats → `ui/data/dataset-metadata.json` |
-| `test_chart_selector.py` | Tests chart selection engine across all 1,886 datasets |
+| `get-news.py` | Scrapes INS news/press releases → `data/insse_news.csv` |
+| `test_chart_selector.py` | Tests chart selection engine across all datasets |
 
 ## utils/
 
@@ -75,70 +114,63 @@ Sequential data pipeline — run in order. All scripts accept `--lang ro|en` (de
 
 ```
 data/
-  1-indexes/<lang>/   matrices.csv, context.csv
-  2-metas/<lang>/     {dataset-id}.json — metadata per dataset
-  3-db/               tempo-indexes.db (SQLite, legacy)
-  4-datasets/ro/      raw CSVs from TEMPO API
-  5-compact-datasets/ CSVs with numeric IDs instead of labels
-  6-sdmx-csv/         SDMX-CSV 2.0 output
-  parquet/ro/         Parquet (text labels)
-  parquet-v2/ro/      Parquet (numeric IDs) — used by web app
-  tempo_metadata.duckdb — main metadata DB
+  1-indexes/{lang}/        context.csv, matrices.csv
+  2-metas/{lang}/          {dataset-id}.json — metadata per dataset
+  3-db/{lang}/             tempo-indexes.db (SQLite, legacy)
+  4-datasets/{lang}/       raw CSVs from TEMPO API
+  4-datasets-slim-samples/ 50/ and 100/ row samples for LLM analysis
+  5-compact-datasets/      CSVs with numeric IDs instead of labels
+  6-sdmx-csv/ro/           SDMX-CSV 2.0 output
+  parquet/ro/              Parquet v1 (text labels)
+  parquet-v2/ro/           Parquet v2 (numeric IDs) — 1,886 files
+  parquet-v3/ro/           Parquet v3 (SDMX-native + split) — 3,719 files ← used by app
+  view-profiles/           Per-dataset JSON view profiles — 3,883 files
+  tempo_metadata.duckdb    Main DuckDB metadata (12 tables)
+  value_profiles.duckdb    Statistical value profiles
+  meta/                    Reference data (judet CSVs, SIRUTA)
+  logs/                    Pipeline execution logs
 ```
 
+Historical data snapshots in `data-old/`, `data-25-1/`, `data-2026/`.
+
+## Deployment
+
+- **Dockerfile** + **fly.toml** — Fly.io deployment (shared-cpu-1x, 512MB, Amsterdam region)
+- `scripts/prepare-deploy-data.sh` — Stages parquet-v3 + v2 fallbacks + DuckDB + view-profiles into `deploy-data/`
+- `deploy/oracle/` — Oracle Cloud deployment (systemd + nginx)
+- `deploy/hf-spaces/` — Hugging Face Spaces deployment
 
 
-## Roadmap 
 
-### current
-- [x] fetch english labels
-- [ ] revise propfiling
-- [ ] UI
-    - [x] define charting rules
-    - [x] json chart profiles for each dataset
-    - [ ] when charts are split use the children - flag splitted charts
+## Roadmap
 
-### later 
-- [ ] sdmx ready
-- [ ] ui shortcuts
-- [ ] static site generator + OG previews
-- [ ] generic sdmx ui framewok. md, id etc
-- [ ] nl2sql
-- [ ] notebook ready, publish to kaggle etc
+### Done
+- [x] Fetch index, download CSVs, compact data
+- [x] Import into DuckDB + Parquet (v1 → v2 → v3)
+- [x] Fetch english labels (bilingual support)
+- [x] FastAPI backend (`app/`) with DuckDB + Parquet
+- [x] Chart framework (archetypes: geo_time, demographic, time_residence, time_series)
+- [x] Choropleth map, demographic grouped bar, line charts
+- [x] Dataset splitting (by county, age groups, multi-UM)
+- [x] View profiles (3,883 JSON configs)
+- [x] SDMX code mappings + parquet-v3 conversion
+- [x] Deployment setup (Fly.io, Oracle, HF Spaces)
+- [x] Define charting rules + JSON chart profiles per dataset
+- [x] Filter datasets by dimension, context info, permalinks
+- [x] 30k cells limit handling in fetch
 
+### Current
+- [ ] UI polish — split dataset charts using children, flag split charts
+- [ ] Revise profiling pipeline
+- [ ] StatExplorer (`explorer/`) — Tableau-inspired alternative UI
 
-### alpha
-- [x] fetch index
-- [x] download csvs
-- [x] refactor csvs -> db
-- [x] dashboard / charts (alpha)
-- [x] compact data
-
-### Prepare for UI
-- [x] import into DuckDB / Parquet
-- [ ] **split repositories** -> UI (ask 493n7 to look at initial docs, db structure and create clean specs)
-    - [ ] api / FastAPI?
-    - [ ] front end 
-
-
-### beta
-- [x] some datasets are not downloaded
-    - [x] 30k cells limit alert: _Selectia dvs actuala ar solicita 30600 celule. Datorita limitarilor impuse de o aplicatie web, va rugam sa rafinati cautarea Dvs. pentru a cobori sub pragul de 30000 de celule. Va multumim!_ see comments in [6-fetch-csv.py](6-fetch-csv.py)
-
-- [x] categorise filters
-- [ ] auto charts
-- [ ] dataset filtering, charting options
-
-
-### UI
-- [x] filter datasets by dimension
-- [x] add context info
-- [x] permalinks #variables in url
-- [x] combine labels/dimensions
-- [x] show dataset preview
-- [x] collapse definition
-- [ ] tree nav
-- [ ] basic stats / charts - per all years, per last year - for localitati normeaza la populatie
+### Later
+- [ ] SDMX-ready export + generic SDMX UI framework
+- [ ] Static site generator + OG previews
+- [ ] NL2SQL natural language queries
+- [ ] Notebook-ready exports, publish to Kaggle
+- [ ] UI shortcuts
+- [ ] Basic stats/charts per localitati (normalize to population)
 
 see also: [ui/readme.md](ui/readme.md)
  
