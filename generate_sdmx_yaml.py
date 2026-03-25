@@ -19,7 +19,7 @@ import yaml  # PyYAML
 PROJECT_ROOT = Path(__file__).parent
 DB_PATH = PROJECT_ROOT / "data" / "tempo_metadata.duckdb"
 PARQUET_DIR = PROJECT_ROOT / "data" / "parquet-v3" / "ro"
-OUT_DIR = PROJECT_ROOT / "sdmx-dashboards"
+OUT_DIR = PROJECT_ROOT / "data" / "sdmx-dashboards"
 
 DEFAULT_BASE_URL = "http://localhost:8080"
 
