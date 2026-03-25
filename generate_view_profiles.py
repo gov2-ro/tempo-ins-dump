@@ -558,7 +558,8 @@ def build_snapshot_view(time_dim: dict | None, analysis_dims: list,
         if low_card:
             bar_roles["series"] = low_card[0]['column']
             if not has_neg and 2 <= low_card[0]['option_count'] <= 4:
-                bar_toggles = ["stacked_bar", "grouped_bar"]
+                bar_toggles = ["stacked_bar"]
+        bar_toggles.append("line")  # Line distribution curve toggle
         bar_chart = {
             "chart_type": "horizontal_bar",
             "is_primary": len(charts) == 0,  # primary if no choropleth
@@ -577,7 +578,7 @@ def build_snapshot_view(time_dim: dict | None, analysis_dims: list,
         if series_candidates:
             bar_roles["series"] = series_candidates[0]['column']
             if not has_neg and 2 <= series_candidates[0]['option_count'] <= 4:
-                bar_toggles = ["stacked_bar", "grouped_bar"]
+                bar_toggles = ["stacked_bar"]
         # Choose chart type based on cardinality
         if x_dim['option_count'] > 20:
             chart_type = "horizontal_bar"  # long list → horizontal ranking
@@ -590,6 +591,7 @@ def build_snapshot_view(time_dim: dict | None, analysis_dims: list,
             "is_primary": len(charts) == 0,
             "roles": bar_roles,
         }
+        bar_toggles.append("line")  # Line distribution curve toggle
         if bar_toggles:
             bar_chart["toggles"] = bar_toggles
         charts.append(bar_chart)
@@ -618,8 +620,37 @@ def build_snapshot_view(time_dim: dict | None, analysis_dims: list,
                     c['is_primary'] = False
             pyramid['is_primary'] = True
 
+    # --- 3b. Variant snapshot bars (all dim pairs) ---
+    if len(non_singleton) >= 2:
+        primary_bar = next((c for c in charts
+            if c['chart_type'] in ('grouped_bar', 'bar_vertical', 'horizontal_bar')), None)
+        primary_x = primary_bar['roles'].get('x_axis') if primary_bar else None
+        primary_s = primary_bar['roles'].get('series') if primary_bar else None
+
+        for x_dim in non_singleton:
+            for s_dim in non_singleton:
+                if x_dim == s_dim:
+                    continue
+                if x_dim['column'] == primary_x and s_dim['column'] == primary_s:
+                    continue  # Skip existing primary
+                if s_dim['option_count'] > 8:
+                    continue  # Series too large
+                ct = "horizontal_bar" if x_dim['option_count'] > 20 else "grouped_bar"
+                variant = {
+                    "chart_type": ct,
+                    "is_primary": False,
+                    "variant": f"{x_dim['column']}_by_{s_dim['column']}",
+                    "roles": {
+                        "x_axis": x_dim['column'],
+                        "series": s_dim['column'],
+                    },
+                }
+                if 2 <= s_dim['option_count'] <= 4:
+                    variant["toggles"] = ["stacked_bar"]
+                charts.append(variant)
+
     # --- 4. Bubble/matrix ---
-    qualifying = [d for d in non_singleton if d['option_count'] >= 3 and d['dim_type'] == 'indicator']
+    qualifying = [d for d in non_singleton if d['option_count'] >= 3]
     if len(qualifying) >= 2:
         q_sorted = sorted(qualifying, key=lambda d: d['option_count'])
         bubble = {
