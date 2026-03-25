@@ -24,11 +24,12 @@ OUT_DIR = PROJECT_ROOT / "data" / "sdmx-dashboards"
 DEFAULT_BASE_URL = "http://localhost:8080"
 
 # SDMX concept → chart role hint
+# Supported chart types: VALUE, PIE, BAR, LINE (anything else → time series)
 CHART_TYPE_BY_ARCHETYPE = {
-    "geo_time": "MAP",
-    "time_series": "LINES",
-    "demographic": "BARS",
-    "time_residence": "LINES",
+    "geo_time": "BAR",
+    "time_series": "LINE",
+    "demographic": "BAR",
+    "time_residence": "LINE",
 }
 
 # Which concept to use as legend
@@ -49,11 +50,9 @@ def preferred_legend(dim_cols: list[str]) -> str:
 def guess_chart_type(archetype: str | None, dim_cols: list[str]) -> str:
     if archetype and archetype in CHART_TYPE_BY_ARCHETYPE:
         return CHART_TYPE_BY_ARCHETYPE[archetype]
-    if "REF_AREA" in dim_cols:
-        return "MAP"
     if "TIME_PERIOD" in dim_cols:
-        return "LINES"
-    return "BARS"
+        return "LINE"
+    return "BAR"
 
 
 def generate_yaml(
@@ -73,19 +72,33 @@ def generate_yaml(
 
     return {
         "DashID": f"INS_{matrix_code}",
-        "Title": matrix_name,
         "Rows": [
+            # Row 0 must be TITLE (schema requirement)
             {
                 "Row": 0,
-                "chartType": chart_type,
+                "chartType": "TITLE",
                 "Title": matrix_name,
-                "DATA": data_url,
-                "dsdLink": dsd_url,
-                "metadataLink": flow_url,
+            },
+            # Row 1+ holds the actual chart
+            {
+                "Row": 1,
+                "chartType": chart_type,
+                "Title": None,
+                "Subtitle": "auto",
+                "Unit": None,
+                "UnitShow": "No",
+                "unitLoc": "HIDE",
+                "Decimals": 0,
+                "LabelsYN": "No",
+                "legendConcept": legend,
+                "legendLoc": None,
                 "xAxisConcept": "TIME_PERIOD" if "TIME_PERIOD" in dim_cols else dim_cols[0],
                 "yAxisConcept": "OBS_VALUE",
-                "legendConcept": legend,
-            }
+                "downloadYN": "Yes",
+                "dsdLink": dsd_url,
+                "metadataLink": flow_url,
+                "DATA": data_url,
+            },
         ],
     }
 

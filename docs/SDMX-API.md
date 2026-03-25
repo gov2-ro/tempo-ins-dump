@@ -10,7 +10,9 @@ All endpoints are mounted under `/sdmx` on the same FastAPI app (port 8080).
 
 ### Data — `GET /sdmx/2.1/data/{agency},{flow}/{key}`
 
-Returns observations in **SDMX-JSON 2.0** format, sourced from `data/parquet-v3/ro/{flow}.parquet`.
+Returns observations in **SDMX-ML 2.1 GenericData XML** format (flat `AllDimensions` mode), sourced from `data/parquet-v3/ro/{flow}.parquet`.
+
+> `sdmxthon` (used by the Dashboard Generator) only parses XML — SDMX-JSON is not supported by that library.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -80,16 +82,20 @@ python generate_sdmx_yaml.py --skip-splits
 python generate_sdmx_yaml.py --last-n 5
 ```
 
+Each YAML has two rows: `Row: 0` is a `TITLE` entry (required by the Dashboard Generator schema), `Row: 1` is the actual chart. `Unit: null` is a required field.
+
 Chart type is auto-selected from the dataset archetype:
+
+Supported chart types: `VALUE`, `PIE`, `BAR`, `LINE` (anything else also renders as line/time-series).
 
 | Archetype | Chart type |
 |---|---|
-| `geo_time` | `MAP` |
-| `time_series` | `LINES` |
-| `demographic` | `BARS` |
-| `time_residence` | `LINES` |
-| (fallback, has REF_AREA) | `MAP` |
-| (fallback, has TIME_PERIOD) | `LINES` |
+| `geo_time` | `BAR` |
+| `time_series` | `LINE` |
+| `demographic` | `BAR` |
+| `time_residence` | `LINE` |
+| (fallback, has TIME_PERIOD) | `LINE` |
+| (fallback, no TIME_PERIOD) | `BAR` |
 
 `legendConcept` defaults to `REF_AREA` if present, then first non-time/non-unit dimension.
 

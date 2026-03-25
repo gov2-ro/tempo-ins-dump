@@ -20,6 +20,7 @@ _obsolete
 .playwright-mcp/*
 .playwright-mcp/
 .mcp.json
+test-results/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,16 +1,18 @@
 """SDMX 2.1 REST API endpoints for INS TEMPO data.
 
 Provides the minimal endpoints required by the SDMX Dashboard Generator:
-  GET /sdmx/2.1/data/INS,{flow}/{key}         → SDMX-JSON 2.0
+  GET /sdmx/2.1/data/INS,{flow}/{key}         → SDMX-ML 2.1 XML (GenericData)
   GET /sdmx/2.1/datastructure/INS/{flow}/1.0  → SDMX-ML 2.1 XML (DSD)
   GET /sdmx/2.1/dataflow/INS/{flow}/1.0       → SDMX-ML 2.1 XML (Dataflow)
+
+Note: sdmxthon (used by the Dashboard Generator) only supports XML, not JSON.
 """
 from __future__ import annotations
 
 import os
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 
 from app.db import get_conn
 from app.config import PARQUET_DIR, PARQUET_V2_DIR
@@ -132,86 +134,57 @@ def get_data(
         raise HTTPException(500, f"Query error: {e}")
 
     # -----------------------------------------------------------------------
-    # Build SDMX-JSON 2.0 structure
-    # Per sdmxthon expectations: data.structure.dimensions.series + observation
-    # dimensions list, data.dataSets[0].observations keyed as "s:o" index strings
+    # Build SDMX-ML 2.1 GenericData XML
+    # sdmxthon requires: GenericData root, Header with Structure element,
+    # DataSet with generic:Obs children (flat "AllDimensions" format).
     # -----------------------------------------------------------------------
 
-    # Collect unique values per series dimension (all except OBS_VALUE)
-    all_dim_values: list[list[str]] = [[] for _ in dim_names]
-    seen: list[dict[str, int]] = [{} for _ in dim_names]
+    def _esc(v: str) -> str:
+        return str(v).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
+    obs_lines: list[str] = []
     for row in rows:
-        for i, val in enumerate(row[:-1]):
-            sv = str(val) if val is not None else ""
-            if sv not in seen[i]:
-                seen[i][sv] = len(seen[i])
-                all_dim_values[i].append(sv)
+        values = "".join(
+            f'<generic:Value id="{dim_names[i]}" value="{_esc(row[i] if row[i] is not None else "")}"/>'
+            for i in range(len(dim_names))
+        )
+        obs_val = "" if row[-1] is None else str(row[-1])
+        obs_lines.append(
+            f"<generic:Obs>"
+            f"<generic:ObsKey>{values}</generic:ObsKey>"
+            f"<generic:ObsValue value=\"{_esc(obs_val)}\"/>"
+            f"</generic:Obs>"
+        )
 
-    # Build observations dict: key = "d0:d1:...:0" (last index is obs dimension = 0)
-    observations: dict[str, list] = {}
-    for row in rows:
-        parts = []
-        for i, val in enumerate(row[:-1]):
-            sv = str(val) if val is not None else ""
-            parts.append(str(seen[i][sv]))
-        obs_key = ":".join(parts) + ":0"
-        observations[obs_key] = [row[-1]]  # OBS_VALUE
+    dataset_body = "".join(obs_lines)
 
-    # Dimensions structure
-    series_dims = [
-        {
-            "id": dim_names[i],
-            "name": dim_labels[i],
-            "keyPosition": i,
-            "role": None,
-            "values": [{"id": v, "name": v} for v in all_dim_values[i]],
-        }
-        for i in range(len(dim_names))
-    ]
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<message:GenericData'
+        ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
+        ' xmlns:message="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/message"'
+        ' xmlns:generic="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/data/generic"'
+        ' xmlns:common="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/common">'
+        f'<message:Header>'
+        f'<message:ID>{flow}</message:ID>'
+        f'<message:Test>false</message:Test>'
+        f'<message:Prepared>2024-01-01T00:00:00</message:Prepared>'
+        f'<message:Sender id="{AGENCY}"/>'
+        f'<message:Structure structureID="{flow}" dimensionAtObservation="AllDimensions">'
+        f'<common:Structure>'
+        f'<Ref agencyID="{AGENCY}" id="{flow}" version="1.0" class="DataStructure" package="datastructure"/>'
+        f'</common:Structure>'
+        f'</message:Structure>'
+        f'</message:Header>'
+        f'<message:DataSet structureRef="{flow}" action="Replace">'
+        f'{dataset_body}'
+        f'</message:DataSet>'
+        f'</message:GenericData>'
+    )
 
-    obs_dim = {
-        "id": "TIME_PERIOD" if "TIME_PERIOD" in dim_names else "OBS_DIM",
-        "name": "Time Period",
-        "keyPosition": len(dim_names),
-        "role": "time",
-        "values": [{"id": "0", "name": "0"}],
-    }
+    return Response(content=xml, media_type="application/xml")
 
-    sdmx_json = {
-        "meta": {
-            "schema": "https://raw.githubusercontent.com/sdmx-twg/sdmx-json/master/data-message/tools/schemas/2.0/sdmx-json-data-schema.json",
-            "id": flow,
-            "prepared": "2024-01-01T00:00:00",
-            "sender": {"id": AGENCY, "name": "INS Romania"},
-            "links": [],
-        },
-        "data": {
-            "dataSets": [
-                {
-                    "action": "Information",
-                    "observations": observations,
-                }
-            ],
-            "structure": {
-                "id": flow,
-                "ref": {"id": flow, "agencyID": AGENCY, "version": "1.0"},
-                "links": [
-                    {"urn": f"urn:sdmx:org.sdmx.infomodel.datastructure.DataStructure={AGENCY}:{flow}(1.0)"}
-                ],
-                "dimensions": {
-                    "series": series_dims,
-                    "observation": [obs_dim],
-                },
-                "attributes": {
-                    "series": [],
-                    "observation": [],
-                },
-            },
-        },
-    }
 
-    return JSONResponse(content=sdmx_json)
 
 
 # ---------------------------------------------------------------------------
