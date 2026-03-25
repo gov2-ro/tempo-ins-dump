@@ -97,6 +97,32 @@ HTML_TEMPLATE = """
         .dataset-item.active .dataset-stats {
             color: rgba(255,255,255,0.7);
         }
+        .dataset-item.is-split {
+            border-left: 3px solid #b8daff;
+            padding-left: 5px;
+        }
+        .dataset-item.is-split .dataset-code::before {
+            content: '↳ ';
+            color: #6cb2f7;
+            font-size: 11px;
+        }
+        .dataset-item.is-split.active {
+            border-left-color: rgba(255,255,255,0.5);
+        }
+        .split-badge {
+            display: inline-block;
+            font-size: 9px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            background: #e8f0fe;
+            color: #1967d2;
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+        .dataset-item.active .split-badge {
+            background: rgba(255,255,255,0.25);
+            color: white;
+        }
 
         .info-grid {
             display: grid;
@@ -359,6 +385,58 @@ HTML_TEMPLATE = """
         .hero-stat .num { font-size: 24px; font-weight: bold; color: #007bff; }
         .hero-stat .lbl { font-size: 11px; color: #999; text-transform: uppercase; }
 
+        /* Split family panel */
+        .split-family {
+            background: #f0f7ff;
+            border: 1px solid #cce0ff;
+            border-radius: 6px;
+            padding: 14px 16px;
+            margin: 14px 0;
+        }
+        .split-family h3 {
+            font-size: 13px;
+            color: #1967d2;
+            margin-bottom: 8px;
+        }
+        .split-family .parent-link {
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+        .split-family .parent-link a {
+            color: #1967d2;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .split-family .parent-link a:hover { text-decoration: underline; }
+        .sibling-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .sibling-item {
+            display: flex;
+            gap: 8px;
+            align-items: baseline;
+            padding: 5px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+            background: white;
+            border: 1px solid #dde5f0;
+        }
+        .sibling-item:hover { border-color: #1967d2; background: #e8f0fe; }
+        .sibling-item.current { background: #d2e3fc; border-color: #1967d2; font-weight: 600; }
+        .sibling-item .s-code { color: #1967d2; min-width: 60px; font-size: 12px; }
+        .sibling-item .s-label { flex: 1; color: #333; }
+        .sibling-item .s-rows { color: #888; font-size: 11px; white-space: nowrap; }
+        .sibling-item .s-pattern {
+            font-size: 10px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            background: #e8eaed;
+            color: #666;
+        }
+
         .theme-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -566,10 +644,12 @@ HTML_TEMPLATE = """
                     : currentSort === 'options' && d.total_options != null
                     ? ` • ${d.total_options.toLocaleString()} opts`
                     : '';
+                const splitClass = d.is_split ? ' is-split' : '';
+                const splitBadge = d.is_split ? `<span class="split-badge">${d.matrix_code.replace(d.parent_matrix_code + '_', '')}</span>` : '';
                 return `
-                <li class="dataset-item ${d.matrix_code === currentMatrix ? 'active' : ''}"
+                <li class="dataset-item${splitClass} ${d.matrix_code === currentMatrix ? 'active' : ''}"
                     onclick="setHash('${d.matrix_code}')">
-                    <div class="dataset-code">${d.matrix_code}</div>
+                    <div class="dataset-code">${d.matrix_code}${splitBadge}</div>
                     <div class="dataset-name">${d.matrix_name}</div>
                     <div class="dataset-stats">${(d.row_count || 0).toLocaleString()} rows • ${d.mat_max_dim} dims${extra}</div>
                 </li>`;
@@ -821,12 +901,38 @@ HTML_TEMPLATE = """
                 </table>
             `;
 
+            // --- Split family panel ---
+            const sf = data.split_family;
+            let splitFamilyHtml = '';
+            if (sf && sf.siblings && sf.siblings.length) {
+                const isChild = sf.is_split && sf.parent_matrix_code;
+                const title = isChild ? 'Sibling Splits' : 'Sub-datasets';
+                const parentLink = isChild
+                    ? `<div class="parent-link">Parent: <a onclick="setHash('${sf.parent_matrix_code}')">${sf.parent_matrix_code}</a></div>`
+                    : '';
+                const items = sf.siblings.map(s => `
+                    <div class="sibling-item ${s.is_current ? 'current' : ''}"
+                         onclick="setHash('${s.matrix_code}')">
+                        <span class="s-label">${s.suffix_label || s.matrix_code}</span>
+                        <span class="s-pattern">${s.split_pattern.replace(/_/g, ' ')}</span>
+                        <span class="s-rows">${(s.row_count||0).toLocaleString()} rows</span>
+                    </div>
+                `).join('');
+                splitFamilyHtml = `
+                    <div class="split-family">
+                        <h3>${title} (${sf.siblings.length})</h3>
+                        ${parentLink}
+                        <div class="sibling-list">${items}</div>
+                    </div>`;
+            }
+
             const navBtns = renderNavButtons();
             document.getElementById('content').innerHTML = `
                 ${breadcrumbs}
                 ${navBtns}
                 <h1>${d.matrix_code}</h1>
                 <p style="color:#555; margin-bottom:12px">${d.matrix_name}</p>
+                ${splitFamilyHtml}
 
                 <div style="margin: 12px 0;">
                     <div class="stat-box">
@@ -1040,7 +1146,8 @@ def api_datasets():
                 )
                 SELECT m.matrix_code, m.matrix_name, m.row_count, m.mat_max_dim,
                        m.file_size_bytes, m.ultima_actualizare, m.ancestor_codes,
-                       m.context_code, COALESCE(o.total_options, 0) AS total_options
+                       m.context_code, COALESCE(o.total_options, 0) AS total_options,
+                       m.is_split, m.parent_matrix_code
                 FROM matrices m
                 LEFT JOIN opt_counts o ON o.matrix_code = m.matrix_code
                 WHERE m.row_count > 0
@@ -1058,12 +1165,15 @@ def api_datasets():
                     'ancestor_codes': row[6] or [],
                     'context_code': row[7],
                     'total_options': row[8],
+                    'is_split': bool(row[9]),
+                    'parent_matrix_code': row[10],
                 })
         else:
             order_by = SORT_OPTIONS.get(sort_key, SORT_OPTIONS['name'])
             result = conn.execute(f"""
                 SELECT matrix_code, matrix_name, row_count, mat_max_dim,
-                       file_size_bytes, ultima_actualizare, ancestor_codes, context_code
+                       file_size_bytes, ultima_actualizare, ancestor_codes, context_code,
+                       is_split, parent_matrix_code
                 FROM matrices
                 WHERE row_count > 0
                 ORDER BY {order_by}
@@ -1079,6 +1189,8 @@ def api_datasets():
                     'ultima_actualizare': str(row[5]) if row[5] else None,
                     'ancestor_codes': row[6] or [],
                     'context_code': row[7],
+                    'is_split': bool(row[8]),
+                    'parent_matrix_code': row[9],
                 })
 
         conn.close()
@@ -1238,6 +1350,45 @@ def api_dataset(matrix_code):
             FROM dataset_value_profiles WHERE matrix_code = ?
         """, [matrix_code]).fetchone()
 
+        # Split family: siblings (if this is a split) or children (if this is a parent)
+        is_split = meta_row[14] if len(meta_row) > 14 else False  # reuse existing field
+        parent_code = None
+        siblings = []
+        # Re-fetch split info specifically
+        split_info = conn_meta.execute("""
+            SELECT is_split, parent_matrix_code FROM matrices WHERE matrix_code = ?
+        """, [matrix_code]).fetchone()
+        if split_info:
+            is_split_flag, parent_code = split_info
+            if is_split_flag and parent_code:
+                # This is a split child — get siblings (other children of same parent)
+                sib_rows = conn_meta.execute("""
+                    SELECT ds.sub_matrix_code, ds.suffix_label, ds.split_pattern, ds.row_count,
+                           m.matrix_name
+                    FROM dataset_splits ds
+                    JOIN matrices m ON m.matrix_code = ds.sub_matrix_code
+                    WHERE ds.parent_matrix_code = ?
+                    ORDER BY ds.sub_matrix_code
+                """, [parent_code]).fetchall()
+                siblings = [{
+                    'matrix_code': r[0], 'suffix_label': r[1], 'split_pattern': r[2],
+                    'row_count': r[3], 'matrix_name': r[4], 'is_current': r[0] == matrix_code,
+                } for r in sib_rows]
+            else:
+                # This is a parent — get children
+                child_rows = conn_meta.execute("""
+                    SELECT ds.sub_matrix_code, ds.suffix_label, ds.split_pattern, ds.row_count,
+                           m.matrix_name
+                    FROM dataset_splits ds
+                    JOIN matrices m ON m.matrix_code = ds.sub_matrix_code
+                    WHERE ds.parent_matrix_code = ?
+                    ORDER BY ds.sub_matrix_code
+                """, [matrix_code]).fetchall()
+                siblings = [{
+                    'matrix_code': r[0], 'suffix_label': r[1], 'split_pattern': r[2],
+                    'row_count': r[3], 'matrix_name': r[4], 'is_current': False,
+                } for r in child_rows]
+
         # Dimensions with options
         dimensions = conn_meta.execute("""
             SELECT d.dim_label, d.dim_column_name, d.option_count,
@@ -1305,6 +1456,11 @@ def api_dataset(matrix_code):
                 for d in dimensions
             ],
             'preview': preview_data,
+            'split_family': {
+                'is_split': bool(split_info[0]) if split_info else False,
+                'parent_matrix_code': parent_code,
+                'siblings': siblings,
+            } if siblings else None,
         })
 
     except Exception as e:
