@@ -1,15 +1,14 @@
 data/*
 data*/*
 /tmp
+/*.png
 /data/*
 *.code-workspace
 .vscode
 .vscode/*
 .github
 .github/*
-.claude/*
-.claude
-*/.claude*
+.claude/settings.local.json
 .github/*
 */_obsolete
 */*.log
