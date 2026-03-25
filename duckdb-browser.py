@@ -9,6 +9,7 @@ This demonstrates:
 """
 from flask import Flask, render_template_string, request, jsonify
 import csv
+import json
 import duckdb
 import math
 from pathlib import Path
@@ -1715,6 +1716,22 @@ def api_dataset(matrix_code):
 
         conn_meta.close()
 
+        # Overlay EN text fields from EN meta JSON when lang=en
+        en_definitie = meta_row[5]
+        en_metodologie = meta_row[6]
+        en_observatii = meta_row[8]
+        if lang == 'en':
+            base_code = matrix_code.split('_')[0] if '_' in matrix_code else matrix_code
+            en_meta_path = Path(f'data/2-metas/en/{base_code}.json')
+            if en_meta_path.exists():
+                try:
+                    en_meta = json.loads(en_meta_path.read_text(encoding='utf-8'))
+                    en_definitie = en_meta.get('definitie') or en_definitie
+                    en_metodologie = en_meta.get('metodologie') or en_metodologie
+                    en_observatii = en_meta.get('observatii') or en_observatii
+                except Exception:
+                    pass
+
         # First page of data — prefer EN CSV when lang=en
         page = int(request.args.get('page', 0))
         page_size = int(request.args.get('page_size', 50))
@@ -1736,10 +1753,10 @@ def api_dataset(matrix_code):
                 'context_code': meta_row[2],
                 'ancestor_path': meta_row[3],
                 'periodicitati': meta_row[4],
-                'definitie': meta_row[5],
-                'metodologie': meta_row[6],
+                'definitie': en_definitie,
+                'metodologie': en_metodologie,
                 'ultima_actualizare': fmt_date(meta_row[7]),
-                'observatii': meta_row[8],
+                'observatii': en_observatii,
                 'persoane_responsabile': meta_row[9],
                 'row_count': meta_row[10],
                 'mat_max_dim': meta_row[11],

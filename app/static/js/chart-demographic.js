@@ -12,13 +12,14 @@ function createDemographicChart(container, config, data, metadata) {
     const valueIdx = cols.length - 1;
 
     const timeDim = config.time_dim;
-    const ageDim = config.age_dim;
+    // Use explicit x_axis_dim/series_dim from roles (variant charts) over profile defaults
+    const ageDim = config.x_axis_dim || config.age_dim;
     const genderDim = config.gender_dim;
 
     const timeIdx = timeDim ? cols.indexOf(timeDim) : -1;
     const ageIdx = ageDim ? cols.indexOf(ageDim) : -1;
-    // Group by gender if available, else first indicator dim
-    const seriesDim = genderDim || config.series_dim;
+    // Prefer explicit series_dim (from variant chart roles) over gender_dim
+    const seriesDim = config.series_dim || genderDim;
     const seriesIdx = seriesDim ? cols.indexOf(seriesDim) : -1;
 
     // Fall back to time series if no age/category dimension
@@ -95,11 +96,13 @@ function createDemographicChart(container, config, data, metadata) {
         return seriesIds.map((sid, i) => {
             const seriesLabel = sid !== null ? (seriesLabels[String(sid)] || String(sid)) : (metadata.matrix_name || 'Value');
             const sData = frame[sid] || {};
+            const isLine = config._lineMode;
             return {
                 name: seriesLabel,
-                type: 'bar',
+                type: isLine ? 'line' : 'bar',
                 data: ageOrder.map(aid => sData[aid] ?? null),
                 itemStyle: { color: colors[i % colors.length] },
+                ...(isLine && { smooth: true, symbol: 'circle', symbolSize: 4 }),
                 ...(config._stacked && { stack: 'total' }),
             };
         });

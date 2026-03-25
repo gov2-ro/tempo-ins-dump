@@ -28,6 +28,12 @@ function createChart(container, chartConfig, data, metadata) {
 
     switch (chartType) {
         case 'line':
+            // If x_axis is a category (not time), render as demographic line
+            if (cfg.x_axis_dim && cfg.x_axis_dim !== cfg.time_dim) {
+                cfg._lineMode = true;
+                return createDemographicChart(container, cfg, data, metadata);
+            }
+            return createTimeSeriesChart(container, cfg, data, metadata);
         case 'area':
         case 'area_stacked':
             return createTimeSeriesChart(container, cfg, data, metadata);
