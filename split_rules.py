@@ -168,6 +168,11 @@ def detect_mixed_metrics(conn) -> list[SplitRule]:
         r'productie|consum|export|import|stoc|sold|cifra|valoare|durata|suprafata)',
         re.IGNORECASE
     )
+    # Dimension labels to skip — these mix categories with rates but the UM split
+    # handles the separation more cleanly
+    SKIP_DIM_LABELS = {
+        'categorii de populatie si rate',
+    }
 
     rows = conn.execute("""
         WITH um_dims AS (
@@ -215,6 +220,10 @@ def detect_mixed_metrics(conn) -> list[SplitRule]:
     rules = []
     for mc, opts in by_matrix.items():
         if len(opts) <= 1:
+            continue
+
+        dim_label = opts[0][3].strip().lower()
+        if dim_label in SKIP_DIM_LABELS:
             continue
 
         # Check if option labels suggest mixed metric types
@@ -644,9 +653,11 @@ def detect_all(conn) -> list[SplitRule]:
     geo_hier = detect_geo_hierarchy(conn)
     mixed_time = detect_mixed_time_granularity(conn)
 
-    # Deduplicate: mixed_metrics supersedes multi_um for the same dataset
-    mixed_metric_codes = {r.matrix_code for r in mixed_metrics}
-    multi_um = [r for r in multi_um if r.matrix_code not in mixed_metric_codes]
+    # Deduplicate: multi_um supersedes mixed_metrics for the same dataset.
+    # UM split is more fundamental — after splitting by UM, the metric dimension
+    # often becomes homogeneous (all counts or all rates) and doesn't need splitting.
+    multi_um_codes = {r.matrix_code for r in multi_um}
+    mixed_metrics = [r for r in mixed_metrics if r.matrix_code not in multi_um_codes]
 
     all_rules = multi_um + mixed_metrics + slash_dims + hierarchy + age_gran + geo_hier + mixed_time
     total_datasets = len(set(r.matrix_code for r in all_rules))
