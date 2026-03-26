@@ -574,14 +574,14 @@ def detect_geo_hierarchy(conn) -> list[SplitRule]:
 
 
 def detect_mixed_time_granularity(conn) -> list[SplitRule]:
-    """Pattern G: Perioade dimension has both annual and monthly options.
+    """Pattern G: Perioade dimension has mixed time granularities (annual / quarterly / monthly).
 
-    Creates two sub-datasets per affected parent:
-      <code>_anual — annual rows only  (time_granularity='annual')
-      <code>_lunar — monthly rows only (time_granularity='monthly')
+    Creates one sub-dataset per granularity found:
+      <code>_anual        — annual rows only  (time_granularity='annual')
+      <code>_trimestrial  — quarterly rows     (time_granularity='quarterly')
+      <code>_lunar        — monthly rows       (time_granularity='monthly')
 
-    Uses dimension_options_parsed.time_granularity for classification.
-    Excludes datasets that are already split sub-datasets.
+    Handles any 2- or 3-way mix. Excludes datasets that are already split sub-datasets.
     """
     try:
         rows = conn.execute("""
@@ -593,7 +593,7 @@ def detect_mixed_time_granularity(conn) -> list[SplitRule]:
             LEFT JOIN dimension_options_parsed p ON p.nom_item_id = o.nom_item_id
             WHERE LOWER(d.dim_label) LIKE '%perioade%'
               AND (m.is_split IS NULL OR m.is_split = FALSE)
-              AND p.time_granularity IN ('annual', 'monthly')
+              AND p.time_granularity IN ('annual', 'monthly', 'quarterly')
             ORDER BY d.matrix_code, p.time_granularity, o.option_label
         """).fetchall()
     except Exception as e:
@@ -601,20 +601,23 @@ def detect_mixed_time_granularity(conn) -> list[SplitRule]:
         return []
 
     from collections import defaultdict
-    by_matrix = defaultdict(lambda: {"dim_id": None, "dim_col": None, "annual": {}, "monthly": {}})
+    by_matrix = defaultdict(lambda: {"dim_id": None, "dim_col": None, "annual": {}, "monthly": {}, "quarterly": {}})
     for mc, dim_id, dim_col, nom_id, label, granularity in rows:
         entry = by_matrix[mc]
         entry["dim_id"] = dim_id
         entry["dim_col"] = dim_col
         entry[granularity][nom_id] = label
 
+    suffix_map = {"annual": "anual", "monthly": "lunar", "quarterly": "trimestrial"}
+
     rules = []
     for mc, data in by_matrix.items():
-        if not data["annual"] or not data["monthly"]:
+        present = [g for g in ("annual", "monthly", "quarterly") if data[g]]
+        if len(present) < 2:
             continue
         groups = [
-            SplitGroup(label="anual", option_ids=list(data["annual"].keys()), option_labels=data["annual"]),
-            SplitGroup(label="lunar", option_ids=list(data["monthly"].keys()), option_labels=data["monthly"]),
+            SplitGroup(label=suffix_map[g], option_ids=list(data[g].keys()), option_labels=data[g])
+            for g in ("annual", "monthly", "quarterly") if data[g]
         ]
         rules.append(SplitRule(
             matrix_code=mc,
