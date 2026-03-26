@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
-Romanian National Institute of Statistics (INS) data scraper and explorer. Fetches, processes, and visualizes ~1,900 statistical datasets from TEMPO Online. Three main components: a data pipeline (numbered Python scripts), a FastAPI + DuckDB web application (`app/`), and static HTML explorers (`ui/`).
+Romanian National Institute of Statistics (INS) data scraper and explorer. Fetches, processes, and visualizes ~3,600 canonical statistical datasets from TEMPO Online. Three main components: a data pipeline (numbered Python scripts), a FastAPI + DuckDB web application (`app/`), and static HTML explorers (`ui/`).
 
 ## Architecture
 
@@ -16,18 +16,18 @@ Sequential scripts process data through stages. All accept `--lang ro|en` (defau
 | 2 | `2-fetch-matrices.py` | `data/1-indexes/{lang}/matrices.csv` | Fetches dataset list |
 | 3 | `3-fetch-metas.py` | `data/2-metas/{lang}/{id}.json` | Downloads metadata per dataset |
 | 4 | `4-build-meta-index.py` | `data/1-indexes/{lang}/matrices-list.csv` | Builds summary index from metadata |
-| 5 | `5-varstats-db.py` | `data/3-db/{lang}/tempo-indexes.db` | Creates SQLite DB from metadata |
+| 5 | `5-varstats-db.py` | `data/3-db/{lang}/tempo-indexes.db` | Creates SQLite DB from metadata (legacy) |
 | 6 | `6-fetch-csv.py` | `data/4-datasets/{lang}/` | Downloads raw CSV data from TEMPO API |
 | 7 | `7-data-compactor.py` | `data/5-compact-datasets/{lang}/` | Replaces text labels with numeric IDs |
-| 8 | `8-setup-duckdb-schema.py` | `data/tempo_metadata.duckdb` | Creates DuckDB schema (contexts, matrices, dimensions) |
-| 9 | `9-csv-to-parquet.py` | `data/parquet/ro/` | Converts compacted CSVs to Parquet |
+| 8 | `8-setup-duckdb-schema.py` | `data/corpus/metadata.duckdb` | Creates DuckDB schema (contexts, matrices, dimensions) |
+| 9 | `9-csv-to-parquet.py` | `data/parquet-v2/ro/` | Converts compacted CSVs to Parquet (intermediate) |
 | 10 | `10-import-metadata.py` | DuckDB tables | Imports all metadata into DuckDB |
 | 10 | `10-classify-dimensions.py` | `dimension_options_parsed`, `matrix_profiles` | Parses/classifies dimensions, detects archetypes |
 | 10 | `10-sdmx-export.py` | `data/6-sdmx-csv/ro/` | Converts to SDMX-CSV 2.0 |
 | 11 | `11-build-sdmx-codes.py` | DuckDB code mapping tables | Builds SDMX code mappings |
 | 11 | `11-coverage-profiler.py` | `dataset_coverage` DuckDB table | Analyzes data completeness |
-| 12 | `12-parquet-to-sdmx.py` | `data/parquet-v3/ro/` | Transforms parquet-v2 to SDMX-native parquet-v3 |
-| 12 | `12-split-datasets.py` | `data/parquet-v3/ro/` | Splits inconsistent datasets into clean sub-datasets |
+| 12 | `12-parquet-to-sdmx.py` | `data/corpus/parquet/` | Transforms parquet-v2 to SDMX-native canonical parquet |
+| 12 | `12-split-datasets.py` | `data/corpus/parquet/` | Splits inconsistent datasets into clean sub-datasets |
 
 Note: `{lang}` is `ro` or `en`.
 
@@ -35,7 +35,7 @@ Note: `{lang}` is `ro` or `en`.
 
 | Script | Description |
 |---|---|
-| `generate_view_profiles.py` | Generates per-dataset JSON view profiles → `data/view-profiles/` |
+| `generate_view_profiles.py` | Generates per-dataset JSON view profiles → `data/corpus/view-profiles/` |
 | `build-geo-regions.py` | Dissolves county GeoJSON into regions/macroregions |
 | `split_rules.py` | Split rules engine — detects datasets needing structural splits |
 | `detect_trends.py` | Detects trends, YoY growth, seasonality per dataset |
@@ -51,7 +51,7 @@ Primary web application — FastAPI + DuckDB + Parquet backend, Vanilla JS + ECh
 ```
 app/
   main.py              — FastAPI entry point, mounts routers + static files
-  config.py            — DB_PATH, PARQUET_DIR (v3), MAX_DATA_ROWS=50000
+  config.py            — DB_PATH (corpus/metadata.duckdb), PARQUET_DIR (corpus/parquet), MAX_DATA_ROWS=50000
   db.py                — DuckDB cursor-per-request (critical for concurrency)
   routers/
     categories.py      — /api/categories endpoints
@@ -151,21 +151,24 @@ bash scripts/prepare-deploy-data.sh   # Stage data for deployment
 
 ```
 data/
-  1-indexes/{lang}/     context.csv, matrices.csv
-  2-metas/{lang}/       {dataset-id}.json — metadata per dataset
-  3-db/{lang}/          tempo-indexes.db (SQLite, legacy)
-  4-datasets/{lang}/    raw CSVs from TEMPO API
-  4-datasets-slim-samples/  50/ and 100/ row samples for LLM analysis
-  5-compact-datasets/   CSVs with numeric IDs instead of labels
-  6-sdmx-csv/ro/        SDMX-CSV 2.0 output
-  parquet/ro/            Parquet (text labels, v1)
-  parquet-v2/ro/         Parquet (numeric IDs) — 1,886 files
-  parquet-v3/ro/         Parquet (SDMX-native + split datasets) — 3,719 files ← used by app
-  view-profiles/         Per-dataset JSON view profiles — 3,883 files
-  tempo_metadata.duckdb  Main DuckDB metadata (12 tables)
-  value_profiles.duckdb  Statistical value profiles
-  meta/                  Reference data (judet CSVs, SIRUTA)
-  logs/                  Pipeline execution logs
+  # Pipeline stages (scripts write here)
+  1-indexes/{lang}/          context.csv, matrices.csv
+  2-metas/{lang}/            {dataset-id}.json — metadata per dataset
+  4-datasets/{lang}/         raw CSVs from TEMPO API
+  4-datasets-slim-samples/   50/ and 100/ row samples for LLM analysis
+  parquet-v2/ro/             Parquet (numeric IDs) — pipeline intermediate, read by scripts 12-*
+  meta/                      Reference data (judet CSVs, SIRUTA)
+  logs/                      Pipeline execution logs
+  sdmx-dashboards/           SDMX dashboard YAML configs (generate_sdmx_yaml.py)
+
+  # Final output — app reads from here
+  corpus/
+    metadata.duckdb          Main DuckDB metadata (16 tables)
+    parquet/                 SDMX-native canonical parquets — 3,632 files
+    view-profiles/           Per-dataset JSON view profiles — ~3,800 files
+
+  # Archived (not needed for app or pipeline)
+  _obsolete/                 Legacy intermediates: parquet-v1, 5-compact-datasets, 6-sdmx-csv, etc.
 ```
 
 ### Data Flow
@@ -182,8 +185,8 @@ data/
 ## Technology Stack
 - **Backend**: FastAPI + DuckDB + Parquet
 - **Frontend**: Vanilla HTML5/CSS3/JS (ES6+), ECharts for visualization
-- **Database**: DuckDB (primary), SQLite (legacy dimension index)
-- **Data**: Parquet files (v3, ~3,700 files)
+- **Database**: DuckDB (16 tables in `corpus/metadata.duckdb`)
+- **Data**: Parquet files (SDMX-native, 3,632 canonical files in `corpus/parquet/`)
 - **GeoJSON**: County/region/macroregion polygons for choropleth maps
 - **Deployment**: Docker + Fly.io (also Oracle Cloud, HF Spaces)
 
