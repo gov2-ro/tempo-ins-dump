@@ -1,112 +1,48 @@
 """Dynamic SQL builder for parquet queries with filter pushdown."""
-from app.config import PARQUET_DIR, PARQUET_V2_DIR, MAX_DATA_ROWS
-from app.db import get_conn
-
-
-# Module-level cache for nomItemId → sdmx_value lookup
-_id_to_sdmx_cache = None
-
-
-def _get_id_to_sdmx():
-    """Lazy-load the nomItemId → sdmx_value mapping from DuckDB."""
-    global _id_to_sdmx_cache
-    if _id_to_sdmx_cache is None:
-        try:
-            conn = get_conn()
-            rows = conn.execute("SELECT nom_item_id, sdmx_value FROM sdmx_codes").fetchall()
-            _id_to_sdmx_cache = {nom_id: val for nom_id, val in rows}
-        except Exception:
-            _id_to_sdmx_cache = {}
-    return _id_to_sdmx_cache
+from app.config import PARQUET_DIR, MAX_DATA_ROWS
 
 
 def _resolve_parquet_path(matrix_code: str):
-    """Find the parquet file for a matrix code. Checks v3 first, then v2 fallback."""
-    v3_path = PARQUET_DIR / f"{matrix_code}.parquet"
-    if v3_path.exists():
-        return v3_path
-    v2_path = PARQUET_V2_DIR / f"{matrix_code}.parquet"
-    if v2_path.exists():
-        return v2_path
-    return v3_path  # Will fail at query time with clear error
-
-
-_v3_cache = {}
-
-def _is_v3(parquet_path) -> bool:
-    """Detect v3 SDMX format by checking for OBS_VALUE column (cached)."""
-    key = str(parquet_path)
-    if key not in _v3_cache:
-        try:
-            conn = get_conn()
-            cols = {r[0] for r in conn.execute(
-                f"DESCRIBE SELECT * FROM read_parquet('{key}')"
-            ).fetchall()}
-            _v3_cache[key] = "OBS_VALUE" in cols
-        except Exception:
-            _v3_cache[key] = False
-    return _v3_cache[key]
+    """Find the v3 parquet file for a matrix code."""
+    return PARQUET_DIR / f"{matrix_code}.parquet"
 
 
 def build_data_query(matrix_code: str, dimensions: list, filters: dict,
                      limit: int = MAX_DATA_ROWS) -> str:
-    """Build a DuckDB query against a parquet file.
+    """Build a DuckDB query against a v3 SDMX parquet file.
 
-    Parquet-v3 columns contain human-readable string values (SDMX format).
-    Filters may contain integer nom_item_ids (from frontend) which are
-    transparently translated to sdmx_value strings for v3 queries.
+    All parquets use OBS_VALUE column and string dimension values.
 
     Args:
         matrix_code: Dataset identifier
         dimensions: List of dimension dicts with dim_column_name
-        filters: Column name → list of values (nomItemIds or strings)
+        filters: Column name → list of string values
         limit: Max rows to return
 
     Returns:
         SQL query string
     """
     parquet_path = _resolve_parquet_path(matrix_code)
-    is_v3 = _is_v3(parquet_path)
 
-    # Use OBS_VALUE for v3 parquets, value for legacy v2
-    value_col = "OBS_VALUE" if is_v3 else "value"
-    cols = [d['dim_column_name'] for d in dimensions] + [value_col]
+    cols = [d['dim_column_name'] for d in dimensions] + ["OBS_VALUE"]
     select_clause = ", ".join(f'"{c}"' for c in cols)
 
     where_parts = []
     valid_cols = {d['dim_column_name'] for d in dimensions}
 
-    # For v3: translate nomItemId filter values → sdmx_value strings
-    id_to_sdmx = _get_id_to_sdmx() if is_v3 else {}
-
     for col_name, values in filters.items():
-        if col_name not in valid_cols:
-            continue
-        if not values:
+        if col_name not in valid_cols or not values:
             continue
 
-        safe_values = []
-        for v in values:
-            if _is_int(v):
-                int_v = int(v)
-                if is_v3 and int_v in id_to_sdmx:
-                    # Translate nomItemId → sdmx_value for v3
-                    safe_values.append(id_to_sdmx[int_v])
-                else:
-                    safe_values.append(str(int_v))
-            elif isinstance(v, str):
-                safe_values.append(v)
-
+        safe_values = [str(v) for v in values if v is not None]
         if not safe_values:
             continue
 
-        # Build IN clause — cast to VARCHAR for consistent matching
-        placeholders = ", ".join(f"'{_escape_sql(str(v))}'" for v in safe_values)
+        placeholders = ", ".join(f"'{_escape_sql(v)}'" for v in safe_values)
         where_parts.append(f'CAST("{col_name}" AS VARCHAR) IN ({placeholders})')
 
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
 
-    # Sort by time dimension if present
     col_names = {d['dim_column_name'] for d in dimensions}
     order_clause = 'ORDER BY "TIME_PERIOD" ASC' if "TIME_PERIOD" in col_names else ""
 
@@ -117,15 +53,6 @@ def build_data_query(matrix_code: str, dimensions: list, filters: dict,
         {order_clause}
         LIMIT {int(limit)}
     """
-
-
-def _is_int(v) -> bool:
-    """Check if value can be safely cast to int."""
-    try:
-        int(v)
-        return True
-    except (ValueError, TypeError):
-        return False
 
 
 def _escape_sql(s: str) -> str:

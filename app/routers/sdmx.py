@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
 from app.db import get_conn
-from app.config import PARQUET_DIR, PARQUET_V2_DIR
+from app.config import PARQUET_DIR
 
 router = APIRouter()
 
@@ -23,13 +23,10 @@ AGENCY = "INS"
 
 
 def _parquet_path(flow: str) -> str | None:
-    """Return path to parquet file, preferring v3 over v2."""
+    """Return path to v3 parquet file."""
     p = PARQUET_DIR / f"{flow}.parquet"
     if p.exists():
         return str(p)
-    p2 = PARQUET_V2_DIR / f"{flow}.parquet"
-    if p2.exists():
-        return str(p2)
     return None
 
 

@@ -15,6 +15,7 @@ def list_datasets(
     ancestor: str = Query(None, description="Filter by ancestor code"),
     archetype: str = Query(None, description="Filter by archetype"),
     has_geo: bool = Query(None),
+    lang: str = Query("ro", description="Language: ro|en"),
     sort: str = Query("updated", description="Sort: updated|name|rows"),
     limit: int = Query(DEFAULT_PAGE_SIZE, le=200),
     offset: int = Query(0, ge=0),
@@ -22,11 +23,14 @@ def list_datasets(
     """List datasets with search and filters."""
     conn = get_conn()
 
-    where = ["m.parquet_path IS NOT NULL"]
+    where = ["m.is_canonical = TRUE"]
     params = []
 
+    # Use EN name for search if lang=en
+    name_col = "m.matrix_name_en" if lang == "en" else "m.matrix_name"
+
     if q:
-        where.append("(LOWER(m.matrix_name) LIKE LOWER(?) OR LOWER(m.matrix_code) LIKE LOWER(?))")
+        where.append(f"(LOWER({name_col}) LIKE LOWER(?) OR LOWER(m.matrix_code) LIKE LOWER(?))")
         params.extend([f"%{q}%", f"%{q}%"])
 
     if context:
@@ -63,10 +67,11 @@ def list_datasets(
     total = conn.execute(count_sql, params).fetchone()[0]
 
     # Fetch page
+    display_name = "COALESCE(m.matrix_name_en, m.matrix_name)" if lang == "en" else "m.matrix_name"
     data_sql = f"""
         SELECT
             m.matrix_code,
-            m.matrix_name,
+            {display_name} as display_name,
             m.context_code,
             m.ultima_actualizare,
             m.row_count,
@@ -85,10 +90,10 @@ def list_datasets(
         LEFT JOIN matrix_profiles p ON m.matrix_code = p.matrix_code
         LEFT JOIN dataset_splits ds ON ds.parent_matrix_code = m.matrix_code
         WHERE {where_sql}
-        GROUP BY m.matrix_code, m.matrix_name, m.context_code, m.ultima_actualizare,
-                 m.row_count, m.mat_max_dim, p.archetype, p.has_time, p.has_geo,
-                 p.time_year_min, p.time_year_max, p.primary_unit_type, p.time_granularity,
-                 m.is_split, m.parent_matrix_code
+        GROUP BY m.matrix_code, m.matrix_name, m.matrix_name_en, m.context_code,
+                 m.ultima_actualizare, m.row_count, m.mat_max_dim, p.archetype,
+                 p.has_time, p.has_geo, p.time_year_min, p.time_year_max,
+                 p.primary_unit_type, p.time_granularity, m.is_split, m.parent_matrix_code
         ORDER BY {order_by}
         LIMIT ? OFFSET ?
     """
