@@ -241,6 +241,20 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> lis
             "row_count": row_count, "group": group,
         })
 
+    # Guard: a real split needs ≥2 groups with data.
+    # If only 1 (or 0) succeeded, the metadata lied — abort and clean up.
+    if len(results) < 2:
+        logger.warning(
+            f"  False-positive split for {rule.matrix_code}: "
+            f"only {len(results)} group(s) produced data. Aborting split."
+        )
+        for r in results:
+            p = Path(r["path"])
+            if p.exists():
+                p.unlink()
+                logger.warning(f"  Deleted: {p.name}")
+        return []
+
     return results
 
 
@@ -582,7 +596,27 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
             "row_count": row_count, "combo": combo, "rules": sorted_rules,
         })
 
-    return results
+    # Guard: a real split needs ≥2 combos with data.
+    results_with_data = [r for r in results if r["row_count"] > 0]
+    if len(results_with_data) < 2:
+        logger.warning(
+            f"  False-positive split for {matrix_code}: "
+            f"only {len(results_with_data)} combo(s) produced data. Aborting split."
+        )
+        for r in results:
+            p = Path(r["path"])
+            if p.exists():
+                p.unlink()
+        return []
+
+    # Clean up 0-row parquet files from combos that had no data
+    for r in results:
+        if r["row_count"] == 0:
+            p = Path(r["path"])
+            if p.exists():
+                p.unlink()
+
+    return results_with_data
 
 
 def register_cross_product_sub_dataset(conn, matrix_code: str, sub_info: dict):
