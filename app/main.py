@@ -24,7 +24,7 @@ app.include_router(dataset_data.router, prefix="/api", tags=["data"])
 app.include_router(sdmx.router, prefix="/sdmx", tags=["sdmx"])
 
 # Serve view profiles (must come before catch-all static mount)
-view_profiles_dir = DATA_DIR / "view-profiles"
+view_profiles_dir = DATA_DIR / "corpus" / "view-profiles"
 if view_profiles_dir.exists():
     app.mount("/view-profiles", StaticFiles(directory=str(view_profiles_dir)), name="view-profiles")
 

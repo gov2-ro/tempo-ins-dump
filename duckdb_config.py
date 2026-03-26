@@ -25,10 +25,18 @@ COMPACT_CSV_DIR = DATA_DIR / "5-compact-datasets" / LANG  # Compacted CSVs with 
 # Options: ORIGINAL_CSV_DIR (text labels, larger) or COMPACT_CSV_DIR (IDs, smaller but has issues)
 CSV_SOURCE_DIR = ORIGINAL_CSV_DIR  # Using original for reliability
 
-# Output paths
-PARQUET_DIR = DATA_DIR / "parquet" / LANG
+# Pipeline intermediate output
 PARQUET_V2_DIR = DATA_DIR / "parquet-v2" / LANG
-DB_FILE = DATA_DIR / "tempo_metadata.duckdb"
+
+# Corpus paths (final output, app reads from here)
+CORPUS_DIR = DATA_DIR / "corpus"
+DB_FILE = CORPUS_DIR / "metadata.duckdb"
+CORPUS_PARQUET_DIR = CORPUS_DIR / "parquet"
+VIEW_PROFILES_DIR = CORPUS_DIR / "view-profiles"
+
+# Legacy alias (some scripts still reference this)
+PARQUET_DIR = CORPUS_PARQUET_DIR
+
 LOGS_DIR = DATA_DIR / "logs"
 
 # Processing settings

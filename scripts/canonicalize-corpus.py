@@ -28,9 +28,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import duckdb
 from duckdb_config import DB_FILE, PARQUET_V2_DIR, PARQUET_COMPRESSION, DATA_DIR
 
-PARQUET_V3_DIR = DATA_DIR / "parquet-v3" / "ro"
+PARQUET_V3_DIR = DATA_DIR / "corpus" / "parquet"
 PARENTS_DIR = PARQUET_V3_DIR / "_parents"
-VP_DIR = DATA_DIR / "view-profiles"
+VP_DIR = DATA_DIR / "corpus" / "view-profiles"
 
 logging.basicConfig(
     level=logging.INFO,

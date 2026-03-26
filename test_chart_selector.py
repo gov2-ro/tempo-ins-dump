@@ -15,7 +15,7 @@ from collections import Counter
 sys.path.insert(0, '.')
 from app.services.chart_selector import build_signature, select_charts, assign_roles
 
-DB_PATH = "data/tempo_metadata.duckdb"
+DB_PATH = "data/corpus/metadata.duckdb"
 
 # Old archetype → what chart it mapped to
 ARCHETYPE_DEFAULT = {

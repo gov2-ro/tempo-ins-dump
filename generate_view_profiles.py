@@ -28,8 +28,9 @@ import duckdb
 # Configuration
 # ---------------------------------------------------------------------------
 
-DB_PATH = Path("data/tempo_metadata.duckdb")
-OUTPUT_DIR = Path("data/view-profiles")
+from duckdb_config import DB_FILE, VIEW_PROFILES_DIR
+DB_PATH = DB_FILE
+OUTPUT_DIR = VIEW_PROFILES_DIR
 PROFILE_VERSION = 1
 
 # Cardinality bands

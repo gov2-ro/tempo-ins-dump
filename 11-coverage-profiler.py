@@ -9,7 +9,8 @@ import os
 import time
 from collections import Counter
 
-DB_PATH = "data/tempo_metadata.duckdb"
+from duckdb_config import DB_FILE
+DB_PATH = str(DB_FILE)
 FALLBACK_DB = "data/dataset_coverage.duckdb"
 CURRENT_YEAR = 2026
 PROGRESS_INTERVAL = 200

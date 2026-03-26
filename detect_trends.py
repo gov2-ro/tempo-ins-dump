@@ -9,7 +9,8 @@ import math
 import time
 import duckdb
 
-DB_PATH = "data/tempo_metadata.duckdb"
+from duckdb_config import DB_FILE
+DB_PATH = str(DB_FILE)
 
 
 def classify_trend(slope_norm, yoy_changes):

@@ -23,7 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from duckdb_config import DB_FILE, PARQUET_V2_DIR, DATA_DIR
 
-PARQUET_V3_DIR = DATA_DIR / "parquet-v3" / "ro"
+PARQUET_V3_DIR = DATA_DIR / "corpus" / "parquet"
 
 import duckdb
 

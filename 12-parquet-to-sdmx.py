@@ -27,7 +27,7 @@ from pathlib import Path
 
 import duckdb
 
-from duckdb_config import DB_FILE, PARQUET_COMPRESSION
+from duckdb_config import DB_FILE, PARQUET_COMPRESSION, CORPUS_PARQUET_DIR
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
@@ -192,7 +192,7 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
 
     src_dir = DATA_DIR / "parquet-v2" / args.lang
-    dst_dir = DATA_DIR / "parquet-v3" / args.lang
+    dst_dir = CORPUS_PARQUET_DIR  # Output to corpus/parquet
     dst_dir.mkdir(parents=True, exist_ok=True)
 
     log.info(f"Source: {src_dir}")

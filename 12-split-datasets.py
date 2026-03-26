@@ -37,15 +37,14 @@ from collections import defaultdict
 
 import duckdb
 
-from duckdb_config import DB_FILE, PARQUET_COMPRESSION
+from duckdb_config import DB_FILE, PARQUET_COMPRESSION, CORPUS_PARQUET_DIR, PARQUET_V2_DIR
 from split_rules import detect_all, SplitRule, SplitGroup
 
 logger = logging.getLogger(__name__)
 
 # Paths
 DATA_DIR = Path(__file__).parent / "data"
-PARQUET_V2_DIR = DATA_DIR / "parquet-v2" / "ro"
-PARQUET_V3_DIR = DATA_DIR / "parquet-v3" / "ro"
+PARQUET_V3_DIR = CORPUS_PARQUET_DIR  # Output goes to corpus/parquet
 
 
 def setup_logging(debug: bool = False):
