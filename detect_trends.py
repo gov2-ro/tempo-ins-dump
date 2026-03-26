@@ -49,6 +49,49 @@ def find_breakpoints(yoy_changes, years):
     return breakpoints
 
 
+def _detect_v3(conn, parquet_path):
+    """Check if parquet uses v3 SDMX format (has OBS_VALUE column)."""
+    try:
+        cols = {r[0] for r in conn.execute(
+            f"SELECT column_name FROM (DESCRIBE SELECT * FROM read_parquet('{parquet_path}'))"
+        ).fetchall()}
+        return "OBS_VALUE" in cols, cols
+    except Exception:
+        return False, set()
+
+
+def _extract_year(time_str):
+    """Extract year from SDMX TIME_PERIOD: '1992' → 1992, '2024-Q1' → 2024, '2024-03' → 2024."""
+    if not time_str:
+        return None
+    s = str(time_str).strip()
+    # Pure year
+    if s.isdigit() and len(s) == 4:
+        return int(s)
+    # yyyy-Qn or yyyy-mm
+    if len(s) >= 4 and s[:4].isdigit():
+        return int(s[:4])
+    return None
+
+
+def _extract_sub_period(time_str, granularity):
+    """Extract quarter (1-4) or month (1-12) from SDMX TIME_PERIOD."""
+    if not time_str:
+        return None
+    s = str(time_str).strip()
+    if granularity == "quarterly" and "-Q" in s:
+        try:
+            return int(s.split("-Q")[1])
+        except (ValueError, IndexError):
+            return None
+    if granularity == "monthly" and len(s) >= 7 and s[4] == "-":
+        try:
+            return int(s[5:7])
+        except ValueError:
+            return None
+    return None
+
+
 def process_dataset(conn, matrix_code, parquet_path, time_col, geo_col, time_granularity):
     result = {
         "matrix_code": matrix_code, "trend_direction": None, "trend_slope": None,
@@ -60,13 +103,34 @@ def process_dataset(conn, matrix_code, parquet_path, time_col, geo_col, time_gra
         result["trend_direction"] = "no_time"
         return result
 
+    is_v3, cols = _detect_v3(conn, parquet_path)
+    val_col = "OBS_VALUE" if is_v3 else "value"
+
+    # For v3: TIME_PERIOD contains string years; for v2: join dimension_options_parsed
     try:
-        query = f"""SELECT dop.year, SUM(p.value) as total
-            FROM read_parquet(?) p
-            JOIN dimension_options_parsed dop ON p.{time_col} = dop.nom_item_id AND dop.dim_type = 'time'
-            WHERE dop.year IS NOT NULL AND p.value IS NOT NULL
-            GROUP BY dop.year ORDER BY dop.year"""
-        ts = conn.execute(query, [parquet_path]).fetchall()
+        if is_v3 and "TIME_PERIOD" in cols:
+            # v3: parse TIME_PERIOD directly
+            raw = conn.execute(f"""
+                SELECT TIME_PERIOD, SUM(CAST("{val_col}" AS DOUBLE)) as total
+                FROM read_parquet('{parquet_path}')
+                WHERE "{val_col}" IS NOT NULL
+                GROUP BY TIME_PERIOD
+            """).fetchall()
+            # Aggregate by year
+            year_totals = {}
+            for tp, total in raw:
+                yr = _extract_year(tp)
+                if yr:
+                    year_totals[yr] = year_totals.get(yr, 0) + float(total)
+            ts = sorted(year_totals.items())
+        else:
+            # v2: join on nom_item_id
+            query = f"""SELECT dop.year, SUM(p.value) as total
+                FROM read_parquet(?) p
+                JOIN dimension_options_parsed dop ON p."{time_col}" = dop.nom_item_id AND dop.dim_type = 'time'
+                WHERE dop.year IS NOT NULL AND p.value IS NOT NULL
+                GROUP BY dop.year ORDER BY dop.year"""
+            ts = conn.execute(query, [parquet_path]).fetchall()
     except Exception:
         result["trend_direction"] = "no_time"
         return result
@@ -115,13 +179,29 @@ def process_dataset(conn, matrix_code, parquet_path, time_col, geo_col, time_gra
     result["has_seasonality"] = False
     if time_granularity in ("quarterly", "monthly"):
         try:
-            period_col = "quarter" if time_granularity == "quarterly" else "month"
-            sq = f"""SELECT dop.{period_col} as period, SUM(p.value) as total
-                FROM read_parquet(?) p
-                JOIN dimension_options_parsed dop ON p.{time_col} = dop.nom_item_id AND dop.dim_type = 'time'
-                WHERE dop.{period_col} IS NOT NULL AND p.value IS NOT NULL
-                GROUP BY dop.{period_col} ORDER BY dop.{period_col}"""
-            seasonal_data = conn.execute(sq, [parquet_path]).fetchall()
+            if is_v3 and "TIME_PERIOD" in cols:
+                # v3: parse sub-period from TIME_PERIOD
+                raw_s = conn.execute(f"""
+                    SELECT TIME_PERIOD, SUM(CAST("{val_col}" AS DOUBLE)) as total
+                    FROM read_parquet('{parquet_path}')
+                    WHERE "{val_col}" IS NOT NULL
+                    GROUP BY TIME_PERIOD
+                """).fetchall()
+                period_totals_map = {}
+                for tp, total in raw_s:
+                    sp = _extract_sub_period(tp, time_granularity)
+                    if sp:
+                        period_totals_map[sp] = period_totals_map.get(sp, 0) + float(total)
+                seasonal_data = sorted(period_totals_map.items())
+            else:
+                period_col = "quarter" if time_granularity == "quarterly" else "month"
+                sq = f"""SELECT dop.{period_col} as period, SUM(p.value) as total
+                    FROM read_parquet(?) p
+                    JOIN dimension_options_parsed dop ON p."{time_col}" = dop.nom_item_id AND dop.dim_type = 'time'
+                    WHERE dop.{period_col} IS NOT NULL AND p.value IS NOT NULL
+                    GROUP BY dop.{period_col} ORDER BY dop.{period_col}"""
+                seasonal_data = conn.execute(sq, [parquet_path]).fetchall()
+
             if seasonal_data and len(seasonal_data) > 1:
                 period_totals = [float(r[1]) for r in seasonal_data]
                 pm = sum(period_totals) / len(period_totals)
@@ -137,15 +217,14 @@ def process_dataset(conn, matrix_code, parquet_path, time_col, geo_col, time_gra
     result["breakpoint_years"] = json.dumps(bp) if bp else "[]"
 
     # Geo analysis
-    if geo_col:
+    geo_col_actual = "REF_AREA" if is_v3 and "REF_AREA" in cols else geo_col
+    if geo_col_actual and is_v3:
         try:
-            gq = f"""SELECT dop_g.geo_name_clean, SUM(p.value) as total
-                FROM read_parquet(?) p
-                JOIN dimension_options_parsed dop_t ON p.{time_col} = dop_t.nom_item_id AND dop_t.dim_type = 'time'
-                JOIN dimension_options_parsed dop_g ON p.{geo_col} = dop_g.nom_item_id AND dop_g.dim_type = 'geo'
-                WHERE dop_t.year = ? AND dop_g.geo_level = 'county' AND p.value IS NOT NULL
-                GROUP BY dop_g.geo_name_clean"""
-            geo_data = conn.execute(gq, [parquet_path, years[-1]]).fetchall()
+            gq = f"""SELECT "{geo_col_actual}", SUM(CAST("{val_col}" AS DOUBLE)) as total
+                FROM read_parquet('{parquet_path}')
+                WHERE "{val_col}" IS NOT NULL
+                GROUP BY "{geo_col_actual}" """
+            geo_data = conn.execute(gq).fetchall()
             if geo_data and len(geo_data) > 1:
                 geo_vals = [float(r[1]) for r in geo_data if r[1] is not None]
                 if geo_vals:
