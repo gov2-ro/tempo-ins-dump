@@ -2,7 +2,7 @@
 .dataset-page {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 97px); /* 56px header + 41px breadcrumb */
+    min-height: calc(100vh - 97px); /* 56px header + 41px breadcrumb */
 }
 
 /* Dataset header */

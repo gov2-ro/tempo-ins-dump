@@ -138,7 +138,10 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
             const seriesLabel = seriesLabelsMap[String(seriesId)] || String(seriesId);
             const dataMap = {};
             for (const row of groupRows) {
-                dataMap[row[timeIdx]] = row[valueIdx];
+                const tid = row[timeIdx];
+                const val = row[valueIdx];
+                if (val === null || val === undefined) continue;
+                dataMap[tid] = (dataMap[tid] || 0) + val;
             }
 
             series.push({
@@ -155,7 +158,10 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
         // Single series
         const dataMap = {};
         for (const row of rows) {
-            dataMap[row[timeIdx]] = row[valueIdx];
+            const tid = row[timeIdx];
+            const val = row[valueIdx];
+            if (val === null || val === undefined) continue;
+            dataMap[tid] = (dataMap[tid] || 0) + val;
         }
         series.push({
             name: metadata.matrix_name || 'Value',

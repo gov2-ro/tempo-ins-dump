@@ -3,7 +3,7 @@
  * Each control maps to a dimension and produces filter values.
  */
 class ViewControlsPanel {
-    static TOTAL_RE = /^(total|toate|ambele sexe|ambele|urban\s*\+\s*rural|m\s*\+\s*f)$/i;
+    static TOTAL_RE = /^\s*(total|toate|ambele sexe|ambele|urban\s*\+\s*rural|m\s*\+\s*f)\s*$/i;
 
     constructor(container, controls, dimensions, onChange) {
         this.container = container;
@@ -35,11 +35,26 @@ class ViewControlsPanel {
             return options.length ? [options[options.length - 1].nom_item_id] : [];
         }
 
-        // Everything else: select ALL non-Total options by default
-        const allNonTotal = options
-            .filter(o => !ViewControlsPanel.TOTAL_RE.test(o.label))
-            .map(o => o.nom_item_id);
-        return allNonTotal;
+        // Filter out Total-like options
+        const nonTotal = options
+            .filter(o => !ViewControlsPanel.TOTAL_RE.test(o.label));
+
+        // High-cardinality dims (>20 options): select a manageable subset
+        // Prevents massive queries that get truncated by LIMIT (e.g. AGE with 103 values)
+        if (def === 'total' && nonTotal.length > 20) {
+            // Prefer group-level options (ranges like "10-14 ani") over individual values
+            const groups = nonTotal.filter(o =>
+                /[-–]/.test(o.label) || /\d+.*si\s*peste/i.test(o.label)
+            );
+            if (groups.length >= 3 && groups.length <= 30) {
+                return groups.map(o => o.nom_item_id);
+            }
+            // Fallback: first 10 options
+            return nonTotal.slice(0, 10).map(o => o.nom_item_id);
+        }
+
+        // Low cardinality: select all (existing behavior)
+        return nonTotal.map(o => o.nom_item_id);
     }
 
     render() {

@@ -571,7 +571,7 @@ class DatasetPageV2 {
         this.showLoading(true);
         try {
             const filters = this.buildFilters();
-            const data = await API.getDatasetData(this.matrixCode, filters, 5000);
+            const data = await API.getDatasetData(this.matrixCode, filters, 50000);
             this.dataTable.update(data, this.metadata);
         } catch (err) {
             document.getElementById('data-table').innerHTML =
@@ -592,7 +592,7 @@ class DatasetPageV2 {
         try {
             const filters = this.buildFilters();
             const chartType = this.getActiveChartType();
-            const limit = chartType === 'choropleth' ? 50000 : 5000;
+            const limit = 50000;
 
             const data = await API.getDatasetData(this.matrixCode, filters, limit);
 
