@@ -409,14 +409,15 @@ function createHeatmapChart(container, config, data, metadata) {
     const rows     = data.rows;
     const valueIdx = cols.length - 1;
 
-    // Pick the two categorical dims with the most options (excluding time/unit)
+    // Pick x/y dims: prefer user-assigned roles, fall back to auto-detect by cardinality
     const dims = metadata.dimensions.filter(d =>
         !['time', 'unit'].includes(d.dim_type) && cols.includes(d.dim_column_name)
     );
     dims.sort((a, b) => b.option_count - a.option_count);
 
-    const xDim = (dims[0] || {}).dim_column_name || cols[0];
-    const yDim = (dims[1] || {}).dim_column_name || cols[1 < cols.length - 1 ? 1 : 0];
+    const userChoseTimeAsX = config.x_axis_dim && config.x_axis_dim === config.time_dim;
+    const xDim = config.x_axis_dim || (dims[0] || {}).dim_column_name || cols[0];
+    const yDim = config.series_dim || (dims[1] || {}).dim_column_name || cols[1 < cols.length - 1 ? 1 : 0];
 
     const xIdx = cols.indexOf(xDim);
     const yIdx = cols.indexOf(yDim);
@@ -424,13 +425,13 @@ function createHeatmapChart(container, config, data, metadata) {
     const xLabels = labels[xDim] || {};
     const yLabels = labels[yDim] || {};
 
-    // Aggregate by (x, y) — take latest time if present
+    // Aggregate by (x, y) — take latest time if present, unless user chose time as x-axis
     const timeDim = config.time_dim;
     const timeIdx = timeDim ? cols.indexOf(timeDim) : -1;
     const timeIds = timeIdx !== -1 ? uniqueValues(rows, timeIdx) : [null];
     const latestTime = timeIds[timeIds.length - 1];
 
-    const activeRows = latestTime !== null
+    const activeRows = (latestTime !== null && !userChoseTimeAsX)
         ? rows.filter(r => r[timeIdx] === latestTime)
         : rows;
 
@@ -469,6 +470,14 @@ function createHeatmapChart(container, config, data, metadata) {
                 if (v > maxVal) maxVal = v;
             }
         }
+    }
+
+    if (heatData.length === 0) {
+        chart.setOption({
+            title: { text: 'No data for selected dimensions', left: 'center', top: 'center',
+                     textStyle: { fontSize: 14, color: '#999' } },
+        });
+        return chart;
     }
 
     const xData = xSlice.map(id => {

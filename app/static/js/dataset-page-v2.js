@@ -421,6 +421,7 @@ class DatasetPageV2 {
         { type: 'stacked_bar',    label: 'Stacked', needsSeries: true  },
         { type: 'choropleth',     label: 'Map',     needsSeries: false, requiresGeo: true },
         { type: 'heatmap',        label: 'Heatmap', needsSeries: true,  minOptions: 5 },
+        { type: 'bubble',         label: 'Bubble',  needsSeries: true  },
     ];
 
     getCustomDims() {

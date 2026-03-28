@@ -14,8 +14,11 @@ Future tasks and intentions for the TEMPO INS data explorer.
   produce English-language SDMX parquets. Requires English `sdmx_codes` entries
   (display_label_en already partially populated).
 
-- [ ] **Clean up stale split profile files** — `data/view-profiles/` has ~1,600 old
-  split profiles with `_nom_id` column names. Remove orphaned files not in `dataset_splits` table.
+- [x] **Clean up stale split profile files** — Done.
+  Moved 1,150 stale profiles to `_stale/`: 736 parent profiles (parquets replaced by children),
+  414 with `_nom_id` column refs. Fixed `dim_column_name` in DuckDB for 414 v2 splits
+  (old `_nom_id` → SDMX names like `TIME_PERIOD`, `REF_AREA`). Regenerated 414 view profiles.
+  Script: `scripts/cleanup-view-profiles.py`.
 
 ## Data Pipeline
 
@@ -51,9 +54,10 @@ Future tasks and intentions for the TEMPO INS data explorer.
   (e.g., EXP102J: 18,225 → 168 rows). Files: `query_builder.py`, `dataset_data.py`,
   `api.js`, `dataset-page-v2.js`.
 
-- [ ] **Non-summable values**: Some datasets have rates, percentages, or indices where
-  SUM is incorrect. Need to detect `UNIT_MEASURE` metadata and use AVG or pass-through
-  for non-count units. Currently all charts use SUM.
+- [x] **Non-summable values** — Done.
+  `query_builder.py` accepts `agg_func` param (SUM or AVG). `dataset_data.py` looks up
+  `matrix_profiles.primary_unit_type` — uses AVG for `percentage` (694 datasets) and
+  `time_unit` (12 datasets), SUM for everything else.
 
 ## Data Quality
 

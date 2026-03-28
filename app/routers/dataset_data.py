@@ -70,9 +70,19 @@ def get_dataset_data(
         except json.JSONDecodeError:
             pass
 
+    # Determine aggregation function based on unit type
+    agg_func = "SUM"
+    if group_by_cols:
+        unit_row = conn.execute(
+            "SELECT primary_unit_type FROM matrix_profiles WHERE matrix_code = ?",
+            [matrix_code]
+        ).fetchone()
+        if unit_row and unit_row[0] in ('percentage', 'time_unit'):
+            agg_func = "AVG"
+
     # Build and execute query
     sql = build_data_query(matrix_code, dimensions, filter_dict, limit + 1,
-                           group_by=group_by_cols)
+                           group_by=group_by_cols, agg_func=agg_func)
 
     try:
         result = conn.execute(sql).fetchall()

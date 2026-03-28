@@ -9,7 +9,8 @@ def _resolve_parquet_path(matrix_code: str):
 
 def build_data_query(matrix_code: str, dimensions: list, filters: dict,
                      limit: int = MAX_DATA_ROWS,
-                     group_by: list[str] | None = None) -> str:
+                     group_by: list[str] | None = None,
+                     agg_func: str = "SUM") -> str:
     """Build a DuckDB query against a v3 SDMX parquet file.
 
     All parquets use OBS_VALUE column and string dimension values.
@@ -38,7 +39,7 @@ def build_data_query(matrix_code: str, dimensions: list, filters: dict,
         if not keep_cols:
             keep_cols = all_dim_cols  # fallback to all
         dim_select = ", ".join(f'"{c}"' for c in keep_cols)
-        select_clause = f'{dim_select}, SUM("OBS_VALUE") AS "OBS_VALUE"'
+        select_clause = f'{dim_select}, {agg_func}("OBS_VALUE") AS "OBS_VALUE"'
         group_clause = f'GROUP BY {dim_select}'
         output_cols = keep_cols
     else:
