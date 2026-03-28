@@ -31,11 +31,13 @@ const API = {
         return this.fetch(`/datasets/${code}`);
     },
 
-    getDatasetData(code, filters = {}, limit = 5000) {
-        return this.fetch(`/datasets/${code}/data`, {
+    getDatasetData(code, filters = {}, limit = 5000, { groupBy = null } = {}) {
+        const params = {
             filters: JSON.stringify(filters),
             limit,
-        });
+        };
+        if (groupBy) params.group_by = JSON.stringify(groupBy);
+        return this.fetch(`/datasets/${code}/data`, params);
     },
 
     async getViewProfile(code) {

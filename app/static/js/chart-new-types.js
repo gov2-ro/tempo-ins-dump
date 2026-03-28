@@ -552,67 +552,9 @@ function createBubbleChart(container, config, data, metadata) {
     const timeLabels   = labels[timeDim]   || {};
     const seriesLabels = labels[seriesDim] || {};
 
-    // ---- Geo bubble mode ----
-    if (geoIdx !== -1) {
-        const timeIds = timeIdx !== -1 ? uniqueValues(rows, timeIdx) : [null];
-        const latestTime = timeIds[timeIds.length - 1];
-        const activeRows = latestTime !== null
-            ? rows.filter(r => r[timeIdx] === latestTime)
-            : rows;
-
-        const geoTotals = {};
-        for (const row of activeRows) {
-            const gid = row[geoIdx];
-            geoTotals[gid] = (geoTotals[gid] || 0) + (row[valueIdx] || 0);
-        }
-
-        const items = Object.entries(geoTotals)
-            .map(([id, val]) => ({ id, val, name: geoLabels[String(id)] || String(id) }))
-            .filter(d => {
-                const lbl = d.name.trim().toLowerCase();
-                return lbl !== 'total' && lbl !== 'toate'
-                    && !lbl.startsWith('macroregiunea') && !lbl.startsWith('regiunea');
-            })
-            .sort((a, b) => b.val - a.val);
-
-        const maxVal = Math.max(...items.map(d => d.val));
-        const minVal = Math.min(...items.map(d => d.val));
-        const subtitle = latestTime !== null
-            ? (timeLabels[String(latestTime)] || String(latestTime)).replace(/^Anul\s+/, '')
-            : '';
-
-        chart.setOption({
-            title: subtitle ? { text: subtitle, textStyle: { fontSize: 13, fontWeight: 'normal', color: '#666' }, left: 'center', top: 4 } : undefined,
-            tooltip: { formatter: p => `<b>${p.name}</b><br/>${formatNumber(p.value[1])}` },
-            grid: { left: 120, right: 20, top: subtitle ? 40 : 20, bottom: 30 },
-            xAxis: { show: false, min: 0, max: items.length - 1 },
-            yAxis: {
-                type: 'category',
-                data: items.map(d => d.name).reverse(),
-                axisLabel: { fontSize: 11, width: 110, overflow: 'truncate' },
-            },
-            visualMap: {
-                show: true, min: minVal, max: maxVal, dimension: 1,
-                orient: 'horizontal', bottom: 0, left: 'center',
-                textStyle: { fontSize: 10 },
-                formatter: v => formatNumber(v),
-                inRange: { color: ['#bfdbfe', '#1a56db'] },
-            },
-            series: [{
-                type: 'scatter',
-                data: items.map((d, i) => ({
-                    name: d.name,
-                    value: [i, d.val],
-                    symbolSize: 10 + 40 * Math.sqrt((d.val - minVal) / (maxVal - minVal + 1)),
-                })).reverse(),
-                encode: { x: 0, y: 1 },
-            }],
-            animationDuration: 300,
-        });
-        return chart;
-    }
-
     // ---- Category bubble matrix mode (dim × dim) ----
+    // Check this FIRST: if the profile explicitly assigned x_axis + series roles,
+    // use category matrix even for geo datasets.
     const xAxisDim = config.x_axis_dim;
     const xAxisIdx = xAxisDim ? cols.indexOf(xAxisDim) : -1;
     const catSeriesIdx = seriesIdx !== -1 ? seriesIdx : -1;
@@ -690,6 +632,71 @@ function createBubbleChart(container, config, data, metadata) {
         }
     }
 
+    // ---- Geo bubble mode ----
+    if (geoIdx !== -1) {
+        const timeIds = timeIdx !== -1 ? uniqueValues(rows, timeIdx) : [null];
+        const latestTime = timeIds[timeIds.length - 1];
+        const activeRows = latestTime !== null
+            ? rows.filter(r => r[timeIdx] === latestTime)
+            : rows;
+
+        const geoTotals = {};
+        for (const row of activeRows) {
+            const gid = row[geoIdx];
+            geoTotals[gid] = (geoTotals[gid] || 0) + (row[valueIdx] || 0);
+        }
+
+        const items = Object.entries(geoTotals)
+            .map(([id, val]) => ({ id, val, name: geoLabels[String(id)] || String(id) }))
+            .filter(d => {
+                const lbl = d.name.trim().toLowerCase();
+                return lbl !== 'total' && lbl !== 'toate'
+                    && !lbl.startsWith('macroregiunea') && !lbl.startsWith('regiunea');
+            })
+            .sort((a, b) => b.val - a.val);
+
+        if (items.length === 0) {
+            // No geo data after filtering — fall through to scatter mode
+        } else {
+
+        const maxVal = Math.max(...items.map(d => d.val));
+        const minVal = Math.min(...items.map(d => d.val));
+        const subtitle = latestTime !== null
+            ? (timeLabels[String(latestTime)] || String(latestTime)).replace(/^Anul\s+/, '')
+            : '';
+
+        chart.setOption({
+            title: subtitle ? { text: subtitle, textStyle: { fontSize: 13, fontWeight: 'normal', color: '#666' }, left: 'center', top: 4 } : undefined,
+            tooltip: { formatter: p => `<b>${p.name}</b><br/>${formatNumber(p.value[1])}` },
+            grid: { left: 120, right: 20, top: subtitle ? 40 : 20, bottom: 30 },
+            xAxis: { show: false, min: 0, max: items.length - 1 },
+            yAxis: {
+                type: 'category',
+                data: items.map(d => d.name).reverse(),
+                axisLabel: { fontSize: 11, width: 110, overflow: 'truncate' },
+            },
+            visualMap: {
+                show: true, min: minVal, max: maxVal, dimension: 1,
+                orient: 'horizontal', bottom: 0, left: 'center',
+                textStyle: { fontSize: 10 },
+                formatter: v => formatNumber(v),
+                inRange: { color: ['#bfdbfe', '#1a56db'] },
+            },
+            series: [{
+                type: 'scatter',
+                data: items.map((d, i) => ({
+                    name: d.name,
+                    value: [i, d.val],
+                    symbolSize: 10 + 40 * Math.sqrt((d.val - minVal) / (maxVal - minVal + 1)),
+                })).reverse(),
+                encode: { x: 0, y: 1 },
+            }],
+            animationDuration: 300,
+        });
+        return chart;
+        } // end else (items.length > 0)
+    }
+
     // ---- Scatter-bubble mode (time × category) ----
     const timeIds = timeIdx !== -1 ? uniqueValues(rows, timeIdx) : [];
     const xData = timeIds.map(id =>
@@ -729,6 +736,116 @@ function createBubbleChart(container, config, data, metadata) {
         xAxis: { type: 'category', data: xData, axisLabel: { fontSize: 11, rotate: xData.length > 20 ? 45 : 0 } },
         yAxis: { type: 'value', axisLabel: { fontSize: 11, formatter: v => formatNumber(v) } },
         series,
+        animationDuration: 300,
+    });
+    return chart;
+}
+
+
+// ---------------------------------------------------------------------------
+// Scatter/Correlation chart — pivots one dimension's categories into X/Y axes
+// Each bubble = one entity, positioned at (value_for_X_category, value_for_Y_category)
+// ---------------------------------------------------------------------------
+
+function createScatterChart(container, config, data, metadata) {
+    const chart = echarts.init(container);
+
+    const cols     = data.columns;
+    const labels   = data.column_labels;
+    const rows     = data.rows;
+    const valueIdx = cols.length - 1;
+
+    const pivotDim  = config.pivot_dim;
+    const entityDim = config.entity_dim;
+    const xCat      = config.x_category;
+    const yCat      = config.y_category;
+
+    const pivotIdx  = pivotDim  ? cols.indexOf(pivotDim)  : -1;
+    const entityIdx = entityDim ? cols.indexOf(entityDim) : -1;
+
+    if (pivotIdx === -1 || entityIdx === -1 || xCat == null || yCat == null) {
+        chart.setOption({
+            title: { text: 'Select X and Y axes', left: 'center', top: 'center',
+                     textStyle: { color: '#999', fontSize: 14 } },
+        });
+        return chart;
+    }
+
+    const entityLabels = labels[entityDim] || {};
+    const pivotLabels  = labels[pivotDim]  || {};
+
+    // Group rows by entity → { pivotValue: obsValue }
+    const entityMap = {};
+    for (const row of rows) {
+        const eid = row[entityIdx];
+        const pid = row[pivotIdx];
+        if (!entityMap[eid]) entityMap[eid] = {};
+        entityMap[eid][pid] = (entityMap[eid][pid] || 0) + (row[valueIdx] || 0);
+    }
+
+    // Build scatter points
+    const points = [];
+    for (const [eid, vals] of Object.entries(entityMap)) {
+        const x = vals[xCat];
+        const y = vals[yCat];
+        if (x != null && y != null) {
+            const name = entityLabels[String(eid)] || String(eid);
+            // Skip total-like labels
+            const lbl = name.trim().toLowerCase();
+            if (lbl === 'total' || lbl === 'toate' || lbl === 'ambele sexe') continue;
+            points.push({ name, value: [x, y] });
+        }
+    }
+
+    if (points.length === 0) {
+        chart.setOption({
+            title: { text: 'No data for selected axes', left: 'center', top: 'center',
+                     textStyle: { color: '#999', fontSize: 14 } },
+        });
+        return chart;
+    }
+
+    const xLabel = pivotLabels[String(xCat)] || String(xCat);
+    const yLabel = pivotLabels[String(yCat)] || String(yCat);
+    const showLabels = points.length <= 25;
+
+    chart.setOption({
+        tooltip: {
+            formatter: p => {
+                return `<b>${p.name}</b><br/>${xLabel}: <b>${formatNumber(p.value[0])}</b><br/>${yLabel}: <b>${formatNumber(p.value[1])}</b>`;
+            },
+        },
+        grid: { left: 70, right: 30, top: 20, bottom: 60 },
+        xAxis: {
+            type: 'value',
+            name: xLabel,
+            nameLocation: 'center',
+            nameGap: 35,
+            nameTextStyle: { fontSize: 12 },
+            axisLabel: { fontSize: 11, formatter: v => formatNumber(v) },
+        },
+        yAxis: {
+            type: 'value',
+            name: yLabel,
+            nameLocation: 'center',
+            nameGap: 55,
+            nameTextStyle: { fontSize: 12 },
+            axisLabel: { fontSize: 11, formatter: v => formatNumber(v) },
+        },
+        series: [{
+            type: 'scatter',
+            data: points,
+            symbolSize: 14,
+            itemStyle: { color: '#3b82f6', opacity: 0.8 },
+            emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.3)', opacity: 1 } },
+            label: {
+                show: showLabels,
+                formatter: '{b}',
+                position: 'right',
+                fontSize: 10,
+                color: '#555',
+            },
+        }],
         animationDuration: 300,
     });
     return chart;

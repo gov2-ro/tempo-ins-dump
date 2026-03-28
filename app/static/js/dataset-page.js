@@ -154,17 +154,17 @@ class DatasetPage {
             if (unitDim) {
                 const select = el('select');
                 for (const opt of unitDim.options) {
-                    select.appendChild(el('option', { value: String(opt.nom_item_id) }, opt.label));
+                    select.appendChild(el('option', { value: String(optVal(opt)) }, opt.label));
                 }
                 select.addEventListener('change', () => {
-                    this.currentFilters[unitDim.dim_column_name] = [parseInt(select.value)];
+                    this.currentFilters[unitDim.dim_column_name] = [select.value];
                     this.fetchAndRender();
                 });
                 unitSel.innerHTML = '<label style="font-size:12px;margin-right:4px">Unit:</label>';
                 unitSel.appendChild(select);
 
                 // Apply first unit as default filter
-                this.currentFilters[unitDim.dim_column_name] = [parseInt(select.value)];
+                this.currentFilters[unitDim.dim_column_name] = [select.value];
             }
         }
     }
@@ -203,7 +203,7 @@ class DatasetPage {
                 if (geoDimMeta) {
                     const countyIds = geoDimMeta.options
                         .filter(o => o.parsed && o.parsed.geo_level === 'county')
-                        .map(o => o.nom_item_id);
+                        .map(o => optVal(o));
                     if (countyIds.length > 0) {
                         filters[geoDim] = countyIds;
                     }
@@ -221,11 +221,34 @@ class DatasetPage {
             }
 
             // Choropleth needs all years × all counties — raise limit accordingly
+            const isTable = this.currentChartType === 'table';
             const limit = this.currentChartType === 'choropleth' ? 50000 : 5000;
+
+            // For chart queries, GROUP BY only the dims the chart displays.
+            // This collapses e.g. 101k rows to ~110 for a time×gender chart.
+            let groupBy = null;
+            if (!isTable) {
+                const cc = this.metadata.chart_config || {};
+                const roles = resolveRoles({ ...cc, primary_chart: this.currentChartType });
+                const keepDims = new Set();
+                if (roles.time_dim) keepDims.add(roles.time_dim);
+                if (roles.series_dim) keepDims.add(roles.series_dim);
+                if (roles.geo_dim) keepDims.add(roles.geo_dim);
+                if (roles.x_axis_dim) keepDims.add(roles.x_axis_dim);
+                if (roles.age_dim) keepDims.add(roles.age_dim);
+                if (roles.gender_dim) keepDims.add(roles.gender_dim);
+                if (roles.facet_dim) keepDims.add(roles.facet_dim);
+                // Always keep UNIT_MEASURE if present (avoids summing across units)
+                const allCols = this.metadata.dimensions.map(d => d.dim_column_name);
+                if (allCols.includes('UNIT_MEASURE')) keepDims.add('UNIT_MEASURE');
+                if (keepDims.size > 0) groupBy = [...keepDims];
+            }
+
             const data = await API.getDatasetData(
                 this.matrixCode,
                 filters,
-                limit
+                limit,
+                { groupBy }
             );
 
             // Render chart

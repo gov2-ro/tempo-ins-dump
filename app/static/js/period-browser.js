@@ -82,12 +82,12 @@ class PeriodBrowser {
 
     getCurrentPeriodId() {
         const opt = this.options[this.currentIndex];
-        return opt ? opt.nom_item_id : null;
+        return opt ? optVal(opt) : null;
     }
 
     /** Set period by ID (for restoring state) */
     setPeriod(periodId) {
-        const idx = this.options.findIndex(o => o.nom_item_id === periodId);
+        const idx = this.options.findIndex(o => optVal(o) === periodId);
         if (idx >= 0) {
             this.currentIndex = idx;
             this.updateDisplay();

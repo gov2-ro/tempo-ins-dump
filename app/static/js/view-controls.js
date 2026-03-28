@@ -32,7 +32,7 @@ class ViewControlsPanel {
 
         // "latest" — period browser needs last time point
         if (def === 'latest') {
-            return options.length ? [options[options.length - 1].nom_item_id] : [];
+            return options.length ? [optVal(options[options.length - 1])] : [];
         }
 
         // Filter out Total-like options
@@ -47,14 +47,14 @@ class ViewControlsPanel {
                 /[-–]/.test(o.label) || /\d+.*si\s*peste/i.test(o.label)
             );
             if (groups.length >= 3 && groups.length <= 30) {
-                return groups.map(o => o.nom_item_id);
+                return groups.map(o => optVal(o));
             }
             // Fallback: first 10 options
-            return nonTotal.slice(0, 10).map(o => o.nom_item_id);
+            return nonTotal.slice(0, 10).map(o => optVal(o));
         }
 
         // Low cardinality: select all (existing behavior)
-        return nonTotal.map(o => o.nom_item_id);
+        return nonTotal.map(o => optVal(o));
     }
 
     render() {
@@ -144,12 +144,12 @@ class ViewControlsPanel {
 
         const filtered = options.filter(o => !ViewControlsPanel.TOTAL_RE.test(o.label));
         const selected = new Set(defaults);
-        const allSelected = () => filtered.every(o => selected.has(o.nom_item_id));
+        const allSelected = () => filtered.every(o => selected.has(optVal(o)));
 
         const updatePillStates = () => {
             allPill.classList.toggle('active', allSelected());
             pillWrap.querySelectorAll('.pill:not([data-id="_all"])').forEach(p => {
-                p.classList.toggle('active', selected.has(parseInt(p.dataset.id)));
+                p.classList.toggle('active', selected.has(p.dataset.id));
             });
         };
 
@@ -162,10 +162,10 @@ class ViewControlsPanel {
             if (allSelected()) {
                 // Deselect all — keep just first
                 selected.clear();
-                if (filtered.length > 0) selected.add(filtered[0].nom_item_id);
+                if (filtered.length > 0) selected.add(optVal(filtered[0]));
             } else {
                 // Select all
-                for (const o of filtered) selected.add(o.nom_item_id);
+                for (const o of filtered) selected.add(optVal(o));
             }
             updatePillStates();
             this.onChange();
@@ -173,16 +173,17 @@ class ViewControlsPanel {
         pillWrap.appendChild(allPill);
 
         for (const opt of filtered) {
+            const val = optVal(opt);
             const pill = document.createElement('button');
-            pill.className = 'pill' + (selected.has(opt.nom_item_id) ? ' active' : '');
+            pill.className = 'pill' + (selected.has(val) ? ' active' : '');
             pill.textContent = opt.label;
-            pill.dataset.id = opt.nom_item_id;
+            pill.dataset.id = String(val);
             pill.addEventListener('click', () => {
-                if (selected.has(opt.nom_item_id)) {
+                if (selected.has(val)) {
                     // Don't allow deselecting the last one
-                    if (selected.size > 1) selected.delete(opt.nom_item_id);
+                    if (selected.size > 1) selected.delete(val);
                 } else {
-                    selected.add(opt.nom_item_id);
+                    selected.add(val);
                 }
                 updatePillStates();
                 this.onChange();
@@ -216,10 +217,11 @@ class ViewControlsPanel {
         select.appendChild(allOpt);
 
         for (const opt of filtered) {
+            const val = optVal(opt);
             const option = document.createElement('option');
-            option.value = opt.nom_item_id;
+            option.value = val;
             option.textContent = opt.label;
-            if (!isAllDefault && defaults.includes(opt.nom_item_id)) option.selected = true;
+            if (!isAllDefault && defaults.includes(val)) option.selected = true;
             select.appendChild(option);
         }
         select.addEventListener('change', () => this.onChange());
@@ -229,7 +231,7 @@ class ViewControlsPanel {
             element: select,
             getValue: () => {
                 if (select.value === '_all') return [];
-                return [parseInt(select.value)];
+                return [select.value];
             },
         };
     }
@@ -252,12 +254,13 @@ class ViewControlsPanel {
         const selected = new Set(defaults);
 
         for (const opt of filtered) {
+            const val = optVal(opt);
             const row = document.createElement('label');
             row.className = 'multi-opt';
             const cb = document.createElement('input');
             cb.type = 'checkbox';
-            cb.value = opt.nom_item_id;
-            cb.checked = allMode || selected.has(opt.nom_item_id);
+            cb.value = val;
+            cb.checked = allMode || selected.has(val);
             cb.addEventListener('change', () => {
                 const total = dropdown.querySelectorAll('input').length;
                 const count = dropdown.querySelectorAll('input:checked').length;
@@ -286,7 +289,7 @@ class ViewControlsPanel {
             element: wrapper,
             getValue: () => {
                 const checked = dropdown.querySelectorAll('input:checked');
-                return Array.from(checked).map(cb => parseInt(cb.value));
+                return Array.from(checked).map(cb => cb.value);
             },
         };
     }
@@ -311,7 +314,7 @@ class ViewControlsPanel {
         const renderTags = () => {
             tags.innerHTML = '';
             for (const id of selected) {
-                const opt = options.find(o => o.nom_item_id === id);
+                const opt = options.find(o => optVal(o) === id);
                 if (!opt) continue;
                 const tag = document.createElement('span');
                 tag.className = 'typeahead-tag';
@@ -329,7 +332,7 @@ class ViewControlsPanel {
             list.innerHTML = '';
             const q = query.toLowerCase();
             const matches = options
-                .filter(o => !selected.has(o.nom_item_id) && o.label.toLowerCase().includes(q))
+                .filter(o => !selected.has(optVal(o)) && o.label.toLowerCase().includes(q))
                 .slice(0, 20);
 
             if (matches.length === 0) {
@@ -343,7 +346,7 @@ class ViewControlsPanel {
                 item.textContent = opt.label;
                 item.addEventListener('click', () => {
                     if (selected.size < 8) {
-                        selected.add(opt.nom_item_id);
+                        selected.add(optVal(opt));
                         renderTags();
                         input.value = '';
                         list.classList.add('hidden');

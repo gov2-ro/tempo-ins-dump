@@ -14,6 +14,8 @@ def get_dataset_data(
     matrix_code: str,
     filters: str = Query("{}", description="JSON: {column_name: [value, ...]}"),
     limit: int = Query(MAX_DATA_ROWS, le=MAX_DATA_ROWS),
+    group_by: str = Query("", description="JSON array of dim columns to GROUP BY, e.g. [\"TIME_PERIOD\",\"SEX\"]. "
+                          "Other dims are summed. Empty = no aggregation (raw rows)."),
 ):
     """Query dataset parquet with dimension filters.
 
@@ -58,8 +60,19 @@ def get_dataset_data(
         for d in dims
     ]
 
+    # Parse group_by
+    group_by_cols = None
+    if group_by:
+        try:
+            group_by_cols = json.loads(group_by)
+            if not isinstance(group_by_cols, list):
+                group_by_cols = None
+        except json.JSONDecodeError:
+            pass
+
     # Build and execute query
-    sql = build_data_query(matrix_code, dimensions, filter_dict, limit + 1)
+    sql = build_data_query(matrix_code, dimensions, filter_dict, limit + 1,
+                           group_by=group_by_cols)
 
     try:
         result = conn.execute(sql).fetchall()
@@ -69,10 +82,19 @@ def get_dataset_data(
     truncated = len(result) > limit
     rows = result[:limit]
 
+    # Determine which dimension columns are in the result
+    if group_by_cols:
+        # Order must match SQL output: group_by order, filtered to valid cols
+        dim_by_col = {d['dim_column_name']: d for d in dimensions}
+        result_dims = [dim_by_col[c] for c in group_by_cols if c in dim_by_col]
+        if not result_dims:
+            result_dims = dimensions  # fallback
+    else:
+        result_dims = dimensions
+
     # Build column_labels: map data values to display labels.
-    # Detect v3 (SDMX) vs v2 (nomItemId) by checking if values are strings.
     column_labels = {}
-    for i, dim in enumerate(dimensions):
+    for i, dim in enumerate(result_dims):
         col = dim['dim_column_name']
         values = set()
         for row in rows:
@@ -101,7 +123,7 @@ def get_dataset_data(
                 column_labels[col] = {str(nom_id): label for nom_id, label in labels}
 
     # Format column names
-    columns = [d['dim_column_name'] for d in dimensions] + ['OBS_VALUE']
+    columns = [d['dim_column_name'] for d in result_dims] + ['OBS_VALUE']
 
     # Convert rows to plain lists
     data_rows = [list(r) for r in rows]

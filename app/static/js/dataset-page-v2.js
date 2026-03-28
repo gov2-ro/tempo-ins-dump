@@ -14,10 +14,11 @@ class DatasetPageV2 {
         this.dataTable = null;
         this.controlsPanel = null;
 
-        this.activeView = null;      // 'timeline' | 'snapshot' | 'table'
+        this.activeView = null;      // 'timeline' | 'snapshot' | 'table' | 'custom'
         this.activeChartIdx = 0;     // index into current view's charts[]
         this.viewStates = {};        // saved control states per view
         this.pageFilters = {};       // page-level filters (e.g., unit)
+        this.customState = null;     // { chartType, roles: { x_axis, series } }
     }
 
     async init() {
@@ -170,16 +171,16 @@ class DatasetPageV2 {
 
         const select = document.createElement('select');
         for (const opt of unitDim.options) {
-            select.appendChild(el('option', { value: String(opt.nom_item_id) }, opt.label));
+            select.appendChild(el('option', { value: String(optVal(opt)) }, opt.label));
         }
         select.addEventListener('change', () => {
-            this.pageFilters[unitDim.dim_column_name] = [parseInt(select.value)];
+            this.pageFilters[unitDim.dim_column_name] = [select.value];
             this.fetchAndRender();
         });
         container.appendChild(select);
 
         // Set default
-        this.pageFilters[unitDim.dim_column_name] = [parseInt(select.value)];
+        this.pageFilters[unitDim.dim_column_name] = [select.value];
     }
 
     // --- Sub-dataset bar ---
@@ -278,7 +279,7 @@ class DatasetPageV2 {
 
         tabBar.querySelectorAll('.tab').forEach(tab => {
             const view = tab.dataset.view;
-            const available = view === 'table' || views[view]?.available;
+            const available = view === 'table' || view === 'custom' || views[view]?.available;
             tab.disabled = !available;
             tab.addEventListener('click', () => {
                 if (!tab.disabled) this.switchView(view);
@@ -313,7 +314,14 @@ class DatasetPageV2 {
     switchView(viewName) {
         // Save current state
         if (this.activeView && this.controlsPanel) {
-            this.viewStates[this.activeView] = this.controlsPanel.saveState();
+            if (this.activeView === 'custom') {
+                this.viewStates['custom'] = {
+                    customState: this.customState ? { ...this.customState, roles: { ...this.customState.roles } } : null,
+                    controlState: this.controlsPanel.saveState(),
+                };
+            } else {
+                this.viewStates[this.activeView] = this.controlsPanel.saveState();
+            }
         }
 
         this.activeView = viewName;
@@ -343,6 +351,21 @@ class DatasetPageV2 {
         tableView.style.display = 'none';
         viewControls.style.display = '';
         chartSelector.style.display = '';
+
+        // Custom view — user-driven chart building
+        if (viewName === 'custom') {
+            // Restore saved custom state
+            if (this.viewStates['custom']?.customState) {
+                this.customState = { ...this.viewStates['custom'].customState, roles: { ...this.viewStates['custom'].customState.roles } };
+            }
+            this.renderCustomControls();
+            // Restore filter state after controls are rendered
+            if (this.viewStates['custom']?.controlState && this.controlsPanel) {
+                this.controlsPanel.restoreState(this.viewStates['custom'].controlState);
+            }
+            this.fetchAndRender();
+            return;
+        }
 
         // Render view controls
         this.renderViewControls(viewName);
@@ -387,6 +410,258 @@ class DatasetPageV2 {
         );
     }
 
+    // --- Custom view ---
+
+    static CUSTOM_CHART_TYPES = [
+        { type: 'line',           label: 'Line',    needsSeries: false },
+        { type: 'area_stacked',   label: 'Area',    needsSeries: true  },
+        { type: 'bar_vertical',   label: 'Bar',     needsSeries: false },
+        { type: 'horizontal_bar', label: 'H-Bar',   needsSeries: false },
+        { type: 'grouped_bar',    label: 'Grouped', needsSeries: true  },
+        { type: 'stacked_bar',    label: 'Stacked', needsSeries: true  },
+        { type: 'choropleth',     label: 'Map',     needsSeries: false, requiresGeo: true },
+        { type: 'heatmap',        label: 'Heatmap', needsSeries: true,  minOptions: 5 },
+    ];
+
+    getCustomDims() {
+        const singletons = this.profile?.dimensions?.singleton_dims || [];
+        return this.metadata.dimensions.filter(d => {
+            if (singletons.includes(d.dim_column_name)) return false;
+            if (d.dim_type === 'unit') return false;
+            return d.option_count > 1;
+        });
+    }
+
+    isChartTypeEligible(chartDef, dims) {
+        if (chartDef.requiresGeo && !dims.find(d => d.dim_type === 'geo')) return false;
+        if (chartDef.needsSeries && dims.length < 2) return false;
+        if (chartDef.minOptions) {
+            const qualifying = dims.filter(d => d.option_count >= chartDef.minOptions);
+            if (qualifying.length < 2) return false;
+        }
+        return true;
+    }
+
+    initCustomDefaults(dims) {
+        const timeDim = dims.find(d => d.dim_type === 'time' && d.option_count >= 3);
+        const geoDim = dims.find(d => d.dim_type === 'geo');
+        const analysisDims = dims.filter(d => d.dim_type !== 'time' && d.dim_type !== 'geo');
+
+        // Pick best series dim
+        const pickSeries = (exclude) => {
+            const candidates = dims.filter(d => d.dim_column_name !== exclude);
+            const gender = candidates.find(d => d.dim_type === 'gender');
+            if (gender) return gender.dim_column_name;
+            const residence = candidates.find(d => d.dim_type === 'residence');
+            if (residence) return residence.dim_column_name;
+            const small = candidates.filter(d => d.option_count <= 8 && d.dim_type !== 'time' && d.dim_type !== 'geo')
+                .sort((a, b) => a.option_count - b.option_count);
+            if (small.length) return small[0].dim_column_name;
+            return null;
+        };
+
+        if (timeDim) {
+            const series = pickSeries(timeDim.dim_column_name);
+            this.customState = { chartType: 'line', roles: { x_axis: timeDim.dim_column_name, series } };
+        } else if (geoDim) {
+            this.customState = { chartType: 'horizontal_bar', roles: { x_axis: geoDim.dim_column_name, series: null } };
+        } else {
+            const largest = [...dims].sort((a, b) => b.option_count - a.option_count)[0];
+            this.customState = { chartType: 'bar_vertical', roles: { x_axis: largest?.dim_column_name || null, series: null } };
+        }
+    }
+
+    renderCustomControls() {
+        const chartSelectorEl = document.getElementById('chart-selector');
+        const viewControlsEl = document.getElementById('view-controls');
+        chartSelectorEl.innerHTML = '';
+        if (this.controlsPanel) this.controlsPanel.destroy();
+
+        const dims = this.getCustomDims();
+
+        // Initialize defaults on first open
+        if (!this.customState) {
+            this.initCustomDefaults(dims);
+        }
+
+        // Chart type picker
+        const typeBar = document.createElement('div');
+        typeBar.className = 'custom-chart-type-bar';
+        for (const def of DatasetPageV2.CUSTOM_CHART_TYPES) {
+            const btn = document.createElement('button');
+            btn.className = 'chart-type-btn';
+            btn.textContent = def.label;
+            const eligible = this.isChartTypeEligible(def, dims);
+            btn.disabled = !eligible;
+            if (!eligible) btn.title = def.requiresGeo ? 'No geographic dimension' :
+                def.minOptions ? 'Needs 2+ dimensions with 5+ options' : 'Needs 2+ dimensions';
+            if (def.type === this.customState.chartType) btn.classList.add('active');
+            btn.addEventListener('click', () => {
+                if (!eligible) return;
+                this.customState.chartType = def.type;
+                // If chart now requires series and we don't have one, pick one
+                if (def.needsSeries && !this.customState.roles.series) {
+                    const avail = dims.filter(d => d.dim_column_name !== this.customState.roles.x_axis);
+                    if (avail.length) this.customState.roles.series = avail[0].dim_column_name;
+                }
+                // If choropleth, force x_axis to geo
+                if (def.requiresGeo) {
+                    const geo = dims.find(d => d.dim_type === 'geo');
+                    if (geo) this.customState.roles.x_axis = geo.dim_column_name;
+                }
+                this.renderCustomControls();
+                this.fetchAndRender();
+            });
+            typeBar.appendChild(btn);
+        }
+        chartSelectorEl.appendChild(typeBar);
+
+        // Role assignment
+        const roleBar = document.createElement('div');
+        roleBar.className = 'custom-role-bar';
+
+        const activeDef = DatasetPageV2.CUSTOM_CHART_TYPES.find(d => d.type === this.customState.chartType);
+        const showSeries = activeDef ? (activeDef.needsSeries || dims.length > 1) : dims.length > 1;
+
+        // X-Axis dropdown
+        const xGroup = document.createElement('div');
+        xGroup.className = 'custom-role-group';
+        const xLabel = document.createElement('span');
+        xLabel.className = 'custom-role-label';
+        xLabel.textContent = 'X-Axis';
+        const xSelect = document.createElement('select');
+        xSelect.className = 'custom-role-select';
+        for (const d of dims) {
+            const opt = document.createElement('option');
+            opt.value = d.dim_column_name;
+            opt.textContent = `${d.dim_label} (${d.option_count})`;
+            if (d.dim_column_name === this.customState.roles.x_axis) opt.selected = true;
+            xSelect.appendChild(opt);
+        }
+        xSelect.addEventListener('change', () => {
+            this.customState.roles.x_axis = xSelect.value;
+            // If series is now same as x, clear it
+            if (this.customState.roles.series === xSelect.value) {
+                this.customState.roles.series = null;
+            }
+            this.renderCustomControls();
+            this.fetchAndRender();
+        });
+        xGroup.appendChild(xLabel);
+        xGroup.appendChild(xSelect);
+        roleBar.appendChild(xGroup);
+
+        // Series dropdown
+        if (showSeries) {
+            const sGroup = document.createElement('div');
+            sGroup.className = 'custom-role-group';
+            const sLabel = document.createElement('span');
+            sLabel.className = 'custom-role-label';
+            sLabel.textContent = 'Series';
+            const sSelect = document.createElement('select');
+            sSelect.className = 'custom-role-select';
+            if (!activeDef?.needsSeries) {
+                const noneOpt = document.createElement('option');
+                noneOpt.value = '';
+                noneOpt.textContent = '(none)';
+                if (!this.customState.roles.series) noneOpt.selected = true;
+                sSelect.appendChild(noneOpt);
+            }
+            for (const d of dims) {
+                if (d.dim_column_name === this.customState.roles.x_axis) continue;
+                const opt = document.createElement('option');
+                opt.value = d.dim_column_name;
+                opt.textContent = `${d.dim_label} (${d.option_count})`;
+                if (d.dim_column_name === this.customState.roles.series) opt.selected = true;
+                sSelect.appendChild(opt);
+            }
+            sSelect.addEventListener('change', () => {
+                this.customState.roles.series = sSelect.value || null;
+                this.renderCustomControls();
+                this.fetchAndRender();
+            });
+            sGroup.appendChild(sLabel);
+            sGroup.appendChild(sSelect);
+            roleBar.appendChild(sGroup);
+        }
+
+        // Warnings
+        const seriesDim = dims.find(d => d.dim_column_name === this.customState.roles.series);
+        if (seriesDim && seriesDim.option_count > 12) {
+            const warn = document.createElement('span');
+            warn.className = 'custom-warning';
+            warn.textContent = `Series has ${seriesDim.option_count} values (top 12 shown)`;
+            roleBar.appendChild(warn);
+        }
+
+        chartSelectorEl.appendChild(roleBar);
+
+        // Auto-generate filters for unassigned dims
+        this.renderCustomFilters(viewControlsEl, dims);
+    }
+
+    renderCustomFilters(container, dims) {
+        const assigned = new Set(
+            Object.values(this.customState.roles).filter(Boolean)
+        );
+        const filterDims = dims.filter(d => !assigned.has(d.dim_column_name));
+
+        const controls = filterDims.map(dim => {
+            const oc = dim.option_count;
+            let type = 'pill_group';
+            if (oc > 100) type = 'typeahead_select';
+            else if (oc > 25) type = 'single_select';
+            else if (oc > 5) type = 'multi_select';
+            return {
+                type,
+                column: dim.dim_column_name,
+                label: dim.dim_label,
+                scope: 'view',
+                default: 'total',
+            };
+        });
+
+        this.controlsPanel = new ViewControlsPanel(
+            container,
+            controls,
+            this.metadata.dimensions,
+            () => this.fetchAndRender()
+        );
+    }
+
+    buildCustomChartConfig() {
+        const ct = this.customState.chartType;
+        const roles = this.customState.roles;
+        const dims = this.profile?.dimensions || {};
+        const timeDim = dims.time?.column || null;
+        const xIsTime = roles.x_axis === timeDim;
+
+        return {
+            primary_chart: ct,
+            ranked_charts: [{
+                chart_type: ct,
+                roles: {
+                    x_axis: roles.x_axis || null,
+                    series: roles.series || null,
+                    timeline: xIsTime ? roles.x_axis : null,
+                    pivot: null,
+                    entity: null,
+                    facet: null,
+                },
+            }],
+            geo_dim: dims.geo?.column || null,
+            time_dim: timeDim,
+            series_dim: roles.series || null,
+            pivot_dim: null,
+            entity_dim: null,
+            age_dim: dims.age || null,
+            gender_dim: dims.gender || null,
+            archetype: this.profile?.archetype,
+            max_series: 12,
+            multi_unit: dims.unit?.multi_unit || false,
+        };
+    }
+
     // --- Chart selector ---
 
     renderChartSelector(charts) {
@@ -399,7 +674,7 @@ class DatasetPageV2 {
             bar: 'Grouped', horizontal_bar: 'H-Bar',
             grouped_bar: 'Grouped', stacked_bar: 'Stacked',
             choropleth: 'Map', population_pyramid: 'Pyramid',
-            heatmap: 'Heatmap', bubble: 'Bubble',
+            heatmap: 'Heatmap', bubble: 'Bubble', scatter: 'Scatter',
             small_multiples: 'Small ×',
         };
 
@@ -489,6 +764,57 @@ class DatasetPageV2 {
             container.appendChild(sel);
         }
 
+        // Scatter axis selectors — two dropdowns to pick pivot categories for X and Y
+        if (this.getActiveChartType() === 'scatter') {
+            const pivotCol = activeChart?.roles?.pivot;
+            const pivotMeta = pivotCol
+                ? this.metadata.dimensions.find(d => d.dim_column_name === pivotCol)
+                : null;
+            if (pivotMeta && pivotMeta.options && pivotMeta.options.length >= 2) {
+                const opts = pivotMeta.options;
+                const currentX = this._scatterAxes?.x ?? optVal(opts[0]);
+                const currentY = this._scatterAxes?.y ?? optVal(opts[Math.min(1, opts.length - 1)]);
+                // Initialize defaults if not set
+                if (!this._scatterAxes) {
+                    this._scatterAxes = { x: currentX, y: currentY };
+                }
+
+                const sep = document.createElement('span');
+                sep.className = 'sep';
+                container.appendChild(sep);
+
+                const makeSelect = (label, current, onChange) => {
+                    const wrap = document.createElement('span');
+                    wrap.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-right:8px;';
+                    const lbl = document.createElement('span');
+                    lbl.textContent = label;
+                    lbl.style.cssText = 'font-size:12px;color:#666;';
+                    const sel = document.createElement('select');
+                    sel.className = 'chart-btn';
+                    for (const o of opts) {
+                        const option = document.createElement('option');
+                        option.value = optVal(o);
+                        option.textContent = o.label;
+                        if (String(optVal(o)) === String(current)) option.selected = true;
+                        sel.appendChild(option);
+                    }
+                    sel.addEventListener('change', () => onChange(sel.value));
+                    wrap.appendChild(lbl);
+                    wrap.appendChild(sel);
+                    return wrap;
+                };
+
+                container.appendChild(makeSelect('X:', currentX, v => {
+                    this._scatterAxes = { ...this._scatterAxes, x: v };
+                    this.fetchAndRender();
+                }));
+                container.appendChild(makeSelect('Y:', currentY, v => {
+                    this._scatterAxes = { ...this._scatterAxes, y: v };
+                    this.fetchAndRender();
+                }));
+            }
+        }
+
         // Dimension pair toggle for bubble chart
         if (activeChart?.dimension_pair_toggle && this.getActiveChartType() === 'bubble') {
             const cats = (this.profile.dimensions.categories || [])
@@ -547,6 +873,9 @@ class DatasetPageV2 {
     }
 
     getActiveChartType() {
+        if (this.activeView === 'custom' && this.customState) {
+            return this.customState.chartType;
+        }
         const view = this.profile?.views?.[this.activeView];
         const charts = view?.charts || [];
         const chart = charts[this.activeChartIdx];
@@ -594,7 +923,8 @@ class DatasetPageV2 {
             const chartType = this.getActiveChartType();
             const limit = 50000;
 
-            const data = await API.getDatasetData(this.matrixCode, filters, limit);
+            const groupBy = this.computeGroupBy();
+            const data = await API.getDatasetData(this.matrixCode, filters, limit, { groupBy });
 
             // Dispose old chart
             if (this.chartInstance) {
@@ -613,6 +943,30 @@ class DatasetPageV2 {
         } finally {
             this.showLoading(false);
         }
+    }
+
+    computeGroupBy() {
+        if (this.activeView === 'table') return null;
+
+        const chartConfig = this.buildChartConfig();
+        const roles = resolveRoles(chartConfig);
+
+        const keepDims = new Set();
+        if (roles.time_dim)   keepDims.add(roles.time_dim);
+        if (roles.series_dim) keepDims.add(roles.series_dim);
+        if (roles.geo_dim)    keepDims.add(roles.geo_dim);
+        if (roles.x_axis_dim) keepDims.add(roles.x_axis_dim);
+        if (roles.age_dim)    keepDims.add(roles.age_dim);
+        if (roles.gender_dim) keepDims.add(roles.gender_dim);
+        if (roles.facet_dim)  keepDims.add(roles.facet_dim);
+        if (roles.pivot_dim)  keepDims.add(roles.pivot_dim);
+        if (roles.entity_dim) keepDims.add(roles.entity_dim);
+
+        // Always keep UNIT_MEASURE if present (avoid summing across units)
+        const allCols = this.metadata.dimensions.map(d => d.dim_column_name);
+        if (allCols.includes('UNIT_MEASURE')) keepDims.add('UNIT_MEASURE');
+
+        return keepDims.size > 0 ? [...keepDims] : null;
     }
 
     buildFilters() {
@@ -656,7 +1010,7 @@ class DatasetPageV2 {
                     : 'county';
                 const geoIds = geoDim.options
                     .filter(o => o.parsed?.geo_level === targetLevel)
-                    .map(o => o.nom_item_id);
+                    .map(o => optVal(o));
                 if (geoIds.length > 0) {
                     filters[geoCol] = geoIds;
                 }
@@ -695,6 +1049,10 @@ class DatasetPageV2 {
      * that chart-factory's resolveRoles() expects.
      */
     buildChartConfig() {
+        if (this.activeView === 'custom' && this.customState) {
+            return this.buildCustomChartConfig();
+        }
+
         const chart = this.getActiveChart();
         const chartType = this.getActiveChartType();
         const dims = this.profile.dimensions;
@@ -717,6 +1075,8 @@ class DatasetPageV2 {
                 roles: {
                     x_axis: bubbleX || chart?.roles?.x_axis || null,
                     series: bubbleS || effectiveSeries,
+                    pivot: chart?.roles?.pivot || null,
+                    entity: chart?.roles?.entity || null,
                     timeline: (this.activeView === 'timeline')
                         ? (dims.time?.column || chart?.roles?.x_axis || null)
                         : null,
@@ -726,6 +1086,10 @@ class DatasetPageV2 {
             geo_dim: dims.geo?.column || null,
             time_dim: dims.time?.column || null,
             series_dim: bubbleS || effectiveSeries,
+            pivot_dim: chart?.roles?.pivot || null,
+            entity_dim: chart?.roles?.entity || null,
+            x_category: (chartType === 'scatter' && this._scatterAxes) ? this._scatterAxes.x : null,
+            y_category: (chartType === 'scatter' && this._scatterAxes) ? this._scatterAxes.y : null,
             age_dim: dims.age || null,
             gender_dim: dims.gender || null,
             archetype: this.profile.archetype,

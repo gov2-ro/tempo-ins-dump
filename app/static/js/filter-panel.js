@@ -51,7 +51,7 @@ class FilterPanel {
     _renderTimeFilter(section, dim) {
         const years = dim.options
             .filter(o => o.parsed && o.parsed.year)
-            .map(o => ({ id: o.nom_item_id, year: o.parsed.year }))
+            .map(o => ({ id: optVal(o), year: o.parsed.year }))
             .sort((a, b) => a.year - b.year);
 
         if (years.length === 0) {
@@ -118,11 +118,11 @@ class FilterPanel {
 
         for (const opt of dim.options) {
             const label = el('label', {},
-                el('input', { type: 'radio', name, value: String(opt.nom_item_id) }),
+                el('input', { type: 'radio', name, value: String(optVal(opt)) }),
                 opt.label
             );
             label.querySelector('input').addEventListener('change', (e) => {
-                this.filters[dim.dim_column_name] = [parseInt(e.target.value)];
+                this.filters[dim.dim_column_name] = [e.target.value];
                 this.onChange(this.getFilters());
             });
             group.appendChild(label);
@@ -171,7 +171,7 @@ class FilterPanel {
                 const label = el('label', { className: cssClass },
                     el('input', {
                         type: 'checkbox',
-                        value: String(opt.nom_item_id),
+                        value: String(optVal(opt)),
                         ...(checked ? { checked: 'true' } : {}),
                     }),
                     opt.label
@@ -242,7 +242,7 @@ class FilterPanel {
             const label = el('label', { className: isTotal ? 'opt-total' : '' },
                 el('input', {
                     type: 'checkbox',
-                    value: String(opt.nom_item_id),
+                    value: String(optVal(opt)),
                     ...(checked ? { checked: 'true' } : {}),
                 }),
                 opt.label
@@ -263,7 +263,7 @@ class FilterPanel {
     }
 
     _applyCheckboxFilter(dim, group) {
-        const checked = [...group.querySelectorAll('input:checked')].map(cb => parseInt(cb.value));
+        const checked = [...group.querySelectorAll('input:checked')].map(cb => cb.value);
         if (checked.length === 0 || checked.length === dim.option_count) {
             delete this.filters[dim.dim_column_name];
         } else {

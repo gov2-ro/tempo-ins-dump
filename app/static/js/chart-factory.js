@@ -18,6 +18,9 @@ function resolveRoles(chartConfig) {
         // legacy compat
         age_dim:    chartConfig.age_dim || null,
         gender_dim: chartConfig.gender_dim || null,
+        // scatter/correlation
+        pivot_dim:  roles.pivot || chartConfig.pivot_dim || null,
+        entity_dim: roles.entity || chartConfig.entity_dim || null,
     };
 }
 
@@ -62,6 +65,8 @@ function createChart(container, chartConfig, data, metadata) {
             return createHeatmapChart(container, cfg, data, metadata);
         case 'bubble':
             return createBubbleChart(container, cfg, data, metadata);
+        case 'scatter':
+            return createScatterChart(container, cfg, data, metadata);
         case 'small_multiples':
             return createSmallMultiplesChart(container, cfg, data, metadata);
         default:

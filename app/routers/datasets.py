@@ -185,9 +185,11 @@ def get_dataset(matrix_code: str):
                 p.age_max,
                 p.unit_type,
                 p.unit_scale,
-                p.parse_confidence
+                p.parse_confidence,
+                sc.sdmx_value
             FROM dimension_options o
             LEFT JOIN dimension_options_parsed p ON o.nom_item_id = p.nom_item_id
+            LEFT JOIN sdmx_codes sc ON o.nom_item_id = sc.nom_item_id
             WHERE o.dimension_id = ?
             ORDER BY o.option_offset
         """, [dim_id]).fetchall()
@@ -196,7 +198,7 @@ def get_dataset(matrix_code: str):
         type_counts = {}
         option_list = []
         for opt in options:
-            nom_id, label, offset, parent_id, dt, year, q, mo, geo_lvl, geo_name, gender, age_min, age_max, unit_type, unit_scale, conf = opt
+            nom_id, label, offset, parent_id, dt, year, q, mo, geo_lvl, geo_name, gender, age_min, age_max, unit_type, unit_scale, conf, sdmx_val = opt
             if dt:
                 type_counts[dt] = type_counts.get(dt, 0) + 1
 
@@ -221,6 +223,7 @@ def get_dataset(matrix_code: str):
                 'parent_id': parent_id,
                 'dim_type': dt,
                 'parsed': parsed,
+                'sdmx_value': sdmx_val,
             })
 
         dim_type = max(type_counts, key=type_counts.get) if type_counts else 'indicator'

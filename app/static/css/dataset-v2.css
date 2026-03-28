@@ -595,3 +595,84 @@
     margin-left: 4px;
 }
 .stack-by-select:focus { outline: none; border-color: var(--primary); }
+
+/* Custom view — Chart type picker */
+.custom-chart-type-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+
+.custom-chart-type-bar .chart-type-btn {
+    border: 1px solid var(--border);
+    background: var(--bg-white);
+    border-radius: var(--radius-sm);
+    padding: 5px 12px;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--text-light);
+    transition: all 0.15s;
+}
+
+.custom-chart-type-bar .chart-type-btn:hover:not(:disabled) {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.custom-chart-type-bar .chart-type-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+}
+
+.custom-chart-type-bar .chart-type-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+/* Role assignment row */
+.custom-role-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 4px 0;
+}
+
+.custom-role-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.custom-role-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--text-muted);
+}
+
+.custom-role-select {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 5px 8px;
+    font-size: 12px;
+    background: var(--bg-white);
+    min-width: 160px;
+}
+
+.custom-role-select:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+/* Validation warning */
+.custom-warning {
+    font-size: 11px;
+    color: #92400e;
+    background: #fef3c7;
+    padding: 3px 10px;
+    border-radius: var(--radius-sm);
+    margin-left: 8px;
+}

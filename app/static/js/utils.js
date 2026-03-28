@@ -16,6 +16,12 @@ function formatNumber(val, decimals = null) {
     });
 }
 
+/** Get the filter value for a dimension option.
+ *  v3 SDMX parquets use string values; fall back to nom_item_id for v2. */
+function optVal(opt) {
+    return opt.sdmx_value != null ? opt.sdmx_value : opt.nom_item_id;
+}
+
 /** Resolve nom_item_id to label using column_labels dict */
 function resolveLabel(columnLabels, colName, id) {
     if (id === null || id === undefined) return '—';
