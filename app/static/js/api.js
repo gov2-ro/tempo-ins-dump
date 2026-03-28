@@ -19,8 +19,8 @@ const API = {
         return resp.json();
     },
 
-    getCategories() {
-        return this.fetch('/categories');
+    getCategories(params = {}) {
+        return this.fetch('/categories', params);
     },
 
     getDatasets(params = {}) {

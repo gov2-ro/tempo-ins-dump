@@ -1,18 +1,82 @@
 /**
  * Lens — INS Data Observatory
- * A modern, dark-themed data exploration UI.
+ * A modern data exploration UI with dark/light theme and EN/RO language.
  * Reuses existing API layer + chart modules.
  */
 
 // ---------------------------------------------------------------------------
-// ECharts dark theme — override init so all chart modules use it automatically
+// i18n — UI string translations
 // ---------------------------------------------------------------------------
-(function registerDarkTheme() {
+const UI = {
+    ro: {
+        heroTitle: 'Romanian Statistics<br><span class="hero-accent">Observatory</span>',
+        heroSub: (n, c) => `${n} seturi de date din ${c} categorii`,
+        searchPlaceholder: 'Caută seturi de date, indicatori, coduri...',
+        searchTrigger: 'Caută seturi de date...',
+        searchEmpty: 'Tastează pentru a căuta în toate seturile de date',
+        searchNoResults: 'Niciun rezultat',
+        searchError: 'Eroare la căutare',
+        noDatasets: 'Niciun set de date în această categorie',
+        backExplore: '← Explorare',
+        backCategories: '← Categorii',
+        latestValue: 'Ultima valoare',
+        average: 'Medie',
+        range: 'Interval',
+        dataPoints: 'Puncte date',
+        ofTotal: 'din',
+        total: 'total',
+        noData: 'Fără date',
+        noDataFilters: 'Nicio dată pentru filtrele curente',
+        datasets: 'seturi de date',
+        subcategories: 'subcategorii',
+        rows: 'rânduri',
+        navigate: 'navighează',
+        open: 'deschide',
+    },
+    en: {
+        heroTitle: 'Romanian Statistics<br><span class="hero-accent">Observatory</span>',
+        heroSub: (n, c) => `${n} datasets across ${c} categories`,
+        searchPlaceholder: 'Search datasets, indicators, codes...',
+        searchTrigger: 'Search datasets...',
+        searchEmpty: 'Type to search across all datasets',
+        searchNoResults: 'No results',
+        searchError: 'Search error',
+        noDatasets: 'No datasets in this category',
+        backExplore: '← Explore',
+        backCategories: '← Categories',
+        latestValue: 'Latest Value',
+        average: 'Average',
+        range: 'Range',
+        dataPoints: 'Data Points',
+        ofTotal: 'of',
+        total: 'total',
+        noData: 'No data',
+        noDataFilters: 'No data for current filters',
+        datasets: 'datasets',
+        subcategories: 'subcategories',
+        rows: 'rows',
+        navigate: 'navigate',
+        open: 'open',
+    },
+};
+
+// ---------------------------------------------------------------------------
+// ECharts themes — dark and light variants
+// ---------------------------------------------------------------------------
+(function registerThemes() {
     const COLORS = ['#818cf8','#f472b6','#34d399','#fbbf24','#60a5fa','#a78bfa','#fb923c','#94a3b8',
                     '#e879f9','#22d3ee','#f87171','#84cc16'];
-    echarts.registerTheme('lens', {
-        backgroundColor: 'transparent',
+
+    const sharedStyle = {
         color: COLORS,
+        line: { smooth: true, symbolSize: 4, lineStyle: { width: 2.5 } },
+        bar: { barMaxWidth: 40, itemStyle: { borderRadius: [3, 3, 0, 0] } },
+        scatter: { symbolSize: 10 },
+    };
+
+    echarts.registerTheme('lens-dark', {
+        ...sharedStyle,
+        backgroundColor: 'transparent',
         textStyle: { color: '#a1a1aa', fontFamily: "'Inter', system-ui, sans-serif" },
         title: { textStyle: { color: '#fafafa', fontWeight: 600 }, subtextStyle: { color: '#71717a' } },
         legend: { textStyle: { color: '#a1a1aa' }, pageTextStyle: { color: '#a1a1aa' } },
@@ -34,15 +98,42 @@
             axisLabel: { color: '#71717a', fontSize: 11 },
             splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
         },
-        line: { smooth: true, symbolSize: 4, lineStyle: { width: 2.5 } },
-        bar: { barMaxWidth: 40, itemStyle: { borderRadius: [3, 3, 0, 0] } },
-        scatter: { symbolSize: 10 },
         visualMap: { textStyle: { color: '#71717a' } },
     });
 
-    // Monkey-patch echarts.init to always use our theme
+    echarts.registerTheme('lens-light', {
+        ...sharedStyle,
+        backgroundColor: 'transparent',
+        textStyle: { color: '#4a4a55', fontFamily: "'Inter', system-ui, sans-serif" },
+        title: { textStyle: { color: '#111118', fontWeight: 600 }, subtextStyle: { color: '#8a8a99' } },
+        legend: { textStyle: { color: '#4a4a55' }, pageTextStyle: { color: '#4a4a55' } },
+        tooltip: {
+            backgroundColor: 'rgba(255,255,255,0.96)',
+            borderColor: 'rgba(0,0,0,0.08)',
+            textStyle: { color: '#111118', fontSize: 12 },
+            extraCssText: 'border-radius:8px; backdrop-filter:blur(8px); box-shadow:0 4px 20px rgba(0,0,0,0.12);',
+        },
+        categoryAxis: {
+            axisLine: { lineStyle: { color: 'rgba(0,0,0,0.1)' } },
+            axisTick: { lineStyle: { color: 'rgba(0,0,0,0.06)' } },
+            axisLabel: { color: '#8a8a99', fontSize: 11 },
+            splitLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } },
+        },
+        valueAxis: {
+            axisLine: { lineStyle: { color: 'rgba(0,0,0,0.1)' } },
+            axisTick: { lineStyle: { color: 'rgba(0,0,0,0.06)' } },
+            axisLabel: { color: '#8a8a99', fontSize: 11 },
+            splitLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } },
+        },
+        visualMap: { textStyle: { color: '#8a8a99' } },
+    });
+
+    // Monkey-patch echarts.init to use the current theme
     const _origInit = echarts.init.bind(echarts);
-    echarts.init = (dom, _theme, opts) => _origInit(dom, 'lens', opts);
+    echarts.init = (dom, _theme, opts) => {
+        const themeName = document.body.dataset.theme === 'light' ? 'lens-light' : 'lens-dark';
+        return _origInit(dom, themeName, opts);
+    };
 })();
 
 
@@ -70,12 +161,23 @@ class LensApp {
         this.charts = [];       // active ECharts instances
         this.categories = null; // category tree cache
         this.searchIdx = -1;    // keyboard nav index in search results
+
+        // Theme & language from localStorage
+        this.theme = localStorage.getItem('lens_theme') || 'dark';
+        this.lang = localStorage.getItem('lens_lang') || 'ro';
+
         this.init();
     }
 
+    /** Shortcut to get current UI strings */
+    get ui() { return UI[this.lang] || UI.ro; }
+
     // --- Init ---------------------------------------------------------------
     async init() {
+        this.applyTheme();
+        this.applyLang();
         this.bindEvents();
+        this.bindThemeAndLang();
         const code = new URLSearchParams(location.search).get('code');
         if (code) {
             this.showDashboard(code);
@@ -122,6 +224,58 @@ class LensApp {
         });
     }
 
+    // --- Theme & Language ----------------------------------------------------
+    bindThemeAndLang() {
+        document.getElementById('theme-toggle').addEventListener('click', () => {
+            this.theme = this.theme === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('lens_theme', this.theme);
+            this.applyTheme();
+            this.reRenderCharts();
+        });
+
+        document.getElementById('lang-toggle').addEventListener('click', () => {
+            this.lang = this.lang === 'ro' ? 'en' : 'ro';
+            localStorage.setItem('lens_lang', this.lang);
+            this.applyLang();
+            // Clear category cache (names depend on lang)
+            this.categories = null;
+            // Re-render current view
+            const code = new URLSearchParams(location.search).get('code');
+            if (code) {
+                this.showDashboard(code);
+            } else {
+                this.showBrowse();
+            }
+        });
+    }
+
+    applyTheme() {
+        document.body.dataset.theme = this.theme;
+        const sunIcon = document.getElementById('theme-icon-sun');
+        const moonIcon = document.getElementById('theme-icon-moon');
+        if (this.theme === 'light') {
+            sunIcon.classList.add('hidden');
+            moonIcon.classList.remove('hidden');
+        } else {
+            sunIcon.classList.remove('hidden');
+            moonIcon.classList.add('hidden');
+        }
+    }
+
+    applyLang() {
+        document.getElementById('lang-label').textContent = this.lang === 'ro' ? 'EN' : 'RO';
+        document.getElementById('search-trigger').querySelector('span').textContent = this.ui.searchTrigger;
+        document.getElementById('search-input').placeholder = this.ui.searchPlaceholder;
+    }
+
+    /** Dispose and re-create all charts (needed after theme change) */
+    reRenderCharts() {
+        if (this.data && this.chartConfig) {
+            this.renderPrimaryChart();
+            this.renderSecondaryCharts();
+        }
+    }
+
     // --- Navigation ---------------------------------------------------------
     navigate(code) {
         const url = new URL(location.href);
@@ -143,14 +297,13 @@ class LensApp {
         document.getElementById('back-btn').classList.add('hidden');
 
         if (!this.categories) {
-            const resp = await API.getCategories();
+            const resp = await API.getCategories({ lang: this.lang });
             this.categories = resp.tree;
         }
 
         const totalDatasets = this.categories.reduce((s, c) => s + (c.total_datasets || 0), 0);
-        document.getElementById('hero-sub').textContent =
-            `${formatNumber(totalDatasets, 0)} datasets across ${this.categories.length} categories`;
-        document.getElementById('dataset-count').textContent = `${formatNumber(totalDatasets, 0)} datasets`;
+        document.getElementById('hero-sub').innerHTML = this.ui.heroSub(formatNumber(totalDatasets, 0), this.categories.length);
+        document.getElementById('dataset-count').textContent = `${formatNumber(totalDatasets, 0)} ${this.ui.datasets}`;
 
         this.showCategoryGrid();
     }
@@ -173,8 +326,8 @@ class LensApp {
                 <div class="cat-body">
                     <div class="cat-name">${cat.name}</div>
                     <div class="cat-meta">
-                        <span class="cat-count">${cat.total_datasets || 0} datasets</span>
-                        ${cat.children.length ? `<span>&middot; ${cat.children.length} subcategories</span>` : ''}
+                        <span class="cat-count">${cat.total_datasets || 0} ${this.ui.datasets}</span>
+                        ${cat.children.length ? `<span>&middot; ${cat.children.length} ${this.ui.subcategories}</span>` : ''}
                     </div>
                     ${cat.children.length ? `<div class="cat-children">
                         ${cat.children.slice(0, 4).map(c =>
@@ -192,18 +345,19 @@ class LensApp {
         document.getElementById('category-grid').classList.add('hidden');
         const panel = document.getElementById('dataset-panel');
         panel.classList.remove('hidden');
+        document.getElementById('panel-back').textContent = this.ui.backCategories;
         document.getElementById('panel-title').textContent = cat.name;
-        document.getElementById('panel-count').textContent = `${cat.total_datasets || 0} datasets`;
+        document.getElementById('panel-count').textContent = `${cat.total_datasets || 0} ${this.ui.datasets}`;
 
         const list = document.getElementById('dataset-list');
         list.innerHTML = '<div class="skeleton" style="height:200px;margin:8px 0"></div>';
 
         // Fetch datasets for this category (use ancestor filter)
-        const resp = await API.getDatasets({ ancestor: cat.code, limit: 100, sort: 'updated' });
+        const resp = await API.getDatasets({ ancestor: cat.code, limit: 100, sort: 'updated', lang: this.lang });
         list.innerHTML = '';
 
         if (resp.datasets.length === 0) {
-            list.innerHTML = '<div class="search-empty">No datasets in this category</div>';
+            list.innerHTML = `<div class="search-empty">${this.ui.noDatasets}</div>`;
             return;
         }
 
@@ -218,7 +372,7 @@ class LensApp {
                 <span class="ds-badges">
                     ${ds.time_range ? `<span class="ds-badge">${ds.time_range}</span>` : ''}
                     ${ds.archetype ? `<span class="ds-badge">${ds.archetype}</span>` : ''}
-                    ${ds.row_count ? `<span class="ds-badge">${formatNumber(ds.row_count, 0)} rows</span>` : ''}
+                    ${ds.row_count ? `<span class="ds-badge">${formatNumber(ds.row_count, 0)} ${this.ui.rows}</span>` : ''}
                 </span>
             `;
             list.appendChild(row);
@@ -233,6 +387,7 @@ class LensApp {
         document.getElementById('browse-view').classList.add('hidden');
         document.getElementById('dashboard-view').classList.remove('hidden');
         document.getElementById('back-btn').classList.remove('hidden');
+        document.getElementById('back-btn').textContent = this.ui.backExplore;
 
         // Show loading skeletons
         document.getElementById('dash-header').innerHTML =
@@ -452,7 +607,7 @@ class LensApp {
         const row = document.getElementById('insights-row');
         row.innerHTML = '';
         if (!this.data || !this.data.rows.length) {
-            row.innerHTML = '<div class="insight-card"><div class="insight-label">Status</div><div class="insight-value" style="font-size:16px;color:var(--text-2)">No data for current filters</div></div>';
+            row.innerHTML = `<div class="insight-card"><div class="insight-label">Status</div><div class="insight-value" style="font-size:16px;color:var(--text-2)">${this.ui.noDataFilters}</div></div>`;
             return;
         }
 
@@ -471,19 +626,19 @@ class LensApp {
             const cls = pctChange >= 0 ? 'insight-up' : 'insight-down';
             trendHtml = `<span class="${cls}">${arrow} ${Math.abs(pctChange).toFixed(1)}%</span>`;
         }
-        this.addInsight(row, 'Latest Value', this.formatBigNumber(latest), trendHtml);
+        this.addInsight(row, this.ui.latestValue, this.formatBigNumber(latest), trendHtml);
 
         // Average
         const avg = values.reduce((a, b) => a + b, 0) / values.length;
-        this.addInsight(row, 'Average', this.formatBigNumber(avg));
+        this.addInsight(row, this.ui.average, this.formatBigNumber(avg));
 
         // Min / Max
         const min = Math.min(...values);
         const max = Math.max(...values);
-        this.addInsight(row, 'Range', `${this.formatBigNumber(min)} – ${this.formatBigNumber(max)}`);
+        this.addInsight(row, this.ui.range, `${this.formatBigNumber(min)} – ${this.formatBigNumber(max)}`);
 
         // Data points
-        this.addInsight(row, 'Data Points', formatNumber(rows.length, 0), `of ${formatNumber(this.metadata.row_count, 0)} total`);
+        this.addInsight(row, this.ui.dataPoints, formatNumber(rows.length, 0), `${this.ui.ofTotal} ${formatNumber(this.metadata.row_count, 0)} ${this.ui.total}`);
     }
 
     addInsight(container, label, value, sub = '') {
@@ -512,7 +667,7 @@ class LensApp {
         this.disposeCharts();
 
         if (!this.data || !this.data.rows.length) {
-            container.innerHTML = '<div class="chart-loading">No data</div>';
+            container.innerHTML = `<div class="chart-loading">${this.ui.noData}</div>`;
             return;
         }
         container.innerHTML = '';
@@ -588,7 +743,7 @@ class LensApp {
         input.focus();
         this.searchIdx = -1;
         document.getElementById('search-results').innerHTML =
-            '<div class="search-empty">Type to search across all datasets</div>';
+            `<div class="search-empty">${this.ui.searchEmpty}</div>`;
     }
 
     closeSearch() {
@@ -598,18 +753,18 @@ class LensApp {
     async onSearchInput(query) {
         const results = document.getElementById('search-results');
         if (!query || query.length < 2) {
-            results.innerHTML = '<div class="search-empty">Type to search across all datasets</div>';
+            results.innerHTML = `<div class="search-empty">${this.ui.searchEmpty}</div>`;
             this.searchIdx = -1;
             return;
         }
 
         try {
-            const resp = await API.getDatasets({ q: query, limit: 12 });
+            const resp = await API.getDatasets({ q: query, limit: 12, lang: this.lang });
             results.innerHTML = '';
             this.searchIdx = -1;
 
             if (resp.datasets.length === 0) {
-                results.innerHTML = '<div class="search-empty">No results</div>';
+                results.innerHTML = `<div class="search-empty">${this.ui.searchNoResults}</div>`;
                 return;
             }
 
@@ -628,7 +783,7 @@ class LensApp {
                 results.appendChild(item);
             }
         } catch (_) {
-            results.innerHTML = '<div class="search-empty">Search error</div>';
+            results.innerHTML = `<div class="search-empty">${this.ui.searchError}</div>`;
         }
     }
 

@@ -1,18 +1,20 @@
 """Category tree API endpoint."""
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from app.db import get_conn
 
 router = APIRouter()
 
 
 @router.get("/categories")
-def get_categories():
+def get_categories(lang: str = Query("ro", regex="^(ro|en)$")):
     """Return the full category tree with dataset counts per leaf node."""
     conn = get_conn()
 
+    name_col = "COALESCE(context_name_en, context_name)" if lang == "en" else "context_name"
+
     # Fetch all contexts
-    contexts = conn.execute("""
-        SELECT context_code, parent_code, level, context_name
+    contexts = conn.execute(f"""
+        SELECT context_code, parent_code, level, {name_col} AS context_name
         FROM contexts
         ORDER BY level, context_code
     """).fetchall()

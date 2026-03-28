@@ -82,27 +82,44 @@ Key techniques:
 - Skeleton loading with `shimmer` animation (moving gradient)
 - Custom scrollbar styling
 
-## ECharts Theme
+## ECharts Themes
 
-A custom theme `'lens'` is registered with:
-- 12-color vibrant palette (indigo, pink, emerald, amber, sky, violet, orange, slate, fuchsia, cyan, red, lime)
-- Transparent background (inherits from CSS)
-- Dark axis labels, subtle grid lines
-- Styled tooltip with blur backdrop and rounded corners
-- Smooth lines, rounded bar corners
+Two themes are registered — `lens-dark` and `lens-light` — sharing the same 12-color palette but differing in axis/tooltip/text styling. The active theme is selected dynamically via a monkey-patched `echarts.init`:
 
-The theme is force-applied by monkey-patching `echarts.init`:
 ```js
 const _origInit = echarts.init.bind(echarts);
-echarts.init = (dom, _theme, opts) => _origInit(dom, 'lens', opts);
+echarts.init = (dom, _theme, opts) => {
+    const themeName = document.body.dataset.theme === 'light' ? 'lens-light' : 'lens-dark';
+    return _origInit(dom, themeName, opts);
+};
 ```
 
-This means ALL chart modules (chart-factory, chart-geo, chart-demographic, chart-new-types) automatically render in dark mode without any changes to their code.
+This means ALL chart modules automatically render in the correct theme without any changes to their code. When the user toggles theme, active charts are disposed and recreated with the new theme.
+
+## Light / Dark Theme
+
+Toggle via the sun/moon button in the topbar. Persists to `localStorage` (`lens_theme`).
+
+- **Dark** (default): `--bg-0: #09090b`, dark surfaces, light text
+- **Light**: `--bg-0: #f8f9fb`, white surfaces, dark text
+
+Both themes use CSS custom properties defined in `explore.css`. The light theme is activated by setting `data-theme="light"` on `<body>`.
+
+## Language Switcher (EN/RO)
+
+Toggle via the language button in the topbar. Persists to `localStorage` (`lens_lang`).
+
+- UI strings are defined in a `UI` object with `ro` and `en` keys (40+ strings each)
+- Category names come from the API via `?lang=en` parameter — the `contexts` table has `context_name_en` translations
+- Dataset names in browse/search come from `?lang=en` on the datasets endpoint
+- Dashboard dataset names remain in Romanian (the `get_dataset()` endpoint doesn't support `lang` yet)
+
+Backend: `categories.py` accepts `lang` param and uses `COALESCE(context_name_en, context_name)` for English.
 
 ## Known Limitations
 
 - **Large datasets (>50k rows)**: The backend requires at least one filter. Lens shows the error message but doesn't auto-suggest which filter to pick.
 - **Choropleth on large geo datasets**: Switching to Map mode on datasets with >50k rows can fail if the unfiltered county data exceeds the limit. Works fine for smaller geo datasets.
 - **No table view**: The browse/dashboard flow is chart-focused. For tabular data, use the existing dataset page at `/dataset.html?code=X`.
-- **No i18n**: Currently Romanian labels only (from the API). English switcher planned.
+- **Dashboard dataset names**: The `get_dataset()` endpoint doesn't support `lang` yet, so dataset names on the dashboard page are always in Romanian.
 - **No persistence**: Filter selections and chart type choices are not saved across navigation.
