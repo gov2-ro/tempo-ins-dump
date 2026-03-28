@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lens — INS Data Observatory</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/explore.css?v=2">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+</head>
+<body>
+    <!-- Top bar -->
+    <nav class="topbar" id="topbar">
+        <div class="topbar-left">
+            <a href="/explore.html" class="logo"><span class="logo-dot"></span>Lens</a>
+            <button class="back-btn hidden" id="back-btn">&larr; Explore</button>
+        </div>
+        <button class="search-trigger" id="search-trigger">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span>Search datasets...</span>
+            <kbd>&hairsp;/&hairsp;</kbd>
+        </button>
+        <div class="topbar-right">
+            <span class="badge" id="dataset-count"></span>
+        </div>
+    </nav>
+
+    <!-- Search overlay -->
+    <div class="search-overlay hidden" id="search-overlay">
+        <div class="search-backdrop" id="search-backdrop"></div>
+        <div class="search-modal">
+            <div class="search-input-row">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="search-input" placeholder="Search datasets, indicators, codes..." spellcheck="false">
+                <kbd>esc</kbd>
+            </div>
+            <div id="search-results" class="search-results"></div>
+            <div class="search-footer">
+                <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> navigate</span>
+                <span><kbd>&crarr;</kbd> open</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main content -->
+    <main id="app">
+        <!-- Browse view -->
+        <section id="browse-view" class="browse-view">
+            <div class="browse-hero">
+                <h1 class="hero-title">Romanian Statistics<br><span class="hero-accent">Observatory</span></h1>
+                <p class="hero-sub" id="hero-sub"></p>
+            </div>
+            <div class="category-grid" id="category-grid"></div>
+            <div class="dataset-panel hidden" id="dataset-panel">
+                <div class="panel-header">
+                    <button class="panel-back" id="panel-back">&larr; Categories</button>
+                    <h2 id="panel-title"></h2>
+                    <span class="badge" id="panel-count"></span>
+                </div>
+                <div id="dataset-list" class="dataset-list"></div>
+            </div>
+        </section>
+
+        <!-- Dashboard view -->
+        <section id="dashboard-view" class="dashboard-view hidden">
+            <header class="dash-header" id="dash-header"></header>
+            <div class="insights-row" id="insights-row"></div>
+            <div class="chart-section">
+                <div class="chart-container" id="chart-container">
+                    <div id="primary-chart" style="width:100%;height:100%"></div>
+                </div>
+                <div class="chart-toolbar" id="chart-toolbar"></div>
+            </div>
+            <div class="filter-strip" id="filter-strip"></div>
+            <div class="secondary-grid" id="secondary-grid"></div>
+        </section>
+    </main>
+
+    <!-- Scripts: reuse existing API + chart modules -->
+    <script src="/js/utils.js?v=22"></script>
+    <script src="/js/api.js?v=21"></script>
+    <script src="/js/chart-factory.js?v=26"></script>
+    <script src="/js/chart-new-types.js?v=27"></script>
+    <script src="/js/chart-geo.js?v=20"></script>
+    <script src="/js/chart-demographic.js?v=24"></script>
+    <script src="/js/explore-app.js?v=2"></script>
+</body>
+</html>
