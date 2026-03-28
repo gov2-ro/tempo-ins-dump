@@ -15,11 +15,13 @@ Usage:
     python 12-parquet-to-sdmx.py                    # process all
     python 12-parquet-to-sdmx.py --matrix ACC101B   # single dataset
     python 12-parquet-to-sdmx.py --force             # re-process existing
+    python 12-parquet-to-sdmx.py --strip-totals      # strip aggregate rows using decisions file
     python 12-parquet-to-sdmx.py --debug             # verbose logging
     python 12-parquet-to-sdmx.py --lang en           # English parquets
 """
 
 import argparse
+import json
 import logging
 import sys
 import time
@@ -39,6 +41,26 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent / "data"
+DECISIONS_FILE = DATA_DIR / "logs" / "total-decisions.json"
+
+
+def load_strip_decisions() -> dict:
+    """Load total-stripping decisions from JSON.
+
+    Returns {matrix_code: {col: [val1, val2, ...]}} with only 'strip' actions.
+    """
+    if not DECISIONS_FILE.exists():
+        log.warning(f"  No decisions file at {DECISIONS_FILE}")
+        return {}
+    raw = json.loads(DECISIONS_FILE.read_text())
+    decisions = {}
+    for mc, cols in raw.items():
+        for col, vals in cols.items():
+            strip_vals = [v for v, d in vals.items() if isinstance(d, dict) and d.get("action") == "strip"]
+            if strip_vals:
+                decisions.setdefault(mc, {})[col] = strip_vals
+    log.info(f"  Strip decisions: {len(decisions)} matrices from {DECISIONS_FILE.name}")
+    return decisions
 
 
 # ── Lookup builders ──────────────────────────────────────────────────────────
@@ -77,6 +99,7 @@ def convert_matrix(
     src_dir: Path,
     dst_dir: Path,
     debug: bool = False,
+    strip_decisions: dict | None = None,
 ) -> dict:
     """Convert one parquet file from v2 (nomItemIds) to v3 (SDMX values).
 
@@ -155,6 +178,35 @@ def convert_matrix(
         new_columns[col] = new_name
     df = df.rename(columns=new_columns)
 
+    # Strip aggregate/total rows if decisions exist
+    stripped_rows = 0
+    if strip_decisions and matrix_code in strip_decisions:
+        col_filters = strip_decisions[matrix_code]
+        pre_len = len(df)
+
+        # Try independent mode first (strip each column's totals separately)
+        df_filtered = df.copy()
+        for col, vals in col_filters.items():
+            if col in df_filtered.columns:
+                df_filtered = df_filtered[~df_filtered[col].isin(vals)]
+
+        if len(df_filtered) == 0 and len(col_filters) > 1:
+            # Mutually exclusive breakdowns — fall back to intersection mode:
+            # only strip rows where ALL listed dims are Total simultaneously
+            mask = True
+            for col, vals in col_filters.items():
+                if col in df.columns:
+                    mask = mask & df[col].isin(vals)
+            df = df[~mask]
+            if debug:
+                log.debug(f"  [{matrix_code}] Intersection mode (mutually exclusive breakdowns)")
+        else:
+            df = df_filtered
+
+        stripped_rows = pre_len - len(df)
+        if stripped_rows > 0 and debug:
+            log.debug(f"  [{matrix_code}] Stripped {stripped_rows} total/aggregate rows")
+
     # Write output parquet via DuckDB
     try:
         conn.execute(f"""
@@ -170,6 +222,8 @@ def convert_matrix(
 
     return {
         "rows": src_rows,
+        "rows_written": src_rows - stripped_rows,
+        "stripped_rows": stripped_rows,
         "src_size": src_size,
         "dst_size": dst_size,
         "unmapped": unmapped_cols if unmapped_cols else None,
@@ -185,6 +239,8 @@ def main():
     parser.add_argument("--lang", default="ro", choices=["ro", "en"], help="Language (default: ro)")
     parser.add_argument("--force", action="store_true", help="Re-process existing files")
     parser.add_argument("--debug", action="store_true", help="Verbose logging")
+    parser.add_argument("--strip-totals", action="store_true",
+                        help="Strip aggregate/total rows using decisions from total-decisions.json")
     parser.add_argument("--limit", type=int, help="Process only first N matrices (for testing)")
     args = parser.parse_args()
 
@@ -206,6 +262,9 @@ def main():
         log.info("Building lookups...")
         id_to_value = build_id_to_value_map(conn)
         col_map = build_column_map(conn)
+
+        # Load strip-totals decisions
+        strip_decisions = load_strip_decisions() if args.strip_totals else None
 
         # Get list of parquet files to process
         if args.matrix:
@@ -230,6 +289,7 @@ def main():
         total_src = 0
         total_dst = 0
         total_unmapped = 0
+        total_stripped = 0
 
         for i, matrix_code in enumerate(matrices, 1):
             # Skip if already converted
@@ -241,6 +301,7 @@ def main():
             result = convert_matrix(
                 matrix_code, conn, id_to_value, col_map,
                 src_dir, dst_dir, debug=args.debug,
+                strip_decisions=strip_decisions,
             )
 
             if "error" in result:
@@ -250,6 +311,7 @@ def main():
                 success += 1
                 total_src += result["src_size"]
                 total_dst += result["dst_size"]
+                total_stripped += result.get("stripped_rows", 0)
                 if result.get("unmapped"):
                     total_unmapped += sum(v["count"] for v in result["unmapped"].values())
 
@@ -270,6 +332,8 @@ def main():
         if total_src > 0:
             print(f"  Size:     {total_src / 1024 / 1024:.1f} MB → {total_dst / 1024 / 1024:.1f} MB "
                   f"({total_dst / total_src:.1%})")
+        if total_stripped > 0:
+            print(f"  Stripped: {total_stripped} aggregate/total rows")
         if total_unmapped > 0:
             print(f"  Unmapped: {total_unmapped} cell values fell back to str(nomItemId)")
 

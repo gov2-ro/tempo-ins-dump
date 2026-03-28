@@ -44,58 +44,24 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 ## Data Accuracy — Server-Side Aggregation
 
-- [ ] **CRITICAL: Raw LIMIT truncation produces misleading charts for large datasets**
+- [x] **Server-side GROUP BY for chart queries** — Done.
+  Frontend sends `group_by` param with chart-relevant dimension columns. Backend
+  `query_builder.py` generates `SELECT dims, SUM(OBS_VALUE) ... GROUP BY dims`.
+  Table view sends raw queries (no GROUP BY). Typical reduction: 99%+ for large datasets
+  (e.g., EXP102J: 18,225 → 168 rows). Files: `query_builder.py`, `dataset_data.py`,
+  `api.js`, `dataset-page-v2.js`.
 
-  **Problem:** `query_builder.py` returns raw parquet rows with `LIMIT N` and no `GROUP BY`.
-  For datasets like POP107A (485k rows), even with `LIMIT 50000`, the truncation causes
-  uneven representation across dimension values — e.g., Male/Female lines appear unequal
-  when the real population is roughly balanced. This is **statistically misleading**.
-
-  **Root cause:** The query returns un-aggregated rows. The frontend sums values per
-  time×series key (`chart-factory.js`), but if the LIMIT cuts off rows unevenly across
-  dimension combinations, the sums are wrong. `ORDER BY TIME_PERIOD ASC` means later
-  years get dropped first, and within a year, the row order is arbitrary.
-
-  **Fix options (pick one or combine):**
-
-  1. **Server-side GROUP BY** (recommended) — Add aggregation to `query_builder.py`:
-     ```sql
-     SELECT dim1, dim2, ..., TIME_PERIOD, SUM(OBS_VALUE) as OBS_VALUE
-     FROM read_parquet(...)
-     WHERE ...
-     GROUP BY dim1, dim2, ..., TIME_PERIOD
-     ORDER BY TIME_PERIOD ASC
-     LIMIT N
-     ```
-     This produces one row per unique combination — POP107A goes from 485k raw rows
-     to ~6k grouped rows (18 age groups × 2 sex × 3 residence × ~55 years).
-     DuckDB handles this efficiently. The frontend aggregation in chart-factory.js
-     becomes a no-op (already summing, but now each key appears once).
-
-     **Considerations:** Some datasets have non-summable values (rates, percentages,
-     indices). Need to detect `unit_of_measure` or similar metadata to choose
-     `SUM` vs `AVG` vs pass-through. Could default to SUM for counts, skip
-     aggregation for rates.
-
-  2. **Pre-aggregated materialized views** — Create summary parquets at build time
-     for common dimension combinations. More complex pipeline but zero query-time cost.
-
-  3. **Truncation warning + smart sampling** — If rows > limit, show a warning badge
-     and use stratified sampling (proportional rows per dimension value) instead of
-     `ORDER BY TIME_PERIOD`. Simpler but still approximate.
-
-  **Affected datasets:** Any dataset where `total_rows > limit` after filtering.
-  Currently ~50 datasets have >50k rows. The worst offenders (POP107A, POP105A,
-  demographic datasets with AGE×SEX×GEO) have 100k-500k rows.
-
-  **Quick win:** Option 1 for chart/timeline queries only. Table view can keep raw
-  rows (users expect individual records there). Add a `aggregate=true` parameter
-  to the data endpoint.
+- [ ] **Non-summable values**: Some datasets have rates, percentages, or indices where
+  SUM is incorrect. Need to detect `UNIT_MEASURE` metadata and use AVG or pass-through
+  for non-count units. Currently all charts use SUM.
 
 ## Data Quality
 
-- [ ] **Remove Total/aggregate rows from parquet files** — Rows like "Total", "Ambele sexe",
-  "Urban + Rural" cause double-counting when all options are selected. Verify they are actual
-  sums before removing. This would simplify filter logic (no need to exclude Totals in UI).
+- [x] **Phase 8: Strip aggregate/total rows from parquet files** — Done.
+  49 parquet files stripped of 28,280 aggregate rows (Total in SEX, AGE, RESIDENCE, REF_AREA).
+  Scripts: `scripts/detect-totals.py` (detection + decisions), `scripts/strip-totals-from-parquet.py`
+  (apply to existing parquets), `12-parquet-to-sdmx.py --strip-totals` (integrated pipeline).
+  Handles mutually exclusive breakdowns via intersection mode (only strips grand-total row).
+  Decisions stored in `data/logs/total-decisions.json`.
 
 - [ ] Review `docs/TODO_COMPACTION.md` — label normalisation issues in 7-data-compactor.py
