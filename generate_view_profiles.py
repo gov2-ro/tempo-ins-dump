@@ -666,6 +666,22 @@ def build_snapshot_view(time_dim: dict | None, analysis_dims: list,
             bubble["dimension_pair_toggle"] = True
         charts.append(bubble)
 
+    # --- 4b. Scatter/correlation ---
+    # Pivot dim = low-cardinality dimension whose categories become X/Y axis selectors
+    # Entity dim = higher-cardinality dimension whose values become individual bubbles
+    pivot_candidates = [d for d in non_singleton if 2 <= d['option_count'] <= 20]
+    entity_candidates = [d for d in non_singleton if d['option_count'] >= 4]
+    if pivot_candidates and entity_candidates:
+        pivot = sorted(pivot_candidates, key=lambda d: d['option_count'])[0]
+        entities = [e for e in entity_candidates if e['column'] != pivot['column']]
+        if entities:
+            entity = sorted(entities, key=lambda d: d['option_count'], reverse=True)[0]
+            charts.append({
+                "chart_type": "scatter",
+                "is_primary": False,
+                "roles": {"pivot": pivot['column'], "entity": entity['column']},
+            })
+
     # --- 5. Heatmap ---
     heatmap_candidates = [d for d in non_singleton if d['option_count'] >= 5]
     has_large = any(d['option_count'] >= 10 for d in heatmap_candidates)
