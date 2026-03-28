@@ -163,6 +163,7 @@ Historical data snapshots in `data-old/`, `data-25-1/`, `data-2026/`.
 - [ ] UI polish — split dataset charts using children, flag split charts
 - [ ] Revise profiling pipeline
 - [ ] StatExplorer (`explorer/`) — Tableau-inspired alternative UI
+- [ ] multilang, /En - do we need duplicate data or just a translation?
 
 ### Later
 - [ ] SDMX-ready export + generic SDMX UI framework
@@ -175,6 +176,10 @@ Historical data snapshots in `data-old/`, `data-25-1/`, `data-2026/`.
 see also: [ui/readme.md](ui/readme.md)
  
 ## Notes
+
+Kill process for 5050
+
+  lsof -i :5050 | grep -v COMMAND | awk '{print $2}' | xargs kill -9 2>/dev/null && echo "Killed process on port 5050" || echo "No process found on port 5050"
 
 > Atentie! Nomenclatoarele care prezinta doar optiunea "Total" se vor completa automat cu alte optiuni doar daca nomenclatorului anterior i se deselecteaza optiunea "Total" si i se alege o singura alta optiune,
 

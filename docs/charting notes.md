@@ -1,6 +1,11 @@
 see also [data analysis.md](data analysis.md), [chart-framework-spec.md](chart-framework-spec.md)
 
+interesting datasets
+BUF105G, BUF106G - 5 dimensions
+
 # 260323
+
+
 
 ## Rules
 - have both snapshot (one year/period) and trendline/timeline – 2 separate views. then data/table view (datatable + filters, heatmaps)
