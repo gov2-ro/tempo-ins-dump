@@ -1175,6 +1175,91 @@ body.sidebar-open #app {
 /* Transition for main content push */
 #app { transition: margin-left 0.2s ease; }
 
+/* --- Table toggle row --- */
+.table-toggle-row {
+    display: none;  /* shown via JS after dashboard loads */
+    padding: 0 0 8px;
+}
+.table-toggle-row.visible { display: flex; }
+.table-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    font-size: 12px;
+    color: var(--text-2);
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all var(--transition);
+}
+.table-toggle-btn:hover { color: var(--text-0); border-color: var(--accent); }
+.table-toggle-btn.active { color: var(--accent); border-color: var(--accent); background: var(--bg-3); }
+
+/* --- Data table panel --- */
+.table-panel {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 24px;
+    overflow: hidden;
+}
+.table-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 440px;
+}
+.table-row-count {
+    font-size: 12px;
+    color: var(--text-3);
+}
+.table-close-btn {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-2);
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition);
+}
+.table-close-btn:hover { color: var(--text-0); background: var(--bg-3); }
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    white-space: nowrap;
+}
+.data-table th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-2);
+    padding: 7px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-2);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+}
+.data-table th:hover { color: var(--text-0); }
+.data-table th .sort-arrow { margin-left: 4px; color: var(--accent); }
+.data-table td {
+    padding: 5px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-1);
+}
+.data-table td.num { text-align: right; color: var(--text-0); font-variant-numeric: tabular-nums; }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: var(--bg-2); }
+.table-truncated {
+    padding: 8px 14px;
+    font-size: 11px;
+    color: var(--text-3);
+    text-align: center;
+    border-top: 1px solid var(--border);
+}
+
 /* --- Responsive --- */
 @media (max-width: 768px) {
     .search-trigger span { display: none; }

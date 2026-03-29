@@ -1,9 +1,26 @@
 """Dataset listing, search, and detail API endpoints."""
 import json
+from pathlib import Path
 from fastapi import APIRouter, Query, HTTPException
 from app.db import get_conn
 from app.config import DEFAULT_PAGE_SIZE
 from app.services.chart_selector import build_signature, select_charts, assign_roles
+
+_EN_METAS_DIR = Path(__file__).parent.parent.parent / "data" / "2-metas" / "en"
+
+
+def _load_en_meta(matrix_code: str) -> dict:
+    """Load English metadata JSON for a dataset, or empty dict if unavailable."""
+    # For split datasets like POP301A_judete, try base code first
+    base = matrix_code.split("_")[0] if "_" in matrix_code else matrix_code
+    for code in (matrix_code, base):
+        p = _EN_METAS_DIR / f"{code}.json"
+        if p.exists():
+            try:
+                return json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+    return {}
 
 router = APIRouter()
 
@@ -129,6 +146,7 @@ def list_datasets(
 def get_dataset(matrix_code: str, lang: str = Query("ro", description="Language: ro|en")):
     """Get full dataset metadata, dimensions, options, and chart config."""
     conn = get_conn()
+    en_meta = _load_en_meta(matrix_code) if lang == "en" else {}
 
     # Fetch matrix info
     m = conn.execute("""
@@ -166,6 +184,16 @@ def get_dataset(matrix_code: str, lang: str = Query("ro", description="Language:
         ORDER BY d.dim_code
     """, [matrix_code]).fetchall()
 
+    # Build dim_label EN lookup from file (indexed by 1-based dim_code)
+    en_dims_map = {}  # dim_code (int) → {"label": ..., "options": [{label, ...}]}
+    if lang == "en":
+        for i, dim in enumerate(en_meta.get("dimensionsMap", []), start=1):
+            en_dims_map[i] = {
+                "label": dim.get("label", ""),
+                "options": {o.get("label", "").strip(): o.get("label", "").strip()
+                            for o in dim.get("options", [])},
+            }
+
     dimensions = []
     for dim_code, dim_label, dim_col, opt_count, dim_id in dims_raw:
         # Get options with parsed fields
@@ -187,7 +215,8 @@ def get_dataset(matrix_code: str, lang: str = Query("ro", description="Language:
                 p.unit_type,
                 p.unit_scale,
                 p.parse_confidence,
-                sc.sdmx_value
+                sc.sdmx_value,
+                sc.display_label_en
             FROM dimension_options o
             LEFT JOIN dimension_options_parsed p ON o.nom_item_id = p.nom_item_id
             LEFT JOIN sdmx_codes sc ON o.nom_item_id = sc.nom_item_id
@@ -199,9 +228,12 @@ def get_dataset(matrix_code: str, lang: str = Query("ro", description="Language:
         type_counts = {}
         option_list = []
         for opt in options:
-            nom_id, label, offset, parent_id, dt, year, q, mo, geo_lvl, geo_name, gender, age_min, age_max, unit_type, unit_scale, conf, sdmx_val = opt
+            nom_id, label, offset, parent_id, dt, year, q, mo, geo_lvl, geo_name, gender, age_min, age_max, unit_type, unit_scale, conf, sdmx_val, label_en = opt
             if dt:
                 type_counts[dt] = type_counts.get(dt, 0) + 1
+
+            # Use EN label from sdmx_codes when available
+            display_label = (label_en or label) if lang == "en" else label
 
             parsed = {}
             if dt == 'time':
@@ -219,7 +251,7 @@ def get_dataset(matrix_code: str, lang: str = Query("ro", description="Language:
 
             option_list.append({
                 'nom_item_id': nom_id,
-                'label': label,
+                'label': display_label,
                 'offset': offset,
                 'parent_id': parent_id,
                 'dim_type': dt,
@@ -229,9 +261,13 @@ def get_dataset(matrix_code: str, lang: str = Query("ro", description="Language:
 
         dim_type = max(type_counts, key=type_counts.get) if type_counts else 'indicator'
 
+        # Use EN dim label from file if available
+        en_dim = en_dims_map.get(dim_code, {})
+        display_dim_label = en_dim.get("label") or dim_label if lang == "en" else dim_label
+
         dimensions.append({
             'dim_code': dim_code,
-            'dim_label': dim_label,
+            'dim_label': display_dim_label,
             'dim_column_name': dim_col,
             'dim_type': dim_type,
             'option_count': opt_count,
@@ -251,8 +287,11 @@ def get_dataset(matrix_code: str, lang: str = Query("ro", description="Language:
     context_path = []
     if ancestor_codes_raw:
         ancestor_codes = ancestor_codes_raw if isinstance(ancestor_codes_raw, list) else []
+        ctx_name_col = "COALESCE(context_name_en, context_name)" if lang == "en" else "context_name"
         for ac in ancestor_codes:
-            r = conn.execute("SELECT context_name FROM contexts WHERE context_code = ?", [str(ac)]).fetchone()
+            r = conn.execute(
+                f"SELECT {ctx_name_col} FROM contexts WHERE context_code = ?", [str(ac)]
+            ).fetchone()
             if r:
                 context_path.append({'code': str(ac), 'name': r[0]})
 
@@ -328,16 +367,24 @@ def get_dataset(matrix_code: str, lang: str = Query("ro", description="Language:
     matrix_name_en = m[12]
     display_name = (matrix_name_en or m[1]) if lang == 'en' else m[1]
 
+    # Use English text fields from JSON file when available
+    if lang == 'en' and en_meta:
+        definitie   = en_meta.get('definitie') or m[4]
+        metodologie = en_meta.get('metodologie') or m[5]
+        observatii  = en_meta.get('observatii') or m[7]
+    else:
+        definitie, metodologie, observatii = m[4], m[5], m[7]
+
     return {
         'matrix_code': m[0],
         'matrix_name': display_name,
         'matrix_name_ro': m[1],
         'context_code': m[2],
         'context_path': context_path,
-        'definitie': m[4],
-        'metodologie': m[5],
+        'definitie': definitie,
+        'metodologie': metodologie,
         'ultima_actualizare': str(m[6]) if m[6] else None,
-        'observatii': m[7],
+        'observatii': observatii,
         'row_count': m[8],
         'dim_count': m[9],
         'is_split': is_split,

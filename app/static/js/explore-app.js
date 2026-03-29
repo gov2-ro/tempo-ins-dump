@@ -46,6 +46,9 @@ const UI = {
         noSnapshotPanel: 'Fără dimensiuni categoriale',
         sidebarTitle: 'Navigare',
         sidebarFilter: 'Filtrează seturi de date...',
+        showTable: 'Arată tabelul de date',
+        hideTable: 'Ascunde tabelul de date',
+        tableLabel: 'Date',
     },
     en: {
         heroTitle: 'Romanian Statistics<br><span class="hero-accent">Observatory</span>',
@@ -85,6 +88,9 @@ const UI = {
         noSnapshotPanel: 'No categorical dimensions',
         sidebarTitle: 'Navigate',
         sidebarFilter: 'Filter datasets...',
+        showTable: 'Show data table',
+        hideTable: 'Hide data table',
+        tableLabel: 'Data',
     },
 };
 
@@ -273,6 +279,7 @@ class LensApp {
         });
 
         this.initSidebar();
+        this.initTableToggle();
     }
 
     // --- Theme & Language ----------------------------------------------------
@@ -291,6 +298,13 @@ class LensApp {
             // Clear caches (names depend on lang)
             this.categories = null;
             this.categoryTrends = null;
+            this._sidebarLoaded = false;
+            // Re-render sidebar tree if open
+            const sidebar = document.getElementById('lens-sidebar');
+            if (sidebar && !sidebar.classList.contains('hidden')) {
+                document.getElementById('sidebar-tree').innerHTML = '';
+                this.renderSidebar();
+            }
             // Re-render current view
             const code = new URLSearchParams(location.search).get('code');
             if (code) {
@@ -322,6 +336,13 @@ class LensApp {
         if (sidebarTitle) sidebarTitle.textContent = this.ui.sidebarTitle;
         const sidebarFilter = document.getElementById('sidebar-search-input');
         if (sidebarFilter) sidebarFilter.placeholder = this.ui.sidebarFilter;
+        const tablePanelLabel = document.getElementById('table-panel-label');
+        if (tablePanelLabel) tablePanelLabel.textContent = this.ui.tableLabel;
+        const tableToggleLabel = document.getElementById('table-toggle-label');
+        if (tableToggleLabel) {
+            const panelHidden = document.getElementById('table-panel')?.classList.contains('hidden');
+            tableToggleLabel.textContent = panelHidden ? this.ui.showTable : this.ui.hideTable;
+        }
     }
 
     /** Dispose and re-create all charts (needed after theme change) */
@@ -348,6 +369,7 @@ class LensApp {
     async showBrowse() {
         this.navigate(null);
         this.disposeCharts();
+        this.hideTableToggleRow();
 
         document.getElementById('browse-view').classList.remove('hidden');
         document.getElementById('dashboard-view').classList.add('hidden');
@@ -535,6 +557,8 @@ class LensApp {
         document.getElementById('dashboard-view').classList.remove('hidden');
         document.getElementById('back-btn').classList.remove('hidden');
         document.getElementById('back-btn').textContent = this.ui.backExplore;
+        this.hideTable();
+        this.showTableToggleRow();
 
         // Show loading skeletons
         document.getElementById('dash-header').innerHTML =
@@ -1032,6 +1056,7 @@ class LensApp {
             this.renderInsights();
             this.renderTimeChart();
             this.renderSnapshotChart();
+            if (!document.getElementById('table-panel').classList.contains('hidden')) this.renderTable();
         } catch (err) {
             const msg = err.message || 'Failed to load data';
             const isLarge = msg.includes('filter');
@@ -1045,6 +1070,7 @@ class LensApp {
                         this.renderInsights();
                         this.renderTimeChart();
                         this.renderSnapshotChart();
+                        if (!document.getElementById('table-panel').classList.contains('hidden')) this.renderTable();
                         return;
                     } catch (_) { /* fall through */ }
                 }
@@ -1436,7 +1462,7 @@ class LensApp {
     async _loadSidebarDatasets(contextCode, container) {
         container.innerHTML = '<div class="sb-loading">Loading...</div>';
         try {
-            const result = await API.getDatasets({ context: contextCode, limit: 200 });
+            const result = await API.getDatasets({ context: contextCode, limit: 200, lang: this.lang });
             container.innerHTML = '';
             const datasets = result.datasets || result.items || [];
             for (const ds of datasets) {
@@ -1507,6 +1533,121 @@ class LensApp {
                 el.classList.add('open');
             }
         }
+    }
+
+    // --- Data Table ---------------------------------------------------------
+    initTableToggle() {
+        const btn = document.getElementById('table-toggle-btn');
+        const closeBtn = document.getElementById('table-close-btn');
+        btn?.addEventListener('click', () => this.toggleTable());
+        closeBtn?.addEventListener('click', () => this.hideTable());
+        this._tableSortCol = null;
+        this._tableSortAsc = true;
+    }
+
+    showTableToggleRow() {
+        document.getElementById('table-toggle-row')?.classList.add('visible');
+    }
+
+    hideTableToggleRow() {
+        document.getElementById('table-toggle-row')?.classList.remove('visible');
+        this.hideTable();
+    }
+
+    toggleTable() {
+        const panel = document.getElementById('table-panel');
+        if (panel.classList.contains('hidden')) {
+            this.showTable();
+        } else {
+            this.hideTable();
+        }
+    }
+
+    showTable() {
+        const panel = document.getElementById('table-panel');
+        const btn = document.getElementById('table-toggle-btn');
+        const label = document.getElementById('table-toggle-label');
+        panel.classList.remove('hidden');
+        btn.classList.add('active');
+        if (label) label.textContent = this.ui.hideTable || 'Hide data table';
+        this.renderTable();
+    }
+
+    hideTable() {
+        const panel = document.getElementById('table-panel');
+        const btn = document.getElementById('table-toggle-btn');
+        const label = document.getElementById('table-toggle-label');
+        panel.classList.add('hidden');
+        btn?.classList.remove('active');
+        if (label) label.textContent = this.ui.showTable || 'Show data table';
+    }
+
+    renderTable() {
+        if (!this.data) return;
+        const { columns, column_labels, rows, truncated, returned_rows, total_rows } = this.data;
+        const scroll = document.getElementById('table-scroll');
+        const countEl = document.getElementById('table-row-count');
+
+        if (!rows || !rows.length) {
+            scroll.innerHTML = `<div class="table-truncated">${this.ui.noDataFilters}</div>`;
+            return;
+        }
+
+        // Sort
+        let sortedRows = [...rows];
+        if (this._tableSortCol !== null) {
+            const idx = this._tableSortCol;
+            const asc = this._tableSortAsc;
+            sortedRows.sort((a, b) => {
+                const va = a[idx], vb = b[idx];
+                if (va == null) return 1;
+                if (vb == null) return -1;
+                return asc ? (va > vb ? 1 : va < vb ? -1 : 0) : (va < vb ? 1 : va > vb ? -1 : 0);
+            });
+        }
+
+        const obsIdx = columns.indexOf('OBS_VALUE');
+
+        const th = columns.map((lbl, i) => {
+            const arrow = this._tableSortCol === i
+                ? `<span class="sort-arrow">${this._tableSortAsc ? '↑' : '↓'}</span>` : '';
+            return `<th data-col="${i}">${lbl}${arrow}</th>`;
+        }).join('');
+
+        const trs = sortedRows.map(row => {
+            const tds = row.map((val, i) => {
+                if (i === obsIdx) {
+                    const fmt = val == null ? '–' : formatNumber(val, val % 1 === 0 ? 0 : 2);
+                    return `<td class="num">${fmt}</td>`;
+                }
+                return `<td>${val ?? '–'}</td>`;
+            }).join('');
+            return `<tr>${tds}</tr>`;
+        }).join('');
+
+        scroll.innerHTML = `
+            <table class="data-table">
+                <thead><tr>${th}</tr></thead>
+                <tbody>${trs}</tbody>
+            </table>
+            ${truncated ? `<div class="table-truncated">Showing ${formatNumber(returned_rows || rows.length, 0)} of ${formatNumber(total_rows || rows.length, 0)} rows</div>` : ''}
+        `;
+
+        if (countEl) countEl.textContent = `${formatNumber(rows.length, 0)} rows`;
+
+        // Column sort click handlers
+        scroll.querySelectorAll('th[data-col]').forEach(th => {
+            th.addEventListener('click', () => {
+                const col = +th.dataset.col;
+                if (this._tableSortCol === col) {
+                    this._tableSortAsc = !this._tableSortAsc;
+                } else {
+                    this._tableSortCol = col;
+                    this._tableSortAsc = true;
+                }
+                this.renderTable();
+            });
+        });
     }
 
     // --- Search -------------------------------------------------------------
