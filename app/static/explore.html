@@ -7,13 +7,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/explore.css?v=8">
+    <link rel="stylesheet" href="/css/explore.css?v=9">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 </head>
 <body>
     <!-- Top bar -->
     <nav class="topbar" id="topbar">
         <div class="topbar-left">
+            <button class="sidebar-toggle" id="sidebar-toggle" title="Quick navigate">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
             <a href="/explore.html" class="logo"><span class="logo-dot"></span>Lens</a>
             <button class="back-btn hidden" id="back-btn">&larr; Explore</button>
         </div>
@@ -50,6 +53,18 @@
             </div>
         </div>
     </div>
+
+    <!-- Sidebar -->
+    <aside class="lens-sidebar hidden" id="lens-sidebar">
+        <div class="sidebar-header">
+            <span class="sidebar-title" id="sidebar-title">Navigate</span>
+            <button class="sidebar-close" id="sidebar-close">&times;</button>
+        </div>
+        <div class="sidebar-search">
+            <input type="text" id="sidebar-search-input" placeholder="Filter datasets..." spellcheck="false" autocomplete="off">
+        </div>
+        <div id="sidebar-tree" class="sidebar-tree"></div>
+    </aside>
 
     <!-- Main content -->
     <main id="app">
@@ -101,6 +116,6 @@
     <script src="/js/chart-new-types.js?v=27"></script>
     <script src="/js/chart-geo.js?v=20"></script>
     <script src="/js/chart-demographic.js?v=24"></script>
-    <script src="/js/explore-app.js?v=9"></script>
+    <script src="/js/explore-app.js?v=10"></script>
 </body>
 </html>

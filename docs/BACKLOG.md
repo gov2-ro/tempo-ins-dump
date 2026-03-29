@@ -12,7 +12,7 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 - [ ] **English parquet-v3 generation** — Run `12-parquet-to-sdmx.py --lang en` to
   produce English-language SDMX parquets. Requires English `sdmx_codes` entries
-  (display_label_en already partially populated).
+  (display_label_en already partially populated). *comment*: English data is the same data, we might only need to use the original Romanian ones and use the English metas.
 
 - [x] **Clean up stale split profile files** — Done.
   Moved 1,150 stale profiles to `_stale/`: 736 parent profiles (parquets replaced by children),

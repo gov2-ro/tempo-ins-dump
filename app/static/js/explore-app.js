@@ -44,6 +44,8 @@ const UI = {
         pause: 'Pauză',
         noTimePanel: 'Fără dimensiune temporală',
         noSnapshotPanel: 'Fără dimensiuni categoriale',
+        sidebarTitle: 'Navigare',
+        sidebarFilter: 'Filtrează seturi de date...',
     },
     en: {
         heroTitle: 'Romanian Statistics<br><span class="hero-accent">Observatory</span>',
@@ -81,6 +83,8 @@ const UI = {
         pause: 'Pause',
         noTimePanel: 'No time dimension',
         noSnapshotPanel: 'No categorical dimensions',
+        sidebarTitle: 'Navigate',
+        sidebarFilter: 'Filter datasets...',
     },
 };
 
@@ -195,6 +199,9 @@ class LensApp {
         this.playInterval = null;          // auto-advance timer
         this.panelSetup = null;            // result of determinePanelSetup()
 
+        // Sidebar state
+        this._sidebarLoaded = false;
+
         // Theme & language from localStorage
         this.theme = localStorage.getItem('lens_theme') || 'dark';
         this.lang = localStorage.getItem('lens_lang') || 'ro';
@@ -264,6 +271,8 @@ class LensApp {
                 if (c && !c.isDisposed()) c.resize();
             }
         });
+
+        this.initSidebar();
     }
 
     // --- Theme & Language ----------------------------------------------------
@@ -309,6 +318,10 @@ class LensApp {
         document.getElementById('lang-label').textContent = this.lang === 'ro' ? 'EN' : 'RO';
         document.getElementById('search-trigger').querySelector('span').textContent = this.ui.searchTrigger;
         document.getElementById('search-input').placeholder = this.ui.searchPlaceholder;
+        const sidebarTitle = document.getElementById('sidebar-title');
+        if (sidebarTitle) sidebarTitle.textContent = this.ui.sidebarTitle;
+        const sidebarFilter = document.getElementById('sidebar-search-input');
+        if (sidebarFilter) sidebarFilter.placeholder = this.ui.sidebarFilter;
     }
 
     /** Dispose and re-create all charts (needed after theme change) */
@@ -557,6 +570,7 @@ class LensApp {
             this.renderFilters();
             this.renderTimePanel();
             this.renderSnapshotPanel();
+            this.highlightSidebarDataset(code);
             await this.fetchAndRender();
         } catch (err) {
             document.getElementById('dash-header').innerHTML =
@@ -1250,6 +1264,249 @@ class LensApp {
             if (c && !c.isDisposed()) c.dispose();
         }
         this.charts = [];
+    }
+
+    // --- Sidebar ------------------------------------------------------------
+    initSidebar() {
+        const toggle = document.getElementById('sidebar-toggle');
+        const sidebar = document.getElementById('lens-sidebar');
+        const close = document.getElementById('sidebar-close');
+        const filterInput = document.getElementById('sidebar-search-input');
+
+        toggle?.addEventListener('click', () => this.toggleSidebar());
+        close?.addEventListener('click', () => this.closeSidebar());
+
+        filterInput?.addEventListener('input', e => this.filterSidebar(e.target.value.toLowerCase()));
+
+        // Restore from session
+        if (sessionStorage.getItem('lensNavOpen') === '1') {
+            this.openSidebar(true);
+        }
+
+        // Update i18n text
+        document.getElementById('sidebar-title').textContent = this.ui.sidebarTitle;
+        filterInput.placeholder = this.ui.sidebarFilter;
+    }
+
+    openSidebar(load = true) {
+        const sidebar = document.getElementById('lens-sidebar');
+        const toggle = document.getElementById('sidebar-toggle');
+        sidebar.classList.remove('hidden');
+        toggle.classList.add('active');
+        document.body.classList.add('sidebar-open');
+        sessionStorage.setItem('lensNavOpen', '1');
+
+        // Lazy-load tree
+        if (load && !this._sidebarLoaded) {
+            this.renderSidebar();
+        }
+
+        // Resize charts to account for narrower main
+        requestAnimationFrame(() => {
+            for (const c of this.charts) {
+                if (c && !c.isDisposed()) c.resize();
+            }
+        });
+    }
+
+    closeSidebar() {
+        const sidebar = document.getElementById('lens-sidebar');
+        const toggle = document.getElementById('sidebar-toggle');
+        sidebar.classList.add('hidden');
+        toggle.classList.remove('active');
+        document.body.classList.remove('sidebar-open');
+        sessionStorage.setItem('lensNavOpen', '');
+
+        requestAnimationFrame(() => {
+            for (const c of this.charts) {
+                if (c && !c.isDisposed()) c.resize();
+            }
+        });
+    }
+
+    toggleSidebar() {
+        const sidebar = document.getElementById('lens-sidebar');
+        if (sidebar.classList.contains('hidden')) {
+            this.openSidebar(true);
+        } else {
+            this.closeSidebar();
+        }
+    }
+
+    async renderSidebar() {
+        this._sidebarLoaded = true;
+        const tree = document.getElementById('sidebar-tree');
+        tree.innerHTML = '<div class="sb-loading">Loading...</div>';
+
+        try {
+            if (!this.categories) {
+                const resp = await API.getCategories({ lang: this.lang });
+                this.categories = resp.tree;
+            }
+
+            tree.innerHTML = '';
+            for (const cat of this.categories) {
+                this._buildSidebarSection(cat, tree);
+            }
+
+            // Highlight current dataset if dashboard is open
+            const code = new URLSearchParams(location.search).get('code');
+            if (code) this.highlightSidebarDataset(code);
+
+        } catch (err) {
+            tree.innerHTML = `<div class="sb-loading">Error: ${err.message}</div>`;
+        }
+    }
+
+    _buildSidebarSection(cat, container) {
+        // L1 section header
+        const section = document.createElement('div');
+        section.className = 'sb-section';
+        section.textContent = this.shortName(cat.name, 40);
+        container.appendChild(section);
+
+        // L2 children
+        if (cat.children?.length) {
+            for (const sub of cat.children) {
+                this._buildSidebarItem(sub, container, 2);
+            }
+        }
+    }
+
+    _buildSidebarItem(cat, container, level) {
+        const hasChildren = cat.children?.length > 0 || cat.dataset_count > 0 || cat.total_datasets > 0;
+
+        const item = document.createElement('div');
+        item.className = 'sb-item';
+        item.dataset.level = level;
+        item.dataset.code = cat.code;
+
+        if (hasChildren) {
+            const arrow = document.createElement('span');
+            arrow.className = 'sb-arrow';
+            arrow.textContent = '▶';
+            item.appendChild(arrow);
+        }
+
+        const label = document.createElement('span');
+        label.textContent = this.shortName(cat.name, 38 - level * 4);
+        item.appendChild(label);
+
+        const count = document.createElement('span');
+        count.className = 'sb-count';
+        count.textContent = cat.total_datasets || cat.dataset_count || '';
+        item.appendChild(count);
+
+        container.appendChild(item);
+
+        // Children container (collapsed by default)
+        const childWrap = document.createElement('div');
+        childWrap.className = 'sb-children';
+        container.appendChild(childWrap);
+
+        if (!hasChildren) return;
+
+        item.addEventListener('click', async () => {
+            const isOpen = childWrap.classList.contains('open');
+            if (isOpen) {
+                childWrap.classList.remove('open');
+                item.querySelector('.sb-arrow')?.classList.remove('open');
+            } else {
+                childWrap.classList.add('open');
+                item.querySelector('.sb-arrow')?.classList.add('open');
+
+                // Populate if not already done
+                if (childWrap.children.length === 0) {
+                    if (cat.children?.length) {
+                        for (const sub of cat.children) {
+                            this._buildSidebarItem(sub, childWrap, level + 1);
+                        }
+                    } else {
+                        // Leaf category — load datasets
+                        await this._loadSidebarDatasets(cat.code, childWrap);
+                    }
+                    // Re-highlight after loading
+                    const code = new URLSearchParams(location.search).get('code');
+                    if (code) this.highlightSidebarDataset(code);
+                }
+            }
+        });
+    }
+
+    async _loadSidebarDatasets(contextCode, container) {
+        container.innerHTML = '<div class="sb-loading">Loading...</div>';
+        try {
+            const result = await API.getDatasets({ context: contextCode, limit: 200 });
+            container.innerHTML = '';
+            const datasets = result.datasets || result.items || [];
+            for (const ds of datasets) {
+                const dsItem = document.createElement('div');
+                dsItem.className = 'sb-item';
+                dsItem.dataset.level = '4';
+                dsItem.dataset.dsCode = ds.matrix_code;
+
+                const label = document.createElement('span');
+                label.textContent = ds.matrix_name || ds.matrix_code;
+                label.title = label.textContent;
+                dsItem.appendChild(label);
+
+                const code = document.createElement('span');
+                code.className = 'sb-code';
+                code.textContent = ds.matrix_code;
+                dsItem.appendChild(code);
+
+                dsItem.addEventListener('click', e => {
+                    e.stopPropagation();
+                    this.showDashboard(ds.matrix_code);
+                });
+                container.appendChild(dsItem);
+            }
+        } catch (err) {
+            container.innerHTML = `<div class="sb-loading">Error</div>`;
+        }
+    }
+
+    highlightSidebarDataset(code) {
+        // Remove previous active state
+        for (const el of document.querySelectorAll('#sidebar-tree .sb-item.active')) {
+            el.classList.remove('active');
+        }
+        if (!code) return;
+
+        // Find dataset item and mark active + auto-open parents
+        const dsItem = document.querySelector(`#sidebar-tree .sb-item[data-ds-code="${code}"]`);
+        if (dsItem) {
+            dsItem.classList.add('active');
+            // Expand parent sb-children containers
+            let parent = dsItem.parentElement;
+            while (parent && parent.id !== 'sidebar-tree') {
+                if (parent.classList.contains('sb-children')) {
+                    parent.classList.add('open');
+                    const prevSibling = parent.previousElementSibling;
+                    prevSibling?.querySelector('.sb-arrow')?.classList.add('open');
+                }
+                parent = parent.parentElement;
+            }
+            requestAnimationFrame(() => dsItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+        }
+    }
+
+    filterSidebar(query) {
+        const items = document.querySelectorAll('#sidebar-tree .sb-item[data-level="4"]');
+        for (const item of items) {
+            const text = (item.textContent || '').toLowerCase();
+            const match = !query || text.includes(query);
+            item.style.display = match ? '' : 'none';
+        }
+        // If query, open all children so results are visible
+        if (query) {
+            for (const el of document.querySelectorAll('#sidebar-tree .sb-children')) {
+                el.classList.add('open');
+            }
+            for (const el of document.querySelectorAll('#sidebar-tree .sb-arrow')) {
+                el.classList.add('open');
+            }
+        }
     }
 
     // --- Search -------------------------------------------------------------

@@ -1004,6 +1004,177 @@ kbd {
 .insight-up { color: var(--green); font-weight: 600; font-size: 13px; }
 .insight-down { color: var(--red); font-weight: 600; font-size: 13px; }
 
+/* --- Sidebar toggle button (in topbar) --- */
+.sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    color: var(--text-2);
+    transition: all var(--transition);
+    flex-shrink: 0;
+}
+.sidebar-toggle:hover { color: var(--text-0); background: var(--bg-3); }
+.sidebar-toggle.active { color: var(--accent); background: var(--bg-3); }
+
+/* --- Sidebar + main layout --- */
+body { display: flex; flex-direction: column; }
+
+.lens-sidebar {
+    position: fixed;
+    top: 52px;
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    background: var(--bg-1);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    z-index: 80;
+    overflow: hidden;
+    transition: transform 0.2s ease;
+}
+.lens-sidebar.hidden {
+    transform: translateX(-100%);
+    pointer-events: none;
+}
+
+/* Push main content when sidebar is open */
+body.sidebar-open #app {
+    margin-left: 260px;
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.sidebar-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-2);
+}
+.sidebar-close {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-sm);
+    color: var(--text-2);
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition);
+}
+.sidebar-close:hover { color: var(--text-0); background: var(--bg-3); }
+
+.sidebar-search {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.sidebar-search input {
+    width: 100%;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 5px 10px;
+    font-size: 12px;
+    color: var(--text-0);
+    outline: none;
+    transition: border-color var(--transition);
+}
+.sidebar-search input:focus { border-color: var(--accent); }
+.sidebar-search input::placeholder { color: var(--text-3); }
+
+.sidebar-tree {
+    overflow-y: auto;
+    flex: 1;
+    padding: 6px 0;
+}
+
+/* Sidebar tree items */
+.sb-section {
+    padding: 10px 14px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    cursor: default;
+}
+.sb-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 14px 5px 14px;
+    font-size: 12px;
+    color: var(--text-1);
+    cursor: pointer;
+    transition: background var(--transition), color var(--transition);
+    line-height: 1.4;
+    user-select: none;
+}
+.sb-item:hover { background: var(--bg-2); color: var(--text-0); }
+.sb-item.active {
+    background: var(--bg-3);
+    color: var(--accent);
+    font-weight: 600;
+    border-left: 2px solid var(--accent);
+    padding-left: 12px;
+}
+.sb-item[data-level="2"] { padding-left: 14px; }
+.sb-item[data-level="3"] { padding-left: 26px; font-size: 11.5px; }
+.sb-item[data-level="4"] {
+    padding-left: 36px;
+    font-size: 11px;
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sb-item[data-level="4"]:hover { color: var(--text-0); }
+.sb-item[data-level="4"].active { color: var(--accent); }
+
+.sb-arrow {
+    flex-shrink: 0;
+    font-size: 9px;
+    color: var(--text-3);
+    width: 10px;
+    transition: transform 0.15s ease;
+}
+.sb-arrow.open { transform: rotate(90deg); }
+.sb-count {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-3);
+    flex-shrink: 0;
+}
+.sb-children { display: none; }
+.sb-children.open { display: block; }
+.sb-loading {
+    padding: 4px 36px 4px;
+    font-size: 11px;
+    color: var(--text-3);
+    font-style: italic;
+}
+.sb-code {
+    font-family: monospace;
+    font-size: 9.5px;
+    color: var(--text-3);
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+/* Transition for main content push */
+#app { transition: margin-left 0.2s ease; }
+
 /* --- Responsive --- */
 @media (max-width: 768px) {
     .search-trigger span { display: none; }
