@@ -38,6 +38,12 @@ const UI = {
         definition: 'Definiție',
         methodology: 'Metodologie',
         notes: 'Observații',
+        trends: 'Tendințe',
+        snapshot: 'Instantaneu',
+        play: 'Redare',
+        pause: 'Pauză',
+        noTimePanel: 'Fără dimensiune temporală',
+        noSnapshotPanel: 'Fără dimensiuni categoriale',
     },
     en: {
         heroTitle: 'Romanian Statistics<br><span class="hero-accent">Observatory</span>',
@@ -69,6 +75,12 @@ const UI = {
         definition: 'Definition',
         methodology: 'Methodology',
         notes: 'Notes',
+        trends: 'Trends',
+        snapshot: 'Snapshot',
+        play: 'Play',
+        pause: 'Pause',
+        noTimePanel: 'No time dimension',
+        noSnapshotPanel: 'No categorical dimensions',
     },
 };
 
@@ -175,6 +187,13 @@ class LensApp {
         this.categoryTrends = null; // trend aggregates per context code
         this.drillStack = [];   // breadcrumb navigation stack
         this.searchIdx = -1;    // keyboard nav index in search results
+
+        // Two-panel chart state
+        this.timeChartType = 'line';      // current type in time panel
+        this.snapshotChartType = null;     // current type in snapshot panel (auto-determined)
+        this.selectedPeriodIdx = -1;       // -1 = latest period
+        this.playInterval = null;          // auto-advance timer
+        this.panelSetup = null;            // result of determinePanelSetup()
 
         // Theme & language from localStorage
         this.theme = localStorage.getItem('lens_theme') || 'dark';
@@ -294,9 +313,10 @@ class LensApp {
 
     /** Dispose and re-create all charts (needed after theme change) */
     reRenderCharts() {
-        if (this.data && this.chartConfig) {
-            this.renderPrimaryChart();
-            this.renderSecondaryCharts();
+        if (this.data && this.chartConfig && this.panelSetup) {
+            this.disposeCharts();
+            this.renderTimeChart();
+            this.renderSnapshotChart();
         }
     }
 
@@ -496,6 +516,7 @@ class LensApp {
     async showDashboard(code) {
         this.navigate(code);
         this.disposeCharts();
+        this.stopPlay();
 
         document.getElementById('browse-view').classList.add('hidden');
         document.getElementById('dashboard-view').classList.remove('hidden');
@@ -508,11 +529,13 @@ class LensApp {
             '<div class="skeleton" style="height:18px;width:40%"></div>';
         document.getElementById('insights-row').innerHTML =
             '<div class="insight-card skeleton" style="height:90px"></div>'.repeat(4);
-        document.getElementById('primary-chart').innerHTML =
+        document.getElementById('time-chart').innerHTML =
             '<div class="chart-loading">Loading data...</div>';
-        document.getElementById('chart-toolbar').innerHTML = '';
+        document.getElementById('snapshot-chart').innerHTML = '';
+        document.getElementById('time-pills').innerHTML = '';
+        document.getElementById('snapshot-pills').innerHTML = '';
+        document.getElementById('period-nav').innerHTML = '';
         document.getElementById('filter-strip').innerHTML = '';
-        document.getElementById('secondary-grid').innerHTML = '';
 
         try {
             // Load metadata + profile in parallel
@@ -524,10 +547,16 @@ class LensApp {
             this.profile = profile;
             this.chartConfig = meta.chart_config;
 
+            this.panelSetup = this.determinePanelSetup();
+            this.timeChartType = this.panelSetup.timeChartTypes[0] || 'line';
+            this.snapshotChartType = this.panelSetup.snapshotChartTypes[0] || null;
+            this.selectedPeriodIdx = -1; // latest
+
             this.renderDashHeader();
             this.renderInfoPanel();
             this.renderFilters();
-            this.renderChartToolbar();
+            this.renderTimePanel();
+            this.renderSnapshotPanel();
             await this.fetchAndRender();
         } catch (err) {
             document.getElementById('dash-header').innerHTML =
@@ -625,81 +654,284 @@ class LensApp {
         });
     }
 
-    renderChartToolbar() {
-        const ranked = this.chartConfig?.ranked_charts || [];
-        const primary = this.chartConfig?.primary_chart || 'line';
-        const toolbar = document.getElementById('chart-toolbar');
-        toolbar.innerHTML = '';
+    // --- Two-panel setup -----------------------------------------------------
 
-        const LABELS = {
-            line: 'Line', bar_vertical: 'Bar', area_stacked: 'Area', horizontal_bar: 'H-Bar',
-            grouped_bar: 'Grouped', stacked_bar: 'Stacked', choropleth: 'Map',
-            heatmap: 'Heatmap', bubble: 'Bubble', scatter: 'Scatter',
-            population_pyramid: 'Pyramid', small_multiples: 'Multiples',
-            table: 'Table',
-        };
+    /**
+     * Analyze dataset dimensions to determine what each panel shows.
+     * Returns: { hasTimePanel, hasSnapshotPanel, timeDim, timeSeriesDim,
+     *   snapXDim, snapSeriesDim, timeChartTypes, snapshotChartTypes, filterDims, periods }
+     */
+    determinePanelSetup() {
+        const dims = this.metadata?.dimensions || [];
+        const profile = this.profile;
+        const singletons = profile?.dimensions?.singleton_dims || [];
+        const cfg = this.chartConfig || {};
+        const archetype = cfg.archetype;
 
-        // For geo_time archetype, inject choropleth if not already present
-        const archetype = this.chartConfig?.archetype;
-        if (archetype === 'geo_time' && !ranked.some(r => r.chart_type === 'choropleth')) {
-            const geoDim = this.chartConfig.geo_dim;
-            const timeDim = this.chartConfig.time_dim;
-            ranked.unshift({
-                chart_type: 'choropleth',
-                roles: { entity: geoDim, timeline: timeDim },
-            });
-            // Pre-load GeoJSON
-            if (typeof loadRomaniaGeoJSON === 'function') loadRomaniaGeoJSON();
+        // Classify dimensions
+        const timeDimObj = dims.find(d => d.dim_type === 'time');
+        const geoDimObj = dims.find(d => d.dim_type === 'geo');
+        const unitDims = dims.filter(d => d.dim_type === 'unit').map(d => d.dim_column_name);
+        const singletonSet = new Set(singletons);
+
+        // Non-time, non-unit, non-singleton dims with more than 1 option
+        const categoryDims = dims.filter(d =>
+            d.dim_type !== 'time' && d.dim_type !== 'unit' &&
+            !singletonSet.has(d.dim_column_name) && d.option_count > 1
+        );
+
+        // Time panel
+        const hasTimePanel = !!timeDimObj;
+        const timeDim = timeDimObj?.dim_column_name || null;
+
+        // Pick best series dim for time panel: prefer 2-6 values, then lowest cardinality
+        let timeSeriesDim = null;
+        if (hasTimePanel && categoryDims.length > 0) {
+            const candidates = categoryDims.filter(d => d.option_count >= 2 && d.option_count <= 6);
+            if (candidates.length > 0) {
+                // Prefer residence, gender, type-like dims
+                const preferred = candidates.find(d =>
+                    ['residence', 'gender'].includes(d.dim_type) || d.option_count <= 4
+                );
+                timeSeriesDim = (preferred || candidates[0]).dim_column_name;
+            } else {
+                // Pick lowest cardinality
+                const sorted = [...categoryDims].sort((a, b) => a.option_count - b.option_count);
+                timeSeriesDim = sorted[0].dim_column_name;
+            }
         }
 
-        const types = [...new Set(ranked.map(r => r.chart_type))].filter(t => t !== 'table');
-        for (const type of types) {
+        // Snapshot panel
+        const hasSnapshotPanel = categoryDims.length > 0;
+        let snapXDim = null, snapSeriesDim = null;
+
+        if (hasSnapshotPanel) {
+            // Sort by cardinality descending → highest cardinality = x-axis
+            const sorted = [...categoryDims].sort((a, b) => b.option_count - a.option_count);
+            snapXDim = sorted[0].dim_column_name;
+            if (sorted.length > 1) {
+                // Pick 2nd dim, but avoid picking same as timeSeriesDim if possible
+                snapSeriesDim = sorted[1].dim_column_name;
+            }
+        }
+
+        // Time chart types
+        const timeChartTypes = hasTimePanel ? ['line', 'area_stacked', 'stacked_bar'] : [];
+
+        // Snapshot chart types
+        let snapshotChartTypes = [];
+        if (hasSnapshotPanel) {
+            if (categoryDims.length >= 2) {
+                snapshotChartTypes = ['grouped_bar', 'heatmap', 'bubble'];
+            } else {
+                snapshotChartTypes = ['bar_vertical', 'horizontal_bar'];
+            }
+            // For geo_time, prepend choropleth
+            if (archetype === 'geo_time' && geoDimObj) {
+                snapshotChartTypes.unshift('choropleth');
+                if (typeof loadRomaniaGeoJSON === 'function') loadRomaniaGeoJSON();
+            }
+        }
+
+        // Periods from time dimension options
+        let periods = [];
+        if (timeDimObj) {
+            periods = (timeDimObj.options || []).map(o => ({
+                id: o.sdmx_value || o.nom_item_id,
+                label: (o.label || '').replace(/^Anul\s+/, ''),
+            }));
+            // Options are in chronological order (oldest first) from API
+        }
+
+        // Filter dims: dims not assigned to any chart axis
+        const axisDims = new Set([timeDim, timeSeriesDim, snapXDim, snapSeriesDim].filter(Boolean));
+        const filterDims = dims.filter(d =>
+            !axisDims.has(d.dim_column_name) &&
+            d.dim_type !== 'unit' &&
+            !singletonSet.has(d.dim_column_name) &&
+            d.option_count > 1
+        );
+
+        return {
+            hasTimePanel, hasSnapshotPanel,
+            timeDim, timeSeriesDim,
+            snapXDim, snapSeriesDim,
+            timeChartTypes, snapshotChartTypes,
+            filterDims, periods,
+            geoDim: geoDimObj?.dim_column_name || cfg.geo_dim || null,
+        };
+    }
+
+    renderTimePanel() {
+        const panel = document.getElementById('time-panel');
+        const setup = this.panelSetup;
+
+        document.getElementById('time-panel-label').textContent = this.ui.trends;
+
+        if (!setup.hasTimePanel) {
+            panel.classList.add('hidden');
+            return;
+        }
+        panel.classList.remove('hidden');
+
+        const pills = document.getElementById('time-pills');
+        pills.innerHTML = '';
+
+        const LABELS = {
+            line: 'Line', area_stacked: 'Area', stacked_bar: 'Stacked',
+        };
+
+        for (const type of setup.timeChartTypes) {
             const btn = document.createElement('button');
-            btn.className = 'ct-btn' + (type === primary ? ' active' : '');
+            btn.className = 'ct-btn' + (type === this.timeChartType ? ' active' : '');
             btn.textContent = LABELS[type] || type;
             btn.addEventListener('click', () => {
-                this.chartConfig.primary_chart = type;
-                // Update roles from ranked_charts
-                const entry = ranked.find(r => r.chart_type === type);
-                if (entry && entry.roles) {
-                    this.chartConfig.geo_dim = entry.roles.entity || this.chartConfig.geo_dim;
-                }
-                toolbar.querySelectorAll('.ct-btn').forEach(b => b.classList.remove('active'));
+                this.timeChartType = type;
+                pills.querySelectorAll('.ct-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                // Show loading state while chart switches
-                const chartEl = document.getElementById('primary-chart');
-                chartEl.style.opacity = '0.4';
-                chartEl.style.transition = 'opacity 0.15s';
-                this.fetchAndRender().finally(() => {
-                    chartEl.style.opacity = '';
-                    chartEl.style.transition = '';
-                });
+                const el = document.getElementById('time-chart');
+                el.style.opacity = '0.4';
+                el.style.transition = 'opacity 0.15s';
+                this.renderTimeChart();
+                el.style.opacity = '';
+                el.style.transition = '';
             });
-            toolbar.appendChild(btn);
+            pills.appendChild(btn);
+        }
+    }
+
+    renderSnapshotPanel() {
+        const panel = document.getElementById('snapshot-panel');
+        const setup = this.panelSetup;
+
+        document.getElementById('snapshot-panel-label').textContent = this.ui.snapshot;
+
+        if (!setup.hasSnapshotPanel) {
+            panel.classList.add('hidden');
+            return;
+        }
+        panel.classList.remove('hidden');
+
+        const pills = document.getElementById('snapshot-pills');
+        pills.innerHTML = '';
+
+        const LABELS = {
+            grouped_bar: 'Grouped', heatmap: 'Heatmap', bubble: 'Bubble',
+            bar_vertical: 'Bar', horizontal_bar: 'H-Bar', choropleth: 'Map',
+        };
+
+        for (const type of setup.snapshotChartTypes) {
+            const btn = document.createElement('button');
+            btn.className = 'ct-btn' + (type === this.snapshotChartType ? ' active' : '');
+            btn.textContent = LABELS[type] || type;
+            btn.addEventListener('click', () => {
+                this.snapshotChartType = type;
+                pills.querySelectorAll('.ct-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const el = document.getElementById('snapshot-chart');
+                el.style.opacity = '0.4';
+                el.style.transition = 'opacity 0.15s';
+                this.renderSnapshotChart();
+                el.style.opacity = '';
+                el.style.transition = '';
+            });
+            pills.appendChild(btn);
+        }
+
+        this.renderPeriodNav();
+    }
+
+    renderPeriodNav() {
+        const nav = document.getElementById('period-nav');
+        nav.innerHTML = '';
+
+        const setup = this.panelSetup;
+        if (!setup.hasTimePanel || setup.periods.length === 0) return;
+
+        const periods = setup.periods;
+        const currentIdx = this.selectedPeriodIdx < 0 ? periods.length - 1 : this.selectedPeriodIdx;
+
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'period-btn';
+        prevBtn.innerHTML = '&#9664;';
+        prevBtn.disabled = currentIdx <= 0;
+        prevBtn.title = 'Previous period';
+        prevBtn.addEventListener('click', () => this.advancePeriod(-1));
+
+        const label = document.createElement('span');
+        label.className = 'period-label';
+        label.textContent = periods[currentIdx]?.label || '';
+
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'period-btn';
+        nextBtn.innerHTML = '&#9654;';
+        nextBtn.disabled = currentIdx >= periods.length - 1;
+        nextBtn.title = 'Next period';
+        nextBtn.addEventListener('click', () => this.advancePeriod(1));
+
+        const playBtn = document.createElement('button');
+        playBtn.className = 'period-play' + (this.playInterval ? ' playing' : '');
+        playBtn.innerHTML = this.playInterval ? '&#9646;&#9646;' : '&#9654;';
+        playBtn.title = this.playInterval ? this.ui.pause : this.ui.play;
+        playBtn.addEventListener('click', () => this.togglePlay());
+
+        nav.appendChild(prevBtn);
+        nav.appendChild(label);
+        nav.appendChild(nextBtn);
+        nav.appendChild(playBtn);
+    }
+
+    advancePeriod(delta) {
+        const periods = this.panelSetup?.periods || [];
+        if (periods.length === 0) return;
+
+        let idx = this.selectedPeriodIdx < 0 ? periods.length - 1 : this.selectedPeriodIdx;
+        idx += delta;
+
+        if (idx < 0) idx = 0;
+        if (idx >= periods.length) {
+            idx = periods.length - 1;
+            this.stopPlay();
+        }
+
+        this.selectedPeriodIdx = idx;
+        this.renderPeriodNav();
+        this.renderSnapshotChart();
+    }
+
+    togglePlay() {
+        if (this.playInterval) {
+            this.stopPlay();
+        } else {
+            // Start from beginning if at the end
+            const periods = this.panelSetup?.periods || [];
+            let idx = this.selectedPeriodIdx < 0 ? periods.length - 1 : this.selectedPeriodIdx;
+            if (idx >= periods.length - 1) {
+                this.selectedPeriodIdx = 0;
+                this.renderPeriodNav();
+                this.renderSnapshotChart();
+            }
+            this.playInterval = setInterval(() => this.advancePeriod(1), 1500);
+            this.renderPeriodNav();
+        }
+    }
+
+    stopPlay() {
+        if (this.playInterval) {
+            clearInterval(this.playInterval);
+            this.playInterval = null;
+            this.renderPeriodNav();
         }
     }
 
     renderFilters() {
         const strip = document.getElementById('filter-strip');
         strip.innerHTML = '';
-        if (!this.metadata) return;
+        if (!this.metadata || !this.panelSetup) return;
 
-        const dims = this.metadata.dimensions;
-        const profile = this.profile;
-        const singletons = profile?.dimensions?.singleton_dims || [];
+        const filterDims = this.panelSetup.filterDims;
 
-        // Determine which dims are chart roles (not filterable)
-        const cfg = this.chartConfig;
-        const ranked = cfg?.ranked_charts || [];
-        const entry = ranked.find(r => r.chart_type === cfg.primary_chart);
-        const roles = entry?.roles || {};
-        const roleCols = new Set([roles.x_axis, roles.series, roles.timeline, roles.entity].filter(Boolean));
-
-        for (const dim of dims) {
-            if (singletons.includes(dim.dim_column_name)) continue;
-            if (dim.option_count <= 1) continue;
-            if (roleCols.has(dim.dim_column_name)) continue;
-
+        for (const dim of filterDims) {
             const group = document.createElement('div');
             group.className = 'filter-group';
 
@@ -718,20 +950,13 @@ class LensApp {
             allOpt.textContent = 'All';
             select.appendChild(allOpt);
 
-            // Sort options: for time dims, show newest first
             let options = [...dim.options];
-            if (dim.dim_type === 'time') options.reverse();
-
+            // Don't auto-filter time dims anymore — time is on the chart axis
             for (const opt of options.slice(0, 100)) {
                 const o = document.createElement('option');
                 o.value = opt.sdmx_value || opt.nom_item_id;
                 o.textContent = opt.label;
                 select.appendChild(o);
-            }
-
-            // Default: for time dims, pick latest
-            if (dim.dim_type === 'time' && options.length > 0) {
-                select.value = options[0].sdmx_value || options[0].nom_item_id;
             }
 
             select.addEventListener('change', () => this.fetchAndRender());
@@ -751,13 +976,19 @@ class LensApp {
     }
 
     computeGroupBy() {
-        if (!this.chartConfig) return null;
-        const entry = (this.chartConfig.ranked_charts || [])
-            .find(r => r.chart_type === this.chartConfig.primary_chart);
-        const roles = entry?.roles || {};
+        if (!this.metadata) return null;
+        const dims = this.metadata.dimensions || [];
+        const profile = this.profile;
+        const singletons = new Set(profile?.dimensions?.singleton_dims || []);
+
+        // Include ALL non-singleton, non-unit dimension columns
+        // Both panels share data, so we need the most granular breakdown
         const cols = new Set();
-        for (const key of ['x_axis', 'series', 'timeline', 'entity', 'pivot', 'facet']) {
-            if (roles[key]) cols.add(roles[key]);
+        for (const dim of dims) {
+            if (singletons.has(dim.dim_column_name)) continue;
+            if (dim.dim_type === 'unit' && dim.option_count <= 1) continue;
+            if (dim.option_count <= 1) continue;
+            cols.add(dim.dim_column_name);
         }
         // Always include filter dims that are set
         document.querySelectorAll('#filter-strip .filter-select').forEach(sel => {
@@ -768,12 +999,7 @@ class LensApp {
 
     async fetchAndRender() {
         const code = this.metadata.matrix_code;
-        const isChoropleth = this.chartConfig?.primary_chart === 'choropleth';
         const filters = this.getFilters();
-        // For choropleth, remove the geo filter so all counties are included
-        if (isChoropleth && this.chartConfig?.geo_dim) {
-            delete filters[this.chartConfig.geo_dim];
-        }
 
         // Smarter large dataset handling: auto-apply filter if needed
         const rowCount = this.metadata.row_count || 0;
@@ -790,8 +1016,8 @@ class LensApp {
             this.data = await API.getDatasetData(code, filters, 50000, { groupBy });
             if (autoFilterApplied) this._showLargeDatasetNotice(); else this._hideLargeDatasetNotice();
             this.renderInsights();
-            this.renderPrimaryChart();
-            this.renderSecondaryCharts();
+            this.renderTimeChart();
+            this.renderSnapshotChart();
         } catch (err) {
             const msg = err.message || 'Failed to load data';
             const isLarge = msg.includes('filter');
@@ -803,14 +1029,14 @@ class LensApp {
                         this.data = await API.getDatasetData(code, filters, 50000, { groupBy: this.computeGroupBy() });
                         this._showLargeDatasetNotice();
                         this.renderInsights();
-                        this.renderPrimaryChart();
-                        this.renderSecondaryCharts();
+                        this.renderTimeChart();
+                        this.renderSnapshotChart();
                         return;
                     } catch (_) { /* fall through */ }
                 }
             }
             this._hideLargeDatasetNotice();
-            document.getElementById('primary-chart').innerHTML = `
+            document.getElementById('time-chart').innerHTML = `
                 <div class="chart-loading" style="color:${isLarge ? 'var(--amber)' : 'var(--red)'}">
                     ${isLarge ? '⚠ ' : ''}${msg}
                 </div>`;
@@ -911,10 +1137,17 @@ class LensApp {
         return formatNumber(n);
     }
 
-    // --- Charts -------------------------------------------------------------
-    renderPrimaryChart() {
-        const container = document.getElementById('primary-chart');
-        this.disposeCharts();
+    // --- Charts (two-panel) --------------------------------------------------
+
+    renderTimeChart() {
+        const container = document.getElementById('time-chart');
+        const setup = this.panelSetup;
+
+        // Dispose only time-panel chart instances
+        this.charts.filter(c => c && !c.isDisposed() && c._timePanel).forEach(c => c.dispose());
+        this.charts = this.charts.filter(c => c && !c.isDisposed());
+
+        if (!setup?.hasTimePanel) return;
 
         if (!this.data || !this.data.rows.length) {
             container.innerHTML = `<div class="chart-loading">${this.ui.noData}</div>`;
@@ -923,61 +1156,96 @@ class LensApp {
         container.innerHTML = '';
 
         try {
-            const chart = createChart(container, this.chartConfig, this.data, this.metadata);
-            if (chart) this.charts.push(chart);
+            // Build config for time panel — omit ranked_charts so resolveRoles()
+            // doesn't override our explicit dim assignments
+            const cfg = {
+                ...this.chartConfig,
+                ranked_charts: [],
+                primary_chart: this.timeChartType,
+                time_dim: setup.timeDim,
+                series_dim: setup.timeSeriesDim,
+                x_axis_dim: setup.timeDim,  // time is always on x-axis for this panel
+            };
+            const chart = createChart(container, cfg, this.data, this.metadata);
+            if (chart) {
+                chart._timePanel = true;
+                this.charts.push(chart);
+            }
         } catch (err) {
             container.innerHTML = `<div class="chart-loading" style="color:var(--red)">Chart error: ${err.message}</div>`;
         }
     }
 
-    renderSecondaryCharts() {
-        const grid = document.getElementById('secondary-grid');
-        grid.innerHTML = '';
-        if (!this.data || !this.data.rows.length) return;
+    renderSnapshotChart() {
+        const container = document.getElementById('snapshot-chart');
+        const setup = this.panelSetup;
 
-        const ranked = this.chartConfig?.ranked_charts || [];
-        const primary = this.chartConfig?.primary_chart;
+        if (!setup?.hasSnapshotPanel || !this.snapshotChartType) {
+            container.innerHTML = '';
+            return;
+        }
 
-        // Show up to 2 secondary chart types
-        const secondary = ranked
-            .filter(r => r.chart_type !== primary)
-            .slice(0, 2);
+        if (!this.data || !this.data.rows.length) {
+            container.innerHTML = `<div class="chart-loading">${this.ui.noData}</div>`;
+            return;
+        }
 
-        for (const entry of secondary) {
-            const card = document.createElement('div');
-            card.className = 'sec-chart-card';
+        // Filter data to selected period
+        const periods = setup.periods;
+        const periodIdx = this.selectedPeriodIdx < 0 ? periods.length - 1 : this.selectedPeriodIdx;
+        const selectedPeriod = periods[periodIdx];
 
-            const LABELS = {
-                line: 'Line', bar_vertical: 'Bar', area_stacked: 'Area', horizontal_bar: 'H-Bar',
-                grouped_bar: 'Grouped Bar', stacked_bar: 'Stacked Bar', choropleth: 'Map',
-                heatmap: 'Heatmap', bubble: 'Bubble', scatter: 'Scatter',
+        let filteredData = this.data;
+        if (selectedPeriod && setup.timeDim) {
+            const timeCol = this.data.columns.indexOf(setup.timeDim);
+            if (timeCol !== -1) {
+                const periodId = selectedPeriod.id;
+                const filteredRows = this.data.rows.filter(r =>
+                    String(r[timeCol]) === String(periodId)
+                );
+                filteredData = {
+                    ...this.data,
+                    rows: filteredRows,
+                };
+            }
+        }
+
+        if (filteredData.rows.length === 0) {
+            container.innerHTML = `<div class="chart-loading">${this.ui.noDataFilters}</div>`;
+            return;
+        }
+
+        // Dispose existing snapshot chart
+        const existing = this.charts.filter(c => c && !c.isDisposed() && c._snapshotPanel);
+        existing.forEach(c => { c.dispose(); });
+        this.charts = this.charts.filter(c => c && !c.isDisposed());
+
+        container.innerHTML = '';
+
+        try {
+            const isChoropleth = this.snapshotChartType === 'choropleth';
+            const cfg = {
+                ...this.chartConfig,
+                ranked_charts: [],
+                primary_chart: this.snapshotChartType,
+                time_dim: null,  // snapshot has no time axis
+                x_axis_dim: setup.snapXDim,
+                series_dim: setup.snapSeriesDim,
+                geo_dim: isChoropleth ? setup.geoDim : null,
             };
 
-            const title = document.createElement('div');
-            title.className = 'sec-chart-title';
-            title.textContent = LABELS[entry.chart_type] || entry.chart_type;
-            card.appendChild(title);
-
-            const container = document.createElement('div');
-            container.className = 'sec-chart-container';
-            card.appendChild(container);
-            grid.appendChild(card);
-
-            // Build a temporary config with this chart type
-            try {
-                const tempConfig = {
-                    ...this.chartConfig,
-                    primary_chart: entry.chart_type,
-                };
-                const chart = createChart(container, tempConfig, this.data, this.metadata);
-                if (chart) this.charts.push(chart);
-            } catch (_) {
-                container.innerHTML = '<div class="chart-loading">Unavailable</div>';
+            const chart = createChart(container, cfg, filteredData, this.metadata);
+            if (chart) {
+                chart._snapshotPanel = true;
+                this.charts.push(chart);
             }
+        } catch (err) {
+            container.innerHTML = `<div class="chart-loading" style="color:var(--red)">Chart error: ${err.message}</div>`;
         }
     }
 
     disposeCharts() {
+        this.stopPlay();
         for (const c of this.charts) {
             if (c && !c.isDisposed()) c.dispose();
         }

@@ -416,8 +416,27 @@ function createHeatmapChart(container, config, data, metadata) {
     dims.sort((a, b) => b.option_count - a.option_count);
 
     const userChoseTimeAsX = config.x_axis_dim && config.x_axis_dim === config.time_dim;
-    const xDim = config.x_axis_dim || (dims[0] || {}).dim_column_name || cols[0];
-    const yDim = config.series_dim || (dims[1] || {}).dim_column_name || cols[1 < cols.length - 1 ? 1 : 0];
+    let xDim = config.x_axis_dim || (dims[0] || {}).dim_column_name || cols[0];
+    let yDim = config.series_dim || (dims[1] || {}).dim_column_name || cols[1 < cols.length - 1 ? 1 : 0];
+
+    // Dedup: ensure x and y are different dimensions
+    if (xDim === yDim) {
+        // Try to find a different dim for y
+        const altDim = dims.find(d => d.dim_column_name !== xDim);
+        if (altDim) {
+            yDim = altDim.dim_column_name;
+        } else {
+            // Only 1 qualifying dim — use time as the other axis if available
+            const timeDim = config.time_dim;
+            if (timeDim && cols.includes(timeDim) && timeDim !== xDim) {
+                yDim = timeDim;
+            } else {
+                // Cannot make a heatmap with < 2 dims — fall back
+                container.innerHTML = '<div class="chart-loading">Not enough dimensions for heatmap</div>';
+                return chart;
+            }
+        }
+    }
 
     const xIdx = cols.indexOf(xDim);
     const yIdx = cols.indexOf(yDim);

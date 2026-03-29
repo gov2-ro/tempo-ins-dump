@@ -14,7 +14,7 @@ function resolveRoles(chartConfig) {
         geo_dim:    chartConfig.geo_dim || null,
         series_dim: roles.series || chartConfig.series_dim || null,
         facet_dim:  roles.facet || null,
-        x_axis_dim: roles.x_axis || null,
+        x_axis_dim: roles.x_axis || chartConfig.x_axis_dim || null,
         // legacy compat
         age_dim:    chartConfig.age_dim || null,
         gender_dim: chartConfig.gender_dim || null,
