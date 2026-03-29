@@ -542,6 +542,25 @@ kbd {
 .breadcrumb-current { color: var(--text-0); font-weight: 600; }
 .breadcrumb-sep { color: var(--text-2); font-size: 14px; user-select: none; }
 
+/* Dashboard breadcrumbs (dataset view) */
+.dash-breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    flex-wrap: wrap;
+}
+.dash-crumb-link {
+    color: var(--text-2);
+    cursor: pointer;
+    transition: color var(--transition);
+    white-space: nowrap;
+}
+.dash-crumb-link:hover { color: var(--accent); }
+.dash-crumb-current { color: var(--text-1); white-space: nowrap; }
+.dash-crumb-sep { color: var(--text-2); font-size: 14px; user-select: none; }
+
 /* Subcategory rows */
 .ds-row-subcat {
     background: var(--bg-1);

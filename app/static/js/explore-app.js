@@ -534,8 +534,22 @@ class LensApp {
         const timeRange = profile.time_year_min && profile.time_year_max
             ? `${profile.time_year_min}–${profile.time_year_max}` : null;
 
+        // Build category breadcrumb path
+        let pathHtml = '';
+        if (m.context_path && m.context_path.length > 0) {
+            const crumbs = m.context_path.map((p, i) => {
+                const label = this.shortName(p.name);
+                if (i < m.context_path.length - 1) {
+                    return `<span class="dash-crumb-link" data-code="${p.code}">${label}</span>`;
+                }
+                return `<span class="dash-crumb-current">${label}</span>`;
+            });
+            pathHtml = `<div class="dash-breadcrumbs">${crumbs.join('<span class="dash-crumb-sep">›</span>')}</div>`;
+        }
+
         const header = document.getElementById('dash-header');
         header.innerHTML = `
+            ${pathHtml}
             <div class="dash-title">${m.matrix_name}</div>
             <div class="dash-meta">
                 ${cfg.archetype ? `<span class="meta-pill archetype">${cfg.archetype}</span>` : ''}
@@ -546,6 +560,24 @@ class LensApp {
                 <span class="meta-pill code">${m.matrix_code}</span>
             </div>
         `;
+
+        // Bind breadcrumb clicks → navigate to category drill
+        header.querySelectorAll('.dash-crumb-link').forEach(el => {
+            el.addEventListener('click', () => {
+                const code = el.dataset.code;
+                const cat = m.context_path.find(p => p.code === code);
+                if (cat) {
+                    this.drillStack = [];
+                    // Build stack up to clicked level
+                    const idx = m.context_path.indexOf(cat);
+                    for (let i = 0; i <= idx; i++) {
+                        this.drillStack.push({ cat: m.context_path[i], colorIdx: 0 });
+                    }
+                    this.showBrowse();
+                    this.drillCategory(cat, 0, false);
+                }
+            });
+        });
     }
 
     renderChartToolbar() {
