@@ -126,7 +126,7 @@ def list_datasets(
 
 
 @router.get("/datasets/{matrix_code}")
-def get_dataset(matrix_code: str):
+def get_dataset(matrix_code: str, lang: str = Query("ro", description="Language: ro|en")):
     """Get full dataset metadata, dimensions, options, and chart config."""
     conn = get_conn()
 
@@ -134,7 +134,8 @@ def get_dataset(matrix_code: str):
     m = conn.execute("""
         SELECT matrix_code, matrix_name, context_code, ancestor_codes,
                definitie, metodologie, ultima_actualizare, observatii,
-               row_count, mat_max_dim, is_split, parent_matrix_code
+               row_count, mat_max_dim, is_split, parent_matrix_code,
+               matrix_name_en
         FROM matrices
         WHERE matrix_code = ?
     """, [matrix_code]).fetchone()
@@ -324,9 +325,13 @@ def get_dataset(matrix_code: str):
         'primary_unit_type': profile.get('primary_unit_type', 'count'),
     }
 
+    matrix_name_en = m[12]
+    display_name = (matrix_name_en or m[1]) if lang == 'en' else m[1]
+
     return {
         'matrix_code': m[0],
-        'matrix_name': m[1],
+        'matrix_name': display_name,
+        'matrix_name_ro': m[1],
         'context_code': m[2],
         'context_path': context_path,
         'definitie': m[4],

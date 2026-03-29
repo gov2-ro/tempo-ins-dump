@@ -34,6 +34,10 @@ const UI = {
         open: 'deschide',
         categoriesRoot: 'Categorii',
         largeDatasetNotice: 'Se afișează doar o selecție — setul de date are prea multe rânduri pentru afișare completă',
+        aboutDataset: 'Despre acest set de date',
+        definition: 'Definiție',
+        methodology: 'Metodologie',
+        notes: 'Observații',
     },
     en: {
         heroTitle: 'Romanian Statistics<br><span class="hero-accent">Observatory</span>',
@@ -61,6 +65,10 @@ const UI = {
         open: 'open',
         categoriesRoot: 'Categories',
         largeDatasetNotice: 'Showing filtered view only — dataset too large for full display',
+        aboutDataset: 'About this dataset',
+        definition: 'Definition',
+        methodology: 'Methodology',
+        notes: 'Notes',
     },
 };
 
@@ -509,7 +517,7 @@ class LensApp {
         try {
             // Load metadata + profile in parallel
             const [meta, profile] = await Promise.all([
-                API.getDataset(code),
+                API.getDataset(code, { lang: this.lang }),
                 API.getViewProfile(code),
             ]);
             this.metadata = meta;
@@ -517,6 +525,7 @@ class LensApp {
             this.chartConfig = meta.chart_config;
 
             this.renderDashHeader();
+            this.renderInfoPanel();
             this.renderFilters();
             this.renderChartToolbar();
             await this.fetchAndRender();
@@ -580,6 +589,42 @@ class LensApp {
         });
     }
 
+    renderInfoPanel() {
+        const m = this.metadata;
+        const panel = document.getElementById('info-panel');
+        const definitie = m.definitie?.trim();
+        const metodologie = m.metodologie?.trim();
+        const observatii = m.observatii?.trim();
+
+        if (!definitie && !metodologie && !observatii) {
+            panel.classList.add('hidden');
+            return;
+        }
+
+        panel.classList.remove('hidden');
+        panel.innerHTML = `
+            <button class="info-toggle" id="info-toggle" aria-expanded="false">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                ${this.ui.aboutDataset || 'About this dataset'}
+                <svg class="info-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="info-body hidden" id="info-body">
+                ${definitie ? `<div class="info-section"><strong>${this.ui.definition || 'Definition'}</strong><p>${definitie}</p></div>` : ''}
+                ${metodologie ? `<div class="info-section"><strong>${this.ui.methodology || 'Methodology'}</strong><p>${metodologie}</p></div>` : ''}
+                ${observatii ? `<div class="info-section"><strong>${this.ui.notes || 'Notes'}</strong><p>${observatii}</p></div>` : ''}
+            </div>
+        `;
+
+        document.getElementById('info-toggle').addEventListener('click', () => {
+            const body = document.getElementById('info-body');
+            const btn = document.getElementById('info-toggle');
+            const expanded = !body.classList.contains('hidden');
+            body.classList.toggle('hidden', expanded);
+            btn.setAttribute('aria-expanded', String(!expanded));
+            btn.querySelector('.info-chevron').style.transform = expanded ? '' : 'rotate(180deg)';
+        });
+    }
+
     renderChartToolbar() {
         const ranked = this.chartConfig?.ranked_charts || [];
         const primary = this.chartConfig?.primary_chart || 'line';
@@ -621,7 +666,14 @@ class LensApp {
                 }
                 toolbar.querySelectorAll('.ct-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                this.fetchAndRender();
+                // Show loading state while chart switches
+                const chartEl = document.getElementById('primary-chart');
+                chartEl.style.opacity = '0.4';
+                chartEl.style.transition = 'opacity 0.15s';
+                this.fetchAndRender().finally(() => {
+                    chartEl.style.opacity = '';
+                    chartEl.style.transition = '';
+                });
             });
             toolbar.appendChild(btn);
         }

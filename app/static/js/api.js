@@ -31,8 +31,8 @@ const API = {
         return this.fetch('/datasets', params);
     },
 
-    getDataset(code) {
-        return this.fetch(`/datasets/${code}`);
+    getDataset(code, params = {}) {
+        return this.fetch(`/datasets/${code}`, params);
     },
 
     getDatasetData(code, filters = {}, limit = 5000, { groupBy = null } = {}) {
