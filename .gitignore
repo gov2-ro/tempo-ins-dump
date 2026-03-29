@@ -18,6 +18,7 @@ data*/*
 _obsolete
 .playwright-mcp/*
 .playwright-mcp/
+docs/misc/*.png
 .mcp.json
 test-results/*
 
