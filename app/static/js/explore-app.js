@@ -583,6 +583,7 @@ class LensApp {
             this.metadata = meta;
             this.profile = profile;
             this.chartConfig = meta.chart_config;
+            this.buildValueMap();
 
             this.panelSetup = this.determinePanelSetup();
             this.timeChartType = this.panelSetup.timeChartTypes[0] || 'line';
@@ -1206,7 +1207,7 @@ class LensApp {
                 series_dim: setup.timeSeriesDim,
                 x_axis_dim: setup.timeDim,  // time is always on x-axis for this panel
             };
-            const chart = createChart(container, cfg, this.data, this.metadata);
+            const chart = createChart(container, cfg, this._translateData(this.data), this.metadata);
             if (chart) {
                 chart._timePanel = true;
                 this.charts.push(chart);
@@ -1274,7 +1275,7 @@ class LensApp {
                 geo_dim: isChoropleth ? setup.geoDim : null,
             };
 
-            const chart = createChart(container, cfg, filteredData, this.metadata);
+            const chart = createChart(container, cfg, this._translateData(filteredData), this.metadata);
             if (chart) {
                 chart._snapshotPanel = true;
                 this.charts.push(chart);
@@ -1535,6 +1536,49 @@ class LensApp {
         }
     }
 
+    // --- Value translation (EN mode) ----------------------------------------
+    /**
+     * Build a per-column lookup: { col_name → { sdmx_value → en_label } }
+     * Used to translate parquet row values for display (table + charts).
+     * Only populated when lang=en. Time dimensions are skipped (years are universal).
+     */
+    buildValueMap() {
+        this.valueMap = {};
+        if (this.lang !== 'en' || !this.metadata) return;
+        for (const dim of this.metadata.dimensions) {
+            if (dim.dim_type === 'time') continue;  // "1990" is clearer than "Year 1990" on axes
+            const map = {};
+            for (const opt of dim.options) {
+                if (opt.sdmx_value != null && opt.label) {
+                    map[String(opt.sdmx_value)] = opt.label;
+                }
+            }
+            if (Object.keys(map).length) this.valueMap[dim.dim_column_name] = map;
+        }
+    }
+
+    /**
+     * Return a display copy of `data` with row values translated to the current language.
+     * Column names (SDMX codes) are unchanged so internal logic that indexes by column
+     * name continues to work. Only the values visible to the user are translated.
+     */
+    _translateData(data) {
+        if (!data || this.lang !== 'en' || !this.valueMap || !Object.keys(this.valueMap).length) {
+            return data;
+        }
+        const colMaps = data.columns.map(col => this.valueMap[col] || null);
+        if (!colMaps.some(Boolean)) return data;
+        return {
+            ...data,
+            rows: data.rows.map(row =>
+                row.map((val, i) => {
+                    const m = colMaps[i];
+                    return m ? (m[String(val)] ?? val) : val;
+                })
+            ),
+        };
+    }
+
     // --- Data Table ---------------------------------------------------------
     initTableToggle() {
         const btn = document.getElementById('table-toggle-btn');
@@ -1584,7 +1628,8 @@ class LensApp {
 
     renderTable() {
         if (!this.data) return;
-        const { columns, column_labels, rows, truncated, returned_rows, total_rows } = this.data;
+        const display = this._translateData(this.data);
+        const { columns, rows, truncated, returned_rows, total_rows } = display;
         const scroll = document.getElementById('table-scroll');
         const countEl = document.getElementById('table-row-count');
 
@@ -1592,6 +1637,15 @@ class LensApp {
             scroll.innerHTML = `<div class="table-truncated">${this.ui.noDataFilters}</div>`;
             return;
         }
+
+        // Build human-readable column headers (use dim_label when available)
+        const dimLabelMap = {};
+        if (this.metadata?.dimensions) {
+            for (const d of this.metadata.dimensions) {
+                dimLabelMap[d.dim_column_name] = d.dim_label;
+            }
+        }
+        const colHeaders = columns.map(col => dimLabelMap[col] || col);
 
         // Sort
         let sortedRows = [...rows];
@@ -1608,7 +1662,7 @@ class LensApp {
 
         const obsIdx = columns.indexOf('OBS_VALUE');
 
-        const th = columns.map((lbl, i) => {
+        const th = colHeaders.map((lbl, i) => {
             const arrow = this._tableSortCol === i
                 ? `<span class="sort-arrow">${this._tableSortAsc ? '↑' : '↓'}</span>` : '';
             return `<th data-col="${i}">${lbl}${arrow}</th>`;
