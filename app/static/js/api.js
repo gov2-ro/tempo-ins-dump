@@ -23,6 +23,10 @@ const API = {
         return this.fetch('/categories', params);
     },
 
+    getCategoryTrends() {
+        return this.fetch('/categories/trends');
+    },
+
     getDatasets(params = {}) {
         return this.fetch('/datasets', params);
     },

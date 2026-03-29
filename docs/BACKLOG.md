@@ -45,6 +45,42 @@ Future tasks and intentions for the TEMPO INS data explorer.
 - [x] **Dataset page: show split siblings**
   Done — sub-dataset bar with pills in dataset-page-v2.js, variant drawer in datasets-page.js.
 
+### Lens UI Improvements
+
+- [ ] **Add `lang` to `get_dataset()` endpoint** — dashboard dataset names are stuck in Romanian
+  when EN is selected. Add `lang` param, use `COALESCE(matrix_name_en, matrix_name)`.
+
+- [ ] **Responsive mobile layout** — 3-column category grid and 4-column insight cards don't
+  adapt well to phones. Add `@media (max-width: 768px)` breakpoints for stacking.
+
+- [ ] **Filter persistence across navigation** — navigating away and back to the same dataset
+  resets filters. Could persist filter state to URL params for shareability.
+
+- [ ] **Loading states for chart switching** — clicking a chart type pill shows no transition.
+  A brief loading indicator while new data arrives would feel snappier.
+
+- [ ] **Dataset definition/methodology panel** — metadata has `definitie` and `metodologie`
+  fields not shown in Lens. Expandable info panel below the header would add context.
+
+- [ ] **Keyboard shortcuts legend** — Lens supports `/`, `Cmd+K`, arrow keys but there's no
+  discoverable way to learn about them beyond the search footer hints.
+
+- [x] **Category breadcrumbs** — Done. Clickable breadcrumb trail with nested subcategory
+  drill-down (▸ rows), back button shows parent name. Stack-based navigation.
+
+- [x] **Smarter large dataset handling** — Done. Auto-applies first non-TOTAL filter for
+  datasets >50k rows. Shows amber warning banner. Retries on filter-required errors.
+
+- [ ] **URL deep-linking for filters** — encode filter state in URL so dashboard views
+  can be shared with specific filters pre-applied.
+
+- [ ] **Secondary chart lazy loading** — render secondary charts only when they scroll
+  into view to improve initial load performance.
+
+- [x] **Trend indicators on category cards** — Done. Green/red bar showing proportion of
+  increasing vs decreasing datasets, plus avg YoY% growth. New `/api/categories/trends` endpoint
+  aggregates `dataset_trends` via `UNNEST(ancestor_codes)`. Works for all context levels.
+
 ## Data Accuracy — Server-Side Aggregation
 
 - [x] **Server-side GROUP BY for chart queries** — Done.

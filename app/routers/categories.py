@@ -65,6 +65,34 @@ def get_categories(lang: str = Query("ro", regex="^(ro|en)$")):
     return {'tree': roots}
 
 
+@router.get("/categories/trends")
+def get_category_trends():
+    """Return trend direction aggregates per context code (all levels)."""
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT a.ancestor_code AS context_code,
+               COUNT(*) AS total,
+               COUNT(*) FILTER (WHERE t.trend_direction = 'increasing') AS up,
+               COUNT(*) FILTER (WHERE t.trend_direction = 'decreasing') AS down,
+               COUNT(*) FILTER (WHERE t.trend_direction = 'flat') AS flat,
+               COUNT(*) FILTER (WHERE t.trend_direction = 'volatile') AS volatile,
+               ROUND(AVG(t.yoy_growth_latest), 2) AS avg_yoy
+        FROM matrices m,
+             UNNEST(m.ancestor_codes) AS a(ancestor_code)
+        JOIN dataset_trends t ON m.matrix_code = t.matrix_code
+        GROUP BY a.ancestor_code
+    """).fetchall()
+
+    trends = {}
+    for code, total, up, down, flat, volatile, avg_yoy in rows:
+        trends[str(code)] = {
+            'total': total, 'up': up, 'down': down,
+            'flat': flat, 'volatile': volatile,
+            'avg_yoy': float(avg_yoy) if avg_yoy is not None else None,
+        }
+    return {'trends': trends}
+
+
 def _clean_context_name(name: str) -> str:
     """Remove leading numbering/prefixes like 'A. ', '1. ' from context names."""
     if not name:

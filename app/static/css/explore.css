@@ -464,6 +464,32 @@ kbd {
     max-width: 200px;
 }
 
+/* Trend indicator on category cards */
+.cat-trend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+.cat-trend-bar {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--bg-3);
+    display: flex;
+    overflow: hidden;
+}
+.cat-trend-up { background: var(--green); height: 100%; }
+.cat-trend-down { background: var(--red); height: 100%; }
+.cat-trend-yoy {
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.cat-trend-yoy.up { color: var(--green); }
+.cat-trend-yoy.down { color: var(--red); }
+
 /* Dataset panel (replaces category grid when drilled in) */
 .dataset-panel {
     padding-bottom: 80px;
@@ -491,6 +517,38 @@ kbd {
     transition: all var(--transition);
 }
 .panel-back:hover { background: var(--bg-3); color: var(--text-0); }
+
+/* Breadcrumbs */
+.breadcrumb-trail {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    flex-wrap: wrap;
+}
+.breadcrumb-item {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+}
+.breadcrumb-link {
+    color: var(--text-2);
+    cursor: pointer;
+    transition: color var(--transition);
+}
+.breadcrumb-link:hover { color: var(--accent); }
+.breadcrumb-current { color: var(--text-0); font-weight: 600; }
+.breadcrumb-sep { color: var(--text-2); font-size: 14px; user-select: none; }
+
+/* Subcategory rows */
+.ds-row-subcat {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    margin-bottom: 2px;
+}
+.ds-row-subcat:hover { border-color: var(--border-hover); background: var(--bg-2); }
 
 .dataset-list {
     display: flex;
@@ -719,6 +777,24 @@ kbd {
     background: var(--border);
     margin: 0 4px;
 }
+
+/* Large dataset notice */
+.large-dataset-notice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    margin: 12px 0;
+    border-radius: var(--radius);
+    background: rgba(251,191,36,0.08);
+    border: 1px solid rgba(251,191,36,0.2);
+    color: var(--amber);
+    font-size: 13px;
+    font-weight: 500;
+    animation: fadeIn 0.3s ease;
+}
+.notice-icon { font-size: 16px; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* Secondary chart grid */
 .secondary-grid {

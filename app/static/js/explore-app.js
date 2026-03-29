@@ -32,6 +32,8 @@ const UI = {
         rows: 'rânduri',
         navigate: 'navighează',
         open: 'deschide',
+        categoriesRoot: 'Categorii',
+        largeDatasetNotice: 'Se afișează doar o selecție — setul de date are prea multe rânduri pentru afișare completă',
     },
     en: {
         heroTitle: 'Romanian Statistics<br><span class="hero-accent">Observatory</span>',
@@ -57,6 +59,8 @@ const UI = {
         rows: 'rows',
         navigate: 'navigate',
         open: 'open',
+        categoriesRoot: 'Categories',
+        largeDatasetNotice: 'Showing filtered view only — dataset too large for full display',
     },
 };
 
@@ -160,6 +164,8 @@ class LensApp {
         this.chartConfig = null;
         this.charts = [];       // active ECharts instances
         this.categories = null; // category tree cache
+        this.categoryTrends = null; // trend aggregates per context code
+        this.drillStack = [];   // breadcrumb navigation stack
         this.searchIdx = -1;    // keyboard nav index in search results
 
         // Theme & language from localStorage
@@ -214,7 +220,16 @@ class LensApp {
 
         // Back button
         document.getElementById('back-btn').addEventListener('click', () => this.showBrowse());
-        document.getElementById('panel-back').addEventListener('click', () => this.showCategoryGrid());
+        document.getElementById('panel-back').addEventListener('click', () => {
+            if (this.drillStack.length > 1) {
+                this.drillStack.pop();
+                const parent = this.drillStack[this.drillStack.length - 1];
+                this.drillCategory(parent.cat, parent.colorIdx, false);
+            } else {
+                this.drillStack = [];
+                this.showCategoryGrid();
+            }
+        });
 
         // Resize charts
         window.addEventListener('resize', () => {
@@ -237,8 +252,9 @@ class LensApp {
             this.lang = this.lang === 'ro' ? 'en' : 'ro';
             localStorage.setItem('lens_lang', this.lang);
             this.applyLang();
-            // Clear category cache (names depend on lang)
+            // Clear caches (names depend on lang)
             this.categories = null;
+            this.categoryTrends = null;
             // Re-render current view
             const code = new URLSearchParams(location.search).get('code');
             if (code) {
@@ -297,8 +313,12 @@ class LensApp {
         document.getElementById('back-btn').classList.add('hidden');
 
         if (!this.categories) {
-            const resp = await API.getCategories({ lang: this.lang });
-            this.categories = resp.tree;
+            const [catResp, trendsResp] = await Promise.all([
+                API.getCategories({ lang: this.lang }),
+                this.categoryTrends ? Promise.resolve(null) : API.getCategoryTrends(),
+            ]);
+            this.categories = catResp.tree;
+            if (trendsResp) this.categoryTrends = trendsResp.trends;
         }
 
         const totalDatasets = this.categories.reduce((s, c) => s + (c.total_datasets || 0), 0);
@@ -311,6 +331,7 @@ class LensApp {
     showCategoryGrid() {
         document.getElementById('category-grid').classList.remove('hidden');
         document.getElementById('dataset-panel').classList.add('hidden');
+        this.drillStack = [];
 
         const grid = document.getElementById('category-grid');
         grid.innerHTML = '';
@@ -321,6 +342,7 @@ class LensApp {
             card.addEventListener('click', () => this.drillCategory(cat, i));
 
             const color = catColor(i);
+            const trendHtml = this._renderTrendIndicator(cat.code);
             card.innerHTML = `
                 <div class="cat-accent" style="background:${color}"></div>
                 <div class="cat-body">
@@ -329,6 +351,7 @@ class LensApp {
                         <span class="cat-count">${cat.total_datasets || 0} ${this.ui.datasets}</span>
                         ${cat.children.length ? `<span>&middot; ${cat.children.length} ${this.ui.subcategories}</span>` : ''}
                     </div>
+                    ${trendHtml}
                     ${cat.children.length ? `<div class="cat-children">
                         ${cat.children.slice(0, 4).map(c =>
                             `<span class="cat-child-pill">${this.shortName(c.name)}</span>`
@@ -341,13 +364,38 @@ class LensApp {
         });
     }
 
-    async drillCategory(cat, colorIdx) {
+    _renderTrendIndicator(contextCode) {
+        const trend = this.categoryTrends?.[contextCode];
+        if (!trend || !trend.total) return '';
+        const total = trend.total;
+        const upPct = (trend.up / total * 100).toFixed(0);
+        const dnPct = (trend.down / total * 100).toFixed(0);
+        const yoy = trend.avg_yoy;
+        const yoyStr = yoy != null ? `${yoy >= 0 ? '+' : ''}${yoy.toFixed(1)}%` : '';
+        const yoyCls = yoy >= 0 ? 'up' : 'down';
+        return `
+            <div class="cat-trend">
+                <div class="cat-trend-bar">
+                    <div class="cat-trend-up" style="width:${upPct}%"></div>
+                    <div class="cat-trend-down" style="width:${dnPct}%"></div>
+                </div>
+                ${yoyStr ? `<span class="cat-trend-yoy ${yoyCls}">${yoyStr}</span>` : ''}
+            </div>
+        `;
+    }
+
+    async drillCategory(cat, colorIdx, pushToStack = true) {
+        if (pushToStack) this.drillStack.push({ cat, colorIdx });
+
         document.getElementById('category-grid').classList.add('hidden');
         const panel = document.getElementById('dataset-panel');
         panel.classList.remove('hidden');
-        document.getElementById('panel-back').textContent = this.ui.backCategories;
+        document.getElementById('panel-back').textContent =
+            this.drillStack.length > 1 ? '← ' + this.drillStack[this.drillStack.length - 2].cat.name : this.ui.backCategories;
         document.getElementById('panel-title').textContent = cat.name;
         document.getElementById('panel-count').textContent = `${cat.total_datasets || 0} ${this.ui.datasets}`;
+
+        this.renderBreadcrumbs();
 
         const list = document.getElementById('dataset-list');
         list.innerHTML = '<div class="skeleton" style="height:200px;margin:8px 0"></div>';
@@ -356,7 +404,25 @@ class LensApp {
         const resp = await API.getDatasets({ ancestor: cat.code, limit: 100, sort: 'updated', lang: this.lang });
         list.innerHTML = '';
 
-        if (resp.datasets.length === 0) {
+        // Show subcategory rows first (if any)
+        if (cat.children && cat.children.length > 0) {
+            for (const child of cat.children) {
+                const trendHtml = this._renderTrendIndicator(child.code);
+                const row = document.createElement('div');
+                row.className = 'ds-row ds-row-subcat';
+                row.addEventListener('click', () => this.drillCategory(child, colorIdx));
+                row.innerHTML = `
+                    <span class="ds-code" style="color:var(--text-2)">▸</span>
+                    <span class="ds-name" style="font-weight:600">${child.name}</span>
+                    <span class="ds-badges">
+                        <span class="ds-badge">${child.total_datasets || 0} ${this.ui.datasets}</span>
+                    </span>
+                `;
+                list.appendChild(row);
+            }
+        }
+
+        if (resp.datasets.length === 0 && (!cat.children || cat.children.length === 0)) {
             list.innerHTML = `<div class="search-empty">${this.ui.noDatasets}</div>`;
             return;
         }
@@ -376,6 +442,45 @@ class LensApp {
                 </span>
             `;
             list.appendChild(row);
+        });
+    }
+
+    renderBreadcrumbs() {
+        let bc = document.getElementById('breadcrumb-trail');
+        if (!bc) {
+            bc = document.createElement('div');
+            bc.id = 'breadcrumb-trail';
+            bc.className = 'breadcrumb-trail';
+            const panelHeader = document.querySelector('#dataset-panel .panel-header');
+            panelHeader.insertAdjacentElement('afterend', bc);
+        }
+        bc.innerHTML = '';
+
+        // Root link
+        const root = document.createElement('span');
+        root.className = 'breadcrumb-item breadcrumb-link';
+        root.textContent = this.ui.categoriesRoot;
+        root.addEventListener('click', () => { this.drillStack = []; this.showCategoryGrid(); });
+        bc.appendChild(root);
+
+        this.drillStack.forEach((entry, i) => {
+            const sep = document.createElement('span');
+            sep.className = 'breadcrumb-sep';
+            sep.textContent = '›';
+            bc.appendChild(sep);
+
+            const crumb = document.createElement('span');
+            crumb.textContent = this.shortName(entry.cat.name);
+            if (i < this.drillStack.length - 1) {
+                crumb.className = 'breadcrumb-item breadcrumb-link';
+                crumb.addEventListener('click', () => {
+                    this.drillStack = this.drillStack.slice(0, i + 1);
+                    this.drillCategory(entry.cat, entry.colorIdx, false);
+                });
+            } else {
+                crumb.className = 'breadcrumb-item breadcrumb-current';
+            }
+            bc.appendChild(crumb);
         });
     }
 
@@ -585,21 +690,82 @@ class LensApp {
         if (isChoropleth && this.chartConfig?.geo_dim) {
             delete filters[this.chartConfig.geo_dim];
         }
+
+        // Smarter large dataset handling: auto-apply filter if needed
+        const rowCount = this.metadata.row_count || 0;
+        const hasActiveFilters = Object.keys(filters).length > 0;
+        let autoFilterApplied = false;
+
+        if (rowCount > 50000 && !hasActiveFilters) {
+            autoFilterApplied = this._autoApplyFilter(filters);
+        }
+
         const groupBy = this.computeGroupBy();
 
         try {
             this.data = await API.getDatasetData(code, filters, 50000, { groupBy });
+            if (autoFilterApplied) this._showLargeDatasetNotice(); else this._hideLargeDatasetNotice();
             this.renderInsights();
             this.renderPrimaryChart();
             this.renderSecondaryCharts();
         } catch (err) {
             const msg = err.message || 'Failed to load data';
             const isLarge = msg.includes('filter');
+            // Retry with auto-filter on large dataset error
+            if (isLarge && !autoFilterApplied) {
+                autoFilterApplied = this._autoApplyFilter(filters);
+                if (autoFilterApplied) {
+                    try {
+                        this.data = await API.getDatasetData(code, filters, 50000, { groupBy: this.computeGroupBy() });
+                        this._showLargeDatasetNotice();
+                        this.renderInsights();
+                        this.renderPrimaryChart();
+                        this.renderSecondaryCharts();
+                        return;
+                    } catch (_) { /* fall through */ }
+                }
+            }
+            this._hideLargeDatasetNotice();
             document.getElementById('primary-chart').innerHTML = `
                 <div class="chart-loading" style="color:${isLarge ? 'var(--amber)' : 'var(--red)'}">
                     ${isLarge ? '⚠ ' : ''}${msg}
                 </div>`;
         }
+    }
+
+    /** Auto-pick first available filter value for large datasets (skip "TOTAL" aggregates) */
+    _autoApplyFilter(filters) {
+        const selects = document.querySelectorAll('#filter-strip .filter-select');
+        for (const sel of selects) {
+            if (sel.value) continue;
+            // Find first non-empty, non-TOTAL option
+            const opts = [...sel.querySelectorAll('option:not([value=""])')];
+            const pick = opts.find(o => !/^TOTAL$/i.test(o.value)) || opts[0];
+            if (pick) {
+                sel.value = pick.value;
+                filters[sel.dataset.col] = [pick.value];
+                return true;
+            }
+        }
+        return false;
+    }
+
+    _showLargeDatasetNotice() {
+        let notice = document.getElementById('large-dataset-notice');
+        if (!notice) {
+            notice = document.createElement('div');
+            notice.id = 'large-dataset-notice';
+            notice.className = 'large-dataset-notice';
+            const filterStrip = document.getElementById('filter-strip');
+            filterStrip.insertAdjacentElement('beforebegin', notice);
+        }
+        notice.innerHTML = `<span class="notice-icon">⚠</span> ${this.ui.largeDatasetNotice}`;
+        notice.classList.remove('hidden');
+    }
+
+    _hideLargeDatasetNotice() {
+        const notice = document.getElementById('large-dataset-notice');
+        if (notice) notice.classList.add('hidden');
     }
 
     // --- Insights -----------------------------------------------------------
