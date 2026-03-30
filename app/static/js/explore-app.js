@@ -49,6 +49,10 @@ const UI = {
         showTable: 'Arată tabelul de date',
         hideTable: 'Ascunde tabelul de date',
         tableLabel: 'Date',
+        seriesLabel: 'Culoare',
+        xAxisLabel: 'Axă',
+        colorLabel: 'Grupare',
+        noneDim: 'Niciuna',
     },
     en: {
         heroTitle: 'Romanian Statistics<br><span class="hero-accent">Observatory</span>',
@@ -91,6 +95,10 @@ const UI = {
         showTable: 'Show data table',
         hideTable: 'Hide data table',
         tableLabel: 'Data',
+        seriesLabel: 'Color',
+        xAxisLabel: 'Axis',
+        colorLabel: 'Group',
+        noneDim: 'None',
     },
 };
 
@@ -728,10 +736,9 @@ class LensApp {
         if (hasTimePanel && categoryDims.length > 0) {
             const candidates = categoryDims.filter(d => d.option_count >= 2 && d.option_count <= 6);
             if (candidates.length > 0) {
-                // Prefer residence, gender, type-like dims
-                const preferred = candidates.find(d =>
-                    ['residence', 'gender'].includes(d.dim_type) || d.option_count <= 4
-                );
+                // Prefer residence/gender dims, then small cardinality
+                const preferred = candidates.find(d => ['residence', 'gender'].includes(d.dim_type))
+                    || candidates.find(d => d.option_count <= 4);
                 timeSeriesDim = (preferred || candidates[0]).dim_column_name;
             } else {
                 // Pick lowest cardinality
@@ -749,8 +756,10 @@ class LensApp {
             const sorted = [...categoryDims].sort((a, b) => b.option_count - a.option_count);
             snapXDim = sorted[0].dim_column_name;
             if (sorted.length > 1) {
-                // Pick 2nd dim, but avoid picking same as timeSeriesDim if possible
-                snapSeriesDim = sorted[1].dim_column_name;
+                // Prefer gender/residence for series (color), then 2nd highest cardinality
+                const remaining = sorted.slice(1);
+                const preferred = remaining.find(d => ['residence', 'gender'].includes(d.dim_type));
+                snapSeriesDim = (preferred || remaining[0]).dim_column_name;
             }
         }
 
@@ -798,6 +807,7 @@ class LensApp {
             timeChartTypes, snapshotChartTypes,
             filterDims, periods,
             geoDim: geoDimObj?.dim_column_name || cfg.geo_dim || null,
+            categoryDims,
         };
     }
 
@@ -837,6 +847,34 @@ class LensApp {
             });
             pills.appendChild(btn);
         }
+
+        // Dimension picker for time series (which dim colors the lines)
+        if (setup.categoryDims.length >= 2) {
+            const picker = document.createElement('div');
+            picker.className = 'dim-picker';
+            picker.innerHTML = `<span class="dim-picker-label">${this.ui.seriesLabel}:</span>`;
+            const sel = document.createElement('select');
+            sel.className = 'dim-picker-select';
+            // "None" option — single aggregate line
+            const noneOpt = document.createElement('option');
+            noneOpt.value = '';
+            noneOpt.textContent = this.ui.noneDim;
+            sel.appendChild(noneOpt);
+            for (const d of setup.categoryDims) {
+                const opt = document.createElement('option');
+                opt.value = d.dim_column_name;
+                opt.textContent = d.dim_label;
+                if (d.dim_column_name === setup.timeSeriesDim) opt.selected = true;
+                sel.appendChild(opt);
+            }
+            sel.addEventListener('change', () => {
+                this.panelSetup.timeSeriesDim = sel.value || null;
+                this.renderFilters();
+                this.renderTimeChart();
+            });
+            picker.appendChild(sel);
+            pills.appendChild(picker);
+        }
     }
 
     renderSnapshotPanel() {
@@ -875,6 +913,63 @@ class LensApp {
                 el.style.transition = '';
             });
             pills.appendChild(btn);
+        }
+
+        // Dimension pickers for snapshot (X-axis and Color/Series)
+        if (setup.categoryDims.length >= 2) {
+            const pickerRow = document.createElement('div');
+            pickerRow.className = 'dim-picker-row';
+
+            // X-axis picker
+            const xPicker = document.createElement('div');
+            xPicker.className = 'dim-picker';
+            xPicker.innerHTML = `<span class="dim-picker-label">${this.ui.xAxisLabel}:</span>`;
+            const xSel = document.createElement('select');
+            xSel.className = 'dim-picker-select';
+            for (const d of setup.categoryDims) {
+                const opt = document.createElement('option');
+                opt.value = d.dim_column_name;
+                opt.textContent = d.dim_label;
+                if (d.dim_column_name === setup.snapXDim) opt.selected = true;
+                xSel.appendChild(opt);
+            }
+            xPicker.appendChild(xSel);
+            pickerRow.appendChild(xPicker);
+
+            // Series/Color picker
+            const sPicker = document.createElement('div');
+            sPicker.className = 'dim-picker';
+            sPicker.innerHTML = `<span class="dim-picker-label">${this.ui.colorLabel}:</span>`;
+            const sSel = document.createElement('select');
+            sSel.className = 'dim-picker-select';
+            const noneOpt = document.createElement('option');
+            noneOpt.value = '';
+            noneOpt.textContent = this.ui.noneDim;
+            sSel.appendChild(noneOpt);
+            for (const d of setup.categoryDims) {
+                const opt = document.createElement('option');
+                opt.value = d.dim_column_name;
+                opt.textContent = d.dim_label;
+                if (d.dim_column_name === setup.snapSeriesDim) opt.selected = true;
+                sSel.appendChild(opt);
+            }
+            sPicker.appendChild(sSel);
+            pickerRow.appendChild(sPicker);
+
+            const onDimChange = () => {
+                const newX = xSel.value;
+                let newS = sSel.value;
+                // Avoid same dim on both axes
+                if (newS && newS === newX) newS = '';
+                this.panelSetup.snapXDim = newX;
+                this.panelSetup.snapSeriesDim = newS || null;
+                this.renderFilters();
+                this.renderSnapshotChart();
+            };
+            xSel.addEventListener('change', onDimChange);
+            sSel.addEventListener('change', onDimChange);
+
+            pills.parentNode.insertBefore(pickerRow, pills.nextSibling);
         }
 
         this.renderPeriodNav();
@@ -963,12 +1058,39 @@ class LensApp {
         }
     }
 
+    getActiveFilterDims() {
+        if (!this.metadata || !this.panelSetup) return [];
+        const setup = this.panelSetup;
+        // Dims currently assigned to chart axes (not available for filtering)
+        const chartedDims = new Set([
+            setup.timeDim,
+            setup.timeSeriesDim,
+            setup.snapXDim,
+            setup.snapSeriesDim,
+        ].filter(Boolean));
+        // Filter dims = category dims not on any chart axis
+        const dims = this.metadata.dimensions || [];
+        const profile = this.profile;
+        const singletons = new Set(profile?.dimensions?.singleton_dims || []);
+        return dims.filter(d =>
+            !chartedDims.has(d.dim_column_name) &&
+            d.dim_type !== 'time' && d.dim_type !== 'unit' &&
+            !singletons.has(d.dim_column_name) &&
+            d.option_count > 1
+        );
+    }
+
     renderFilters() {
         const strip = document.getElementById('filter-strip');
+        // Preserve existing filter selections before rebuilding
+        const prevSelections = {};
+        strip.querySelectorAll('.filter-select').forEach(sel => {
+            if (sel.value) prevSelections[sel.dataset.col] = sel.value;
+        });
         strip.innerHTML = '';
         if (!this.metadata || !this.panelSetup) return;
 
-        const filterDims = this.panelSetup.filterDims;
+        const filterDims = this.getActiveFilterDims();
 
         for (const dim of filterDims) {
             const group = document.createElement('div');
@@ -996,6 +1118,11 @@ class LensApp {
                 o.value = opt.sdmx_value || opt.nom_item_id;
                 o.textContent = opt.label;
                 select.appendChild(o);
+            }
+
+            // Restore previous selection if this dim was a filter before
+            if (prevSelections[dim.dim_column_name]) {
+                select.value = prevSelections[dim.dim_column_name];
             }
 
             select.addEventListener('change', () => this.fetchAndRender());

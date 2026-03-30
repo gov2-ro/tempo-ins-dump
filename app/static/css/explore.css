@@ -812,6 +812,41 @@ kbd {
     cursor: not-allowed;
 }
 
+/* Dimension pickers (inline with panel pills) */
+.dim-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+}
+.dim-picker-label {
+    font-size: 11px;
+    color: var(--text-2);
+    white-space: nowrap;
+}
+.dim-picker-select {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 99px;
+    background: var(--bg-2);
+    color: var(--text-1);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    max-width: 180px;
+    outline: none;
+    transition: border-color var(--transition);
+}
+.dim-picker-select:hover,
+.dim-picker-select:focus {
+    border-color: var(--accent);
+}
+.dim-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 16px 0;
+}
+
 /* Period navigator */
 .period-nav {
     display: flex;
