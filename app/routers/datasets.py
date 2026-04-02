@@ -317,10 +317,11 @@ def get_dataset(matrix_code: str, lang: str = Query("ro", description="Language:
     parent_info = None
     if is_split and parent_matrix_code:
         pr = conn.execute("""
-            SELECT matrix_code, matrix_name FROM matrices WHERE matrix_code = ?
+            SELECT matrix_code, matrix_name, matrix_name_en FROM matrices WHERE matrix_code = ?
         """, [parent_matrix_code]).fetchone()
         if pr:
-            parent_info = {"matrix_code": pr[0], "matrix_name": pr[1]}
+            parent_display = (pr[2] or pr[1]) if lang == 'en' else pr[1]
+            parent_info = {"matrix_code": pr[0], "matrix_name": parent_display}
 
     # Fetch enriched metadata for scoring
     def fetch_row(table):

@@ -599,7 +599,10 @@ HTML_TEMPLATE = """
         }
         .sidebar-header h1 { margin: 0; }
         .lang-toggle {
-            padding: 4px 10px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 8px;
             font-size: 12px;
             font-weight: 600;
             background: #e9ecef;
@@ -609,13 +612,17 @@ HTML_TEMPLATE = """
             cursor: pointer;
         }
         .lang-toggle:hover { background: #dee2e6; }
+        .lang-toggle img { width: 18px; height: 18px; border-radius: 2px; display: block; }
     </style>
 </head>
 <body>
     <div id="sidebar">
         <div class="sidebar-header">
             <h1 id="sidebarTitle">Datasets</h1>
-            <button class="lang-toggle" id="langToggle" onclick="toggleLang()">EN</button>
+            <button class="lang-toggle" id="langToggle" onclick="toggleLang()">
+                <img id="langFlag" src="" alt="flag">
+                <span id="langLabel">EN</span>
+            </button>
         </div>
         <input type="text" class="search-box" id="searchBox" placeholder="Search datasets..." />
         <div class="sort-bar" id="sortBar">
@@ -647,6 +654,10 @@ HTML_TEMPLATE = """
         let contextMap = {};      // code → node, built from tree
         let currentLang = localStorage.getItem('tempo_lang') || 'ro';
         let S = {};               // UI strings
+        const FLAG_ICONS = {
+            ro: 'data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 height%3D%22512%22 width%3D%22512%22%3E%3Cg fill-rule%3D%22evenodd%22 stroke-width%3D%221pt%22%3E%3Cpath fill%3D%22%2300319c%22 d%3D%22M0 0h170.666v512H0z%22%2F%3E%3Cpath fill%3D%22%23ffde00%22 d%3D%22M170.666 0h170.666v512H170.666z%22%2F%3E%3Cpath fill%3D%22%23de2110%22 d%3D%22M341.332 0h170.665v512H341.332z%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E',
+            en: 'data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 60 60%22%3E%3Crect width%3D%2260%22 height%3D%2260%22 fill%3D%22%23012169%22%2F%3E%3Cpath d%3D%22M0%200l60%2060M60%200L0%2060%22 stroke%3D%22%23fff%22 stroke-width%3D%2212%22%2F%3E%3Cpath d%3D%22M0%200l60%2060M60%200L0%2060%22 stroke%3D%22%23C8102E%22 stroke-width%3D%228%22%2F%3E%3Cpath d%3D%22M30%200v60M0%2030h60%22 stroke%3D%22%23fff%22 stroke-width%3D%2220%22%2F%3E%3Cpath d%3D%22M30%200v60M0%2030h60%22 stroke%3D%22%23C8102E%22 stroke-width%3D%2212%22%2F%3E%3C%2Fsvg%3E',
+        };
 
         function langParam(extra) {
             const sep = extra ? '&' : '?';
@@ -687,7 +698,9 @@ HTML_TEMPLATE = """
         function updateSidebarStrings() {
             document.getElementById('sidebarTitle').textContent = S.datasets || 'Datasets';
             document.getElementById('searchBox').placeholder = S.search || 'Search datasets...';
-            document.getElementById('langToggle').textContent = S.lang_toggle || 'EN';
+            document.getElementById('langLabel').textContent = S.lang_toggle || 'EN';
+            const nextLang = currentLang === 'ro' ? 'en' : 'ro';
+            document.getElementById('langFlag').src = FLAG_ICONS[nextLang] || '';
             // Sort buttons
             const sortLabels = {name: S.name, updated: S.updated, records: S.records,
                                 dimensions: S.dims, cells: S.cells, options: S.options};
@@ -1528,8 +1541,97 @@ def _csv_data(csv_file, page=0, page_size=50):
     }
 
 
-def _parquet_data(parquet_file, page=0, page_size=50):
-    """Fetch one page + full unique values from parquet."""
+def _find_dim_matrix_code(matrix_code):
+    """Return the matrix_code to use for dimension lookups.
+    Sub-datasets have no dimensions registered; return their parent instead.
+    """
+    try:
+        conn = duckdb.connect(str(DB_FILE), read_only=True)
+        count = conn.execute(
+            "SELECT COUNT(*) FROM dimensions WHERE matrix_code = ?", [matrix_code]
+        ).fetchone()[0]
+        if count == 0:
+            parent = conn.execute(
+                "SELECT parent_matrix_code FROM dataset_splits WHERE sub_matrix_code = ?",
+                [matrix_code]
+            ).fetchone()
+            conn.close()
+            return parent[0] if parent else matrix_code
+        conn.close()
+    except Exception:
+        pass
+    return matrix_code
+
+
+def _load_nom_id_maps(matrix_code, lang='ro'):
+    """Return {normalized_dim_label: {nom_item_id: label}} for translating _nom_id columns.
+    Uses EN labels from labels_i18n when lang='en'.
+    """
+    dim_mc = _find_dim_matrix_code(matrix_code)
+    try:
+        conn = duckdb.connect(str(DB_FILE), read_only=True)
+        if lang == 'en':
+            rows = conn.execute("""
+                SELECT d.dim_label, dopt.nom_item_id,
+                       COALESCE(li.label_en, dopt.option_label)
+                FROM dimensions d
+                JOIN dimension_options dopt ON dopt.dimension_id = d.dimension_id
+                LEFT JOIN labels_i18n li ON li.nom_item_id = dopt.nom_item_id
+                WHERE d.matrix_code = ?
+            """, [dim_mc]).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT d.dim_label, dopt.nom_item_id, dopt.option_label
+                FROM dimensions d
+                JOIN dimension_options dopt ON dopt.dimension_id = d.dimension_id
+                WHERE d.matrix_code = ?
+            """, [dim_mc]).fetchall()
+        conn.close()
+    except Exception:
+        return {}
+
+    by_norm = {}
+    for dim_label, nom_item_id, label in rows:
+        norm = ' '.join(dim_label.lower().replace(':', '').replace(',', '').split())
+        if norm not in by_norm:
+            by_norm[norm] = {}
+        by_norm[norm][int(nom_item_id)] = (label or '').strip() or str(nom_item_id)
+    return by_norm
+
+
+def _load_corpus_en_maps(matrix_code):
+    """Return {dim_column_name: {ro_text: en_text}} for translating corpus parquet text values to EN."""
+    dim_mc = _find_dim_matrix_code(matrix_code)
+    try:
+        conn = duckdb.connect(str(DB_FILE), read_only=True)
+        rows = conn.execute("""
+            SELECT d.dim_column_name, dopt.option_label,
+                   COALESCE(li.label_en, dopt.option_label)
+            FROM dimensions d
+            JOIN dimension_options dopt ON dopt.dimension_id = d.dimension_id
+            LEFT JOIN labels_i18n li ON li.nom_item_id = dopt.nom_item_id
+            WHERE d.matrix_code = ?
+        """, [dim_mc]).fetchall()
+        conn.close()
+    except Exception:
+        return {}
+
+    by_col = {}
+    for dim_col, ro_label, en_label in rows:
+        if dim_col not in by_col:
+            by_col[dim_col] = {}
+        ro = (ro_label or '').strip()
+        en = (en_label or ro_label or '').strip()
+        by_col[dim_col][ro] = en
+    return by_col
+
+
+def _parquet_data(parquet_file, page=0, page_size=50, matrix_code=None, lang='ro'):
+    """Fetch one page + full unique values from parquet.
+
+    - parquet-v2 (*_nom_id columns): translates numeric IDs → labels via dimension_options.
+    - corpus parquets (SDMX text columns) in EN mode: translates RO text → EN via labels_i18n.
+    """
     conn = duckdb.connect()
     offset = page * page_size
     df = conn.execute(
@@ -1537,18 +1639,72 @@ def _parquet_data(parquet_file, page=0, page_size=50):
     ).fetchdf()
     total_rows = conn.execute(f"SELECT COUNT(*) FROM '{parquet_file}'").fetchone()[0]
 
+    has_nom_id = any(col.endswith('_nom_id') for col in df.columns)
+    nom_id_maps = {}   # {col: {int_id: label}}  — parquet-v2
+    text_maps = {}     # {col: {ro_str: en_str}}  — corpus parquet EN mode
+
+    if matrix_code:
+        if has_nom_id:
+            dim_maps = _load_nom_id_maps(matrix_code, lang=lang)
+            for col in df.columns:
+                if not col.endswith('_nom_id'):
+                    continue
+                stem = ' '.join(col[:-7].replace('_', ' ').split())
+                id_map = dim_maps.get(stem)
+                if id_map is None:
+                    for key, m in dim_maps.items():
+                        if key == stem or key.startswith(stem) or stem.startswith(key.split()[0]):
+                            id_map = m
+                            break
+                if id_map:
+                    nom_id_maps[col] = id_map
+        elif lang == 'en':
+            corpus_maps = _load_corpus_en_maps(matrix_code)
+            for col in df.columns:
+                if col in corpus_maps:
+                    text_maps[col] = corpus_maps[col]
+
+    value_cols = {'value', 'OBS_VALUE'}
     unique_vals = {}
     for col in df.columns:
-        if col != 'value':
-            vals = conn.execute(
-                f'SELECT DISTINCT "{col}" FROM \'{parquet_file}\' ORDER BY 1'
-            ).fetchall()
-            unique_vals[col] = [str(r[0]) for r in vals if r[0] is not None]
+        if col in value_cols:
+            continue
+        raw = [r[0] for r in conn.execute(
+            f'SELECT DISTINCT "{col}" FROM \'{parquet_file}\' ORDER BY 1'
+        ).fetchall() if r[0] is not None]
+        if col in nom_id_maps:
+            m = nom_id_maps[col]
+            unique_vals[col] = [m.get(int(v), str(v)) for v in raw]
+        elif col in text_maps:
+            m = text_maps[col]
+            unique_vals[col] = [m.get(str(v), str(v)) for v in raw]
+        else:
+            unique_vals[col] = [str(v) for v in raw]
 
     conn.close()
+
+    import pandas as pd
+    for col, id_map in nom_id_maps.items():
+        if col in df.columns:
+            df[col] = df[col].apply(
+                lambda v, m=id_map: m.get(int(v), str(v)) if pd.notna(v) and v is not None else v
+            )
+    for col, str_map in text_maps.items():
+        if col in df.columns:
+            df[col] = df[col].apply(
+                lambda v, m=str_map: m.get(str(v), str(v)) if pd.notna(v) and v is not None else v
+            )
+
+    def _clean(v):
+        if v is None:
+            return None
+        if hasattr(v, '__class__') and v.__class__.__name__ == 'float' and str(v) == 'nan':
+            return None
+        return v
+
     return {
         'columns': df.columns.tolist(),
-        'rows': [[None if (hasattr(v, '__class__') and v.__class__.__name__ == 'float' and str(v) == 'nan') else v for v in row] for row in df.values.tolist()],
+        'rows': [[_clean(v) for v in row] for row in df.values.tolist()],
         'total_rows': total_rows,
         'page': page,
         'page_size': page_size,
@@ -1580,7 +1736,7 @@ def api_dataset_data(matrix_code):
         if not parquet_file.exists():
             return jsonify({'error': 'Parquet file not found'}), 404
 
-        return jsonify(_parquet_data(parquet_file, page, page_size))
+        return jsonify(_parquet_data(parquet_file, page, page_size, matrix_code=matrix_code, lang=lang))
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -1740,7 +1896,7 @@ def api_dataset(matrix_code):
             preview_data = _csv_data(en_csv, page, page_size)
         else:
             parquet_file = _resolve_parquet(matrix_code, meta_row[13])
-            preview_data = _parquet_data(parquet_file, page, page_size) if parquet_file.exists() else None
+            preview_data = _parquet_data(parquet_file, page, page_size, matrix_code=matrix_code, lang=lang) if parquet_file.exists() else None
 
         def fmt_date(d): return str(d) if d else None
         def fmt_pct(v): return f'{v:.1%}' if v is not None else None
