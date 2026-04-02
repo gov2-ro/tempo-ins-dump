@@ -60,6 +60,20 @@ def get_dataset_data(
         for d in dims
     ]
 
+    # Resolve legacy v2 _nom_id column names to SDMX names for split sub-datasets
+    if any(d['dim_column_name'].endswith('_nom_id') for d in dimensions):
+        parent_row = conn.execute(
+            "SELECT parent_matrix_code FROM matrices WHERE matrix_code = ?", [matrix_code]
+        ).fetchone()
+        lookup_code = (parent_row[0] or matrix_code) if parent_row else matrix_code
+        col_map = dict(conn.execute("""
+            SELECT old_column_name, sdmx_column_name
+            FROM sdmx_column_map WHERE matrix_code = ?
+        """, [lookup_code]).fetchall())
+        for d in dimensions:
+            if d['dim_column_name'].endswith('_nom_id'):
+                d['dim_column_name'] = col_map.get(d['dim_column_name'], d['dim_column_name'])
+
     # Parse group_by
     group_by_cols = None
     if group_by:

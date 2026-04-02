@@ -1772,7 +1772,10 @@ class LensApp {
                 dimLabelMap[d.dim_column_name] = d.dim_label;
             }
         }
-        const colHeaders = columns.map(col => dimLabelMap[col] || col);
+        const colHeaders = columns.map(col => {
+            if (col === 'OBS_VALUE') return this.lang === 'en' ? 'Value' : 'Valoare';
+            return dimLabelMap[col] || col;
+        });
 
         // Sort
         let sortedRows = [...rows];
