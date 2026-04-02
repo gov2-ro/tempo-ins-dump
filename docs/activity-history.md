@@ -1,5 +1,27 @@
 # Activity History
 
+## 2026-04-02 — Static Site Migration Plan
+
+Designed and scaffolded a static website architecture to replace the FastAPI backend.
+
+**Approach:** DuckDB-WASM for client-side parquet queries + pre-built static JSON for metadata. Zero server at runtime.
+
+**Created:**
+- `docs/plans/static-site-migration.md` — Full architecture plan with phased migration path
+- `build-static-site.py` — Build script that exports DuckDB metadata → static JSON (categories, dataset index, per-dataset metadata with chart configs)
+- `static-site/` — Frontend scaffold:
+  - `index.html` — SPA shell (Vue 3 + ECharts + Fuse.js)
+  - `js/duckdb-data-client.js` — DuckDB-WASM integration (replaces `query_builder.py`)
+  - `js/api-static.js` — Static API client (replaces `app/routers/` endpoints)
+  - `js/app.js` — App bootstrap with reactive store
+  - Stub files for charts and components (to be ported from `explorer/` in Phase 3)
+
+**Key decisions:**
+- DuckDB-WASM queries parquet via HTTP range requests (no full file download)
+- Chart selector runs at build time (pre-computed in meta JSON, not ported to JS)
+- Fuse.js for client-side fuzzy search (~400KB index)
+- Target hosting: Cloudflare Pages + R2 (free tier)
+
 ## 2026-03-24 — SDMX-Native Data Format (Phases 0-4)
 
 Transformed the entire data layer from opaque integer IDs to SDMX-compatible, human-readable format.
