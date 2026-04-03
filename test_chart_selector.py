@@ -113,8 +113,11 @@ def fmt_sig(sig):
     if sig['has_residence']: parts.append("residence")
     for d in sig['categorical_dims']:
         parts.append(f"ind({d['count']})")
+    unit = sig.get('primary_unit_type', 'count')
+    if unit != 'count': parts.append(f"unit={unit}")
     if sig['has_negatives']: parts.append("neg!")
     if sig['is_sparse']: parts.append("sparse!")
+    if sig['has_seasonality']: parts.append("seasonal!")
     if sig['trend_direction'] == 'volatile': parts.append("volatile!")
     return " | ".join(parts)
 
@@ -128,15 +131,19 @@ def spot_check(mc, profiles, dims_by_matrix, coverages, value_profiles, trends):
     print(f"  Signature: {fmt_sig(sig)}")
     print(f"  Old primary: {result['old_primary']}")
     print(f"  New primary: {result['new_primary']}  {'✓ agrees' if result['agrees'] else '⚠ differs'}")
+    if result['new_ranked']:
+        conf = result['new_ranked'][0].get('confidence', '?')
+        print(f"  Confidence: {conf}")
     print(f"\n  Ranked chart options:")
     for r in result['new_ranked']:
         bar = '█' * int(r['score'] * 20)
-        print(f"    {r['chart_type']:20s}  {r['score']:.2f}  {bar}")
+        comp = f"  ↔ {r['complementary_to']}" if r.get('complementary_to') else ""
+        print(f"    {r['chart_type']:20s}  {r['score']:.2f}  {bar}{comp}")
     roles = assign_roles(result['new_primary'], dims_by_matrix.get(mc, []))
     print(f"\n  Role assignment ({result['new_primary']}):")
     for role, val in roles.items():
-        if val and val != []:
-            print(f"    {role:12s}: {val}")
+        if val and val != [] and val != {}:
+            print(f"    {role:14s}: {val}")
 
 
 def main():
@@ -230,6 +237,25 @@ def main():
         if mc in profiles:
             spot_check(mc, profiles, dims_by_matrix, coverages, value_profiles, trends)
 
+    # ---- Unit type distribution ----
+    print(f"\n{'='*60}")
+    print("  UNIT TYPE × PRIMARY CHART")
+    print(f"{'='*60}")
+    unit_dist = Counter(r['sig'].get('primary_unit_type', 'count') for r in results)
+    for ut, cnt in unit_dist.most_common():
+        primaries = Counter(r['new_primary'] for r in results if r['sig'].get('primary_unit_type') == ut)
+        top3 = ", ".join(f"{ct}({n})" for ct, n in primaries.most_common(3))
+        print(f"  {ut:14s}  {cnt:4d}  → {top3}")
+
+    # ---- Confidence distribution ----
+    conf_dist = Counter(
+        r['new_ranked'][0].get('confidence', '?') if r['new_ranked'] else '?'
+        for r in results
+    )
+    print(f"\n  Confidence distribution:")
+    for conf, cnt in conf_dist.most_common():
+        print(f"    {conf:8s}  {cnt:4d}  ({100*cnt/total:.1f}%)")
+
     # ---- Interesting findings ----
     print(f"\n{'='*60}")
     print("  INTERESTING: Datasets that gain new chart options")
@@ -237,9 +263,11 @@ def main():
     gained_heatmap = [r for r in results if any(x['chart_type'] == 'heatmap' for x in r['new_ranked'])]
     gained_pyramid = [r for r in results if r['new_primary'] == 'population_pyramid']
     gained_small = [r for r in results if r['new_primary'] == 'small_multiples']
+    gained_area = [r for r in results if r['new_primary'] == 'area_stacked']
     print(f"  Datasets eligible for heatmap: {len(gained_heatmap)}")
     print(f"  Datasets primary = population_pyramid: {len(gained_pyramid)}")
     print(f"  Datasets primary = small_multiples: {len(gained_small)}")
+    print(f"  Datasets primary = area_stacked: {len(gained_area)}")
 
     if gained_pyramid:
         print(f"\n  Sample population pyramid datasets:")
@@ -249,6 +277,11 @@ def main():
     if gained_small:
         print(f"\n  Sample small_multiples datasets:")
         for r in gained_small[:5]:
+            print(f"    {r['matrix_code']:10s}  {fmt_sig(r['sig'])}")
+
+    if gained_area:
+        print(f"\n  Sample area_stacked datasets (boosted by unit awareness):")
+        for r in gained_area[:5]:
             print(f"    {r['matrix_code']:10s}  {fmt_sig(r['sig'])}")
 
 

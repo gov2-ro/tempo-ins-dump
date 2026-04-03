@@ -1,5 +1,39 @@
 # Activity History
 
+## 2026-04-03 — Chart Selection Engine v2
+
+Comprehensive overhaul of `app/services/chart_selector.py` scoring engine.
+
+**Unit-type awareness:**
+- Signature now includes `primary_unit_type` and `unit_types` from matrix_profiles
+- Percentage data strongly prefers `area_stacked` (parts-of-whole visualization)
+- Index/rate data boosts `line` chart (continuous trends are meaningful)
+- Currency/count data gives small bonus to comparison bars and bubble charts
+- Index data penalizes `bar_vertical` (bar heights misleading for base-100 values)
+
+**Scoring rebalancing:**
+- `bar_vertical` base lowered from 0.5 to 0.45, penalized for long time series (>=10 pts: -0.15)
+- `area_stacked` base raised from 0.3 to 0.4, big boost for percentage+small-series data
+- Seasonal data: line gets +0.15 (was +0.05), bar_vertical gets -0.10
+- Sparse data penalties added to area_stacked (-0.15), stacked_bar (-0.10), small_multiples (-0.10)
+
+**Confidence scoring:**
+- Each recommendation now includes `confidence` (high/medium/low) based on score gap to runner-up
+- Complementary chart pairs annotated (e.g., choropleth ↔ line, pyramid ↔ line)
+
+**Deterministic tie-breaking:**
+- When scores tie, specific/informative charts win (choropleth > line > bar_vertical > table)
+
+**Smarter role assignment:**
+- `assign_roles()` now returns `filter_hints` (single_select/multi_select/pill_group per dim)
+- `defaults` dict with recommended initial filter state (e.g., time='latest', exclude_total=True)
+- Line series selection prefers 2-6 option dims over raw minimum cardinality
+- Stacked charts prefer stackable (2-6 option) dims for series role
+
+**Eliminated recursive scoring bug** — horizontal_bar and bubble no longer call `_score('choropleth', ...)` to cap themselves; use explicit score ceilings instead.
+
+**Synced** explorer/services/chart_selector.py. Updated test_chart_selector.py with unit-type distribution and confidence reporting.
+
 ## 2026-03-24 — SDMX-Native Data Format (Phases 0-4)
 
 Transformed the entire data layer from opaque integer IDs to SDMX-compatible, human-readable format.
