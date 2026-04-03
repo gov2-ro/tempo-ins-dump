@@ -184,6 +184,18 @@ def get_dataset(matrix_code: str, lang: str = Query("ro", description="Language:
         ORDER BY d.dim_code
     """, [matrix_code]).fetchall()
 
+    # Resolve legacy v2 _nom_id column names to SDMX names for split sub-datasets
+    col_map = {}
+    if any(r[2].endswith('_nom_id') for r in dims_raw):
+        parent_row = conn.execute(
+            "SELECT parent_matrix_code FROM matrices WHERE matrix_code = ?", [matrix_code]
+        ).fetchone()
+        lookup_code = (parent_row[0] or matrix_code) if parent_row else matrix_code
+        col_map = dict(conn.execute("""
+            SELECT old_column_name, sdmx_column_name
+            FROM sdmx_column_map WHERE matrix_code = ?
+        """, [lookup_code]).fetchall())
+
     # Build dim_label EN lookup from file (indexed by 1-based dim_code)
     en_dims_map = {}  # dim_code (int) → {"label": ..., "options": [{label, ...}]}
     if lang == "en":
@@ -195,7 +207,8 @@ def get_dataset(matrix_code: str, lang: str = Query("ro", description="Language:
             }
 
     dimensions = []
-    for dim_code, dim_label, dim_col, opt_count, dim_id in dims_raw:
+    for dim_code, dim_label, dim_col_raw, opt_count, dim_id in dims_raw:
+        dim_col = col_map.get(dim_col_raw, dim_col_raw) if dim_col_raw.endswith('_nom_id') else dim_col_raw
         # Get options with parsed fields
         options = conn.execute("""
             SELECT

@@ -777,7 +777,18 @@ class LensApp {
             // For geo_time, prepend choropleth
             if (archetype === 'geo_time' && geoDimObj) {
                 snapshotChartTypes.unshift('choropleth');
-                if (typeof loadRomaniaGeoJSON === 'function') loadRomaniaGeoJSON();
+                // Detect geo level from dimension options to load correct GeoJSON
+                let geoLevel = 'county';
+                if (geoDimObj.options) {
+                    const lvlCounts = {};
+                    for (const opt of geoDimObj.options) {
+                        const lvl = opt.parsed?.geo_level;
+                        if (lvl) lvlCounts[lvl] = (lvlCounts[lvl] || 0) + 1;
+                    }
+                    if (lvlCounts['macroregion'] > 0 && !lvlCounts['county']) geoLevel = 'macroregion';
+                    else if (lvlCounts['region'] > 0 && !lvlCounts['county']) geoLevel = 'region';
+                }
+                if (typeof loadRomaniaGeoJSON === 'function') loadRomaniaGeoJSON(geoLevel);
             }
         }
 
@@ -969,6 +980,9 @@ class LensApp {
             xSel.addEventListener('change', onDimChange);
             sSel.addEventListener('change', onDimChange);
 
+            // Remove any previous picker row before inserting
+            const oldPicker = pills.parentNode.querySelector('.dim-picker-row');
+            if (oldPicker) oldPicker.remove();
             pills.parentNode.insertBefore(pickerRow, pills.nextSibling);
         }
 
@@ -1182,8 +1196,8 @@ class LensApp {
             this.data = await API.getDatasetData(code, filters, 50000, { groupBy });
             if (autoFilterApplied) this._showLargeDatasetNotice(); else this._hideLargeDatasetNotice();
             this.renderInsights();
-            this.renderTimeChart();
-            this.renderSnapshotChart();
+            await this.renderTimeChart();
+            await this.renderSnapshotChart();
             if (!document.getElementById('table-panel').classList.contains('hidden')) this.renderTable();
         } catch (err) {
             const msg = err.message || 'Failed to load data';
@@ -1196,8 +1210,8 @@ class LensApp {
                         this.data = await API.getDatasetData(code, filters, 50000, { groupBy: this.computeGroupBy() });
                         this._showLargeDatasetNotice();
                         this.renderInsights();
-                        this.renderTimeChart();
-                        this.renderSnapshotChart();
+                        await this.renderTimeChart();
+                        await this.renderSnapshotChart();
                         if (!document.getElementById('table-panel').classList.contains('hidden')) this.renderTable();
                         return;
                     } catch (_) { /* fall through */ }
@@ -1259,30 +1273,78 @@ class LensApp {
         const cols = this.data.columns;
         const valueIdx = cols.length - 1;
         const values = rows.map(r => r[valueIdx]).filter(v => v != null);
+        const setup = this.panelSetup;
 
-        // Latest value with trend
-        const latest = values[values.length - 1];
-        const prev = values.length > 1 ? values[values.length - 2] : null;
-        let trendHtml = '';
-        if (prev != null && prev !== 0) {
-            const pctChange = ((latest - prev) / Math.abs(prev)) * 100;
-            const arrow = pctChange >= 0 ? '↑' : '↓';
-            const cls = pctChange >= 0 ? 'insight-up' : 'insight-down';
-            trendHtml = `<span class="${cls}">${arrow} ${Math.abs(pctChange).toFixed(1)}%</span>`;
+        // Aggregate by time period if time dimension exists
+        // Use AVG for rate/percentage data, SUM for counts
+        const unitType = this.chartConfig?.primary_unit_type;
+        const useAvg = unitType === 'percentage' || unitType === 'time_unit' || unitType === 'rate';
+        const timeDim = setup?.timeDim;
+        const timeIdx = timeDim ? cols.indexOf(timeDim) : -1;
+        let periodTotals = null; // [{period, total}] sorted chronologically
+
+        if (timeIdx !== -1) {
+            const byPeriod = {};
+            const byCounts = {};
+            for (const r of rows) {
+                const t = r[timeIdx];
+                const v = r[valueIdx];
+                if (t != null && v != null) {
+                    byPeriod[t] = (byPeriod[t] || 0) + v;
+                    byCounts[t] = (byCounts[t] || 0) + 1;
+                }
+            }
+            periodTotals = Object.entries(byPeriod)
+                .map(([p, t]) => ({
+                    period: p,
+                    total: useAvg ? t / (byCounts[p] || 1) : t,
+                }))
+                .sort((a, b) => String(a.period).localeCompare(String(b.period)));
         }
-        this.addInsight(row, this.ui.latestValue, this.formatBigNumber(latest), trendHtml);
 
-        // Average
-        const avg = values.reduce((a, b) => a + b, 0) / values.length;
-        this.addInsight(row, this.ui.average, this.formatBigNumber(avg));
+        // Card 1: Latest period aggregate with YoY trend
+        if (periodTotals && periodTotals.length > 0) {
+            const latest = periodTotals[periodTotals.length - 1];
+            const prev = periodTotals.length > 1 ? periodTotals[periodTotals.length - 2] : null;
+            let trendHtml = '';
+            if (prev && prev.total !== 0) {
+                const pctChange = ((latest.total - prev.total) / Math.abs(prev.total)) * 100;
+                const arrow = pctChange >= 0 ? '↑' : '↓';
+                const cls = pctChange >= 0 ? 'insight-up' : 'insight-down';
+                trendHtml = `<span class="${cls}">${arrow} ${Math.abs(pctChange).toFixed(1)}%</span>`;
+            }
+            const periodLabel = String(latest.period).replace(/^Anul\s+/, '');
+            this.addInsight(row, this.ui.latestValue, this.formatBigNumber(latest.total),
+                (trendHtml ? trendHtml + ' ' : '') + (periodLabel ? `<span class="insight-period">${periodLabel}</span>` : ''));
+        } else {
+            // No time dimension — show sum or avg of all values
+            const agg = useAvg
+                ? values.reduce((a, b) => a + b, 0) / values.length
+                : values.reduce((a, b) => a + b, 0);
+            this.addInsight(row, this.ui.latestValue, this.formatBigNumber(agg));
+        }
 
-        // Min / Max
+        // Card 2: Average (per-period average if time exists, else per-row)
+        if (periodTotals && periodTotals.length > 0) {
+            const avg = periodTotals.reduce((s, p) => s + p.total, 0) / periodTotals.length;
+            this.addInsight(row, this.ui.average, this.formatBigNumber(avg));
+        } else {
+            const avg = values.reduce((a, b) => a + b, 0) / values.length;
+            this.addInsight(row, this.ui.average, this.formatBigNumber(avg));
+        }
+
+        // Card 3: Range
         const min = Math.min(...values);
         const max = Math.max(...values);
         this.addInsight(row, this.ui.range, `${this.formatBigNumber(min)} – ${this.formatBigNumber(max)}`);
 
-        // Data points
-        this.addInsight(row, this.ui.dataPoints, formatNumber(rows.length, 0), `${this.ui.ofTotal} ${formatNumber(this.metadata.row_count, 0)} ${this.ui.total}`);
+        // Card 4: Sparkline (per-period totals) or Data Points
+        if (periodTotals && periodTotals.length >= 3) {
+            this.addSparklineInsight(row, periodTotals);
+        } else {
+            this.addInsight(row, this.ui.dataPoints, formatNumber(rows.length, 0),
+                `${this.ui.ofTotal} ${formatNumber(this.metadata.row_count, 0)} ${this.ui.total}`);
+        }
     }
 
     addInsight(container, label, value, sub = '') {
@@ -1292,6 +1354,34 @@ class LensApp {
             <div class="insight-label">${label}</div>
             <div class="insight-value">${value}</div>
             ${sub ? `<div class="insight-sub">${sub}</div>` : ''}
+        `;
+        container.appendChild(card);
+    }
+
+    addSparklineInsight(container, periodTotals) {
+        const card = document.createElement('div');
+        card.className = 'insight-card';
+        const totals = periodTotals.map(p => p.total);
+        const minVal = Math.min(...totals);
+        const maxVal = Math.max(...totals);
+        const range = maxVal - minVal;
+        const barH = 36; // max bar height in px
+        const barW = Math.max(2, Math.min(6, Math.floor(120 / totals.length)));
+        const gap = totals.length > 30 ? 0 : 1;
+
+        const bars = totals.map((v, i) => {
+            const h = range > 0 ? Math.max(2, Math.round(((v - minVal) / range) * barH)) : barH / 2;
+            const isLast = i === totals.length - 1;
+            return `<div style="width:${barW}px;height:${h}px;background:${isLast ? 'var(--accent)' : 'var(--text-3)'};border-radius:1px;flex-shrink:0"></div>`;
+        }).join('');
+
+        const firstLabel = String(periodTotals[0].period).replace(/^Anul\s+/, '');
+        const lastLabel = String(periodTotals[periodTotals.length - 1].period).replace(/^Anul\s+/, '');
+
+        card.innerHTML = `
+            <div class="insight-label">${this.ui.trends}</div>
+            <div style="display:flex;align-items:flex-end;gap:${gap}px;height:${barH}px;margin:6px 0 2px">${bars}</div>
+            <div class="insight-sub">${firstLabel} – ${lastLabel}</div>
         `;
         container.appendChild(card);
     }
@@ -1307,7 +1397,7 @@ class LensApp {
 
     // --- Charts (two-panel) --------------------------------------------------
 
-    renderTimeChart() {
+    async renderTimeChart() {
         const container = document.getElementById('time-chart');
         const setup = this.panelSetup;
 
@@ -1334,7 +1424,7 @@ class LensApp {
                 series_dim: setup.timeSeriesDim,
                 x_axis_dim: setup.timeDim,  // time is always on x-axis for this panel
             };
-            const chart = createChart(container, cfg, this._translateData(this.data), this.metadata);
+            const chart = await createChart(container, cfg, this._translateData(this.data), this.metadata);
             if (chart) {
                 chart._timePanel = true;
                 this.charts.push(chart);
@@ -1344,7 +1434,7 @@ class LensApp {
         }
     }
 
-    renderSnapshotChart() {
+    async renderSnapshotChart() {
         const container = document.getElementById('snapshot-chart');
         const setup = this.panelSetup;
 
@@ -1396,13 +1486,17 @@ class LensApp {
                 ...this.chartConfig,
                 ranked_charts: [],
                 primary_chart: this.snapshotChartType,
-                time_dim: null,  // snapshot has no time axis
+                // Choropleth builds its own timeline from all data; other charts use single period
+                time_dim: isChoropleth ? setup.timeDim : null,
                 x_axis_dim: setup.snapXDim,
-                series_dim: setup.snapSeriesDim,
+                series_dim: isChoropleth ? null : setup.snapSeriesDim,
                 geo_dim: isChoropleth ? setup.geoDim : null,
             };
+            // Choropleth needs all time periods for its internal timeline
+            // Also: choropleth must use untranslated data — geo names must match GeoJSON features
+            const chartData = isChoropleth ? this.data : filteredData;
 
-            const chart = createChart(container, cfg, this._translateData(filteredData), this.metadata);
+            const chart = await createChart(container, cfg, isChoropleth ? chartData : this._translateData(chartData), this.metadata);
             if (chart) {
                 chart._snapshotPanel = true;
                 this.charts.push(chart);

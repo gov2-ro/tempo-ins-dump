@@ -131,7 +131,7 @@ function createDemographicChart(container, config, data, metadata) {
             left: 60,
             right: 20,
             top: seriesIds.length > 1 ? 36 : 16,
-            bottom: timeIds.length > 1 ? 80 : 36,
+            bottom: timeIds.length > 1 ? 80 : (ageCats.length > 8 ? 80 : 36),
         },
         xAxis: {
             type: 'category',
@@ -140,6 +140,8 @@ function createDemographicChart(container, config, data, metadata) {
                 fontSize: 11,
                 rotate: ageCats.length > 8 ? 35 : 0,
                 interval: 0,
+                width: 100,
+                overflow: 'truncate',
             },
         },
         yAxis: {

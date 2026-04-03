@@ -24,7 +24,7 @@ function resolveRoles(chartConfig) {
     };
 }
 
-function createChart(container, chartConfig, data, metadata) {
+async function createChart(container, chartConfig, data, metadata) {
     const chartType = chartConfig.primary_chart;
     const roles = resolveRoles(chartConfig);
     const cfg = { ...chartConfig, ...roles };
@@ -52,11 +52,25 @@ function createChart(container, chartConfig, data, metadata) {
                 return createDemographicChart(container, cfg, data, metadata);
             }
             return createStackedBarChart(container, cfg, data, metadata);
-        case 'choropleth':
-            if (window._geoDataLoaded) {
-                return createChoroplethChart(container, cfg, data, metadata);
+        case 'choropleth': {
+            // Detect geo level to ensure correct GeoJSON is loaded
+            const geoDimMeta = metadata.dimensions?.find(d => d.dim_column_name === cfg.geo_dim);
+            let geoLevel = 'county';
+            if (geoDimMeta) {
+                const lvlCounts = {};
+                for (const opt of (geoDimMeta.options || [])) {
+                    const lvl = opt.parsed?.geo_level;
+                    if (lvl) lvlCounts[lvl] = (lvlCounts[lvl] || 0) + 1;
+                }
+                if (lvlCounts['macroregion'] > 0 && !lvlCounts['county']) geoLevel = 'macroregion';
+                else if (lvlCounts['region'] > 0 && !lvlCounts['county']) geoLevel = 'region';
+            }
+            if (typeof loadRomaniaGeoJSON === 'function') {
+                const loaded = await loadRomaniaGeoJSON(geoLevel);
+                if (loaded) return createChoroplethChart(container, cfg, data, metadata);
             }
             return createTimeSeriesChart(container, cfg, data, metadata);
+        }
         case 'grouped_bar':
             return createDemographicChart(container, cfg, data, metadata);
         case 'population_pyramid':

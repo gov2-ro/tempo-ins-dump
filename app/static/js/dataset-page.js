@@ -261,7 +261,7 @@ class DatasetPage {
                 chartEl.style.display = 'none';
             } else {
                 chartEl.style.display = '';
-                this.chartInstance = createChart(
+                this.chartInstance = await createChart(
                     chartEl,
                     { ...this.metadata.chart_config, primary_chart: this.currentChartType },
                     data,

@@ -936,7 +936,7 @@ class DatasetPageV2 {
             const chartEl = document.getElementById('main-chart');
             const chartConfig = this.buildChartConfig();
 
-            this.chartInstance = createChart(chartEl, chartConfig, data, this.metadata);
+            this.chartInstance = await createChart(chartEl, chartConfig, data, this.metadata);
         } catch (err) {
             document.getElementById('main-chart').innerHTML =
                 `<div class="error-msg" style="padding:20px">${err.message}</div>`;
