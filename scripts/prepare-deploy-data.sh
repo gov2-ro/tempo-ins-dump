@@ -1,50 +1,51 @@
 #!/usr/bin/env bash
 # Stages deployment data into deploy-data/ and creates a tarball.
+# Data is sourced from data/corpus/ (new unified data layout).
 # Usage: bash scripts/prepare-deploy-data.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+CORPUS_DIR="$PROJECT_ROOT/data/corpus"
 DEPLOY_DIR="$PROJECT_ROOT/deploy-data"
 
 echo "=== Preparing deployment data ==="
+echo "Source: $CORPUS_DIR"
+
+# Validate source
+if [ ! -d "$CORPUS_DIR" ]; then
+    echo "❌ corpus directory not found: $CORPUS_DIR"
+    exit 1
+fi
+if [ ! -f "$CORPUS_DIR/metadata.duckdb" ]; then
+    echo "❌ metadata.duckdb not found in $CORPUS_DIR"
+    exit 1
+fi
 
 # Clean previous staging
 rm -rf "$DEPLOY_DIR"
-mkdir -p "$DEPLOY_DIR/parquet-v3/ro"
-mkdir -p "$DEPLOY_DIR/view-profiles"
+mkdir -p "$DEPLOY_DIR/corpus/parquet"
+mkdir -p "$DEPLOY_DIR/corpus/view-profiles"
 
-# 1. Copy parquet-v3 (primary)
-echo "Copying parquet-v3..."
-cp "$PROJECT_ROOT/data/parquet-v3/ro/"*.parquet "$DEPLOY_DIR/parquet-v3/ro/"
-V3_COUNT=$(ls "$DEPLOY_DIR/parquet-v3/ro/" | wc -l | tr -d ' ')
-echo "  $V3_COUNT v3 files copied"
+# 1. Copy parquet files
+echo "Copying parquet files..."
+cp "$CORPUS_DIR/parquet/"*.parquet "$DEPLOY_DIR/corpus/parquet/"
+PARQUET_COUNT=$(ls "$DEPLOY_DIR/corpus/parquet/" | wc -l | tr -d ' ')
+echo "  $PARQUET_COUNT parquet files copied"
 
-# 2. Merge v2-only parquet files (those not in v3)
-echo "Merging v2-only parquet files..."
-V2_ADDED=0
-if [ -d "$PROJECT_ROOT/data/parquet-v2/ro" ]; then
-    for f in "$PROJECT_ROOT/data/parquet-v2/ro/"*.parquet; do
-        basename=$(basename "$f")
-        if [ ! -f "$DEPLOY_DIR/parquet-v3/ro/$basename" ]; then
-            cp "$f" "$DEPLOY_DIR/parquet-v3/ro/"
-            V2_ADDED=$((V2_ADDED + 1))
-        fi
-    done
-fi
-echo "  $V2_ADDED v2-only files merged"
-
-# 3. Copy DuckDB metadata
+# 2. Copy DuckDB metadata
 echo "Copying metadata database..."
-cp "$PROJECT_ROOT/data/tempo_metadata.duckdb" "$DEPLOY_DIR/"
+cp "$CORPUS_DIR/metadata.duckdb" "$DEPLOY_DIR/corpus/"
+DB_SIZE=$(du -h "$DEPLOY_DIR/corpus/metadata.duckdb" | cut -f1)
+echo "  metadata.duckdb: $DB_SIZE"
 
-# 4. Copy view profiles
+# 3. Copy view profiles
 echo "Copying view profiles..."
-cp "$PROJECT_ROOT/data/view-profiles/"*.json "$DEPLOY_DIR/view-profiles/"
-VP_COUNT=$(ls "$DEPLOY_DIR/view-profiles/" | wc -l | tr -d ' ')
+cp "$CORPUS_DIR/view-profiles/"*.json "$DEPLOY_DIR/corpus/view-profiles/"
+VP_COUNT=$(ls "$DEPLOY_DIR/corpus/view-profiles/" | wc -l | tr -d ' ')
 echo "  $VP_COUNT view profiles copied"
 
-# 5. Create tarball
+# 4. Create tarball (for HF Spaces / manual deploys)
 echo "Creating tarball..."
 cd "$PROJECT_ROOT"
 tar czf deploy-data.tar.gz -C deploy-data .
@@ -56,4 +57,4 @@ echo ""
 echo "=== Done ==="
 echo "Staged: $DEPLOY_DIR ($TOTAL_SIZE)"
 echo "Tarball: $PROJECT_ROOT/deploy-data.tar.gz ($TARBALL_SIZE)"
-echo "Total parquet: $((V3_COUNT + V2_ADDED)) files"
+echo "Parquet files: $PARQUET_COUNT | View profiles: $VP_COUNT"
