@@ -2,6 +2,15 @@
 
 Future tasks and intentions for the TEMPO INS data explorer.
 
+## Misc
+- [ ] enhance table view
+- [ ] add data download option, csv/xlsx?
+  - [ ] disseminate data. Kaggle, Hugging face? Check legal?
+- [ ] split repos, data fetching, UI?
+- [ ] responsive
+- [ ] fetch newly updated datasets
+  - [ ] continuous fetching, gh actions?
+
 ## SDMX / Multi-Source
 
 - [ ] **Phase 5: NL2SQL preparation** — Generate per-dataset JSON schema files, create

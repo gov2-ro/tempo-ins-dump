@@ -1853,6 +1853,7 @@ class LensApp {
         closeBtn?.addEventListener('click', () => this.hideTable());
         this._tableSortCol = null;
         this._tableSortAsc = true;
+        this._tableColFilters = {};
     }
 
     showTableToggleRow() {
@@ -1890,6 +1891,9 @@ class LensApp {
         panel.classList.add('hidden');
         btn?.classList.remove('active');
         if (label) label.textContent = this.ui.showTable || 'Show data table';
+        this._tableSortCol = null;
+        this._tableSortAsc = true;
+        this._tableColFilters = {};
     }
 
     renderTable() {
@@ -1901,10 +1905,11 @@ class LensApp {
 
         if (!rows || !rows.length) {
             scroll.innerHTML = `<div class="table-truncated">${this.ui.noDataFilters}</div>`;
+            if (countEl) countEl.textContent = '';
             return;
         }
 
-        // Build human-readable column headers (use dim_label when available)
+        // Column headers
         const dimLabelMap = {};
         if (this.metadata?.dimensions) {
             for (const d of this.metadata.dimensions) {
@@ -1916,8 +1921,32 @@ class LensApp {
             return dimLabelMap[col] || col;
         });
 
+        const obsIdx = columns.indexOf('OBS_VALUE');
+        const valueCol = obsIdx !== -1 ? obsIdx : columns.length - 1;
+
+        // Build unique values per dimension column (for filters)
+        const uniques = columns.map((col, i) => {
+            if (i === valueCol) return null; // skip value column
+            const set = new Set();
+            for (const r of rows) if (r[i] != null) set.add(r[i]);
+            return [...set].sort((a, b) => String(a).localeCompare(String(b)));
+        });
+
+        // Apply column filters
+        const filters = this._tableColFilters;
+        let filteredRows = rows;
+        const hasFilters = Object.values(filters).some(v => v);
+        if (hasFilters) {
+            filteredRows = rows.filter(row =>
+                Object.entries(filters).every(([idx, val]) => {
+                    if (!val) return true;
+                    return String(row[+idx] ?? '') === val;
+                })
+            );
+        }
+
         // Sort
-        let sortedRows = [...rows];
+        let sortedRows = [...filteredRows];
         if (this._tableSortCol !== null) {
             const idx = this._tableSortCol;
             const asc = this._tableSortAsc;
@@ -1929,17 +1958,32 @@ class LensApp {
             });
         }
 
-        const obsIdx = columns.indexOf('OBS_VALUE');
-
+        // Header row
         const th = colHeaders.map((lbl, i) => {
             const arrow = this._tableSortCol === i
                 ? `<span class="sort-arrow">${this._tableSortAsc ? '↑' : '↓'}</span>` : '';
             return `<th data-col="${i}">${lbl}${arrow}</th>`;
         }).join('');
 
+        // Filter row
+        const filterCells = columns.map((col, i) => {
+            if (i === valueCol || !uniques[i]) return '<td></td>';
+            if (uniques[i].length > 500) return '<td></td>'; // too many options
+            const current = filters[i] || '';
+            const active = current ? ' active' : '';
+            const opts = uniques[i].map(v => {
+                const escaped = String(v).replace(/"/g, '&quot;');
+                const sel = String(v) === current ? ' selected' : '';
+                return `<option value="${escaped}"${sel}>${v}</option>`;
+            }).join('');
+            const allLabel = this.lang === 'en' ? '— all —' : '— toate —';
+            return `<td><select class="col-filter${active}" data-col="${i}"><option value="">${allLabel}</option>${opts}</select></td>`;
+        }).join('');
+
+        // Body rows
         const trs = sortedRows.map(row => {
             const tds = row.map((val, i) => {
-                if (i === obsIdx) {
+                if (i === valueCol) {
                     const fmt = val == null ? '–' : formatNumber(val, val % 1 === 0 ? 0 : 2);
                     return `<td class="num">${fmt}</td>`;
                 }
@@ -1950,15 +1994,23 @@ class LensApp {
 
         scroll.innerHTML = `
             <table class="data-table">
-                <thead><tr>${th}</tr></thead>
+                <thead>
+                    <tr>${th}</tr>
+                    <tr class="filter-row">${filterCells}</tr>
+                </thead>
                 <tbody>${trs}</tbody>
             </table>
             ${truncated ? `<div class="table-truncated">Showing ${formatNumber(returned_rows || rows.length, 0)} of ${formatNumber(total_rows || rows.length, 0)} rows</div>` : ''}
         `;
 
-        if (countEl) countEl.textContent = `${formatNumber(rows.length, 0)} rows`;
+        // Row count
+        if (countEl) {
+            countEl.textContent = hasFilters
+                ? `${formatNumber(sortedRows.length, 0)} / ${formatNumber(rows.length, 0)} rows`
+                : `${formatNumber(rows.length, 0)} rows`;
+        }
 
-        // Column sort click handlers
+        // Sort handlers
         scroll.querySelectorAll('th[data-col]').forEach(th => {
             th.addEventListener('click', () => {
                 const col = +th.dataset.col;
@@ -1968,6 +2020,16 @@ class LensApp {
                     this._tableSortCol = col;
                     this._tableSortAsc = true;
                 }
+                this.renderTable();
+            });
+        });
+
+        // Filter handlers
+        scroll.querySelectorAll('.col-filter').forEach(sel => {
+            sel.addEventListener('click', e => e.stopPropagation());
+            sel.addEventListener('change', e => {
+                const idx = e.target.dataset.col;
+                this._tableColFilters[idx] = e.target.value;
                 this.renderTable();
             });
         });

@@ -1264,16 +1264,20 @@ body.sidebar-open #app {
 .data-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12px;
+    font-size: 12.5px;
     white-space: nowrap;
 }
 .data-table th {
     position: sticky;
     top: 0;
+    z-index: 2;
     background: var(--bg-2);
-    padding: 7px 12px;
+    padding: 8px 12px;
     text-align: left;
     font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
     color: var(--text-2);
     border-bottom: 1px solid var(--border);
     cursor: pointer;
@@ -1281,14 +1285,41 @@ body.sidebar-open #app {
 }
 .data-table th:hover { color: var(--text-0); }
 .data-table th .sort-arrow { margin-left: 4px; color: var(--accent); }
+
+/* Filter row */
+.data-table .filter-row td {
+    position: sticky;
+    top: 33px;
+    z-index: 1;
+    background: var(--bg-2);
+    padding: 3px 6px 6px;
+    border-bottom: 1px solid var(--border);
+}
+.col-filter {
+    width: 100%;
+    padding: 3px 6px;
+    font-size: 11px;
+    font-family: var(--font);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-1);
+    color: var(--text-1);
+    cursor: pointer;
+    appearance: auto;
+}
+.col-filter:focus { outline: none; border-color: var(--accent); }
+.col-filter.active { border-color: var(--accent); background: var(--accent-dim); color: var(--text-0); font-weight: 600; }
+
 .data-table td {
-    padding: 5px 12px;
+    padding: 6px 12px;
     border-bottom: 1px solid var(--border);
     color: var(--text-1);
 }
 .data-table td.num { text-align: right; color: var(--text-0); font-variant-numeric: tabular-nums; }
-.data-table tr:last-child td { border-bottom: none; }
-.data-table tr:hover td { background: var(--bg-2); }
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover td { background: var(--bg-hover); }
+.data-table tbody tr:nth-child(even) td { background: var(--bg-2); }
+.data-table tbody tr:nth-child(even):hover td { background: var(--bg-hover); }
 .table-truncated {
     padding: 8px 14px;
     font-size: 11px;

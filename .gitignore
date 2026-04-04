@@ -18,6 +18,8 @@ data*/*
 _obsolete
 .playwright-mcp/*
 .playwright-mcp/
+deploy-data.tar.gz
+deploy-data/
 docs/misc/*.png
 .mcp.json
 test-results/*

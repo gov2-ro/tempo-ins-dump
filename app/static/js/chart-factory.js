@@ -191,18 +191,31 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
         });
     }
 
+    const showTotal = series.length > 1;
+
     const option = {
         tooltip: {
             trigger: 'axis',
             axisPointer: { type: 'cross' },
             formatter: function (params) {
-                let html = `<b>${params[0].axisValue}</b><br/>`;
+                let rows = '';
+                let total = 0;
+                let hasValues = false;
                 for (const p of params) {
                     if (p.value !== null && p.value !== undefined) {
-                        html += `${p.marker} ${p.seriesName}: <b>${formatNumber(p.value)}</b><br/>`;
+                        rows += `${p.marker} ${p.seriesName}: <b>${formatNumber(p.value)}</b><br/>`;
+                        total += p.value;
+                        hasValues = true;
                     }
                 }
-                return html;
+                let html = `<b>${params[0].axisValue}</b>`;
+                if (showTotal && hasValues) {
+                    html += `<br/>∑ <b>${formatNumber(total)}</b>`;
+                    html += `<hr style="margin:4px 0;border-color:currentColor;opacity:0.15"/>`;
+                } else {
+                    html += '<br/>';
+                }
+                return html + rows;
             },
         },
         legend: {

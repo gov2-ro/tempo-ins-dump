@@ -368,13 +368,17 @@ function createStackedBarChart(container, config, data, metadata) {
             trigger: 'axis',
             axisPointer: { type: 'shadow' },
             formatter(params) {
-                let html = `<b>${params[0].axisValue}</b><br/>`;
+                let rows = '';
+                let total = 0;
                 for (const p of params) {
                     if (p.value !== null && p.value !== undefined) {
-                        html += `${p.marker} ${p.seriesName}: <b>${formatNumber(p.value)}</b><br/>`;
+                        rows += `${p.marker} ${p.seriesName}: <b>${formatNumber(p.value)}</b><br/>`;
+                        total += p.value;
                     }
                 }
-                return html;
+                return `<b>${params[0].axisValue}</b><br/>∑ <b>${formatNumber(total)}</b>`
+                    + `<hr style="margin:4px 0;border-color:currentColor;opacity:0.15"/>`
+                    + rows;
             },
         },
         legend: { type: 'scroll', bottom: 0, textStyle: { fontSize: 11 } },
