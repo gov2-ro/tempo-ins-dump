@@ -3,13 +3,18 @@
 Future tasks and intentions for the TEMPO INS data explorer.
 
 ## Misc
-- [ ] enhance table view
+- [x] enhance table view
 - [ ] add data download option, csv/xlsx?
   - [ ] disseminate data. Kaggle, Hugging face? Check legal?
 - [ ] split repos, data fetching, UI?
 - [ ] responsive
 - [ ] fetch newly updated datasets
   - [ ] continuous fetching, gh actions?
+- [ ] landing
+  - [ ] Show latest updates
+  - [ ] Flag interesting datasets
+  - [ ] Some widgets per theme/subtheme/dataset
+- [ ] Look for same EU stats?
 
 ## SDMX / Multi-Source
 
