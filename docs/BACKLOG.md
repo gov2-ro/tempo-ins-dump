@@ -87,8 +87,9 @@ Future tasks and intentions for the TEMPO INS data explorer.
   so dashboard views are shareable/bookmarkable (e.g. `?code=POP301A&period=2020&snap=heatmap`).
   Currently only `?code=` is saved; filter/chart/period selections reset on reload.
 
-- [ ] **Data table toggle** — show underlying data rows alongside/below charts with sort
-  and basic formatting. The old dataset page has a data table; adapt it for Lens.
+- [x] **Data table toggle** — Done. Collapsible data table with dropdown column filters,
+  zebra striping, sticky headers, filtered/total row count. Client-side filtering via
+  exact match on dimension columns.
 
 - [ ] **Visual polish pass** — x-axis label truncation on rotated labels, responsive
   breakpoints for mobile (category grid, insight cards, chart panels), smooth transitions

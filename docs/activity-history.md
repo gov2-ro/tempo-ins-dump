@@ -1,5 +1,33 @@
 # Activity History
 
+## 2026-04-04 — Alpha Preview & UI Polish
+
+Prepared alpha preview with multiple UI/UX improvements across the Lens dashboard.
+
+**Insight cards redesign:**
+- Replaced meaningless Average card with **Overall Change** (first→last period % change, colored +/-)
+- Replaced meaningless Range card with **Coverage** (period count + category count)
+- Replaced div-bar sparkline with **SVG polyline** sparkline (`viewBox` + `preserveAspectRatio="none"` + gradient fill polygon)
+- Fixed `--text-3` CSS variable (undefined, causing transparent backgrounds in 8+ places)
+
+**Tooltip totals:**
+- All multi-series charts (line, area, stacked bar) now show ∑ total on top of tooltip before series breakdown
+- Updated formatters in both `chart-factory.js` and `chart-new-types.js`
+
+**Data table enhancements:**
+- Added dropdown column filters (like duckdb-browser) with active state styling
+- Zebra striping, sticky filter row, filtered/total row count display
+- Client-side filtering via exact string match, all filters AND-combined
+
+**Landing page:**
+- Redesigned `index.html` as a public-facing landing page (old version preserved as `index-old.html`)
+- Added language flag icons (EN/RO SVGs)
+
+**Deployment:**
+- Merged `claude/deploy-flyio-uvicorn-7MxCw` branch — updated paths for `corpus/` data layout
+- Added deploy scripts: Oracle Cloud (`deploy.sh`, nginx config, systemd service), HF Spaces (`Dockerfile`)
+- Updated `fly.toml` with corpus-aware `TEMPO_DATA_DIR`
+
 ## 2026-04-03 — Chart Selection Engine v2
 
 Comprehensive overhaul of `app/services/chart_selector.py` scoring engine.

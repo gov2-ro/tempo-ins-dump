@@ -1,19 +1,24 @@
-app = "tempo-ins-explorer"
-primary_region = "ams"
+# fly.toml app configuration file generated for tempo-ins-explorer on 2026-04-04T12:30:13+07:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'tempo-ins-explorer'
+primary_region = 'ams'
 
 [build]
+
+[env]
+  TEMPO_DATA_DIR = '/app/data'
+  TEMPO_DEBUG = 'false'
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
 
-[env]
-  TEMPO_DATA_DIR = "/app/data"
-  TEMPO_DEBUG = "false"
-
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "512mb"
+  size = 'shared-cpu-1x'
+  memory = '512mb'
