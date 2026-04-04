@@ -35,6 +35,25 @@ Future tasks and intentions for the TEMPO INS data explorer.
   2-level variant of geo_hierarchy (no counties). Already handled by Pattern F
   (emits `_regiuni` + `_macroregiuni`), but worth verifying output quality separately.
 
+## Static Site Migration
+
+- [ ] **Phase 2: DuckDB-WASM data client** — Test `duckdb-data-client.js` against real
+  parquet files, verify HTTP range requests work with CORS, compare output with
+  FastAPI `/data` endpoint. Handle edge cases (missing parquet, WASM not supported).
+
+- [ ] **Phase 3: Port frontend components** — Copy/adapt `explorer/static/js/` chart
+  modules and Vue components to `static-site/js/`. Wire up to `api-static.js`.
+  Main files: `DatasetPicker.js`, `ChartCanvas.js`, `FilterBar.js`, `LeftSidebar.js`.
+
+- [ ] **Phase 4: Deploy pipeline** — GitHub Actions workflow: run `build-static-site.py`,
+  upload JSON to Cloudflare Pages, upload parquet to R2. Service Worker for offline caching.
+
+- [ ] **Phase 5: Retire FastAPI app** — Archive `app/`, `duckdb-browser.py`, update CLAUDE.md.
+
+- [ ] **Aggregation in DuckDB-WASM** — Port the GROUP BY aggregation fix (from backlog
+  "Raw LIMIT truncation" issue) into `duckdb-data-client.js`. Easier in WASM since
+  the full query builder is in JS.
+
 ## UI / App
 
 - [x] **v2 UI build (Lens)** — Two-panel dashboard shipped: Trends (line/area/stacked over time) +
