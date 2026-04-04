@@ -102,6 +102,27 @@ Future tasks and intentions for the TEMPO INS data explorer.
   `matrix_profiles.primary_unit_type` — uses AVG for `percentage` (694 datasets) and
   `time_unit` (12 datasets), SUM for everything else.
 
+## Chart Selection — Future Improvements
+
+- [ ] **Treemap chart type** — For hierarchical categorical data (CAEN economic sectors),
+  treemap would show proportions better than horizontal bar. Requires frontend implementation.
+
+- [ ] **Sparkline/KPI view** — Datasets with 1 dimension (pure time series, no categories)
+  are perfect for a large KPI number + sparkline, not a full chart.
+
+- [ ] **Ratio/change chart mode** — Year-over-year change, growth rates, indexed values.
+  The trend data already detects these patterns; expose as an alternative view.
+
+- [ ] **Radar chart** — For comparing a small number of categories across multiple
+  metrics (e.g., county profiles across health/education/economy indicators).
+
+- [ ] **Unify `generate_view_profiles.py` with `chart_selector.py`** — Both contain
+  independent chart selection logic. The view profile generator has its own snapshot chart
+  rules that partially overlap. Long-term, view profiles should call `select_charts()`.
+
+- [ ] **Delete `app/services/chart_config.py`** — Dead code, no imports found. Kept for
+  reference during the transition period but should be removed.
+
 ## Data Quality
 
 - [x] **Phase 8: Strip aggregate/total rows from parquet files** — Done.

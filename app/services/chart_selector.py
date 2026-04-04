@@ -4,9 +4,32 @@ Generic chart selection engine for statistical datasets.
 Replaces the hardcoded archetype → chart mapping with a rules-based scoring system.
 The 4 existing archetypes (geo_time, demographic, time_residence, time_series) emerge
 naturally from the scores — they are no longer hardcoded inputs.
+
+Unit-type awareness: percentage data prefers area_stacked, index/rate data prefers line,
+currency/count data is neutral. Confidence scoring tells the frontend how certain we are.
 """
 import json
 
+
+# ---------------------------------------------------------------------------
+# Tie-breaking priority: when scores are equal, prefer more specific charts
+# Lower number = higher priority
+# ---------------------------------------------------------------------------
+TIEBREAK_PRIORITY = {
+    'choropleth': 0, 'population_pyramid': 1, 'line': 2,
+    'area_stacked': 3, 'grouped_bar': 4, 'small_multiples': 5,
+    'heatmap': 6, 'stacked_bar': 7, 'horizontal_bar': 8,
+    'bar_vertical': 9, 'bubble': 10, 'table': 11,
+}
+
+# Chart pairings that are complementary rather than competitive
+COMPLEMENTARY_PAIRS = {
+    frozenset({'choropleth', 'line'}): 'map shows spatial patterns, line shows time trends',
+    frozenset({'choropleth', 'horizontal_bar'}): 'map shows geography, bar ranks values',
+    frozenset({'population_pyramid', 'line'}): 'pyramid shows age structure, line shows change over time',
+    frozenset({'grouped_bar', 'heatmap'}): 'bar compares groups, heatmap shows all cross-sections',
+    frozenset({'line', 'small_multiples'}): 'line shows aggregate trend, small multiples show per-category trends',
+}
 
 # ---------------------------------------------------------------------------
 # 1. Signature builder — collapses all metadata into one dict
@@ -29,7 +52,6 @@ def build_signature(profile: dict, dimensions: list,
     vp = value_profile or {}
     tr = trend or {}
 
-    # Dimension counts
     indicator_dims = [
         {'name': d['dim_column_name'], 'count': d.get('option_count') or 0,
          'has_total': False, 'is_ordered': False}
@@ -52,6 +74,14 @@ def build_signature(profile: dict, dimensions: list,
     if coeff_var is not None and abs(coeff_var) > 100:
         coeff_var = 100.0
 
+    # Unit type enrichment
+    unit_types_raw = profile.get('unit_types', '[]') or '[]'
+    try:
+        unit_types = json.loads(unit_types_raw) if isinstance(unit_types_raw, str) else (unit_types_raw or [])
+    except (json.JSONDecodeError, TypeError):
+        unit_types = []
+    primary_unit = profile.get('primary_unit_type', 'count') or 'count'
+
     return {
         # Dimension presence
         'has_time': bool(profile.get('has_time')),
@@ -72,6 +102,9 @@ def build_signature(profile: dict, dimensions: list,
         'is_sparse': (cov.get('fill_rate') or 1.0) < 0.3,
         'distribution': vp.get('distribution_shape', 'unknown'),
         'coeff_variation': coeff_var,
+        # Unit type — drives chart affinity
+        'primary_unit_type': primary_unit,
+        'unit_types': unit_types,
         # Trend characteristics
         'trend_direction': tr.get('trend_direction', 'unknown'),
         'has_seasonality': bool(tr.get('has_seasonality')),
@@ -164,6 +197,7 @@ def _score(chart_type: str, sig: dict) -> float:
     cat_dims = sig['categorical_dims']
     has_residence = sig['has_residence']
     geo_levels = sig['geo_levels']
+    unit = sig.get('primary_unit_type', 'count')
 
     if chart_type == 'line':
         s = 0.5
@@ -173,27 +207,42 @@ def _score(chart_type: str, sig: dict) -> float:
         small_series = [d for d in cat_dims if d['count'] <= 6]
         if small_series: s += 0.1
         elif len(cat_dims) == 0 and has_residence: s += 0.1
-        if sig['has_seasonality']: s += 0.05
-        # No penalty for co-existing with choropleth — both are valid views
+        # Seasonality: line is THE chart for seasonal data
+        if sig['has_seasonality']: s += 0.15
+        if sig['time_granularity'] in ('monthly', 'quarterly'): s += 0.05
+        # Unit affinity: rates/indices are best shown as lines
+        if unit in ('rate', 'ratio', 'index'): s += 0.1
         return min(s, 1.0)
 
     if chart_type == 'area_stacked':
-        s = 0.3
+        s = 0.4  # raised base — area_stacked was chronically underscored
         series = [d for d in cat_dims if d['count'] <= 8]
-        if series: s += 0.2
+        if series: s += 0.15
         if 3 <= (series[0]['count'] if series else 0) <= 6: s += 0.1
         if tp >= 8: s += 0.1
-        return min(s, 1.0)
+        # Unit affinity: percentage data = parts-of-whole → area_stacked is ideal
+        if unit == 'percentage' and series:
+            s += 0.2
+            if 2 <= series[0]['count'] <= 6: s += 0.1  # perfect 100% stacking
+        # Sparse data makes stacked charts misleading (gaps look like zero)
+        if is_sparse: s -= 0.15
+        return min(max(s, 0.0), 1.0)
 
     if chart_type == 'bar_vertical':
-        # Bar is always a valid, clear alternative — higher base than before
-        s = 0.5
+        s = 0.45  # slightly lower base — was too greedy at 0.5
         if has_time and tp < 5: s += 0.15   # few time points → bar shines
         if not has_time: s += 0.1           # snapshot data
         cat_small = [d for d in cat_dims if d['count'] <= 15]
         if cat_small: s += 0.1
-        if has_geo and geo >= 5: s += 0.05  # ranking counties is natural as a bar
-        return min(s, 1.0)
+        if has_geo and geo >= 5: s += 0.05
+        # Penalty: bars hide trends in long time series — line is always better
+        if has_time and tp >= 10: s -= 0.15
+        elif has_time and tp >= 6: s -= 0.05
+        # Penalty: seasonal data needs continuous line, not discrete bars
+        if sig['has_seasonality']: s -= 0.10
+        # Unit penalty: index numbers as bar heights are misleading (base=100)
+        if unit == 'index': s -= 0.10
+        return min(max(s, 0.0), 1.0)
 
     if chart_type == 'grouped_bar':
         s = 0.3
@@ -205,42 +254,46 @@ def _score(chart_type: str, sig: dict) -> float:
         return min(s, 1.0)
 
     if chart_type == 'stacked_bar':
-        s = 0.35  # base bump — stacked bar is generally useful
+        s = 0.35
         small_series = [d for d in cat_dims if 2 <= d['count'] <= 4]
-        if small_series: s += 0.25  # sweet spot: 2-4 categories stack cleanly
-        elif has_gender or has_residence: s += 0.2  # M/F or Urban/Rural stack well
-        if has_time and tp < 5: s += 0.1   # few time points → bar over line
-        if has_time and tp >= 5: s += 0.05  # also fine for longer series
-        return min(s, 1.0)
+        if small_series: s += 0.25
+        elif has_gender or has_residence: s += 0.2
+        if has_time and tp < 5: s += 0.1
+        if has_time and tp >= 5: s += 0.05
+        # Unit affinity: percentage data stacks meaningfully
+        if unit == 'percentage' and small_series: s += 0.1
+        # Sparse data creates misleading gaps in stacks
+        if is_sparse: s -= 0.10
+        return min(max(s, 0.0), 1.0)
 
     if chart_type == 'horizontal_bar':
-        # Ranked bar — always clear for comparing many categories
         s = 0.5
         long_cats = [d for d in cat_dims if 10 <= d['count'] <= 50]
         if long_cats: s += 0.2
         if not has_time: s += 0.1
         elif has_time and tp == 1: s += 0.05
-        if has_geo and 10 <= geo <= 50: s += 0.1  # ranking counties by value
-        # Don't outrank choropleth for near-complete geo coverage
-        if has_geo and geo >= 30:
-            s = min(s, _score('choropleth', sig) - 0.05)
+        if has_geo and 10 <= geo <= 50: s += 0.1
+        # Unit affinity: currency/count are natural for comparison bars
+        if unit in ('currency', 'count'): s += 0.05
+        # Cap below choropleth for high geo coverage (explicit, no recursion)
+        if has_geo and geo >= 30: s = min(s, 0.80)
         return min(s, 1.0)
 
     if chart_type == 'choropleth':
-        s = 0.6   # spatial view is inherently valuable — higher base
-        if geo >= 30: s += 0.25  # near-complete county coverage = great map
+        s = 0.6
+        if geo >= 30: s += 0.25
         elif geo >= 20: s += 0.15
         elif geo >= 10: s += 0.05
         if 'county' in geo_levels: s += 0.05
-        if has_time: s += 0.05   # timeline animation bonus
-        if is_sparse: s -= 0.10  # sparse geo still makes a valid map (reduced penalty)
+        if has_time: s += 0.05
+        if is_sparse: s -= 0.10
         return min(max(s, 0.0), 1.0)
 
     if chart_type == 'population_pyramid':
         s = 0.0
         if has_age and has_gender:
             s = 0.7
-            if gender_count == 2: s += 0.2  # exactly M/F, no Total
+            if gender_count == 2: s += 0.2
             if sig['age_count'] >= 5: s += 0.1
         return min(s, 1.0)
 
@@ -251,7 +304,7 @@ def _score(chart_type: str, sig: dict) -> float:
         elif len(dims_10_30) == 1: s += 0.15
         if not is_sparse: s += 0.1
         if has_time and tp >= 5: s += 0.1
-        if cv > 0.5: s += 0.05  # interesting cross-tab variance
+        if cv > 0.5: s += 0.05
         return min(s, 1.0)
 
     if chart_type == 'small_multiples':
@@ -262,23 +315,25 @@ def _score(chart_type: str, sig: dict) -> float:
             s += 0.15
         if has_geo and 6 < geo <= 16: s += 0.2
         if tp >= 5: s += 0.1
-        return min(s, 1.0)
+        # Sparse data: many facets will be mostly empty
+        if is_sparse: s -= 0.10
+        return min(max(s, 0.0), 1.0)
 
     if chart_type == 'bubble':
-        s = 0.4  # solid alternative, not a primary default
-        if has_geo and geo >= 10: s += 0.15  # many geo units → readable bubble map
-        if has_geo and has_time: s += 0.1    # animate bubbles over time
+        s = 0.4
+        if has_geo and geo >= 10: s += 0.15
+        if has_geo and has_time: s += 0.1
         if len(cat_dims) >= 1 and has_time:
-            # scatter-bubble: x=time, y=value, size/color=category
             best_cat = min(cat_dims, key=lambda d: d['count'], default=None)
             if best_cat and best_cat['count'] <= 20: s += 0.1
-        # Never let bubble outrank choropleth for large geo — they're complementary
-        if has_geo and geo >= 20:
-            s = min(s, _score('choropleth', sig) - 0.05)
+        # Unit affinity: count/currency with large values → bubble size is meaningful
+        if unit in ('count', 'currency'): s += 0.05
+        # Cap below choropleth for high geo coverage (explicit, no recursion)
+        if has_geo and geo >= 20: s = min(s, 0.80)
         return min(max(s, 0.0), 1.0)
 
     if chart_type == 'table':
-        return 0.2  # always available but low priority
+        return 0.2
 
     return 0.0
 
@@ -295,11 +350,11 @@ CHART_TYPES = [
 
 
 def select_charts(sig: dict, top_n: int = 8) -> list[dict]:
-    """Return ranked list of applicable chart types with scores.
+    """Return ranked list of applicable chart types with scores and confidence.
 
     Returns:
-        List of dicts: [{chart_type, score, eligible}], sorted by score DESC.
-        First item = recommended primary chart.
+        List of dicts sorted by score DESC. First item = recommended primary.
+        Each entry: {chart_type, score, confidence, complementary_to?}
     """
     results = []
     for ct in CHART_TYPES:
@@ -307,17 +362,50 @@ def select_charts(sig: dict, top_n: int = 8) -> list[dict]:
             score = _score(ct, sig)
             results.append({'chart_type': ct, 'score': round(score, 3)})
 
-    results.sort(key=lambda x: -x['score'])
-    return results[:top_n]
+    # Deterministic tie-breaking: prefer more specific/informative charts
+    results.sort(key=lambda x: (-x['score'], TIEBREAK_PRIORITY.get(x['chart_type'], 99)))
+    results = results[:top_n]
+
+    # Confidence: how sure are we about the primary recommendation?
+    if len(results) >= 2:
+        gap = results[0]['score'] - results[1]['score']
+        confidence = 'high' if gap > 0.15 else 'medium' if gap > 0.05 else 'low'
+    elif len(results) == 1:
+        confidence = 'high'
+    else:
+        confidence = 'low'
+
+    for entry in results:
+        entry['confidence'] = confidence
+
+    # Mark complementary pairs among top results
+    top_types = {r['chart_type'] for r in results[:4]}
+    for entry in results:
+        for pair, reason in COMPLEMENTARY_PAIRS.items():
+            if entry['chart_type'] in pair:
+                partner = (pair - {entry['chart_type']})
+                if partner & top_types:
+                    entry['complementary_to'] = list(partner & top_types)[0]
+                    entry['complementary_reason'] = reason
+                    break
+
+    return results
 
 
-def assign_roles(chart_type: str, dimensions: list) -> dict:
+def assign_roles(chart_type: str, dimensions: list, sig: dict = None) -> dict:
     """Map dimension columns to visual roles for a given chart type.
 
-    Returns dict with keys: x_axis, series, facet, timeline, filter (list)
+    Args:
+        chart_type: The selected chart type
+        dimensions: List of dimension dicts
+        sig: Optional signature dict — enables context-aware assignment
+
+    Returns dict with keys: x_axis, series, facet, timeline, filter (list),
+    filter_hints (dict), defaults (dict)
     """
     roles = {'x_axis': None, 'series': None, 'facet': None,
-             'timeline': None, 'filter': []}
+             'timeline': None, 'filter': [], 'filter_hints': {},
+             'defaults': {}}
 
     by_type = {}
     for d in dimensions:
@@ -348,13 +436,18 @@ def assign_roles(chart_type: str, dimensions: list) -> dict:
 
     if chart_type == 'line':
         assign('x_axis', time_d)
-        # Best series: gender/residence > small indicator > age
+        # Best series: gender/residence > small indicator (2-6 sweet spot) > age
         if gender_d: assign('series', gender_d)
         elif residence_d: assign('series', residence_d)
         elif indicators:
-            best = min(indicators, key=lambda d: d.get('option_count') or 99)
-            if (best.get('option_count') or 0) <= 15:
+            # Prefer indicators in the 2-6 range (readable line count)
+            sweet = [d for d in indicators if 2 <= (d.get('option_count') or 0) <= 6]
+            small = [d for d in indicators if (d.get('option_count') or 0) <= 15]
+            best = min(sweet or small or [], key=lambda d: d.get('option_count') or 99, default=None)
+            if best:
                 assign('series', best)
+        if not roles['series'] and age_d and (age_d.get('option_count') or 0) <= 8:
+            assign('series', age_d)
         # Facet: another indicator with 6-25 options
         for d in indicators:
             if col(d) not in assigned and 6 < (d.get('option_count') or 0) <= 25:
@@ -363,7 +456,13 @@ def assign_roles(chart_type: str, dimensions: list) -> dict:
 
     elif chart_type in ('area_stacked', 'stacked_bar'):
         assign('x_axis', time_d)
-        if indicators:
+        # For stacking, prefer small categorical dims (parts-of-whole)
+        stackable = [d for d in indicators if 2 <= (d.get('option_count') or 0) <= 6]
+        if stackable:
+            assign('series', stackable[0])
+        elif has_gender_or_residence := (gender_d or residence_d):
+            assign('series', has_gender_or_residence)
+        elif indicators:
             assign('series', indicators[0])
 
     elif chart_type == 'bar_vertical':
@@ -398,7 +497,6 @@ def assign_roles(chart_type: str, dimensions: list) -> dict:
 
     elif chart_type == 'small_multiples':
         assign('x_axis', time_d)
-        # Facet: dim with 6-25 options
         for d in indicators:
             if 6 < (d.get('option_count') or 0) <= 25:
                 assign('facet', d)
@@ -407,7 +505,6 @@ def assign_roles(chart_type: str, dimensions: list) -> dict:
             assign('facet', geo_d)
 
     elif chart_type == 'horizontal_bar':
-        # Highest cardinality indicator or geo on the axis
         candidates = indicators + ([geo_d] if geo_d else [])
         if candidates:
             best = max(candidates, key=lambda d: d.get('option_count') or 0)
@@ -415,25 +512,35 @@ def assign_roles(chart_type: str, dimensions: list) -> dict:
         assign('timeline', time_d)
 
     elif chart_type == 'bubble':
-        # Bubble map: geo units as circles sized by value
-        # Scatter-bubble: x=time, y=value (implicit), color/size=category
         if geo_d:
-            assign('x_axis', geo_d)   # position on map
+            assign('x_axis', geo_d)
             assign('timeline', time_d)
             if indicators:
-                assign('series', indicators[0])  # color dimension
+                assign('series', indicators[0])
         else:
             assign('x_axis', time_d)
             if indicators:
-                assign('series', indicators[0])  # bubble color
+                assign('series', indicators[0])
             if len(indicators) > 1:
-                assign('facet', indicators[1])   # bubble size proxy
+                assign('facet', indicators[1])
 
-    # Everything not assigned → filter
-    all_dims = dimensions
-    roles['filter'] = [
-        col(d) for d in all_dims
-        if col(d) not in assigned and d.get('dim_type') != 'unit'
-    ]
+    # Everything not assigned → filter, with type hints
+    for d in dimensions:
+        c = col(d)
+        if c not in assigned and d.get('dim_type') != 'unit':
+            roles['filter'].append(c)
+            opt_count = d.get('option_count') or 0
+            if opt_count > 25:
+                roles['filter_hints'][c] = 'single_select'
+            elif opt_count > 6:
+                roles['filter_hints'][c] = 'multi_select'
+            else:
+                roles['filter_hints'][c] = 'pill_group'
+
+    # Recommended default filter state
+    if chart_type in ('choropleth', 'horizontal_bar', 'heatmap'):
+        roles['defaults']['time'] = 'latest'
+    if chart_type != 'population_pyramid':
+        roles['defaults']['exclude_total'] = True
 
     return roles
