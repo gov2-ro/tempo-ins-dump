@@ -764,13 +764,13 @@ class LensApp {
         }
 
         // Time chart types
-        const timeChartTypes = hasTimePanel ? ['line', 'area_stacked', 'stacked_bar'] : [];
+        const timeChartTypes = hasTimePanel ? ['line', 'bar', 'area_stacked', 'stacked_bar'] : [];
 
         // Snapshot chart types
         let snapshotChartTypes = [];
         if (hasSnapshotPanel) {
             if (categoryDims.length >= 2) {
-                snapshotChartTypes = ['grouped_bar', 'heatmap', 'bubble'];
+                snapshotChartTypes = ['grouped_bar', 'stacked_bar', 'heatmap', 'bubble'];
             } else {
                 snapshotChartTypes = ['bar_vertical', 'horizontal_bar'];
             }
@@ -838,7 +838,7 @@ class LensApp {
         pills.innerHTML = '';
 
         const LABELS = {
-            line: 'Line', area_stacked: 'Area', stacked_bar: 'Stacked',
+            line: 'Line', bar: 'Bar', area_stacked: 'Area', stacked_bar: 'Stacked',
         };
 
         for (const type of setup.timeChartTypes) {
@@ -904,7 +904,7 @@ class LensApp {
         pills.innerHTML = '';
 
         const LABELS = {
-            grouped_bar: 'Grouped', heatmap: 'Heatmap', bubble: 'Bubble',
+            grouped_bar: 'Grouped', stacked_bar: 'Stacked', heatmap: 'Heatmap', bubble: 'Bubble',
             bar_vertical: 'Bar', horizontal_bar: 'H-Bar', choropleth: 'Map',
         };
 
@@ -1366,13 +1366,11 @@ class LensApp {
         const maxVal = Math.max(...totals);
         const range = maxVal - minVal;
         const barH = 36; // max bar height in px
-        const barW = Math.max(2, Math.min(6, Math.floor(120 / totals.length)));
-        const gap = totals.length > 30 ? 0 : 1;
 
         const bars = totals.map((v, i) => {
             const h = range > 0 ? Math.max(2, Math.round(((v - minVal) / range) * barH)) : barH / 2;
             const isLast = i === totals.length - 1;
-            return `<div style="width:${barW}px;height:${h}px;background:${isLast ? 'var(--accent)' : 'var(--text-3)'};border-radius:1px;flex-shrink:0"></div>`;
+            return `<div style="flex:1;min-width:1px;height:${h}px;background:${isLast ? 'var(--accent)' : 'var(--text-3)'};border-radius:1px"></div>`;
         }).join('');
 
         const firstLabel = String(periodTotals[0].period).replace(/^Anul\s+/, '');
@@ -1380,7 +1378,7 @@ class LensApp {
 
         card.innerHTML = `
             <div class="insight-label">${this.ui.trends}</div>
-            <div style="display:flex;align-items:flex-end;gap:${gap}px;height:${barH}px;margin:6px 0 2px">${bars}</div>
+            <div style="display:flex;align-items:flex-end;gap:1px;height:${barH}px;margin:6px 0 2px;width:100%">${bars}</div>
             <div class="insight-sub">${firstLabel} – ${lastLabel}</div>
         `;
         container.appendChild(card);

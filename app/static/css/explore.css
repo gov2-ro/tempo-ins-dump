@@ -15,6 +15,7 @@
     --text-0: #fafafa;
     --text-1: #a1a1aa;
     --text-2: #62626b;
+    --text-3: #42424a;
     --accent: #818cf8;
     --accent-dim: rgba(129,140,248,0.15);
     --accent-hover: #6366f1;
@@ -46,6 +47,7 @@
     --text-0: #111118;
     --text-1: #4a4a55;
     --text-2: #8a8a99;
+    --text-3: #b0b0bb;
     --accent: #6366f1;
     --accent-dim: rgba(99,102,241,0.1);
     --accent-hover: #4f46e5;
