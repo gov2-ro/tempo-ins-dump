@@ -20,8 +20,11 @@ const UI = {
         backExplore: '← Explorare',
         backCategories: '← Categorii',
         latestValue: 'Ultima valoare',
-        average: 'Medie',
-        range: 'Interval',
+        overallChange: 'Variație totală',
+        coverage: 'Acoperire',
+        periods: 'perioade',
+        categories: 'categorii',
+        since: 'din',
         dataPoints: 'Puncte date',
         ofTotal: 'din',
         total: 'total',
@@ -66,8 +69,11 @@ const UI = {
         backExplore: '← Explore',
         backCategories: '← Categories',
         latestValue: 'Latest Value',
-        average: 'Average',
-        range: 'Range',
+        overallChange: 'Overall Change',
+        coverage: 'Coverage',
+        periods: 'periods',
+        categories: 'categories',
+        since: 'since',
         dataPoints: 'Data Points',
         ofTotal: 'of',
         total: 'total',
@@ -1324,19 +1330,46 @@ class LensApp {
             this.addInsight(row, this.ui.latestValue, this.formatBigNumber(agg));
         }
 
-        // Card 2: Average (per-period average if time exists, else per-row)
-        if (periodTotals && periodTotals.length > 0) {
-            const avg = periodTotals.reduce((s, p) => s + p.total, 0) / periodTotals.length;
-            this.addInsight(row, this.ui.average, this.formatBigNumber(avg));
+        // Card 2: Overall Change (first→last period %)
+        if (periodTotals && periodTotals.length >= 2) {
+            const first = periodTotals[0];
+            const latest = periodTotals[periodTotals.length - 1];
+            if (first.total && first.total !== 0) {
+                const change = ((latest.total - first.total) / Math.abs(first.total)) * 100;
+                const sign = change >= 0 ? '+' : '';
+                const cls = change >= 0 ? 'insight-up' : 'insight-down';
+                const firstLabel = String(first.period).replace(/^Anul\s+/, '');
+                this.addInsight(row, this.ui.overallChange,
+                    `<span class="${cls}">${sign}${change.toFixed(1)}%</span>`,
+                    `${this.ui.since} ${firstLabel}`);
+            } else {
+                this.addInsight(row, this.ui.coverage, String(periodTotals.length),
+                    this.ui.periods);
+            }
         } else {
-            const avg = values.reduce((a, b) => a + b, 0) / values.length;
-            this.addInsight(row, this.ui.average, this.formatBigNumber(avg));
+            this.addInsight(row, this.ui.dataPoints, formatNumber(rows.length, 0));
         }
 
-        // Card 3: Range
-        const min = Math.min(...values);
-        const max = Math.max(...values);
-        this.addInsight(row, this.ui.range, `${this.formatBigNumber(min)} – ${this.formatBigNumber(max)}`);
+        // Card 3: Data Coverage (periods × categories)
+        if (periodTotals && periodTotals.length > 0) {
+            // Count unique values in the largest non-time dimension
+            const nonTimeDims = cols.filter((c, i) => i !== valueIdx && c !== timeDim);
+            let catCount = 0;
+            if (nonTimeDims.length > 0) {
+                // Find dimension with most unique values
+                for (const dim of nonTimeDims) {
+                    const idx = cols.indexOf(dim);
+                    const uniq = new Set(rows.map(r => r[idx]).filter(v => v != null)).size;
+                    if (uniq > catCount) catCount = uniq;
+                }
+            }
+            const sub = catCount > 1
+                ? `${this.ui.periods} · ${catCount} ${this.ui.categories}`
+                : this.ui.periods;
+            this.addInsight(row, this.ui.coverage, String(periodTotals.length), sub);
+        } else {
+            this.addInsight(row, this.ui.coverage, formatNumber(rows.length, 0), this.ui.dataPoints);
+        }
 
         // Card 4: Sparkline (per-period totals) or Data Points
         if (periodTotals && periodTotals.length >= 3) {
@@ -1365,20 +1398,34 @@ class LensApp {
         const minVal = Math.min(...totals);
         const maxVal = Math.max(...totals);
         const range = maxVal - minVal;
-        const barH = 36; // max bar height in px
+        const W = 100, H = 36, pad = 2;
 
-        const bars = totals.map((v, i) => {
-            const h = range > 0 ? Math.max(2, Math.round(((v - minVal) / range) * barH)) : barH / 2;
-            const isLast = i === totals.length - 1;
-            return `<div style="flex:1;min-width:1px;height:${h}px;background:${isLast ? 'var(--accent)' : 'var(--text-3)'};border-radius:1px"></div>`;
-        }).join('');
+        const points = totals.map((v, i) => {
+            const x = totals.length > 1 ? (i / (totals.length - 1)) * W : W / 2;
+            const y = range > 0 ? H - pad - ((v - minVal) / range) * (H - 2 * pad) : H / 2;
+            return `${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(' ');
 
+        const areaPoints = `${points} ${W},${H} 0,${H}`;
         const firstLabel = String(periodTotals[0].period).replace(/^Anul\s+/, '');
         const lastLabel = String(periodTotals[periodTotals.length - 1].period).replace(/^Anul\s+/, '');
 
         card.innerHTML = `
             <div class="insight-label">${this.ui.trends}</div>
-            <div style="display:flex;align-items:flex-end;gap:1px;height:${barH}px;margin:6px 0 2px;width:100%">${bars}</div>
+            <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
+                 style="width:100%;height:${H}px;margin:6px 0 2px;display:block">
+                <defs>
+                    <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.25"/>
+                        <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.02"/>
+                    </linearGradient>
+                </defs>
+                <polygon points="${areaPoints}" fill="url(#spark-fill)"/>
+                <polyline points="${points}" fill="none"
+                          stroke="var(--accent)" stroke-width="1.5"
+                          stroke-linejoin="round" stroke-linecap="round"
+                          vector-effect="non-scaling-stroke"/>
+            </svg>
             <div class="insight-sub">${firstLabel} – ${lastLabel}</div>
         `;
         container.appendChild(card);

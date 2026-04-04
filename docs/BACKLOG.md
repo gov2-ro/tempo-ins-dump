@@ -88,6 +88,11 @@ Future tasks and intentions for the TEMPO INS data explorer.
 - [ ] **Responsive mobile layout** — 3-column category grid and 4-column insight cards don't
   adapt well to phones. Add `@media (max-width: 768px)` breakpoints for stacking.
 
+- [ ] **Monthly → yearly aggregation toggle** — For datasets with monthly data,
+  add an option to aggregate values by year (SUM for counts, AVG for rates/indices).
+  Useful for long time series (20+ years of monthly data = 240+ points) where
+  yearly trends are easier to read.
+
 - [ ] **Keyboard shortcuts legend** — Lens supports `/`, `Cmd+K`, arrow keys but there's no
   discoverable way to learn about them beyond the search footer hints.
 
