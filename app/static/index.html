@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/explore.css?v=16">
+    <link rel="stylesheet" href="/css/explore.css?v=22">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 </head>
 <body>
@@ -41,7 +41,6 @@
                 <img id="lang-flag" class="lang-flag" src="" alt="">
                 <span id="lang-label">EN</span>
             </button>
-            <span class="badge" id="dataset-count"></span>
         </div>
     </nav>
 
@@ -98,6 +97,10 @@
                     <button class="panel-back" id="panel-back">&larr; Categories</button>
                     <h2 id="panel-title"></h2>
                     <span class="badge" id="panel-count"></span>
+                    <button class="view-toggle" id="view-toggle" title="Toggle list/grid view">
+                        <svg class="view-icon-grid" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                        <svg class="view-icon-list hidden" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    </button>
                 </div>
                 <div class="theme-stats hidden" id="theme-stats"></div>
                 <div class="theme-headlines hidden" id="theme-headlines"></div>
@@ -150,6 +153,6 @@
     <script src="/js/chart-new-types.js?v=28"></script>
     <script src="/js/chart-geo.js?v=21"></script>
     <script src="/js/chart-demographic.js?v=25"></script>
-    <script src="/js/explore-app.js?v=27"></script>
+    <script src="/js/explore-app.js?v=30"></script>
 </body>
 </html>

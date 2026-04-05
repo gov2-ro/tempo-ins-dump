@@ -252,9 +252,10 @@ class LensApp {
         // Sidebar state
         this._sidebarLoaded = false;
 
-        // Theme & language from localStorage
+        // Theme, language & view mode from localStorage
         this.theme = localStorage.getItem('lens_theme') || 'dark';
         this.lang = localStorage.getItem('lens_lang') || 'ro';
+        this.dsViewMode = localStorage.getItem('lens_ds_view') || 'grid';
 
         this.init();
     }
@@ -322,8 +323,38 @@ class LensApp {
             }
         });
 
+        // Dataset view toggle (grid/list)
+        const viewToggle = document.getElementById('view-toggle');
+        if (viewToggle) {
+            this._syncViewToggleIcon();
+            viewToggle.addEventListener('click', () => {
+                this.dsViewMode = this.dsViewMode === 'grid' ? 'list' : 'grid';
+                localStorage.setItem('lens_ds_view', this.dsViewMode);
+                this._syncViewToggleIcon();
+                // Re-render current dataset list if visible
+                const list = document.getElementById('dataset-list');
+                if (list && this._lastDrillDatasets) {
+                    this._renderDatasetEntries(list, this._lastDrillDatasets);
+                }
+            });
+        }
+
         this.initSidebar();
         this.initTableToggle();
+    }
+
+    _syncViewToggleIcon() {
+        const gridIcon = document.querySelector('.view-icon-grid');
+        const listIcon = document.querySelector('.view-icon-list');
+        if (!gridIcon || !listIcon) return;
+        // Show the icon of the mode you'd switch TO
+        if (this.dsViewMode === 'grid') {
+            gridIcon.classList.add('hidden');
+            listIcon.classList.remove('hidden');
+        } else {
+            gridIcon.classList.remove('hidden');
+            listIcon.classList.add('hidden');
+        }
     }
 
     // --- Theme & Language ----------------------------------------------------
@@ -430,8 +461,6 @@ class LensApp {
         if (catResp) this.categories = catResp.tree;
         if (trendsResp) this.categoryTrends = trendsResp.trends;
 
-        const totalDatasets = this.categories.reduce((s, c) => s + (c.total_datasets || 0), 0);
-        document.getElementById('dataset-count').textContent = `${formatNumber(totalDatasets, 0)} ${this.ui.datasets}`;
 
         this.headlines = summary.headlines || [];
         this.renderNoticeBar();
@@ -525,6 +554,7 @@ class LensApp {
         for (const theme of headlines) {
             const section = document.createElement('div');
             section.className = 'headline-theme';
+            section.dataset.cols = String(theme.indicators.length);
 
             // Theme header with icon + label + arrow → drills into category
             const header = document.createElement('div');
@@ -554,18 +584,18 @@ class LensApp {
                 const sparkHtml = this._renderSparkline(ind.sparkline, ind.change_pct);
 
                 card.innerHTML = `
+                    ${sparkHtml}
                     <div class="headline-card-info">
                         <div class="headline-label">${ind.label}</div>
                         <div class="headline-value-row">
                             <span class="headline-value">${this._formatHeadlineValue(ind.value, ind.format)}</span>
                             <span class="headline-unit">${ind.unit}</span>
                         </div>
-                        <div class="headline-footer">
-                            <span class="headline-period">${ind.period}</span>
-                            ${changeHtml}
-                        </div>
                     </div>
-                    ${sparkHtml}
+                    <div class="headline-footer">
+                        <span class="headline-period">${ind.period}</span>
+                        ${changeHtml}
+                    </div>
                 `;
                 cards.appendChild(card);
             }
@@ -594,7 +624,7 @@ class LensApp {
 
     _renderSparkline(data, changePct) {
         if (!data || data.length < 3) return '';
-        const color = changePct != null ? (changePct >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-3)';
+        const fill = changePct != null ? (changePct >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-3)';
         const min = Math.min(...data);
         const max = Math.max(...data);
         const range = max - min || 1;
@@ -607,8 +637,8 @@ class LensApp {
         const polyline = points.join(' ');
         const fillPoly = `${points[0].split(',')[0]},${h} ${polyline} ${points[points.length-1].split(',')[0]},${h}`;
         return `<svg class="headline-sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
-            <polygon points="${fillPoly}" fill="${color}" />
-            <polyline points="${polyline}" stroke="${color}" />
+            <polygon points="${fillPoly}" fill="${fill}" />
+            <polyline points="${polyline}" />
         </svg>`;
     }
 
@@ -728,18 +758,18 @@ class LensApp {
                 : '';
             const sparkHtml = this._renderSparkline(ind.sparkline, ind.change_pct);
             card.innerHTML = `
+                ${sparkHtml}
                 <div class="headline-card-info">
                     <div class="headline-label">${ind.label}</div>
                     <div class="headline-value-row">
                         <span class="headline-value">${this._formatHeadlineValue(ind.value, ind.format)}</span>
                         <span class="headline-unit">${ind.unit}</span>
                     </div>
-                    <div class="headline-footer">
-                        <span class="headline-period">${ind.period}</span>
-                        ${changeHtml}
-                    </div>
                 </div>
-                ${sparkHtml}
+                <div class="headline-footer">
+                    <span class="headline-period">${ind.period}</span>
+                    ${changeHtml}
+                </div>
             `;
             cards.appendChild(card);
         }
@@ -795,22 +825,33 @@ class LensApp {
         const resp = await API.getDatasets({ ancestor: cat.code, limit: 100, sort: 'updated', lang: this.lang });
         list.innerHTML = '';
 
-        // Show subcategory rows first (if any)
+        // Show subcategory cards first (if any)
         if (cat.children && cat.children.length > 0) {
+            const subcatGrid = document.createElement('div');
+            subcatGrid.className = 'subcat-grid';
             for (const child of cat.children) {
-                const trendHtml = this._renderTrendIndicator(child.code);
-                const row = document.createElement('div');
-                row.className = 'ds-row ds-row-subcat';
-                row.addEventListener('click', () => this.drillCategory(child, colorIdx));
-                row.innerHTML = `
-                    <span class="ds-code" style="color:var(--text-2)">▸</span>
-                    <span class="ds-name" style="font-weight:600">${child.name}</span>
-                    <span class="ds-badges">
-                        <span class="ds-badge">${child.total_datasets || 0} ${this.ui.datasets}</span>
+                const trend = this.categoryTrends?.[child.code];
+                let trendHtml = '';
+                if (trend && trend.total) {
+                    const yoy = trend.avg_yoy;
+                    if (yoy != null) {
+                        const cls = yoy >= 0 ? 'up' : 'down';
+                        trendHtml = `<span class="subcat-trend ${cls}">${yoy >= 0 ? '↑' : '↓'} ${Math.abs(yoy).toFixed(1)}%</span>`;
+                    }
+                }
+                const card = document.createElement('div');
+                card.className = 'subcat-card';
+                card.addEventListener('click', () => this.drillCategory(child, colorIdx));
+                card.innerHTML = `
+                    <span class="subcat-name">${child.name}</span>
+                    <span class="subcat-meta">
+                        <span class="subcat-count">${child.total_datasets || 0} ${this.ui.datasets}</span>
+                        ${trendHtml}
                     </span>
                 `;
-                list.appendChild(row);
+                subcatGrid.appendChild(card);
             }
+            list.appendChild(subcatGrid);
         }
 
         if (resp.datasets.length === 0 && (!cat.children || cat.children.length === 0)) {
@@ -818,22 +859,52 @@ class LensApp {
             return;
         }
 
-        resp.datasets.forEach((ds, i) => {
-            const row = document.createElement('div');
-            row.className = 'ds-row';
-            row.style.animationDelay = `${Math.min(i * 0.02, 0.5)}s`;
-            row.addEventListener('click', () => this.showDashboard(ds.matrix_code));
-            row.innerHTML = `
-                <span class="ds-code">${ds.matrix_code}</span>
-                <span class="ds-name">${ds.matrix_name}</span>
-                <span class="ds-badges">
-                    ${ds.time_range ? `<span class="ds-badge">${ds.time_range}</span>` : ''}
-                    ${ds.archetype ? `<span class="ds-badge">${ds.archetype}</span>` : ''}
-                    ${ds.row_count ? `<span class="ds-badge">${formatNumber(ds.row_count, 0)} ${this.ui.rows}</span>` : ''}
-                </span>
-            `;
-            list.appendChild(row);
-        });
+        this._lastDrillDatasets = resp.datasets;
+        this._renderDatasetEntries(list, resp.datasets);
+    }
+
+    _renderDatasetEntries(list, datasets) {
+        // Remove existing dataset entries (keep subcat-grid if present)
+        list.querySelectorAll('.ds-row, .ds-grid-card, .ds-grid').forEach(el => el.remove());
+
+        if (this.dsViewMode === 'grid') {
+            const grid = document.createElement('div');
+            grid.className = 'ds-grid';
+            datasets.forEach((ds, i) => {
+                const card = document.createElement('div');
+                card.className = 'ds-grid-card';
+                card.style.animationDelay = `${Math.min(i * 0.02, 0.5)}s`;
+                card.addEventListener('click', () => this.showDashboard(ds.matrix_code));
+                card.innerHTML = `
+                    <span class="ds-grid-code">${ds.matrix_code}</span>
+                    <span class="ds-grid-name">${ds.matrix_name}</span>
+                    <div class="ds-grid-meta">
+                        ${ds.time_range ? `<span class="ds-badge">${ds.time_range}</span>` : ''}
+                        ${ds.archetype ? `<span class="ds-badge">${ds.archetype}</span>` : ''}
+                        ${ds.row_count ? `<span class="ds-badge">${formatNumber(ds.row_count, 0)} ${this.ui.rows}</span>` : ''}
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+            list.appendChild(grid);
+        } else {
+            datasets.forEach((ds, i) => {
+                const row = document.createElement('div');
+                row.className = 'ds-row';
+                row.style.animationDelay = `${Math.min(i * 0.02, 0.5)}s`;
+                row.addEventListener('click', () => this.showDashboard(ds.matrix_code));
+                row.innerHTML = `
+                    <span class="ds-code">${ds.matrix_code}</span>
+                    <span class="ds-name">${ds.matrix_name}</span>
+                    <span class="ds-badges">
+                        ${ds.time_range ? `<span class="ds-badge">${ds.time_range}</span>` : ''}
+                        ${ds.archetype ? `<span class="ds-badge">${ds.archetype}</span>` : ''}
+                        ${ds.row_count ? `<span class="ds-badge">${formatNumber(ds.row_count, 0)} ${this.ui.rows}</span>` : ''}
+                    </span>
+                `;
+                list.appendChild(row);
+            });
+        }
     }
 
     renderBreadcrumbs() {

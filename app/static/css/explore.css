@@ -413,121 +413,146 @@ kbd {
     font-weight: 600;
 }
 
-/* --- Headlines Section (masonry 2-col) --- */
-.headlines-section { margin-bottom: 8px; }
+/* --- Headlines Section — inline-block themes, shrink-wrapped --- */
+.headlines-section { margin-bottom: 12px; }
 .headlines-grid {
-    columns: 2;
-    column-gap: 28px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    align-items: flex-start;
 }
 @media (max-width: 860px) {
-    .headlines-grid { columns: 1; }
+    .headlines-grid { flex-direction: column; }
 }
 
-/* Theme section: masonry block — no border/box */
+/* Theme block: shrink-wrap to content, never stretch */
 .headline-theme {
-    padding: 0;
-    break-inside: avoid;
-    -webkit-column-break-inside: avoid;
-    display: inline-block;
-    width: 100%;
-    margin-bottom: 24px;
+    flex: 0 0 auto;
+    margin-top: 12px;
 }
 
 .headline-theme-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 14px;
+    gap: 8px;
+    margin-bottom: 8px;
     cursor: pointer;
     transition: color 0.15s;
 }
 .headline-theme-header:hover { color: var(--accent); }
 .headline-theme-header:hover .headline-theme-label { color: var(--accent); }
 .headline-theme-icon {
-    width: 26px;
-    height: 26px;
+    width: 24px;
+    height: 24px;
     color: var(--text-2);
     flex-shrink: 0;
 }
 .headline-theme-header:hover .headline-theme-icon { color: var(--accent); }
 .headline-theme-label {
-    font-size: 16px;
+    font-size: 17px;
     font-weight: 700;
     letter-spacing: -0.01em;
-    color: var(--text-0);
+    color: var(--text-1);
     flex: 1;
 }
 .headline-theme-arrow {
-    font-size: 16px;
+    font-size: 15px;
     color: var(--text-3);
     transition: transform 0.15s;
 }
 .headline-theme-header:hover .headline-theme-arrow { transform: translateX(3px); }
 
-/* Cards grid within a theme: auto-fills, squarish tiles */
+/* Cards row: no stretch, flow naturally */
 .headline-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 8px;
+    display: flex;
+    gap: 6px;
 }
+
+/* Card: squarish, 5 per row target */
 .headline-card {
+    position: relative;
+    overflow: hidden;
+    flex: 0 0 190px;
+    height: 110px;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    background: var(--bg-1);
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding: 14px 16px 12px;
-    border-radius: var(--radius);
-    cursor: pointer;
-    transition: background 0.15s;
-    background: var(--bg-1);
-    border: 1px solid var(--border);
-    min-height: 120px;
 }
 .headline-card:hover {
-    background: var(--bg-2);
     border-color: var(--border-hover);
+    background: var(--bg-2);
 }
-.headline-card-info { flex: 1; min-width: 0; }
-.headline-label { font-size: 11.5px; color: var(--text-2); line-height: 1.3; margin-bottom: 4px; }
+.headline-card-info {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+}
+.headline-label {
+    font-size: 12px;
+    color: var(--text-1);
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .headline-value-row {
     display: flex;
     align-items: baseline;
     gap: 5px;
-    flex-wrap: wrap;
+    margin-top: 4px;
 }
 .headline-value {
-    font-size: 1.5rem;
+    font-size: 1.35rem;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     color: var(--text-0);
     line-height: 1.15;
+    white-space: nowrap;
 }
-.headline-unit { font-size: 10.5px; color: var(--text-3); }
+.headline-unit {
+    font-size: 11px;
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .headline-footer {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-top: 3px;
 }
-.headline-period { font-size: 10.5px; color: var(--text-3); }
+.headline-period { font-size: 11.5px; color: var(--text-2); }
 .headline-change { font-size: 11.5px; font-weight: 600; }
 .headline-change.up { color: var(--green); }
 .headline-change.down { color: var(--red); }
 .headline-change.neutral { color: var(--text-3); }
 
-/* Sparkline — full-width at bottom of card */
+/* Sparkline — bottom-aligned background watermark */
 .headline-sparkline {
-    width: 100%;
-    height: 30px;
-    margin-top: 8px;
-    flex-shrink: 0;
+    position: absolute;
+    bottom: 0;
+    left: 10%;
+    width: 80%;
+    height: 50%;
+    z-index: 0;
+    opacity: 0.25;
 }
+.headline-card:hover .headline-sparkline { opacity: 0.40; }
 .headline-sparkline polyline {
     fill: none;
-    stroke-width: 1.5;
+    stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
+    stroke: var(--text-1);
 }
-.headline-sparkline polygon { opacity: 0.10; }
+.headline-sparkline polygon { opacity: 0.3; }
 
 /* --- Recently Updated Section (below KPI grid) --- */
 .recent-section { margin-top: 8px; margin-bottom: 8px; }
@@ -625,10 +650,7 @@ kbd {
     margin-bottom: 20px;
 }
 .theme-headlines .headline-cards {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-}
-.theme-headlines .headline-card {
-    min-height: 110px;
+    flex-wrap: wrap;
 }
 
 /* Legacy compat — hide old hero if still referenced */
@@ -811,13 +833,60 @@ kbd {
 .dash-crumb-current { color: var(--text-1); white-space: nowrap; }
 .dash-crumb-sep { color: var(--text-2); font-size: 14px; user-select: none; }
 
-/* Subcategory rows */
-.ds-row-subcat {
+/* Subcategory card grid */
+.subcat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.subcat-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px;
+    border-radius: var(--radius);
     background: var(--bg-1);
     border: 1px solid var(--border);
-    margin-bottom: 2px;
+    cursor: pointer;
+    transition: all var(--transition);
 }
-.ds-row-subcat:hover { border-color: var(--border-hover); background: var(--bg-2); }
+.subcat-card:hover { border-color: var(--border-hover); background: var(--bg-2); }
+.subcat-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-0);
+    line-height: 1.3;
+}
+.subcat-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.subcat-count {
+    font-size: 11px;
+    color: var(--text-2);
+}
+.subcat-trend {
+    font-size: 11px;
+    font-weight: 600;
+}
+.subcat-trend.up { color: var(--green); }
+.subcat-trend.down { color: var(--red); }
+
+/* View toggle button */
+.view-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-sm);
+    color: var(--text-2);
+    transition: all var(--transition);
+    margin-left: auto;
+}
+.view-toggle:hover { color: var(--text-0); background: var(--bg-2); }
 
 .dataset-list {
     display: flex;
@@ -865,6 +934,47 @@ kbd {
     color: var(--text-2);
     background: var(--bg-3);
     white-space: nowrap;
+}
+
+/* Dataset grid view */
+.ds-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 8px;
+}
+.ds-grid-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    border-radius: var(--radius);
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all var(--transition);
+}
+.ds-grid-card:hover { border-color: var(--border-hover); background: var(--bg-2); }
+.ds-grid-code {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+}
+.ds-grid-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-0);
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.ds-grid-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 2px;
 }
 
 /* --- Dashboard View --- */
@@ -1280,8 +1390,8 @@ kbd {
 .insight-card:nth-child(3) { animation-delay: 0.15s; }
 .insight-card:nth-child(4) { animation-delay: 0.20s; }
 
-/* Staggered entrance for dataset rows */
-.ds-row {
+/* Staggered entrance for dataset rows/cards */
+.ds-row, .ds-grid-card {
     animation: fadeInUp 0.25s ease backwards;
 }
 

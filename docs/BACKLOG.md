@@ -6,7 +6,7 @@ Future tasks and intentions for the TEMPO INS data explorer.
 - [x] enhance table view
 - [ ] more, nice themes - mai light a bit off-white, Financial Times, or Anthropic, lighter dark theme
 - [ ] add datased code to explorer
-- [ ] add flags to language switcher
+- [x] add flags to language switcher
 - [ ] add disclaimer, not official gov.ro site
 - [ ] add data download option, csv/xlsx?
   - [ ] disseminate data. Kaggle, Hugging face? Check legal?
