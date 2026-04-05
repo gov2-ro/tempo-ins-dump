@@ -44,6 +44,14 @@ const API = {
         return this.fetch(`/datasets/${code}/data`, params);
     },
 
+    getCorpusSummary(params = {}) {
+        return this.fetch('/corpus/summary', params);
+    },
+
+    getCategorySummary(code, params = {}) {
+        return this.fetch(`/categories/${code}/summary`, params);
+    },
+
     async getViewProfile(code) {
         const resp = await fetch(`/view-profiles/${code}.json`);
         if (!resp.ok) return null;

@@ -7,17 +7,24 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/explore.css?v=12">
+    <link rel="stylesheet" href="/css/explore.css?v=14">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 </head>
 <body>
+    <!-- Notice bar (above everything) -->
+    <div class="notice-bar hidden" id="notice-bar">
+        <span class="notice-icon">&#x26A0;</span>
+        <span class="notice-text" id="notice-text"></span>
+        <button class="notice-close" id="notice-close">&times;</button>
+    </div>
+
     <!-- Top bar -->
     <nav class="topbar" id="topbar">
         <div class="topbar-left">
             <button class="sidebar-toggle" id="sidebar-toggle" title="Quick navigate">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             </button>
-            <a href="/explore.html" class="logo"><span class="logo-dot"></span>Lens</a>
+            <a href="/" class="logo"><span class="logo-dot"></span>Lens</a>
             <button class="back-btn hidden" id="back-btn">&larr; Explore</button>
         </div>
         <button class="search-trigger" id="search-trigger">
@@ -70,10 +77,19 @@
     <main id="app">
         <!-- Browse view -->
         <section id="browse-view" class="browse-view">
-            <div class="browse-hero">
-                <h1 class="hero-title">Tempo INSse<br><span class="hero-accent"><small>da mai cât de cât</small></span></h1>
-                <p class="hero-sub" id="hero-sub"></p>
+            <div class="browse-header">
+                <h1 class="browse-title" id="browse-title"></h1>
+                <p class="browse-subtitle" id="browse-subtitle"></p>
             </div>
+            <!-- Headline indicators grid (themed KPI cards) -->
+            <div class="headlines-section" id="headlines-section"></div>
+            <!-- Recently updated datasets -->
+            <div class="recent-section hidden" id="recent-section">
+                <h3 class="section-label" id="recent-label"></h3>
+                <div class="recent-grid" id="recent-grid"></div>
+            </div>
+            <!-- Section label before category grid -->
+            <h3 class="section-label" id="categories-label"></h3>
             <div class="category-grid" id="category-grid"></div>
             <div class="dataset-panel hidden" id="dataset-panel">
                 <div class="panel-header">
@@ -81,6 +97,7 @@
                     <h2 id="panel-title"></h2>
                     <span class="badge" id="panel-count"></span>
                 </div>
+                <div class="theme-stats hidden" id="theme-stats"></div>
                 <div id="dataset-list" class="dataset-list"></div>
             </div>
         </section>
@@ -125,11 +142,11 @@
 
     <!-- Scripts: reuse existing API + chart modules -->
     <script src="/js/utils.js?v=22"></script>
-    <script src="/js/api.js?v=24"></script>
+    <script src="/js/api.js?v=25"></script>
     <script src="/js/chart-factory.js?v=30"></script>
     <script src="/js/chart-new-types.js?v=28"></script>
     <script src="/js/chart-geo.js?v=21"></script>
     <script src="/js/chart-demographic.js?v=25"></script>
-    <script src="/js/explore-app.js?v=23"></script>
+    <script src="/js/explore-app.js?v=25"></script>
 </body>
 </html>

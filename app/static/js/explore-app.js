@@ -9,8 +9,11 @@
 // ---------------------------------------------------------------------------
 const UI = {
     ro: {
-        heroTitle: 'Romanian Statistics<br><span class="hero-accent">Observatory</span>',
-        heroSub: (n, c) => `${n} seturi de date din ${c} categorii`,
+        browseTitle: 'Date statistice oficiale România',
+        browseSub: (n, obs) => `${n} seturi de date · ${obs} observații`,
+        noticeText: 'Acesta nu este un proiect oficial gov.ro. Date preluate de pe <a href="https://insse.ro" target="_blank">insse.ro</a>.',
+        recentlyUpdated: 'Actualizate recent',
+        categoriesLabel: 'Categorii tematice',
         searchPlaceholder: 'Caută seturi de date, indicatori, coduri...',
         searchTrigger: 'Caută seturi de date...',
         searchEmpty: 'Tastează pentru a căuta în toate seturile de date',
@@ -58,8 +61,11 @@ const UI = {
         noneDim: 'Niciuna',
     },
     en: {
-        heroTitle: 'Romanian Statistics<br><span class="hero-accent">Observatory</span>',
-        heroSub: (n, c) => `${n} datasets across ${c} categories`,
+        browseTitle: 'Romanian Official Statistical Data',
+        browseSub: (n, obs) => `${n} datasets · ${obs} observations`,
+        noticeText: 'This is not an official gov.ro project. Data sourced from <a href="https://insse.ro" target="_blank">insse.ro</a>.',
+        recentlyUpdated: 'Recently updated',
+        categoriesLabel: 'Thematic categories',
         searchPlaceholder: 'Search datasets, indicators, codes...',
         searchTrigger: 'Search datasets...',
         searchEmpty: 'Type to search across all datasets',
@@ -106,6 +112,16 @@ const UI = {
         colorLabel: 'Group',
         noneDim: 'None',
     },
+};
+
+// ---------------------------------------------------------------------------
+// Theme icons (inline SVGs, Lucide-style)
+// ---------------------------------------------------------------------------
+const THEME_ICONS = {
+    'briefcase': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>',
+    'trending-up': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
+    'users': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+    'compass': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>',
 };
 
 // ---------------------------------------------------------------------------
@@ -389,18 +405,23 @@ class LensApp {
         document.getElementById('dashboard-view').classList.add('hidden');
         document.getElementById('back-btn').classList.add('hidden');
 
-        if (!this.categories) {
-            const [catResp, trendsResp] = await Promise.all([
-                API.getCategories({ lang: this.lang }),
-                this.categoryTrends ? Promise.resolve(null) : API.getCategoryTrends(),
-            ]);
-            this.categories = catResp.tree;
-            if (trendsResp) this.categoryTrends = trendsResp.trends;
-        }
+        const [catResp, trendsResp, summary] = await Promise.all([
+            this.categories ? Promise.resolve(null) : API.getCategories({ lang: this.lang }),
+            this.categoryTrends ? Promise.resolve(null) : API.getCategoryTrends(),
+            API.getCorpusSummary({ lang: this.lang }),
+        ]);
+        if (catResp) this.categories = catResp.tree;
+        if (trendsResp) this.categoryTrends = trendsResp.trends;
 
         const totalDatasets = this.categories.reduce((s, c) => s + (c.total_datasets || 0), 0);
-        document.getElementById('hero-sub').innerHTML = this.ui.heroSub(formatNumber(totalDatasets, 0), this.categories.length);
         document.getElementById('dataset-count').textContent = `${formatNumber(totalDatasets, 0)} ${this.ui.datasets}`;
+
+        this.renderNoticeBar();
+        this.renderBrowseHeader(summary.corpus);
+        this.renderHeadlines(summary.headlines);
+        this.renderRecentlyUpdated(summary.recently_updated);
+        const catLabel = document.getElementById('categories-label');
+        if (catLabel) catLabel.textContent = this.ui.categoriesLabel;
 
         this.showCategoryGrid();
     }
@@ -408,6 +429,10 @@ class LensApp {
     showCategoryGrid() {
         document.getElementById('category-grid').classList.remove('hidden');
         document.getElementById('dataset-panel').classList.add('hidden');
+        // Show landing sections, hide drill-down stats
+        document.getElementById('headlines-section')?.classList.remove('hidden');
+        document.getElementById('recent-section')?.classList.remove('hidden');
+        document.getElementById('categories-label')?.classList.remove('hidden');
         this.drillStack = [];
 
         const grid = document.getElementById('category-grid');
@@ -441,6 +466,219 @@ class LensApp {
         });
     }
 
+    // --- Landing page sections ------------------------------------------------
+    renderNoticeBar() {
+        const bar = document.getElementById('notice-bar');
+        if (!bar) return;
+        if (localStorage.getItem('notice-dismissed')) { bar.classList.add('hidden'); return; }
+        document.getElementById('notice-text').innerHTML = this.ui.noticeText;
+        bar.classList.remove('hidden');
+        document.getElementById('notice-close').onclick = () => {
+            bar.classList.add('hidden');
+            localStorage.setItem('notice-dismissed', '1');
+        };
+    }
+
+    renderBrowseHeader(corpus) {
+        const title = document.getElementById('browse-title');
+        const sub = document.getElementById('browse-subtitle');
+        if (title) title.textContent = this.ui.browseTitle;
+        if (sub && corpus) {
+            sub.textContent = this.ui.browseSub(
+                formatNumber(corpus.datasets, 0),
+                formatNumber(corpus.observations, 0)
+            );
+        }
+    }
+
+    renderHeadlines(headlines) {
+        const container = document.getElementById('headlines-section');
+        if (!container || !headlines || !headlines.length) return;
+        container.innerHTML = '';
+
+        const grid = document.createElement('div');
+        grid.className = 'headlines-grid';
+
+        for (const theme of headlines) {
+            const section = document.createElement('div');
+            section.className = 'headline-theme';
+
+            // Theme header with icon + label + arrow → drills into category
+            const header = document.createElement('div');
+            header.className = 'headline-theme-header';
+            header.innerHTML = `
+                <span class="headline-theme-icon">${THEME_ICONS[theme.icon] || ''}</span>
+                <span class="headline-theme-label">${theme.theme_label}</span>
+                <span class="headline-theme-arrow">›</span>
+            `;
+            if (theme.context_code) {
+                header.addEventListener('click', () => this._drillToContext(theme.context_code));
+            }
+            section.appendChild(header);
+
+            const cards = document.createElement('div');
+            cards.className = 'headline-cards';
+
+            for (const ind of theme.indicators) {
+                const card = document.createElement('div');
+                card.className = 'headline-card';
+                card.addEventListener('click', () => this.showDashboard(ind.code));
+
+                const changeHtml = ind.change_pct != null
+                    ? `<span class="headline-change ${ind.change_pct >= 0 ? 'up' : 'down'}">${ind.change_pct >= 0 ? '↑' : '↓'} ${Math.abs(ind.change_pct).toFixed(1)}%</span>`
+                    : '';
+
+                const sparkHtml = this._renderSparkline(ind.sparkline, ind.change_pct);
+
+                card.innerHTML = `
+                    <div class="headline-card-info">
+                        <div class="headline-label">${ind.label}</div>
+                        <div class="headline-value-row">
+                            <span class="headline-value">${this._formatHeadlineValue(ind.value, ind.format)}</span>
+                            <span class="headline-unit">${ind.unit}</span>
+                        </div>
+                        <div class="headline-footer">
+                            <span class="headline-period">${ind.period}</span>
+                            ${changeHtml}
+                        </div>
+                    </div>
+                    ${sparkHtml}
+                `;
+                cards.appendChild(card);
+            }
+            section.appendChild(cards);
+            grid.appendChild(section);
+        }
+        container.appendChild(grid);
+    }
+
+    _drillToContext(contextCode) {
+        // Find the category node matching this context_code and drill into it
+        if (!this.categories) return;
+        const findCat = (nodes) => {
+            for (let i = 0; i < nodes.length; i++) {
+                if (nodes[i].code === contextCode) return { cat: nodes[i], idx: i };
+                if (nodes[i].children) {
+                    const found = findCat(nodes[i].children);
+                    if (found) return found;
+                }
+            }
+            return null;
+        };
+        const result = findCat(this.categories);
+        if (result) this.drillCategory(result.cat, result.idx);
+    }
+
+    _renderSparkline(data, changePct) {
+        if (!data || data.length < 3) return '';
+        const color = changePct >= 0 ? 'var(--green)' : 'var(--red)';
+        const min = Math.min(...data);
+        const max = Math.max(...data);
+        const range = max - min || 1;
+        const w = 64, h = 28, pad = 2;
+        const points = data.map((v, i) => {
+            const x = pad + (i / (data.length - 1)) * (w - 2 * pad);
+            const y = h - pad - ((v - min) / range) * (h - 2 * pad);
+            return `${x.toFixed(1)},${y.toFixed(1)}`;
+        });
+        const polyline = points.join(' ');
+        // Fill polygon: close path to bottom
+        const fillPoly = `${points[0].split(',')[0]},${h} ${polyline} ${points[points.length-1].split(',')[0]},${h}`;
+        return `<svg class="headline-sparkline" viewBox="0 0 ${w} ${h}">
+            <polygon points="${fillPoly}" fill="${color}" />
+            <polyline points="${polyline}" stroke="${color}" />
+        </svg>`;
+    }
+
+    _formatHeadlineValue(value, format) {
+        if (value == null) return '—';
+        switch (format) {
+            case 'currency':
+                return formatNumber(value, value >= 10 ? 0 : 1);
+            case 'percent':
+                return value.toFixed(1) + '%';
+            case 'index':
+                return value.toFixed(1);
+            case 'number':
+            default:
+                if (Math.abs(value) >= 1_000_000) return (value / 1_000_000).toFixed(1) + ' mil.';
+                if (Math.abs(value) >= 10_000) return formatNumber(Math.round(value), 0);
+                return formatNumber(value, value % 1 === 0 ? 0 : 1);
+        }
+    }
+
+    renderRecentlyUpdated(datasets) {
+        const section = document.getElementById('recent-section');
+        const label = document.getElementById('recent-label');
+        const grid = document.getElementById('recent-grid');
+        if (!section || !grid || !datasets || !datasets.length) return;
+
+        label.textContent = this.ui.recentlyUpdated;
+        grid.innerHTML = '';
+
+        for (const ds of datasets) {
+            const card = document.createElement('div');
+            card.className = 'recent-card';
+            card.addEventListener('click', () => this.showDashboard(ds.matrix_code));
+
+            let trendHtml = '';
+            if (ds.trend_direction === 'increasing' || (ds.yoy_growth_latest != null && ds.yoy_growth_latest > 0)) {
+                trendHtml = `<span class="recent-trend up">↑ ${ds.yoy_growth_latest != null ? Math.abs(ds.yoy_growth_latest).toFixed(1) + '%' : ''}</span>`;
+            } else if (ds.trend_direction === 'decreasing' || (ds.yoy_growth_latest != null && ds.yoy_growth_latest < 0)) {
+                trendHtml = `<span class="recent-trend down">↓ ${ds.yoy_growth_latest != null ? Math.abs(ds.yoy_growth_latest).toFixed(1) + '%' : ''}</span>`;
+            } else {
+                trendHtml = `<span class="recent-trend flat">→</span>`;
+            }
+
+            card.innerHTML = `
+                <div class="recent-info">
+                    <div class="recent-name">${ds.matrix_name}</div>
+                    <div class="recent-meta">${ds.matrix_code} · ${ds.ultima_actualizare || ''} ${ds.time_range ? `· ${ds.time_range}` : ''}</div>
+                </div>
+                ${trendHtml}
+            `;
+            grid.appendChild(card);
+        }
+        section.classList.remove('hidden');
+    }
+
+    async renderThemeStats(code) {
+        const container = document.getElementById('theme-stats');
+        if (!container) return;
+        container.classList.add('hidden');
+        try {
+            const data = await API.getCategorySummary(code, { lang: this.lang });
+            if (!data || !data.datasets) { container.classList.add('hidden'); return; }
+
+            const timeSpan = data.time_span ? `${data.time_span.min}–${data.time_span.max}` : '—';
+            const trends = data.trends || {};
+            const trendTotal = (trends.up || 0) + (trends.down || 0) + (trends.flat || 0) + (trends.volatile || 0);
+            const trendLabel = trendTotal ? `↑${trends.up || 0} ↓${trends.down || 0}` : '—';
+
+            container.innerHTML = `
+                <div class="theme-stat-card">
+                    <div class="theme-stat-value">${formatNumber(data.datasets, 0)}</div>
+                    <div class="theme-stat-label">${this.ui.datasets}</div>
+                </div>
+                <div class="theme-stat-card">
+                    <div class="theme-stat-value">${data.observations ? formatNumber(data.observations, 0) : '—'}</div>
+                    <div class="theme-stat-label">${this.lang === 'ro' ? 'observații' : 'observations'}</div>
+                </div>
+                <div class="theme-stat-card">
+                    <div class="theme-stat-value">${timeSpan}</div>
+                    <div class="theme-stat-label">${this.lang === 'ro' ? 'interval' : 'time span'}</div>
+                </div>
+                <div class="theme-stat-card">
+                    <div class="theme-stat-value">${trendLabel}</div>
+                    <div class="theme-stat-label">${this.lang === 'ro' ? 'tendințe' : 'trends'}</div>
+                </div>
+            `;
+            container.classList.remove('hidden');
+        } catch (e) {
+            container.classList.add('hidden');
+        }
+    }
+
     _renderTrendIndicator(contextCode) {
         const trend = this.categoryTrends?.[contextCode];
         if (!trend || !trend.total) return '';
@@ -464,6 +702,11 @@ class LensApp {
     async drillCategory(cat, colorIdx, pushToStack = true) {
         if (pushToStack) this.drillStack.push({ cat, colorIdx });
 
+        // Hide landing-page-only sections
+        document.getElementById('headlines-section')?.classList.add('hidden');
+        document.getElementById('recent-section')?.classList.add('hidden');
+        document.getElementById('categories-label')?.classList.add('hidden');
+
         document.getElementById('category-grid').classList.add('hidden');
         const panel = document.getElementById('dataset-panel');
         panel.classList.remove('hidden');
@@ -473,6 +716,7 @@ class LensApp {
         document.getElementById('panel-count').textContent = `${cat.total_datasets || 0} ${this.ui.datasets}`;
 
         this.renderBreadcrumbs();
+        this.renderThemeStats(cat.code);
 
         const list = document.getElementById('dataset-list');
         list.innerHTML = '<div class="skeleton" style="height:200px;margin:8px 0"></div>';
@@ -780,8 +1024,8 @@ class LensApp {
             } else {
                 snapshotChartTypes = ['bar_vertical', 'horizontal_bar'];
             }
-            // For geo_time, prepend choropleth
-            if (archetype === 'geo_time' && geoDimObj) {
+            // For geo datasets, prepend choropleth
+            if ((archetype === 'geo_time' || archetype === 'geo_only') && geoDimObj) {
                 snapshotChartTypes.unshift('choropleth');
                 // Detect geo level from dimension options to load correct GeoJSON
                 let geoLevel = 'county';

@@ -4,17 +4,28 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 ## Misc
 - [x] enhance table view
+- [ ] add datased code to explorer
+- [ ] add flags to language switcher
+- [ ] add disclaimer, not official gov.ro site
 - [ ] add data download option, csv/xlsx?
   - [ ] disseminate data. Kaggle, Hugging face? Check legal?
-- [ ] split repos, data fetching, UI?
+- [ ] should we split repos, data fetching, UI? - so we make a dataset independent SDMX UI framework?
 - [ ] responsive
 - [ ] fetch newly updated datasets
   - [ ] continuous fetching, gh actions?
-- [ ] landing
-  - [ ] Show latest updates
-  - [ ] Flag interesting datasets
-  - [ ] Some widgets per theme/subtheme/dataset
 - [ ] Look for same EU stats?
+- [ ] large datasets show no data: LOC108B
+
+## Landing
+- [ ] Show latest updates
+- [ ] Flag interesting datasets
+- [ ] Some widgets per theme/subtheme/dataset
+
+
+## Chart rules
+- [ ] for long horizontal bar charts, prever vertical view
+- [ ] bar charts, order by value
+- [ ] if just 2 dimensions, don't give options to choose (axis, group), just to swap, transpose. 
 
 ## SDMX / Multi-Source
 
@@ -83,7 +94,7 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 ### Lens UI Improvements
 
-- [ ] **URL state persistence** — persist filters, chart type, and selected period in URL
+- [ ] **URL state persistence** — persist filters, chart type, and selected period in URL. Also, language.
   so dashboard views are shareable/bookmarkable (e.g. `?code=POP301A&period=2020&snap=heatmap`).
   Currently only `?code=` is saved; filter/chart/period selections reset on reload.
 
