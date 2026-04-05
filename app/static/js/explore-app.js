@@ -115,6 +115,14 @@ const UI = {
 };
 
 // ---------------------------------------------------------------------------
+// Flag data URIs (Romania + UK) — same as duckdb-browser
+// ---------------------------------------------------------------------------
+const FLAG_DATA = {
+    ro: 'data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 height%3D%22512%22 width%3D%22512%22%3E%3Cg fill-rule%3D%22evenodd%22 stroke-width%3D%221pt%22%3E%3Cpath fill%3D%22%2300319c%22 d%3D%22M0 0h170.666v512H0z%22%2F%3E%3Cpath fill%3D%22%23ffde00%22 d%3D%22M170.666 0h170.666v512H170.666z%22%2F%3E%3Cpath fill%3D%22%23de2110%22 d%3D%22M341.332 0h170.665v512H341.332z%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E',
+    en: 'data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 60 60%22%3E%3Crect width%3D%2260%22 height%3D%2260%22 fill%3D%22%23012169%22%2F%3E%3Cpath d%3D%22M0%200l60%2060M60%200L0%2060%22 stroke%3D%22%23fff%22 stroke-width%3D%2212%22%2F%3E%3Cpath d%3D%22M0%200l60%2060M60%200L0%2060%22 stroke%3D%22%23C8102E%22 stroke-width%3D%228%22%2F%3E%3Cpath d%3D%22M30%200v60M0%2030h60%22 stroke%3D%22%23fff%22 stroke-width%3D%2220%22%2F%3E%3Cpath d%3D%22M30%200v60M0%2030h60%22 stroke%3D%22%23C8102E%22 stroke-width%3D%2212%22%2F%3E%3C%2Fsvg%3E',
+};
+
+// ---------------------------------------------------------------------------
 // Theme icons (inline SVGs, Lucide-style)
 // ---------------------------------------------------------------------------
 const THEME_ICONS = {
@@ -359,7 +367,10 @@ class LensApp {
     }
 
     applyLang() {
-        document.getElementById('lang-label').textContent = this.lang === 'ro' ? 'EN' : 'RO';
+        const nextLang = this.lang === 'ro' ? 'en' : 'ro';
+        document.getElementById('lang-label').textContent = nextLang.toUpperCase();
+        const flagEl = document.getElementById('lang-flag');
+        if (flagEl) flagEl.src = FLAG_DATA[nextLang] || '';
         document.getElementById('search-trigger').querySelector('span').textContent = this.ui.searchTrigger;
         document.getElementById('search-input').placeholder = this.ui.searchPlaceholder;
         const sidebarTitle = document.getElementById('sidebar-title');
@@ -416,9 +427,10 @@ class LensApp {
         const totalDatasets = this.categories.reduce((s, c) => s + (c.total_datasets || 0), 0);
         document.getElementById('dataset-count').textContent = `${formatNumber(totalDatasets, 0)} ${this.ui.datasets}`;
 
+        this.headlines = summary.headlines || [];
         this.renderNoticeBar();
         this.renderBrowseHeader(summary.corpus);
-        this.renderHeadlines(summary.headlines);
+        this.renderHeadlines(this.headlines);
         this.renderRecentlyUpdated(summary.recently_updated);
         const catLabel = document.getElementById('categories-label');
         if (catLabel) catLabel.textContent = this.ui.categoriesLabel;
@@ -430,8 +442,7 @@ class LensApp {
         document.getElementById('category-grid').classList.remove('hidden');
         document.getElementById('dataset-panel').classList.add('hidden');
         // Show landing sections, hide drill-down stats
-        document.getElementById('headlines-section')?.classList.remove('hidden');
-        document.getElementById('recent-section')?.classList.remove('hidden');
+        document.getElementById('landing-content-row')?.classList.remove('hidden');
         document.getElementById('categories-label')?.classList.remove('hidden');
         this.drillStack = [];
 
@@ -571,20 +582,19 @@ class LensApp {
 
     _renderSparkline(data, changePct) {
         if (!data || data.length < 3) return '';
-        const color = changePct >= 0 ? 'var(--green)' : 'var(--red)';
+        const color = changePct != null ? (changePct >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-3)';
         const min = Math.min(...data);
         const max = Math.max(...data);
         const range = max - min || 1;
-        const w = 64, h = 28, pad = 2;
+        const w = 100, h = 30, pad = 1;
         const points = data.map((v, i) => {
             const x = pad + (i / (data.length - 1)) * (w - 2 * pad);
             const y = h - pad - ((v - min) / range) * (h - 2 * pad);
             return `${x.toFixed(1)},${y.toFixed(1)}`;
         });
         const polyline = points.join(' ');
-        // Fill polygon: close path to bottom
         const fillPoly = `${points[0].split(',')[0]},${h} ${polyline} ${points[points.length-1].split(',')[0]},${h}`;
-        return `<svg class="headline-sparkline" viewBox="0 0 ${w} ${h}">
+        return `<svg class="headline-sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
             <polygon points="${fillPoly}" fill="${color}" />
             <polyline points="${polyline}" stroke="${color}" />
         </svg>`;
@@ -623,19 +633,26 @@ class LensApp {
 
             let trendHtml = '';
             if (ds.trend_direction === 'increasing' || (ds.yoy_growth_latest != null && ds.yoy_growth_latest > 0)) {
-                trendHtml = `<span class="recent-trend up">↑ ${ds.yoy_growth_latest != null ? Math.abs(ds.yoy_growth_latest).toFixed(1) + '%' : ''}</span>`;
+                trendHtml = `<span class="recent-trend up">↑${ds.yoy_growth_latest != null ? ' ' + Math.abs(ds.yoy_growth_latest).toFixed(1) + '%' : ''}</span>`;
             } else if (ds.trend_direction === 'decreasing' || (ds.yoy_growth_latest != null && ds.yoy_growth_latest < 0)) {
-                trendHtml = `<span class="recent-trend down">↓ ${ds.yoy_growth_latest != null ? Math.abs(ds.yoy_growth_latest).toFixed(1) + '%' : ''}</span>`;
+                trendHtml = `<span class="recent-trend down">↓${ds.yoy_growth_latest != null ? ' ' + Math.abs(ds.yoy_growth_latest).toFixed(1) + '%' : ''}</span>`;
             } else {
                 trendHtml = `<span class="recent-trend flat">→</span>`;
             }
 
+            const excerptHtml = ds.excerpt
+                ? `<div class="recent-excerpt">${ds.excerpt}</div>`
+                : '';
+
             card.innerHTML = `
-                <div class="recent-info">
-                    <div class="recent-name">${ds.matrix_name}</div>
-                    <div class="recent-meta">${ds.matrix_code} · ${ds.ultima_actualizare || ''} ${ds.time_range ? `· ${ds.time_range}` : ''}</div>
+                <div class="recent-card-top">
+                    <div class="recent-info">
+                        <div class="recent-name">${ds.matrix_name}</div>
+                        <div class="recent-meta">${ds.matrix_code} · ${ds.ultima_actualizare || ''}</div>
+                    </div>
+                    ${trendHtml}
                 </div>
-                ${trendHtml}
+                ${excerptHtml}
             `;
             grid.appendChild(card);
         }
@@ -679,6 +696,46 @@ class LensApp {
         }
     }
 
+    renderThemeHeadlines(contextCode) {
+        const container = document.getElementById('theme-headlines');
+        if (!container) return;
+        // Find matching theme by context_code
+        const theme = (this.headlines || []).find(t => t.context_code === contextCode);
+        if (!theme || !theme.indicators || !theme.indicators.length) {
+            container.classList.add('hidden');
+            return;
+        }
+        const cards = document.createElement('div');
+        cards.className = 'headline-cards';
+        for (const ind of theme.indicators) {
+            const card = document.createElement('div');
+            card.className = 'headline-card';
+            card.addEventListener('click', (e) => { e.stopPropagation(); this.showDashboard(ind.code); });
+            const changeHtml = ind.change_pct != null
+                ? `<span class="headline-change ${ind.change_pct >= 0 ? 'up' : 'down'}">${ind.change_pct >= 0 ? '↑' : '↓'} ${Math.abs(ind.change_pct).toFixed(1)}%</span>`
+                : '';
+            const sparkHtml = this._renderSparkline(ind.sparkline, ind.change_pct);
+            card.innerHTML = `
+                <div class="headline-card-info">
+                    <div class="headline-label">${ind.label}</div>
+                    <div class="headline-value-row">
+                        <span class="headline-value">${this._formatHeadlineValue(ind.value, ind.format)}</span>
+                        <span class="headline-unit">${ind.unit}</span>
+                    </div>
+                    <div class="headline-footer">
+                        <span class="headline-period">${ind.period}</span>
+                        ${changeHtml}
+                    </div>
+                </div>
+                ${sparkHtml}
+            `;
+            cards.appendChild(card);
+        }
+        container.innerHTML = '';
+        container.appendChild(cards);
+        container.classList.remove('hidden');
+    }
+
     _renderTrendIndicator(contextCode) {
         const trend = this.categoryTrends?.[contextCode];
         if (!trend || !trend.total) return '';
@@ -703,8 +760,7 @@ class LensApp {
         if (pushToStack) this.drillStack.push({ cat, colorIdx });
 
         // Hide landing-page-only sections
-        document.getElementById('headlines-section')?.classList.add('hidden');
-        document.getElementById('recent-section')?.classList.add('hidden');
+        document.getElementById('landing-content-row')?.classList.add('hidden');
         document.getElementById('categories-label')?.classList.add('hidden');
 
         document.getElementById('category-grid').classList.add('hidden');
@@ -717,6 +773,7 @@ class LensApp {
 
         this.renderBreadcrumbs();
         this.renderThemeStats(cat.code);
+        this.renderThemeHeadlines(cat.code);
 
         const list = document.getElementById('dataset-list');
         list.innerHTML = '<div class="skeleton" style="height:200px;margin:8px 0"></div>';

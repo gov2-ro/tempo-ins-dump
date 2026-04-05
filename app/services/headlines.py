@@ -53,6 +53,21 @@ HEADLINE_CONFIG = [
                 "unit_ro": "persoane",
                 "unit_en": "people",
             },
+            {
+                "code": "AMG157G",
+                "label_ro": "Rata șomajului BIM",
+                "label_en": "ILO unemployment rate",
+                "sql": """
+                    SELECT TIME_PERIOD, AVG(OBS_VALUE) as val
+                    FROM read_parquet('{parquet_dir}/AMG157G.parquet')
+                    WHERE AGE = '15 - 74 ani'
+                    GROUP BY TIME_PERIOD
+                    ORDER BY TIME_PERIOD DESC
+                """,
+                "format": "percent",
+                "unit_ro": "% (15–74 ani)",
+                "unit_en": "% (15–74 yrs)",
+            },
         ],
     },
     {

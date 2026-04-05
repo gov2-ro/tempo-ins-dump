@@ -4,6 +4,7 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 ## Misc
 - [x] enhance table view
+- [ ] more, nice themes - mai light a bit off-white, Financial Times, or Anthropic, lighter dark theme
 - [ ] add datased code to explorer
 - [ ] add flags to language switcher
 - [ ] add disclaimer, not official gov.ro site
@@ -17,9 +18,9 @@ Future tasks and intentions for the TEMPO INS data explorer.
 - [ ] large datasets show no data: LOC108B
 
 ## Landing
-- [ ] Show latest updates
-- [ ] Flag interesting datasets
-- [ ] Some widgets per theme/subtheme/dataset
+- [x] Show latest updates
+- [x] Flag interesting datasets
+- [x] Some widgets per theme/subtheme/dataset
 
 
 ## Chart rules

@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/explore.css?v=14">
+    <link rel="stylesheet" href="/css/explore.css?v=15">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 </head>
 <body>
@@ -38,6 +38,7 @@
                 <svg id="theme-icon-moon" class="hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
             </button>
             <button class="toggle-btn lang-toggle" id="lang-toggle" title="Switch language">
+                <img id="lang-flag" class="lang-flag" src="" alt="">
                 <span id="lang-label">EN</span>
             </button>
             <span class="badge" id="dataset-count"></span>
@@ -81,12 +82,19 @@
                 <h1 class="browse-title" id="browse-title"></h1>
                 <p class="browse-subtitle" id="browse-subtitle"></p>
             </div>
-            <!-- Headline indicators grid (themed KPI cards) -->
-            <div class="headlines-section" id="headlines-section"></div>
-            <!-- Recently updated datasets -->
-            <div class="recent-section hidden" id="recent-section">
-                <h3 class="section-label" id="recent-label"></h3>
-                <div class="recent-grid" id="recent-grid"></div>
+            <!-- Main landing row: KPI cards + recently updated sidebar -->
+            <div class="landing-content-row" id="landing-content-row">
+                <div class="landing-main">
+                    <!-- Headline indicators grid (themed KPI cards) -->
+                    <div class="headlines-section" id="headlines-section"></div>
+                </div>
+                <aside class="landing-aside">
+                    <!-- Recently updated datasets (sidebar) -->
+                    <div class="recent-section hidden" id="recent-section">
+                        <h3 class="section-label" id="recent-label"></h3>
+                        <div id="recent-grid"></div>
+                    </div>
+                </aside>
             </div>
             <!-- Section label before category grid -->
             <h3 class="section-label" id="categories-label"></h3>
@@ -98,6 +106,7 @@
                     <span class="badge" id="panel-count"></span>
                 </div>
                 <div class="theme-stats hidden" id="theme-stats"></div>
+                <div class="theme-headlines hidden" id="theme-headlines"></div>
                 <div id="dataset-list" class="dataset-list"></div>
             </div>
         </section>
@@ -142,11 +151,11 @@
 
     <!-- Scripts: reuse existing API + chart modules -->
     <script src="/js/utils.js?v=22"></script>
-    <script src="/js/api.js?v=25"></script>
+    <script src="/js/api.js?v=26"></script>
     <script src="/js/chart-factory.js?v=30"></script>
     <script src="/js/chart-new-types.js?v=28"></script>
     <script src="/js/chart-geo.js?v=21"></script>
     <script src="/js/chart-demographic.js?v=25"></script>
-    <script src="/js/explore-app.js?v=25"></script>
+    <script src="/js/explore-app.js?v=26"></script>
 </body>
 </html>

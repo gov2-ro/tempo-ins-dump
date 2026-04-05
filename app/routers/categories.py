@@ -127,22 +127,27 @@ def get_corpus_summary(lang: str = Query("ro", regex="^(ro|en)$")):
 
     # Recently updated datasets
     name_col = "COALESCE(m.matrix_name_en, m.matrix_name)" if lang == "en" else "m.matrix_name"
+    def_col = "COALESCE(m.definitie_en, m.definitie)" if lang == "en" else "m.definitie"
     recent_rows = conn.execute(f"""
         SELECT m.matrix_code, {name_col} AS matrix_name,
                m.ultima_actualizare,
                t.trend_direction, t.yoy_growth_latest,
-               p.time_year_min, p.time_year_max
+               p.time_year_min, p.time_year_max,
+               {def_col} AS definitie
         FROM matrices m
         LEFT JOIN dataset_trends t ON m.matrix_code = t.matrix_code
         LEFT JOIN matrix_profiles p ON m.matrix_code = p.matrix_code
         WHERE m.is_canonical = TRUE AND m.ultima_actualizare IS NOT NULL
         ORDER BY m.ultima_actualizare DESC
-        LIMIT 10
+        LIMIT 12
     """).fetchall()
 
     recently_updated = []
     for r in recent_rows:
         time_range = f"{r[5]}-{r[6]}" if r[5] and r[6] else None
+        definitie = r[7] or ''
+        words = definitie.split()
+        excerpt = ' '.join(words[:15]) + ('…' if len(words) > 15 else '')
         recently_updated.append({
             'matrix_code': r[0],
             'matrix_name': r[1],
@@ -150,6 +155,7 @@ def get_corpus_summary(lang: str = Query("ro", regex="^(ro|en)$")):
             'trend_direction': r[3],
             'yoy_growth_latest': float(r[4]) if r[4] is not None else None,
             'time_range': time_range,
+            'excerpt': excerpt,
         })
 
     return {
