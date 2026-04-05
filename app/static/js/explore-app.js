@@ -11,7 +11,8 @@ const UI = {
     ro: {
         browseTitle: 'Date statistice oficiale România',
         browseSub: (n, obs) => `${n} seturi de date · ${obs} observații`,
-        noticeText: 'Acesta nu este un proiect oficial gov.ro. Date preluate de pe <a href="https://insse.ro" target="_blank">insse.ro</a>.',
+        browseTagline: 'Tempo INS, da nițel mai drăgu\'',
+        noticeText: 'Acesta nu este un proiect oficial al Guvernului României. Date preluate de pe <a href="https://insse.ro" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Actualizate recent',
         categoriesLabel: 'Categorii tematice',
         searchPlaceholder: 'Caută seturi de date, indicatori, coduri...',
@@ -63,7 +64,8 @@ const UI = {
     en: {
         browseTitle: 'Romanian Official Statistical Data',
         browseSub: (n, obs) => `${n} datasets · ${obs} observations`,
-        noticeText: 'This is not an official gov.ro project. Data sourced from <a href="https://insse.ro" target="_blank">insse.ro</a>.',
+        browseTagline: 'Tempo INS, but nicer',
+        noticeText: 'This is not an official Romanian Government project. Data sourced from <a href="https://insse.ro" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Recently updated',
         categoriesLabel: 'Thematic categories',
         searchPlaceholder: 'Search datasets, indicators, codes...',
@@ -130,6 +132,10 @@ const THEME_ICONS = {
     'trending-up': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
     'users': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
     'compass': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>',
+    'heart': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
+    'book': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
+    'leaf': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 8C8 10 5.9 16.17 3.82 19.94c3.18-1.18 6.48-2.73 10.18-4.94 1.46-2.42 3-5 3-7z"/><path d="M3.82 19.94C5 14 9 10 17 8"/></svg>',
+    'factory': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/></svg>',
 };
 
 // ---------------------------------------------------------------------------
@@ -441,8 +447,12 @@ class LensApp {
     showCategoryGrid() {
         document.getElementById('category-grid').classList.remove('hidden');
         document.getElementById('dataset-panel').classList.add('hidden');
-        // Show landing sections, hide drill-down stats
-        document.getElementById('landing-content-row')?.classList.remove('hidden');
+        // Show landing sections (recent-section only if it has content)
+        document.getElementById('headlines-section')?.classList.remove('hidden');
+        const recentGrid = document.getElementById('recent-grid');
+        if (recentGrid && recentGrid.children.length) {
+            document.getElementById('recent-section')?.classList.remove('hidden');
+        }
         document.getElementById('categories-label')?.classList.remove('hidden');
         this.drillStack = [];
 
@@ -493,6 +503,7 @@ class LensApp {
     renderBrowseHeader(corpus) {
         const title = document.getElementById('browse-title');
         const sub = document.getElementById('browse-subtitle');
+        const tagline = document.getElementById('browse-tagline');
         if (title) title.textContent = this.ui.browseTitle;
         if (sub && corpus) {
             sub.textContent = this.ui.browseSub(
@@ -500,6 +511,7 @@ class LensApp {
                 formatNumber(corpus.observations, 0)
             );
         }
+        if (tagline) tagline.textContent = this.ui.browseTagline;
     }
 
     renderHeadlines(headlines) {
@@ -760,7 +772,8 @@ class LensApp {
         if (pushToStack) this.drillStack.push({ cat, colorIdx });
 
         // Hide landing-page-only sections
-        document.getElementById('landing-content-row')?.classList.add('hidden');
+        document.getElementById('headlines-section')?.classList.add('hidden');
+        document.getElementById('recent-section')?.classList.add('hidden');
         document.getElementById('categories-label')?.classList.add('hidden');
 
         document.getElementById('category-grid').classList.add('hidden');

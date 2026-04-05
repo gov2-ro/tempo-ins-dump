@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lens — INS Data Observatory</title>
+    <title>INS+ — Date statistice România</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/explore.css?v=15">
+    <link rel="stylesheet" href="/css/explore.css?v=16">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 </head>
 <body>
@@ -24,7 +24,7 @@
             <button class="sidebar-toggle" id="sidebar-toggle" title="Quick navigate">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             </button>
-            <a href="/" class="logo"><span class="logo-dot"></span>Lens</a>
+            <a href="/" class="logo"><span class="logo-dot"></span>INS+</a>
             <button class="back-btn hidden" id="back-btn">&larr; Explore</button>
         </div>
         <button class="search-trigger" id="search-trigger">
@@ -81,20 +81,14 @@
             <div class="browse-header">
                 <h1 class="browse-title" id="browse-title"></h1>
                 <p class="browse-subtitle" id="browse-subtitle"></p>
+                <p class="browse-tagline" id="browse-tagline"></p>
             </div>
-            <!-- Main landing row: KPI cards + recently updated sidebar -->
-            <div class="landing-content-row" id="landing-content-row">
-                <div class="landing-main">
-                    <!-- Headline indicators grid (themed KPI cards) -->
-                    <div class="headlines-section" id="headlines-section"></div>
-                </div>
-                <aside class="landing-aside">
-                    <!-- Recently updated datasets (sidebar) -->
-                    <div class="recent-section hidden" id="recent-section">
-                        <h3 class="section-label" id="recent-label"></h3>
-                        <div id="recent-grid"></div>
-                    </div>
-                </aside>
+            <!-- Headline indicators grid (themed KPI cards) -->
+            <div class="headlines-section" id="headlines-section"></div>
+            <!-- Recently updated datasets -->
+            <div class="recent-section hidden" id="recent-section">
+                <h3 class="section-label" id="recent-label"></h3>
+                <div id="recent-grid"></div>
             </div>
             <!-- Section label before category grid -->
             <h3 class="section-label" id="categories-label"></h3>
@@ -156,6 +150,6 @@
     <script src="/js/chart-new-types.js?v=28"></script>
     <script src="/js/chart-geo.js?v=21"></script>
     <script src="/js/chart-demographic.js?v=25"></script>
-    <script src="/js/explore-app.js?v=26"></script>
+    <script src="/js/explore-app.js?v=27"></script>
 </body>
 </html>

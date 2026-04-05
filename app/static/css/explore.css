@@ -396,6 +396,12 @@ kbd {
     font-size: 13px;
     color: var(--text-2);
 }
+.browse-tagline {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-3);
+    font-style: italic;
+}
 
 /* --- Section Labels --- */
 .section-label {
@@ -407,34 +413,25 @@ kbd {
     font-weight: 600;
 }
 
-/* --- Landing content row (KPI grid + recent sidebar) --- */
-.landing-content-row {
-    display: flex;
-    gap: 28px;
-    align-items: flex-start;
-    margin-bottom: 8px;
-}
-.landing-main { flex: 1; min-width: 0; }
-.landing-aside {
-    width: 272px;
-    flex-shrink: 0;
-}
-
-/* --- Headlines Section (2-col theme grid) --- */
-.headlines-section { margin-bottom: 0; }
+/* --- Headlines Section (masonry 2-col) --- */
+.headlines-section { margin-bottom: 8px; }
 .headlines-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 24px 28px;
+    columns: 2;
+    column-gap: 28px;
 }
-@media (max-width: 900px) {
-    .headlines-grid { grid-template-columns: 1fr; }
-    .landing-content-row { flex-direction: column; }
-    .landing-aside { width: 100%; }
+@media (max-width: 860px) {
+    .headlines-grid { columns: 1; }
 }
 
-/* Theme section: no border/box — just grouped content */
-.headline-theme { padding: 0; }
+/* Theme section: masonry block — no border/box */
+.headline-theme {
+    padding: 0;
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    display: inline-block;
+    width: 100%;
+    margin-bottom: 24px;
+}
 
 .headline-theme-header {
     display: flex;
@@ -532,8 +529,16 @@ kbd {
 }
 .headline-sparkline polygon { opacity: 0.10; }
 
-/* --- Recently Updated Section (sidebar) --- */
-.recent-section { margin-top: 0; }
+/* --- Recently Updated Section (below KPI grid) --- */
+.recent-section { margin-top: 8px; margin-bottom: 8px; }
+#recent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 8px;
+}
+@media (max-width: 600px) {
+    #recent-grid { grid-template-columns: 1fr; }
+}
 .recent-card {
     background: var(--bg-1);
     border: 1px solid var(--border);

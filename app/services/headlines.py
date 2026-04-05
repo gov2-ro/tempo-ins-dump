@@ -167,6 +167,142 @@ HEADLINE_CONFIG = [
             },
         ],
     },
+    {
+        "theme": "health",
+        "theme_ro": "Sănătate",
+        "theme_en": "Health",
+        "context_code": "30",
+        "icon": "heart",
+        "indicators": [
+            {
+                "code": "SAN102A",
+                "label_ro": "Medici activi",
+                "label_en": "Active physicians",
+                "sql": """
+                    SELECT TIME_PERIOD, OBS_VALUE as val
+                    FROM read_parquet('{parquet_dir}/SAN102A.parquet')
+                    WHERE SPECIALITATI_MEDICALE = 'Total (inclusiv in centre de sanatate)'
+                    ORDER BY TIME_PERIOD DESC
+                """,
+                "format": "number",
+                "unit_ro": "medici",
+                "unit_en": "physicians",
+            },
+        ],
+    },
+    {
+        "theme": "education",
+        "theme_ro": "Educație",
+        "theme_en": "Education",
+        "context_code": "25",
+        "icon": "book",
+        "indicators": [
+            {
+                "code": "SCL103A",
+                "label_ro": "Elevi (preuniversitar)",
+                "label_en": "Pre-university pupils",
+                "sql": """
+                    SELECT TIME_PERIOD, SUM(OBS_VALUE) as val
+                    FROM read_parquet('{parquet_dir}/SCL103A.parquet')
+                    WHERE NIVELURI_DE_EDUCATIE = 'Invatamant preuniversitar'
+                    GROUP BY TIME_PERIOD
+                    ORDER BY TIME_PERIOD DESC
+                """,
+                "format": "number",
+                "unit_ro": "elevi",
+                "unit_en": "pupils",
+            },
+            {
+                "code": "SCL103A",
+                "label_ro": "Studenți licență",
+                "label_en": "University students",
+                "sql": """
+                    SELECT TIME_PERIOD, SUM(OBS_VALUE) as val
+                    FROM read_parquet('{parquet_dir}/SCL103A.parquet')
+                    WHERE NIVELURI_DE_EDUCATIE = 'Invatamant universitar de licenta'
+                    GROUP BY TIME_PERIOD
+                    ORDER BY TIME_PERIOD DESC
+                """,
+                "format": "number",
+                "unit_ro": "studenți",
+                "unit_en": "students",
+            },
+        ],
+    },
+    {
+        "theme": "agriculture",
+        "theme_ro": "Agricultură",
+        "theme_en": "Agriculture",
+        "context_code": "45",
+        "icon": "leaf",
+        "indicators": [
+            {
+                "code": "AGR209C_mii_tone",
+                "label_ro": "Producție cereale",
+                "label_en": "Cereal production",
+                "sql": """
+                    SELECT TIME_PERIOD, SUM(OBS_VALUE) as val
+                    FROM read_parquet('{parquet_dir}/AGR209C_mii_tone.parquet')
+                    GROUP BY TIME_PERIOD
+                    ORDER BY TIME_PERIOD DESC
+                """,
+                "format": "number",
+                "unit_ro": "mii tone",
+                "unit_en": "thousand tons",
+            },
+            {
+                "code": "AGR201E",
+                "label_ro": "Bovine",
+                "label_en": "Cattle",
+                "sql": """
+                    SELECT TIME_PERIOD, OBS_VALUE as val
+                    FROM read_parquet('{parquet_dir}/AGR201E.parquet')
+                    WHERE AGE = 'Bovine - total'
+                    ORDER BY TIME_PERIOD DESC
+                """,
+                "format": "number",
+                "unit_ro": "capete",
+                "unit_en": "head",
+            },
+        ],
+    },
+    {
+        "theme": "industry",
+        "theme_ro": "Industrie",
+        "theme_en": "Industry",
+        "context_code": "50",
+        "icon": "factory",
+        "indicators": [
+            {
+                "code": "IND101M",
+                "label_ro": "Ind. producție (prelucrare)",
+                "label_en": "Manufacturing index",
+                "sql": """
+                    SELECT TIME_PERIOD, OBS_VALUE as val
+                    FROM read_parquet('{parquet_dir}/IND101M.parquet')
+                    WHERE DIVIZIUNI_ALE_INDUSTRIEI = 'INDUSTRIA PRELUCRATOARE'
+                    ORDER BY TIME_PERIOD DESC
+                """,
+                "format": "number",
+                "unit_ro": "indice",
+                "unit_en": "index",
+            },
+            {
+                "code": "IND118A",
+                "label_ro": "Producție electricitate",
+                "label_en": "Electricity production",
+                "sql": """
+                    SELECT TIME_PERIOD, SUM(OBS_VALUE) as val
+                    FROM read_parquet('{parquet_dir}/IND118A.parquet')
+                    GROUP BY TIME_PERIOD
+                    ORDER BY TIME_PERIOD DESC
+                """,
+                "format": "number",
+                "unit_ro": "mil. kWh",
+                "unit_en": "M kWh",
+            },
+        ],
+    },
 ]
 
 # ---------------------------------------------------------------------------
