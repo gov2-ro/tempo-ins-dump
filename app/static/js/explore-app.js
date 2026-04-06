@@ -268,7 +268,8 @@ class LensApp {
         const savedTheme = localStorage.getItem('lens_theme');
         const osPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         this.theme = savedTheme || (osPrefersDark ? 'dark' : 'light');
-        this.lang = localStorage.getItem('lens_lang') || 'ro';
+        const urlLang = new URLSearchParams(window.location.search).get('lang');
+        this.lang = (urlLang === 'en' || urlLang === 'ro') ? urlLang : (localStorage.getItem('lens_lang') || 'ro');
         this.dsViewMode = localStorage.getItem('lens_ds_view') || 'grid';
 
         this.init();

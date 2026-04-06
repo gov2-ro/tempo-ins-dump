@@ -1,9 +1,11 @@
-[ins.gov2.ro](https://ins.gov2.ro/) — scrapes and explores ~1,900 statistical datasets from _TEMPO-Online_ ([statistici.insse.ro](http://statistici.insse.ro:8077/tempo-online))
+[ins.gov2.ro](https://ins.gov2.ro/) — scrapes and explores ~3,600 statistical datasets from _TEMPO-Online_ ([statistici.insse.ro](http://statistici.insse.ro:8077/tempo-online))
 
 _INS Tempo Online but make it nice._
 
 ![prima pagină](docs/misc/screenshots/landing.png)
 ![dataset](docs/misc/screenshots/dataset.png)
+
+📋 [Backlog](docs/backlog.md) · 📅 [Activity History](docs/activity-history.md)
 
 -----
 
@@ -27,7 +29,7 @@ app/
   main.py             — FastAPI entry, mounts API routers + static files
   config.py           — DB_PATH, PARQUET_DIR (v3), MAX_DATA_ROWS=50000
   db.py               — DuckDB cursor-per-request (concurrency-safe)
-  routers/            — /api/categories, /api/datasets, /api/datasets/{id}/data
+  routers/            — /api/categories, /api/datasets, /api/datasets/{id}/data, /api/datasets/{id}/download, /sdmx/
   services/           — chart_config, chart_selector, query_builder
   static/js/          — dataset-page, chart-factory, chart-geo, chart-demographic, filter-panel
   static/css/         — dataset.css, datasets.css, main.css
@@ -125,12 +127,11 @@ data/
   4-datasets-slim-samples/ 50/ and 100/ row samples for LLM analysis
   5-compact-datasets/      CSVs with numeric IDs instead of labels
   6-sdmx-csv/ro/           SDMX-CSV 2.0 output
-  parquet/ro/              Parquet v1 (text labels)
-  parquet-v2/ro/           Parquet v2 (numeric IDs) — 1,886 files
-  parquet-v3/ro/           Parquet v3 (SDMX-native + split) — 3,719 files ← used by app
-  view-profiles/           Per-dataset JSON view profiles — 3,883 files
-  tempo_metadata.duckdb    Main DuckDB metadata (12 tables)
-  value_profiles.duckdb    Statistical value profiles
+  corpus/
+    parquet/             Canonical SDMX parquet files — 3,632 files ← used by app
+    metadata.duckdb      Main DuckDB metadata (16 tables)
+    view-profiles/       Per-dataset JSON view profiles — ~3,800 files
+  parquet-v2/ro/           Parquet v2 (numeric IDs) — legacy fallback
   meta/                    Reference data (judet CSVs, SIRUTA)
   logs/                    Pipeline execution logs
 ```
@@ -164,18 +165,16 @@ Historical data snapshots in `data-old/`, `data-25-1/`, `data-2026/`.
 - [x] 30k cells limit handling in fetch
 
 ### Current
-- [ ] UI polish — split dataset charts using children, flag split charts
-- [ ] Revise profiling pipeline
-- [ ] StatExplorer (`explorer/`) — Tableau-inspired alternative UI
-- [ ] multilang, /En - do we need duplicate data or just a translation?
+- [ ] UI polish — responsive layout, chart label truncation
+- [ ] URL state persistence (filters, period, chart type in URL)
+- [ ] Monthly → yearly aggregation toggle
 
 ### Later
-- [ ] SDMX-ready export + generic SDMX UI framework
-- [ ] Static site generator + OG previews
+- [ ] SDMX generic UI framework (multi-source: Eurostat, OECD)
 - [ ] NL2SQL natural language queries
 - [ ] Notebook-ready exports, publish to Kaggle
-- [ ] UI shortcuts
-- [ ] Basic stats/charts per localitati (normalize to population)
+- [ ] Basic stats/charts per localități (normalize to population)
+- [ ] Static site migration (DuckDB-WASM, Cloudflare Pages)
 
 see also: [ui/readme.md](ui/readme.md)
  

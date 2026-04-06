@@ -1,5 +1,30 @@
 # Activity History
 
+## 2026-04-06 — Landing Redesign, Downloads, UI Polish
+
+**Landing page redesign:**
+- Replaced hero section with compact header + themed KPI cards (Czech CSO style)
+- KPI cards: real values from parquet (salary, GDP, tourism arrivals, etc.) with sparklines + YoY change
+- Category grid switched to CSS columns layout with emoji icons, inline subcategories, bold stats
+- Notice bar (dismissable, "not official gov.ro"), permanent footer with GitHub link
+- OS `prefers-color-scheme` theme detection (defaults to light)
+- OG/SEO meta tags: description, og:image, twitter:card — domain `ins.gov2.ro`
+
+**Data download (CSV / XLSX):**
+- New `GET /api/datasets/{code}/download?format=csv|xlsx&filters=...&lang=ro|en` endpoint
+- On-the-fly generation from parquet via DuckDB + stdlib csv / openpyxl (no pandas)
+- Language-aware: when `lang=en`, translates dimension values via `sdmx_codes` table
+- Download buttons (↓ CSV / ↓ XLSX) in dataset header; pass active filters + current lang at click time
+
+**SDMX endpoints** (already existed, confirmed working):
+- `GET /sdmx/2.1/data/INS,{flow}/{key}` — SDMX-ML 2.1 GenericData XML
+- `GET /sdmx/2.1/datastructure/INS/{flow}/1.0` — DSD with codelists
+- `GET /sdmx/2.1/dataflow/INS/{flow}/1.0` — Dataflow definition
+
+**Other UI improvements:**
+- Dataset code badge in title (accent-colored, replaces meta-pill)
+- `?lang=en` URL parameter — opens app in English (useful for sharing with international users)
+
 ## 2026-04-04 — Alpha Preview & UI Polish
 
 Prepared alpha preview with multiple UI/UX improvements across the Lens dashboard.

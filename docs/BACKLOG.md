@@ -5,7 +5,7 @@ Future tasks and intentions for the TEMPO INS data explorer.
 ## Misc
 - [x] enhance table view
 - [ ] more, nice themes - mai light a bit off-white, Financial Times, or Anthropic, lighter dark theme
-- [ ] add datased code to explorer
+- [x] add dataset code to explorer
 - [x] add flags to language switcher
 - [x] add disclaimer, not official gov.ro site
 - [x] add data download option, csv/xlsx?
@@ -16,7 +16,7 @@ Future tasks and intentions for the TEMPO INS data explorer.
   - [ ] continuous fetching, gh actions?
 - [ ] Look for same EU stats?
 - [ ] large datasets show no data: LOC108B
-- [ ] detect ro/intl -> language.
+- [x] detect ro/intl -> language. (`?lang=en` URL param)
 - [ ] translate, Hu/De
 
 ## Landing
@@ -110,10 +110,11 @@ Future tasks and intentions for the TEMPO INS data explorer.
   breakpoints for mobile (category grid, insight cards, chart panels), smooth transitions
   between chart type switches.
 
-- [ ] **Export** — CSV download of filtered data, PNG export of charts.
+- [x] **Export** — CSV/XLSX download of filtered data with language support.
+- [ ] **Export** — PNG export of charts.
 
-- [ ] **Add `lang` to `get_dataset()` endpoint** — dashboard dataset names are stuck in Romanian
-  when EN is selected. Add `lang` param, use `COALESCE(matrix_name_en, matrix_name)`.
+- [ ] **Add `lang` to `get_dataset()` endpoint** — dataset names in the dashboard header still
+  show in Romanian when EN is selected. Add `lang` param, use `COALESCE(matrix_name_en, matrix_name)`.
 
 - [ ] **Responsive mobile layout** — 3-column category grid and 4-column insight cards don't
   adapt well to phones. Add `@media (max-width: 768px)` breakpoints for stacking.
