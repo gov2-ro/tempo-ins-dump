@@ -962,6 +962,39 @@ kbd {
     padding: 32px 0 8px;
 }
 
+.dash-title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.dash-download {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    padding-top: 2px;
+}
+
+.dl-btn {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-2);
+    background: var(--bg-1);
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+}
+
+.dl-btn:hover {
+    border-color: var(--border-hover);
+    color: var(--text-1);
+    background: var(--bg-2);
+}
+
 .dash-title {
     font-size: 22px;
     font-weight: 700;

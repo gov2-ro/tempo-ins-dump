@@ -8,7 +8,7 @@ Future tasks and intentions for the TEMPO INS data explorer.
 - [ ] add datased code to explorer
 - [x] add flags to language switcher
 - [x] add disclaimer, not official gov.ro site
-- [ ] add data download option, csv/xlsx?
+- [x] add data download option, csv/xlsx?
   - [ ] disseminate data. Kaggle, Hugging face? Check legal?
 - [ ] should we split repos, data fetching, UI? - so we make a dataset independent SDMX UI framework?
 - [ ] responsive

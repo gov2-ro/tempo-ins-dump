@@ -1062,7 +1062,13 @@ class LensApp {
         const header = document.getElementById('dash-header');
         header.innerHTML = `
             ${pathHtml}
-            <div class="dash-title">${m.matrix_name}</div>
+            <div class="dash-title-row">
+                <div class="dash-title">${m.matrix_name}</div>
+                <div class="dash-download">
+                    <button class="dl-btn" id="dl-csv-btn">↓ CSV</button>
+                    <button class="dl-btn" id="dl-xlsx-btn">↓ XLSX</button>
+                </div>
+            </div>
             <div class="dash-meta">
                 ${cfg.archetype ? `<span class="meta-pill archetype">${cfg.archetype}</span>` : ''}
                 ${profile.time_granularity ? `<span class="meta-pill time">${profile.time_granularity}</span>` : ''}
@@ -1072,6 +1078,18 @@ class LensApp {
                 <span class="meta-pill code">${m.matrix_code}</span>
             </div>
         `;
+
+        // Download buttons — build URL with current filters at click time
+        const buildDownloadUrl = (fmt) => {
+            const f = JSON.stringify(this.getFilters());
+            return `/api/datasets/${m.matrix_code}/download?format=${fmt}&filters=${encodeURIComponent(f)}`;
+        };
+        header.querySelector('#dl-csv-btn').addEventListener('click', () => {
+            window.location.href = buildDownloadUrl('csv');
+        });
+        header.querySelector('#dl-xlsx-btn').addEventListener('click', () => {
+            window.location.href = buildDownloadUrl('xlsx');
+        });
 
         // Bind breadcrumb clicks → navigate to category drill
         header.querySelectorAll('.dash-crumb-link').forEach(el => {
