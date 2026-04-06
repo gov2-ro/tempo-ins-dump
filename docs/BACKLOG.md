@@ -24,7 +24,8 @@ Future tasks and intentions for the TEMPO INS data explorer.
 - [x] Flag interesting datasets
 - [x] Some widgets per theme/subtheme/dataset
 
-
+## misc
+- [ ] sustainable development 2020 should be archived?
 
 ## Chart rules
 - [ ] for long horizontal bar charts, prever vertical view

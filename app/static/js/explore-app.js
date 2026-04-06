@@ -138,16 +138,15 @@ const THEME_ICONS = {
     'factory': '🏭',
 };
 
-// Category emojis (mapped by top-level code)
-const CATEGORY_EMOJIS = {
-    '1': '👥',   // A. STATISTICA SOCIALA
-    '2': '📊',   // B. STATISTICA ECONOMICA
-    '3': '💰',   // C. FINANTE
-    '4': '⚖️',  // D. JUSTITIE
-    '5': '🌍',   // E. MEDIU INCONJURATOR
-    '6': '🏗️',  // F. UTILITATI PUBLICE
-    '7': '🎯',   // G. DEZVOLTARE DURABILA 2020
-    '8': '🌱',   // H. DEZVOLTARE DURABILA 2030
+// Category images (mapped by top-level code) — PNGs in /img/themes/
+// Note: '3' (Finances) and '4' (Justice) have no matching icon yet
+const CATEGORY_IMGS = {
+    '1': '1 society.png',                      // A. STATISTICA SOCIALA
+    '2': '2 economy.png',                      // B. STATISTICA ECONOMICA
+    '5': '4 environment.png',                  // E. MEDIU INCONJURATOR
+    '6': '6 transport.png',                    // F. UTILITATI PUBLICE
+    '7': '7 sustainable development.png',      // G. DEZVOLTARE DURABILA 2020
+    '8': '7 sustainable development.png',      // H. DEZVOLTARE DURABILA 2030
 };
 
 // ---------------------------------------------------------------------------
@@ -237,6 +236,12 @@ const CAT_COLORS = [
 ];
 
 function catColor(index) { return CAT_COLORS[index % CAT_COLORS.length]; }
+
+function _exportPng(chart, filename) {
+    const url = chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: 'transparent' });
+    const a = document.createElement('a');
+    a.href = url; a.download = `${filename}.png`; a.click();
+}
 
 
 // ---------------------------------------------------------------------------
@@ -512,15 +517,16 @@ class LensApp {
             const section = document.createElement('div');
             section.className = 'cat-section';
 
-            const emoji = CATEGORY_EMOJIS[cat.code] || '📁';
+            const imgFile = CATEGORY_IMGS[cat.code];
+            const imgTag = imgFile ? `<img class="cat-section-img" src="/img/themes/${encodeURIComponent(imgFile)}" alt="" aria-hidden="true">` : '';
             const header = document.createElement('div');
             header.className = 'cat-section-header';
             header.innerHTML = `
-                <span class="cat-section-emoji">${emoji}</span>
                 <div class="cat-section-title">
                     <span class="cat-section-name">${this.shortName(cat.name)}</span>
                     <span class="cat-section-meta"><strong>${cat.total_datasets || 0}</strong> ${this.ui.datasets} · <strong>${cat.children.length}</strong> ${this.ui.subcategories}</span>
                 </div>
+                ${imgTag}
             `;
             header.addEventListener('click', () => this.drillCategory(cat, i));
             section.appendChild(header);
@@ -1129,7 +1135,7 @@ class LensApp {
         panel.innerHTML = `
             <button class="info-toggle" id="info-toggle" aria-expanded="false">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                ${this.ui.aboutDataset || 'About this dataset'}
+                ${this.ui.aboutDataset || 'About this dataset'}${this.lang === 'en' ? ' <span class="info-lang-note">RO</span>' : ''}
                 <svg class="info-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div class="info-body hidden" id="info-body">
@@ -1915,6 +1921,8 @@ class LensApp {
             if (chart) {
                 chart._timePanel = true;
                 this.charts.push(chart);
+                const btn = document.getElementById('time-png-btn');
+                if (btn) { btn.classList.remove('hidden'); btn.onclick = () => _exportPng(chart, `${this.metadata.matrix_code}-trends`); }
             }
         } catch (err) {
             container.innerHTML = `<div class="chart-loading" style="color:var(--red)">Chart error: ${err.message}</div>`;
@@ -1987,6 +1995,8 @@ class LensApp {
             if (chart) {
                 chart._snapshotPanel = true;
                 this.charts.push(chart);
+                const btn = document.getElementById('snapshot-png-btn');
+                if (btn) { btn.classList.remove('hidden'); btn.onclick = () => _exportPng(chart, `${this.metadata.matrix_code}-snapshot`); }
             }
         } catch (err) {
             container.innerHTML = `<div class="chart-loading" style="color:var(--red)">Chart error: ${err.message}</div>`;

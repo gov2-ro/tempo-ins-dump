@@ -176,7 +176,7 @@ Historical data snapshots in `data-old/`, `data-25-1/`, `data-2026/`.
 - [ ] Basic stats/charts per localități (normalize to population)
 - [ ] Static site migration (DuckDB-WASM, Cloudflare Pages)
 
-see also: [ui/readme.md](ui/readme.md)
+~see also: [ui/readme.md](ui/readme.md)~
  
 ## Notes
 
