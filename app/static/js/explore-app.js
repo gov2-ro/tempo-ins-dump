@@ -1076,6 +1076,7 @@ class LensApp {
                 </div>
                 <div class="dash-download">
                     <a class="dl-btn" href="http://statistici.insse.ro/tempoins/index.jsp?page=tempo3&lang=${this.lang === 'en' ? 'en' : 'ro'}&ind=${m.matrix_code}" target="_blank" rel="noopener" title="${this.lang === 'en' ? 'View on INS TEMPO Online' : 'Vezi pe INS TEMPO Online'}">INS ↗</a>
+                    <a class="dl-btn" href="/sdmx/2.1/data/INS,${m.matrix_code}/" target="_blank" rel="noopener" title="SDMX-ML 2.1 data feed">SDMX ↗</a>
                     <button class="dl-btn" id="dl-csv-btn">↓ CSV</button>
                     <button class="dl-btn" id="dl-xlsx-btn">↓ XLSX</button>
                 </div>
