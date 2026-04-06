@@ -170,8 +170,9 @@ def download_dataset(
     matrix_code: str,
     format: str = Query("csv", pattern="^(csv|xlsx)$"),
     filters: str = Query("{}", description="JSON: {column_name: [value, ...]}"),
+    lang: str = Query("ro", pattern="^(ro|en)$"),
 ):
-    """Download dataset as CSV or XLSX, respecting active filters."""
+    """Download dataset as CSV or XLSX, respecting active filters and language."""
     conn = get_conn()
 
     try:
@@ -215,11 +216,40 @@ def download_dataset(
 
     col_names = [d['dim_column_name'] for d in dimensions] + ['OBS_VALUE']
 
+    # Build EN translation maps if requested
+    value_maps: dict = {}
+    if lang == "en":
+        for d in dimensions:
+            col = d['dim_column_name']
+            mapping = conn.execute("""
+                SELECT dopt.option_label, COALESCE(sc.display_label_en, dopt.option_label)
+                FROM dimension_options dopt
+                JOIN dimensions dim ON dim.dimension_id = dopt.dimension_id
+                LEFT JOIN sdmx_codes sc ON sc.nom_item_id = dopt.nom_item_id
+                WHERE dim.matrix_code = ? AND dim.dim_column_name = ?
+            """, [matrix_code, col]).fetchall()
+            if mapping:
+                value_maps[col] = {ro: en for ro, en in mapping}
+
+    def _translate(row):
+        if not value_maps:
+            return row
+        translated = []
+        for i, v in enumerate(row[:-1]):
+            col = col_names[i]
+            if v is not None and col in value_maps:
+                translated.append(value_maps[col].get(str(v), v))
+            else:
+                translated.append(v)
+        translated.append(row[-1])
+        return translated
+
     if format == "csv":
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow(col_names)
-        writer.writerows(rows)
+        for row in rows:
+            writer.writerow(_translate(row))
         return Response(
             buf.getvalue(),
             media_type="text/csv; charset=utf-8",
@@ -232,7 +262,7 @@ def download_dataset(
         ws.title = matrix_code
         ws.append(col_names)
         for row in rows:
-            ws.append([v if v is not None else "" for v in row])
+            ws.append([v if v is not None else "" for v in _translate(row)])
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)

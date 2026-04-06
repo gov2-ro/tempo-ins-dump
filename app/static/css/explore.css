@@ -1019,8 +1019,21 @@ kbd {
 .meta-pill.archetype { background: var(--accent-dim); color: var(--accent); }
 .meta-pill.time { background: var(--bg-3); color: var(--text-1); }
 .meta-pill.rows { background: var(--bg-3); color: var(--text-2); }
-.meta-pill.code { background: var(--bg-3); color: var(--text-2); font-variant-numeric: tabular-nums; }
 .meta-pill.updated { background: var(--green-dim); color: var(--green); }
+
+.dash-code {
+    display: inline-block;
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+    background: var(--accent-dim);
+    padding: 1px 7px;
+    border-radius: 4px;
+    margin-left: 10px;
+    vertical-align: middle;
+    letter-spacing: 0.02em;
+}
 
 /* Info panel (definition / methodology) */
 .info-panel {

@@ -16,11 +16,14 @@ Future tasks and intentions for the TEMPO INS data explorer.
   - [ ] continuous fetching, gh actions?
 - [ ] Look for same EU stats?
 - [ ] large datasets show no data: LOC108B
+- [ ] detect ro/intl -> language.
+- [ ] translate, Hu/De
 
 ## Landing
 - [x] Show latest updates
 - [x] Flag interesting datasets
 - [x] Some widgets per theme/subtheme/dataset
+
 
 
 ## Chart rules

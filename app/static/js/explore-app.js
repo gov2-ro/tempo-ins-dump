@@ -1063,7 +1063,10 @@ class LensApp {
         header.innerHTML = `
             ${pathHtml}
             <div class="dash-title-row">
-                <div class="dash-title">${m.matrix_name}</div>
+                <div class="dash-title">
+                    ${m.matrix_name}
+                    <span class="dash-code">${m.matrix_code}</span>
+                </div>
                 <div class="dash-download">
                     <button class="dl-btn" id="dl-csv-btn">↓ CSV</button>
                     <button class="dl-btn" id="dl-xlsx-btn">↓ XLSX</button>
@@ -1075,14 +1078,13 @@ class LensApp {
                 ${timeRange ? `<span class="meta-pill time">${timeRange}</span>` : ''}
                 ${m.row_count ? `<span class="meta-pill rows">${formatNumber(m.row_count, 0)} rows</span>` : ''}
                 ${m.ultima_actualizare ? `<span class="meta-pill updated">Updated ${m.ultima_actualizare}</span>` : ''}
-                <span class="meta-pill code">${m.matrix_code}</span>
             </div>
         `;
 
-        // Download buttons — build URL with current filters at click time
+        // Download buttons — build URL with current filters and language at click time
         const buildDownloadUrl = (fmt) => {
             const f = JSON.stringify(this.getFilters());
-            return `/api/datasets/${m.matrix_code}/download?format=${fmt}&filters=${encodeURIComponent(f)}`;
+            return `/api/datasets/${m.matrix_code}/download?format=${fmt}&lang=${this.lang}&filters=${encodeURIComponent(f)}`;
         };
         header.querySelector('#dl-csv-btn').addEventListener('click', () => {
             window.location.href = buildDownloadUrl('csv');
