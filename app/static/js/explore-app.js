@@ -125,17 +125,29 @@ const FLAG_DATA = {
 };
 
 // ---------------------------------------------------------------------------
-// Theme icons (inline SVGs, Lucide-style)
+// Theme icons (emojis)
 // ---------------------------------------------------------------------------
 const THEME_ICONS = {
-    'briefcase': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>',
-    'trending-up': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
-    'users': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
-    'compass': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>',
-    'heart': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
-    'book': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
-    'leaf': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 8C8 10 5.9 16.17 3.82 19.94c3.18-1.18 6.48-2.73 10.18-4.94 1.46-2.42 3-5 3-7z"/><path d="M3.82 19.94C5 14 9 10 17 8"/></svg>',
-    'factory': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/></svg>',
+    'briefcase': '💼',
+    'trending-up': '📈',
+    'users': '👥',
+    'compass': '🧭',
+    'heart': '❤️',
+    'book': '📚',
+    'leaf': '🌿',
+    'factory': '🏭',
+};
+
+// Category emojis (mapped by top-level code)
+const CATEGORY_EMOJIS = {
+    '1': '👥',   // A. STATISTICA SOCIALA
+    '2': '📊',   // B. STATISTICA ECONOMICA
+    '3': '💰',   // C. FINANTE
+    '4': '⚖️',  // D. JUSTITIE
+    '5': '🌍',   // E. MEDIU INCONJURATOR
+    '6': '🏗️',  // F. UTILITATI PUBLICE
+    '7': '🎯',   // G. DEZVOLTARE DURABILA 2020
+    '8': '🌱',   // H. DEZVOLTARE DURABILA 2030
 };
 
 // ---------------------------------------------------------------------------
@@ -489,30 +501,47 @@ class LensApp {
         grid.innerHTML = '';
 
         this.categories.forEach((cat, i) => {
-            const card = document.createElement('div');
-            card.className = 'cat-card';
-            card.addEventListener('click', () => this.drillCategory(cat, i));
+            const section = document.createElement('div');
+            section.className = 'cat-section';
 
-            const color = catColor(i);
-            const trendHtml = this._renderTrendIndicator(cat.code);
-            card.innerHTML = `
-                <div class="cat-accent" style="background:${color}"></div>
-                <div class="cat-body">
-                    <div class="cat-name">${cat.name}</div>
-                    <div class="cat-meta">
-                        <span class="cat-count">${cat.total_datasets || 0} ${this.ui.datasets}</span>
-                        ${cat.children.length ? `<span>&middot; ${cat.children.length} ${this.ui.subcategories}</span>` : ''}
-                    </div>
-                    ${trendHtml}
-                    ${cat.children.length ? `<div class="cat-children">
-                        ${cat.children.slice(0, 4).map(c =>
-                            `<span class="cat-child-pill">${this.shortName(c.name)}</span>`
-                        ).join('')}
-                        ${cat.children.length > 4 ? `<span class="cat-child-pill">+${cat.children.length - 4}</span>` : ''}
-                    </div>` : ''}
+            const emoji = CATEGORY_EMOJIS[cat.code] || '📁';
+            const header = document.createElement('div');
+            header.className = 'cat-section-header';
+            header.innerHTML = `
+                <span class="cat-section-emoji">${emoji}</span>
+                <div class="cat-section-title">
+                    <span class="cat-section-name">${this.shortName(cat.name)}</span>
+                    <span class="cat-section-meta"><strong>${cat.total_datasets || 0}</strong> ${this.ui.datasets} · <strong>${cat.children.length}</strong> ${this.ui.subcategories}</span>
                 </div>
             `;
-            grid.appendChild(card);
+            header.addEventListener('click', () => this.drillCategory(cat, i));
+            section.appendChild(header);
+
+            if (cat.children.length > 1) {
+                const subcats = document.createElement('div');
+                subcats.className = 'cat-subcats';
+
+                cat.children.forEach((child, ci) => {
+                    const sub = document.createElement('span');
+                    sub.className = 'cat-subcat';
+                    sub.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.drillCategory(cat, i);
+                        this.drillCategory(child, 0);
+                    });
+                    sub.innerHTML = `<span class="cat-subcat-name">${this.shortName(child.name)}</span> <span class="cat-subcat-count">(${child.total_datasets})</span>`;
+                    subcats.appendChild(sub);
+                    if (ci < cat.children.length - 1) {
+                        const sep = document.createElement('span');
+                        sep.className = 'cat-subcat-sep';
+                        sep.textContent = '·';
+                        subcats.appendChild(sep);
+                    }
+                });
+                section.appendChild(subcats);
+            }
+
+            grid.appendChild(section);
         });
     }
 
@@ -560,7 +589,7 @@ class LensApp {
             const header = document.createElement('div');
             header.className = 'headline-theme-header';
             header.innerHTML = `
-                <span class="headline-theme-icon">${THEME_ICONS[theme.icon] || ''}</span>
+                <span class="headline-theme-icon">${THEME_ICONS[theme.icon] || '📊'}</span>
                 <span class="headline-theme-label">${theme.theme_label}</span>
                 <span class="headline-theme-arrow">›</span>
             `;
@@ -2493,8 +2522,10 @@ class LensApp {
 
     // --- Utilities ----------------------------------------------------------
     shortName(name) {
-        // Remove numbering prefix like "1. " or "A.01 "
-        return name.replace(/^[A-Z]?\.\d*\s*/, '').replace(/^\d+\.\s*/, '');
+        // Remove numbering prefix like "1. " or "A.01 ", then title-case
+        const stripped = name.replace(/^[A-Z]?\.\d*\s*/, '').replace(/^\d+\.\s*/, '');
+        // Title-case: first letter upper, rest lower (handles all-caps from API)
+        return stripped.charAt(0).toUpperCase() + stripped.slice(1).toLowerCase();
     }
 }
 
