@@ -265,7 +265,9 @@ class LensApp {
         this._sidebarLoaded = false;
 
         // Theme, language & view mode from localStorage
-        this.theme = localStorage.getItem('lens_theme') || 'dark';
+        const savedTheme = localStorage.getItem('lens_theme');
+        const osPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        this.theme = savedTheme || (osPrefersDark ? 'dark' : 'light');
         this.lang = localStorage.getItem('lens_lang') || 'ro';
         this.dsViewMode = localStorage.getItem('lens_ds_view') || 'grid';
 
