@@ -1,5 +1,17 @@
 # Activity History
 
+## 2026-04-07 — Split Dataset Metadata Propagation
+
+**Fixed split sub-datasets missing from "Actualizate recent" and lacking "Despre" panel:**
+- Root cause: split children (e.g. `LOC108C_numar`) have `is_canonical=TRUE` but `ultima_actualizare=NULL` and `definitie=NULL` — they never inherited metadata from their parent
+- Added `propagate_split_metadata()` in `update-pipeline.py`: copies `ultima_actualizare`, `definitie`, `metodologie`, `observatii` from parent matrix to all split children via `dataset_splits` JOIN
+- Runs automatically after `sync_ultima_actualizare()`; also available standalone via `python update-pipeline.py --propagate-splits`
+- Applied one-time fix to existing DuckDB: canonical 2026 dataset count went from 8 → 38
+- English `definitie` was already handled correctly — `_load_en_meta()` in `datasets.py` falls back to parent code for splits
+
+**Fixed TEMPO Online link for split datasets:**
+- `explore-app.js`: INS link now uses `m.parent_matrix_code || m.matrix_code`, so split variants like `LOC108C_numar` link to `ind=LOC108C` on statistici.insse.ro instead of a broken URL
+
 ## 2026-04-06 — Update Pipeline Improvements
 
 **Fixed stale "Actualizate recent" on landing page:**

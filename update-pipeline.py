@@ -103,7 +103,58 @@ def sync_ultima_actualizare(codes: list[str], lang: str, dry_run: bool = False) 
         conn.close()
 
     log.info(f"Synced ultima_actualizare for {updated}/{len(codes)} matrices")
+
+    # Propagate dates (and text metadata) from parents to split children
+    if updated > 0:
+        propagate_split_metadata(db_path, dry_run=False)
+
     return updated
+
+
+def propagate_split_metadata(db_path, dry_run: bool = False) -> int:
+    """Copy ultima_actualizare, definitie, metodologie, observatii from parent to split children."""
+    if dry_run:
+        log.info("[DRY-RUN] propagate_split_metadata skipped")
+        return 0
+
+    conn = duckdb.connect(str(db_path))
+    try:
+        conn.execute("""
+            UPDATE matrices
+            SET ultima_actualizare = (
+                SELECT parent.ultima_actualizare
+                FROM dataset_splits ds
+                JOIN matrices parent ON ds.parent_matrix_code = parent.matrix_code
+                WHERE ds.sub_matrix_code = matrices.matrix_code
+                  AND parent.ultima_actualizare IS NOT NULL
+                LIMIT 1
+            )
+            WHERE matrix_code IN (SELECT sub_matrix_code FROM dataset_splits)
+            AND ultima_actualizare IS NULL
+        """)
+        conn.execute("""
+            UPDATE matrices
+            SET definitie = sub.definitie,
+                metodologie = sub.metodologie,
+                observatii = sub.observatii
+            FROM (
+                SELECT ds.sub_matrix_code, parent.definitie, parent.metodologie, parent.observatii
+                FROM dataset_splits ds
+                JOIN matrices parent ON ds.parent_matrix_code = parent.matrix_code
+            ) sub
+            WHERE matrices.matrix_code = sub.sub_matrix_code
+            AND matrices.definitie IS NULL
+        """)
+        r = conn.execute(
+            "SELECT COUNT(*) FROM matrices WHERE is_canonical = TRUE AND ultima_actualizare >= '2026-01-01'"
+        ).fetchone()
+        log.info(f"Split metadata propagated — canonical 2026 datasets: {r[0]}")
+        return r[0]
+    except Exception as e:
+        log.warning(f"propagate_split_metadata error: {e}")
+        return 0
+    finally:
+        conn.close()
 
 
 def run(cmd: list[str], dry_run: bool = False, label: str = "") -> bool:
@@ -236,6 +287,8 @@ def main():
                         help="Re-fetch news from INS before processing")
     parser.add_argument("--all", action="store_true",
                         help="Process all news entries, ignoring last run date")
+    parser.add_argument("--propagate-splits", action="store_true",
+                        help="Propagate parent metadata (ultima_actualizare, definitie, etc.) to split children, then exit")
     args = parser.parse_args()
 
     lang = args.lang
@@ -249,6 +302,12 @@ def main():
     file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
     logging.getLogger().addHandler(file_handler)
     log.info(f"Logging to {log_file}")
+
+    # ---- 0. Standalone propagate-splits shortcut ----
+    if args.propagate_splits:
+        db_path = BASE_DIR / "data" / "corpus" / "metadata.duckdb"
+        propagate_split_metadata(db_path, dry_run=args.dry_run)
+        return
 
     # ---- 1. Optionally re-fetch news ----
     if args.refetch_news:

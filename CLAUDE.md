@@ -245,9 +245,9 @@ Prefer editing an existing file to creating a new one.
 
 # Other notes
 
-When detecting things that need to be adressed later, add to docs/backlog.md
+When detecting things that need to be addressed later, add to `docs/BACKLOG.md`. Use a checkbox `- [ ]` entry with a clear title and enough context to act on it later.
 
-to do: create a docs/actvoty-history.md as an activity history. Look into the commits and recreate that from the past. For now add a timestamp and current activities.
+After completing any meaningful work, add an entry to `docs/activity-history.md` under a `## YYYY-MM-DD — Short Title` heading. Include what was done, why, and any non-obvious decisions.
 
 When running Python commands, always first activate the following venv `~/devbox/envs/240826/` (/Users/pax/devbox/envs/240826/bin/activate)
 

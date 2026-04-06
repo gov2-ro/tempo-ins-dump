@@ -3,7 +3,10 @@
 Future tasks and intentions for the TEMPO INS data explorer.
 
 ## UI / Navigation
+- [ ] add static pages - how do we treat translations?
+- [ ] add 'last updated' page 
 - [ ] Dataset page breadcrumbs: links click through but navigate to home instead of the correct category — needs investigation into how `/?code=` routing is handled on the landing page (explore-app.js) vs. direct URL navigation
+- [ ] create a release log. how? backwrds. 
 
 ## Misc
 - [x] enhance table view
@@ -56,6 +59,19 @@ Future tasks and intentions for the TEMPO INS data explorer.
   Script: `scripts/cleanup-view-profiles.py`.
 
 ## Data Pipeline
+
+- [ ] **"Actualizate recent" shows only ~8 of 220 2026-updated datasets**
+  `sync_ultima_actualizare()` reads `ultimaActualizare` from metadata JSONs, but those fields
+  are often stale — e.g. LCI101I news date is 2026-03-06 but its JSON says `02-09-2025`.
+  **First investigate**: check whether the actual data in the parquet/CSV for LCI101I contains
+  2026 observations, or whether INS is announcing an update but the data itself hasn't changed.
+  If data IS updated (new rows in parquet), the metadata JSON field `ultimaActualizare` at
+  the INS API level is simply not being refreshed promptly — aggravating but fixable by
+  syncing dates from `insse_news.csv` instead of the metadata JSON.
+  **Proposed fix**: replace `sync_ultima_actualizare()` with `sync_from_news()` that reads
+  announcement dates directly from `insse_news.csv` and updates DuckDB for all news entries,
+  not just the processed ones. Add `--sync-dates-only` flag for standalone runs.
+
 
 - [ ] **Fix `10-import-metadata.py` — schema mismatch on `lang` column**
   Fails with `Binder Error: Table "contexts" does not have a column with name "lang"`.
