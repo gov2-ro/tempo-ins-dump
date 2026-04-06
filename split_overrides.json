@@ -1,9 +1,0 @@
-{
-    "_comment": "Manual overrides for slash-dimension classification. Keys: 'MATRIX_CODE/dim_name', values: {nom_item_id: semantic_type}",
-    "_example": {
-        "TCJ0331/Sexe/grupe de varsta/nivel de educatie/regiuni de dezvoltare": {
-            "12345": "sex",
-            "12346": "varsta"
-        }
-    }
-}

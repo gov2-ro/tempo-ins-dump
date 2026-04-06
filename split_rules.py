@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
-OVERRIDES_FILE = Path(__file__).parent / "split_overrides.json"
+OVERRIDES_FILE = Path(__file__).parent / "data/misc/split_overrides.json"
 
 # --- Regex classifiers for Romanian dimension labels ---
 
