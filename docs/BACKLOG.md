@@ -2,6 +2,9 @@
 
 Future tasks and intentions for the TEMPO INS data explorer.
 
+## UI / Navigation
+- [ ] Dataset page breadcrumbs: links click through but navigate to home instead of the correct category — needs investigation into how `/?code=` routing is handled on the landing page (explore-app.js) vs. direct URL navigation
+
 ## Misc
 - [x] enhance table view
 - [ ] more, nice themes - mai light a bit off-white, Financial Times, or Anthropic, lighter dark theme
@@ -18,6 +21,8 @@ Future tasks and intentions for the TEMPO INS data explorer.
 - [ ] large datasets show no data: LOC108B
 - [x] detect ro/intl -> language. (`?lang=en` URL param)
 - [ ] translate, Hu/De
+- [ ] clean up obsolete subts, refactor scripts - utils, scripts?
+- [ ] static site? - see `docs/misc-ideas/static-site/`
 
 ## Landing
 - [x] Show latest updates

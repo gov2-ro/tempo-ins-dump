@@ -1,4 +1,4 @@
-[ins.gov2.ro](https://ins.gov2.ro/) — scrapes and explores ~3,600 statistical datasets from _TEMPO-Online_ ([statistici.insse.ro](http://statistici.insse.ro:8077/tempo-online))
+[ins.gov2.ro](https://ins.gov2.ro/) — descarcă, normalizează + UI/navigator pentru datele oferite de Institutul național de statistică, via _TEMPO-Online_ ([statistici.insse.ro](http://statistici.insse.ro:8077/tempo-online))
 
 _INS Tempo Online but make it nice._
 
@@ -30,6 +30,21 @@ app/
   config.py           — DB_PATH, PARQUET_DIR (v3), MAX_DATA_ROWS=50000
   db.py               — DuckDB cursor-per-request (concurrency-safe)
   routers/            — /api/categories, /api/datasets, /api/datasets/{id}/data, /api/datasets/{id}/download, /sdmx/
+```
+
+#### SDMX 2.1 REST API
+
+The app exposes a minimal SDMX 2.1 REST API (agency `INS`) compatible with sdmxthon and the SDMX Dashboard Generator:
+
+| Endpoint | Description |
+|---|---|
+| `GET /sdmx/2.1/data/INS,{flow}/{key}` | GenericData XML — dot-notation key, `+` OR separator, `startPeriod`/`endPeriod`/`lastNObservations` query params |
+| `GET /sdmx/2.1/datastructure/INS/{flow}/1.0` | DataStructure Definition (DSD) XML with codelists |
+| `GET /sdmx/2.1/dataflow/INS/{flow}/1.0` | Dataflow definition XML |
+
+Example: `/sdmx/2.1/data/INS,ACC102B/..` returns all observations for dataset `ACC102B`.
+
+```
   services/           — chart_config, chart_selector, query_builder
   static/js/          — dataset-page, chart-factory, chart-geo, chart-demographic, filter-panel
   static/css/         — dataset.css, datasets.css, main.css
