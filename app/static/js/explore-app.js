@@ -12,7 +12,7 @@ const UI = {
         browseTitle: 'Date statistice oficiale România',
         browseSub: (n, obs) => `${n} seturi de date · ${obs} observații`,
         browseTagline: 'Tempo INS, da nițel mai drăgu\'',
-        noticeText: 'Acesta nu este un proiect oficial al Guvernului României. Date preluate de pe <a href="https://insse.ro" target="_blank">insse.ro</a>.',
+        noticeText: 'Alpha / preview version / WIP. Versiune alpha / preview / WIP. Acesta nu este un proiect oficial al Guvernului României. Date preluate de pe <a href="https://insse.ro" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Actualizate recent',
         categoriesLabel: 'Categorii tematice',
         searchPlaceholder: 'Caută seturi de date, indicatori, coduri...',
@@ -65,7 +65,7 @@ const UI = {
         browseTitle: 'Romanian Official Statistical Data',
         browseSub: (n, obs) => `${n} datasets · ${obs} observations`,
         browseTagline: 'Tempo INS, but nicer',
-        noticeText: 'This is not an official Romanian Government project. Data sourced from <a href="https://insse.ro" target="_blank">insse.ro</a>.',
+        noticeText: 'Alpha / preview version / WIP. This is not an official Romanian Government project. Data sourced from <a href="https://insse.ro" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Recently updated',
         categoriesLabel: 'Thematic categories',
         searchPlaceholder: 'Search datasets, indicators, codes...',
@@ -281,6 +281,9 @@ class LensApp {
         this.applyLang();
         this.bindEvents();
         this.bindThemeAndLang();
+        // Footer notice is always shown, independent of notice bar state
+        const footerNotice = document.getElementById('footer-notice');
+        if (footerNotice) footerNotice.innerHTML = this.ui.noticeText;
         const code = new URLSearchParams(location.search).get('code');
         if (code) {
             this.showDashboard(code);
@@ -433,6 +436,8 @@ class LensApp {
             const panelHidden = document.getElementById('table-panel')?.classList.contains('hidden');
             tableToggleLabel.textContent = panelHidden ? this.ui.showTable : this.ui.hideTable;
         }
+        const footerNotice = document.getElementById('footer-notice');
+        if (footerNotice) footerNotice.innerHTML = this.ui.noticeText;
     }
 
     /** Dispose and re-create all charts (needed after theme change) */

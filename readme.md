@@ -2,6 +2,10 @@
 
 _INS Tempo Online but make it nice._
 
+![prima pagină](docs/misc/screenshots/landing.png)
+![dataset](docs/misc/screenshots/dataset.png)
+
+-----
 
 ## Running
 
