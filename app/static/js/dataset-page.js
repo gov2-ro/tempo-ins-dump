@@ -82,8 +82,11 @@ class DatasetPage {
 
         // Breadcrumb
         const breadcrumb = document.getElementById('breadcrumb');
-        if (m.context_path) {
-            breadcrumb.innerHTML = `<a href="/">Home</a><span>›</span>${m.context_path}`;
+        if (m.context_path && m.context_path.length > 0) {
+            const crumbs = m.context_path.map(p =>
+                `<a href="/?code=${p.code}">${p.name}</a>`
+            ).join('<span>›</span>');
+            breadcrumb.innerHTML = `<a href="/">Home</a><span>›</span>${crumbs}`;
         }
 
         // Title

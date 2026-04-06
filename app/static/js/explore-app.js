@@ -1056,12 +1056,9 @@ class LensApp {
         // Build category breadcrumb path
         let pathHtml = '';
         if (m.context_path && m.context_path.length > 0) {
-            const crumbs = m.context_path.map((p, i) => {
+            const crumbs = m.context_path.map((p) => {
                 const label = this.shortName(p.name);
-                if (i < m.context_path.length - 1) {
-                    return `<span class="dash-crumb-link" data-code="${p.code}">${label}</span>`;
-                }
-                return `<span class="dash-crumb-current">${label}</span>`;
+                return `<span class="dash-crumb-link" data-code="${p.code}">${label}</span>`;
             });
             pathHtml = `<div class="dash-breadcrumbs">${crumbs.join('<span class="dash-crumb-sep">›</span>')}</div>`;
         }

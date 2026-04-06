@@ -107,7 +107,7 @@ class DatasetPageV2 {
         if (m.context_path && Array.isArray(m.context_path) && m.context_path.length > 0) {
             let html = '<a href="/">Home</a>';
             for (const seg of m.context_path) {
-                html += `<span>\u203a</span><a href="/datasets.html?context=${seg.code}">${seg.name}</a>`;
+                html += `<span>\u203a</span><a href="/?code=${seg.code}">${seg.name}</a>`;
             }
             breadcrumb.innerHTML = html;
         }
