@@ -1,5 +1,20 @@
 # Activity History
 
+## 2026-04-06 — Update Pipeline Improvements
+
+**Fixed stale "Actualizate recent" on landing page:**
+- Root cause: `10-import-metadata.py` fails with `lang` column schema mismatch (tracked in backlog), so `matrices.ultima_actualizare` in DuckDB was never refreshed after pipeline runs
+- Added `sync_ultima_actualizare(codes, lang)` in `update-pipeline.py` — reads `ultimaActualizare` from freshly fetched metadata JSONs and directly updates DuckDB; runs after every pipeline execution regardless of `10-import-metadata.py` success
+
+**Incremental run tracking:**
+- Added `data/logs/last-pipeline-run.txt` marker — written after each successful run
+- `update-pipeline.py` now auto-applies `--since {last_run_date}` when no explicit `--since` given, so re-running the script daily only processes genuinely new matrices
+- New flags: `--force-meta` (re-fetch metadata JSONs without re-downloading CSVs/parquets), `--all` (ignore last run date)
+
+**Quieted verbose pipeline output:**
+- `12-split-datasets.py`: per-matrix progress lines moved to DEBUG (only visible with `--debug`); summary totals remain at INFO
+- `generate_view_profiles.py`: JSON profile dump now only prints with `--debug` flag
+
 ## 2026-04-06 — Theme Icons, INS Link, UI Polish
 
 **Category section theme icons:**

@@ -57,6 +57,20 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 ## Data Pipeline
 
+- [ ] **Fix `10-import-metadata.py` — schema mismatch on `lang` column**
+  Fails with `Binder Error: Table "contexts" does not have a column with name "lang"`.
+  The script was written for an older schema where `contexts` and `matrices` had a `lang`
+  column to store per-language rows. The current schema uses a single-row-per-entity
+  approach with bilingual columns instead (`context_name_en`, `matrix_name_en`,
+  `definitie_en`, etc.). The script needs to be updated to:
+  1. Remove `lang` from `INSERT INTO contexts` / `INSERT INTO matrices` (and the `ON CONFLICT` key)
+  2. Replace `WHERE lang = ?` filters with no-lang equivalents
+  3. Map English fields to the `_en` columns rather than separate rows
+  This runs in the post-matrix global rebuild step of `update-pipeline.py` (after all
+  per-matrix steps succeed), so it's non-blocking for individual matrix updates but
+  prevents the metadata index from being refreshed after bulk runs.
+
+
 - [ ] **Replicate geo_hierarchy split for English (`eng`) parquet files**
   Pattern F splits are done on `ro` only. Since `nom_item_id` values are shared across
   languages, the same ID sets detected from `ro` can be reused. Low effort once the ro

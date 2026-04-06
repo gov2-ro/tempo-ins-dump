@@ -526,7 +526,7 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
 
     results = []
     combos = list(iterproduct(*[rule.groups for rule in sorted_rules]))
-    logger.info(f"  Cross-product: {' × '.join(str(len(r.groups)) for r in sorted_rules)} = {len(combos)} sub-datasets")
+    logger.debug(f"  Cross-product: {' × '.join(str(len(r.groups)) for r in sorted_rules)} = {len(combos)} sub-datasets")
 
     seen_codes = {}  # track duplicate sub_codes
     for combo in combos:
@@ -793,9 +793,9 @@ def main():
     args = parser.parse_args()
 
     setup_logging(args.debug)
-    logger.info("=" * 60)
-    logger.info("12-split-datasets.py — Dataset Splitter")
-    logger.info("=" * 60)
+    logger.debug("=" * 60)
+    logger.debug("12-split-datasets.py — Dataset Splitter")
+    logger.debug("=" * 60)
 
     # Create output directory
     if not args.dry_run:
@@ -806,7 +806,7 @@ def main():
 
     try:
         # Detect all split rules
-        logger.info("Detecting split patterns...")
+        logger.debug("Detecting split patterns...")
         rules = detect_all(conn)
 
         # Filter by CLI args
@@ -824,9 +824,9 @@ def main():
         for r in rules:
             by_pattern[r.pattern].append(r.matrix_code)
 
-        logger.info(f"\nSplit plan: {len(rules)} datasets")
+        logger.debug(f"Split plan: {len(rules)} datasets")
         for pat, codes in sorted(by_pattern.items()):
-            logger.info(f"  {pat}: {len(codes)} datasets")
+            logger.debug(f"  {pat}: {len(codes)} datasets")
 
         if not args.dry_run:
             # Prepare schema
@@ -848,8 +848,8 @@ def main():
         for i, (matrix_code, mrules) in enumerate(matrix_list, 1):
             if len(mrules) == 1:
                 rule = mrules[0]
-                logger.info(f"\n[{i}/{len(matrix_list)}] {rule.matrix_code} ({rule.pattern}) "
-                            f"-> {len(rule.groups)} sub-datasets")
+                logger.debug(f"\n[{i}/{len(matrix_list)}] {rule.matrix_code} ({rule.pattern}) "
+                             f"-> {len(rule.groups)} sub-datasets")
                 sub_results = split_parquet_by_filter(conn, rule, dry_run=args.dry_run)
                 if not args.dry_run:
                     for sub in sub_results:
@@ -861,7 +861,7 @@ def main():
                             errors += 1
             else:
                 patterns = "+".join(r.pattern for r in mrules)
-                logger.info(f"\n[{i}/{len(matrix_list)}] {matrix_code} (cross-product: {patterns})")
+                logger.debug(f"\n[{i}/{len(matrix_list)}] {matrix_code} (cross-product: {patterns})")
                 sub_results = split_parquet_cross_product(conn, matrix_code, mrules, dry_run=args.dry_run)
                 if not args.dry_run:
                     for sub in sub_results:

@@ -87,11 +87,28 @@ Sequential data pipeline — run in order. All scripts accept `--lang ro|en` (de
 | `12-parquet-to-sdmx.py` | `data/parquet-v3/ro/` | Transforms parquet-v2 to SDMX-native parquet-v3 |
 | `12-split-datasets.py` | `data/parquet-v3/ro/` | Splits inconsistent datasets into clean sub-datasets |
 
+### Incremental Update (`update-pipeline.py`)
+
+Orchestrates incremental updates from the INS news feed — processes only datasets updated since the last run.
+
+```bash
+python update-pipeline.py                        # auto-incremental (since last run)
+python update-pipeline.py --refetch-news         # re-fetch news CSV first
+python update-pipeline.py --since 01.03.2026     # explicit date filter
+python update-pipeline.py --all                  # ignore last run, process all news
+python update-pipeline.py --matrix ACC101B       # single dataset
+python update-pipeline.py --force                # re-download CSVs + parquets
+python update-pipeline.py --force-meta           # re-fetch metadata only (date sync, no CSV re-download)
+python update-pipeline.py --dry-run              # preview without executing
+```
+
+Per-matrix steps: fetch metadata JSON → download CSV → convert to parquet → SDMX transform → split if needed → view profile. After all matrices: rebuild meta index, sync `ultima_actualizare` dates to DuckDB. Saves `data/logs/last-pipeline-run.txt` on completion — used as auto `--since` on next run.
+
 ### Other root-level scripts
 
 | Script | Description |
 |---|---|
-| `generate_view_profiles.py` | Generates per-dataset JSON view profiles → `data/view-profiles/` |
+| `generate_view_profiles.py` | Generates per-dataset JSON view profiles → `data/corpus/view-profiles/` |
 | `build-geo-regions.py` | Dissolves county GeoJSON into regions + macroregions |
 | `split_rules.py` | Split rules engine — classifies datasets needing structural splits |
 | `detect_trends.py` | Detects trends, YoY growth, seasonality → `dataset_trends` DuckDB table |

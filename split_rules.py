@@ -149,7 +149,7 @@ def detect_multi_um(conn) -> list[SplitRule]:
             drop_columns=[dim_col],  # UM col becomes single-valued, drop it
         ))
 
-    logger.info(f"Pattern A (multi_um): {len(rules)} datasets")
+    logger.debug(f"Pattern A (multi_um): {len(rules)} datasets")
     return rules
 
 
@@ -257,7 +257,7 @@ def detect_mixed_metrics(conn) -> list[SplitRule]:
             drop_columns=drop,
         ))
 
-    logger.info(f"Pattern B (mixed_metrics): {len(rules)} datasets")
+    logger.debug(f"Pattern B (mixed_metrics): {len(rules)} datasets")
     return rules
 
 
@@ -349,7 +349,7 @@ def detect_slash_dims(conn) -> list[SplitRule]:
                 groups=groups,
             ))
 
-    logger.info(f"Pattern C (slash_dims): {len(rules)} datasets")
+    logger.debug(f"Pattern C (slash_dims): {len(rules)} datasets")
     return rules
 
 
@@ -386,7 +386,7 @@ def detect_hierarchy(conn) -> list[SplitRule]:
             drop_columns=[],  # Keep both columns; filtering is row-level
         ))
 
-    logger.info(f"Pattern D (hierarchy): {len(rules)} datasets")
+    logger.debug(f"Pattern D (hierarchy): {len(rules)} datasets")
     return rules
 
 
@@ -480,7 +480,7 @@ def detect_age_granularity(conn) -> list[SplitRule]:
             groups=groups,
         ))
 
-    logger.info(f"Pattern E (age_granularity): {len(rules)} datasets")
+    logger.debug(f"Pattern E (age_granularity): {len(rules)} datasets")
     return rules
 
 
@@ -511,7 +511,7 @@ def detect_geo_hierarchy(conn) -> list[SplitRule]:
     """).fetchall()
 
     if not dim_rows:
-        logger.info("Pattern F (geo_hierarchy): 0 datasets")
+        logger.debug("Pattern F (geo_hierarchy): 0 datasets")
         return []
 
     # Load geo_level classifications from dimension_options_parsed
@@ -578,7 +578,7 @@ def detect_geo_hierarchy(conn) -> list[SplitRule]:
             groups=groups,
         ))
 
-    logger.info(f"Pattern F (geo_hierarchy): {len(rules)} datasets")
+    logger.debug(f"Pattern F (geo_hierarchy): {len(rules)} datasets")
     return rules
 
 
@@ -636,7 +636,7 @@ def detect_mixed_time_granularity(conn) -> list[SplitRule]:
             groups=groups,
         ))
 
-    logger.info(f"Pattern G (mixed_time_granularity): {len(rules)} datasets")
+    logger.debug(f"Pattern G (mixed_time_granularity): {len(rules)} datasets")
     return rules
 
 
@@ -661,7 +661,7 @@ def detect_all(conn) -> list[SplitRule]:
 
     all_rules = multi_um + mixed_metrics + slash_dims + hierarchy + age_gran + geo_hier + mixed_time
     total_datasets = len(set(r.matrix_code for r in all_rules))
-    logger.info(f"Total split rules: {len(all_rules)} across {total_datasets} datasets")
+    logger.debug(f"Total split rules: {len(all_rules)} across {total_datasets} datasets")
     return all_rules
 
 

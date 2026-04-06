@@ -72,7 +72,7 @@ def build_id_to_value_map(conn) -> dict:
         FROM sdmx_codes
     """).fetchall()
     lookup = {nom_id: val for nom_id, val in rows}
-    log.info(f"  ID→value lookup: {len(lookup):,} entries")
+    log.debug(f"  ID→value lookup: {len(lookup):,} entries")
     return lookup
 
 
@@ -85,7 +85,7 @@ def build_column_map(conn) -> dict:
     cmap = {}
     for mc, old, new in rows:
         cmap.setdefault(mc, {})[old] = new
-    log.info(f"  Column map: {len(cmap):,} matrices")
+    log.debug(f"  Column map: {len(cmap):,} matrices")
     return cmap
 
 
@@ -251,15 +251,15 @@ def main():
     dst_dir = CORPUS_PARQUET_DIR  # Output to corpus/parquet
     dst_dir.mkdir(parents=True, exist_ok=True)
 
-    log.info(f"Source: {src_dir}")
-    log.info(f"Output: {dst_dir}")
-    log.info(f"DB:     {DB_FILE}")
+    log.debug(f"Source: {src_dir}")
+    log.debug(f"Output: {dst_dir}")
+    log.debug(f"DB:     {DB_FILE}")
 
     conn = duckdb.connect(str(DB_FILE), read_only=True)
 
     try:
         # Build lookup tables
-        log.info("Building lookups...")
+        log.debug("Building lookups...")
         id_to_value = build_id_to_value_map(conn)
         col_map = build_column_map(conn)
 
@@ -280,7 +280,7 @@ def main():
                 matrices = matrices[:args.limit]
 
         total = len(matrices)
-        log.info(f"Processing {total} parquet files...\n")
+        log.debug(f"Processing {total} parquet files...")
 
         t0 = time.time()
         success = 0

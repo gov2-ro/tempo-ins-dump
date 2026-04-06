@@ -794,7 +794,7 @@ class ProfileGenerator:
     def __init__(self, db_path: Path, debug: bool = False):
         self.debug = debug
         self.loader = MetadataLoader(db_path)
-        log.info("Loading metadata from %s...", db_path)
+        log.debug("Loading metadata from %s...", db_path)
         self.profiles = self.loader.load_profiles()
         self.matrices = self.loader.load_matrices()
         self.dimensions = self.loader.load_dimensions()
@@ -806,8 +806,8 @@ class ProfileGenerator:
         self.trends = self.loader.load_trends()
         self.splits = self.loader.load_splits()
         self.split_matrices = self.loader.load_split_matrices()
-        log.info("Loaded %d datasets, %d parents with splits",
-                 len(self.profiles), len(self.splits))
+        log.debug("Loaded %d datasets, %d parents with splits",
+                  len(self.profiles), len(self.splits))
 
         # Pre-detect composite dims and batch-load their options
         composite_dim_ids = []
@@ -816,7 +816,7 @@ class ProfileGenerator:
                 if len(detect_composite_keys(d['dim_column_name'] or '')) >= 2:
                     composite_dim_ids.append(d['dimension_id'])
         self.composite_options = self.loader.load_options_for_dims(composite_dim_ids)
-        log.info("Found %d composite dimensions", len(composite_dim_ids))
+        log.debug("Found %d composite dimensions", len(composite_dim_ids))
 
     def close(self):
         self.loader.close()
@@ -1274,7 +1274,8 @@ def main():
                 path = out_dir / f"{args.matrix}.json"
                 with open(path, 'w', encoding='utf-8') as f:
                     json.dump(profile, f, indent=2, ensure_ascii=False)
-                print(json.dumps(profile, indent=2, ensure_ascii=False))
+                if args.debug:
+                    print(json.dumps(profile, indent=2, ensure_ascii=False))
                 log.info("Wrote %s", path)
             else:
                 log.error("No profile generated for %s", args.matrix)
