@@ -1,5 +1,17 @@
 # Activity History
 
+## 2026-04-06 — Theme Icons, INS Link, UI Polish
+
+**Category section theme icons:**
+- Replaced category emojis with transparent PNGs from `app/static/img/themes/`
+- Icons bottom-aligned with section header text, naturally rising above via flex layout
+- Mapping: society (A), economy (B), environment (E), transport (F), sustainable development (G+H)
+- Subcategory left indent removed for cleaner alignment
+
+**Dataset header:**
+- Added "INS ↗" link to official TEMPO Online page (`statistici.insse.ro/tempoins/...?ind={code}`) next to download buttons
+- Link respects current UI language (ro/en)
+
 ## 2026-04-06 — Landing Redesign, Downloads, UI Polish
 
 **Landing page redesign:**

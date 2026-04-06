@@ -12,7 +12,7 @@ const UI = {
         browseTitle: 'Date statistice oficiale România',
         browseSub: (n, obs) => `${n} seturi de date · ${obs} observații`,
         browseTagline: 'Tempo INS, da nițel mai drăgu\'',
-        noticeText: 'Alpha / preview version / WIP. Versiune alpha / preview / WIP. Acesta nu este un proiect oficial al Guvernului României. Date preluate de pe <a href="https://insse.ro" target="_blank">insse.ro</a>.',
+        noticeText: 'Alpha / preview version / WIP. Versiune alpha / preview / WIP. Acesta nu este un proiect oficial al Guvernului României. Date preluate de pe <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Actualizate recent',
         categoriesLabel: 'Categorii tematice',
         searchPlaceholder: 'Caută seturi de date, indicatori, coduri...',
@@ -1075,6 +1075,7 @@ class LensApp {
                     <span class="dash-code">${m.matrix_code}</span>
                 </div>
                 <div class="dash-download">
+                    <a class="dl-btn" href="http://statistici.insse.ro/tempoins/index.jsp?page=tempo3&lang=${this.lang === 'en' ? 'en' : 'ro'}&ind=${m.matrix_code}" target="_blank" rel="noopener" title="${this.lang === 'en' ? 'View on INS TEMPO Online' : 'Vezi pe INS TEMPO Online'}">INS ↗</a>
                     <button class="dl-btn" id="dl-csv-btn">↓ CSV</button>
                     <button class="dl-btn" id="dl-xlsx-btn">↓ XLSX</button>
                 </div>
