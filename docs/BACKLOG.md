@@ -61,11 +61,15 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
 - [x] `dataset_search.py` FTS-first strategy with LIKE fallback. "unemployment rate" → 130 results (was 0).
 - [x] Full documentation in `tools/tempo-dev-mcp/README.md`.
 
-### Step 2 — v1 user-facing NL→Data agent (~2.5h)
-- [ ] `app/services/llm_client.py` — provider abstraction (Anthropic + OpenAI), normalised `LLMResponse`.
-- [ ] `app/services/agent.py` — tool registry, system prompt, `run_agent()` loop (~80 line core, ~250 with prompt+registry).
-- [ ] `app/routers/ask.py` — `POST /api/ask` behind `TEMPO_ASK_ENABLED` flag.
-- [ ] 4 agent tools: `search_datasets`, `get_dataset_schema`, `query_dataset_data`, `list_categories`. SQL never LLM-generated — calls `query_builder.build_data_query()` directly.
+### Step 2 — v1 user-facing NL→Data agent (~2.5h) ✅
+- [x] `app/services/llm_client.py` — provider abstraction (Anthropic + OpenAI), normalised `LLMResponse`.
+- [x] `app/services/agent.py` — tool registry, system prompt, `run_agent()` loop.
+- [x] `app/routers/ask.py` — `POST /api/ask` behind `TEMPO_ASK_ENABLED` flag.
+- [x] 4 agent tools: `search_datasets`, `get_dataset_schema`, `query_dataset_data`, `list_categories`. SQL never LLM-generated — calls `query_builder.build_data_query()` directly.
+- [ ] Live end-to-end test with `ANTHROPIC_API_KEY` (offline tool handlers verified; live LLM loop pending key).
+- [ ] Minimal chat UI for `/api/ask` (currently only curl-testable).
+- [ ] **Agent: double-counting via unfiltered Total rows** — `query_dataset_data` with `group_by=[TIME_PERIOD]` and no filters sums all rows, including any dimension's `Total` option where present (e.g. `POP107D` → `AGE=Total` doubles the real population). Phase 8 stripped totals from only 49 of 3,600 datasets. Options: (a) sharpen the system prompt to always filter non-grouped dims to a single value or explicitly exclude `Total`; (b) detect `Total` values in the query handler and warn/auto-exclude; (c) expand phase-8 total stripping to more datasets. Option (b) is probably safest — make the handler inspect the parquet for per-dimension `Total` rows and either exclude them by default or surface a `possibly_double_counted` warning on the result.
+- [ ] Pin `anthropic>=0.40` in `requirements.txt` (SDK 0.89.0 installed in dev venv but not pinned).
 
 ### Step 3 — Expand the dev MCP (~3–4h, after Step 2 surfaces real friction)
 - [ ] Pipeline state introspection: `tempo_pipeline_status`, `tempo_dataset_lineage`, `tempo_outdated`.

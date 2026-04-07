@@ -16,3 +16,9 @@ MAX_DATA_ROWS = int(os.environ.get("TEMPO_MAX_ROWS", "50000"))
 LARGE_DATASET_THRESHOLD = 50_000  # Require filters above this row count
 
 DEBUG = os.environ.get("TEMPO_DEBUG", "false").lower() in ("1", "true", "yes")
+
+# LLM agent (POST /api/ask) — disabled by default
+ASK_ENABLED        = os.environ.get("TEMPO_ASK_ENABLED", "false").lower() in ("1", "true", "yes")
+LLM_PROVIDER       = os.environ.get("TEMPO_LLM_PROVIDER", "anthropic")   # anthropic | openai
+LLM_MODEL          = os.environ.get("TEMPO_LLM_MODEL", "claude-sonnet-4-6")
+ASK_MAX_TOOL_CALLS = int(os.environ.get("TEMPO_ASK_MAX_TOOL_CALLS", "8"))

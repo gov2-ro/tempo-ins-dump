@@ -1,5 +1,77 @@
 # Activity History
 
+## 2026-04-07 — LLM Agent Step 2: v1 user-facing NL→Data agent
+
+Built `POST /api/ask` tool-calling agent on top of the existing service layer.
+Gated by `TEMPO_ASK_ENABLED` (disabled by default). LLM never generates SQL —
+all data access goes through `query_builder.build_data_query()`.
+
+**New files:**
+- `app/services/llm_client.py` (~190 lines) — provider-agnostic `complete_with_tools()`
+  returning a normalised `LLMResponse{stop_reason, text, tool_calls}`. Supports
+  Anthropic (primary, SDK 0.89.0) and OpenAI backends with shared message/tool
+  format translation helpers.
+- `app/services/agent.py` (~390 lines) — 4 tools (`search_datasets`,
+  `get_dataset_schema`, `query_dataset_data`, `list_categories`), ~2.3k-char
+  system prompt (bilingual workflow, Romanian vocabulary cheatsheet, "Total"
+  gotcha), `run_agent()` loop (max 8 iterations, dispatches tool calls,
+  accumulates `tool_trace`, attaches `chart_spec` from `chart_selector` for the
+  last queried matrix).
+- `app/routers/ask.py` (~35 lines) — POST `/api/ask` endpoint, returns 404 when
+  disabled, 500 on agent error.
+
+**Modified files:**
+- `app/config.py` — added `ASK_ENABLED`, `LLM_PROVIDER`, `LLM_MODEL`,
+  `ASK_MAX_TOOL_CALLS` environment flags.
+- `app/main.py` — mounted `ask.router` under `/api`.
+
+**Key design decisions:**
+- Agent reuses the existing shared service layer (`dataset_search.py`,
+  `dataset_meta.py`, `query_builder.py`) — same code paths as the FastAPI
+  routes and the dev MCP server.
+- `query_dataset_data` handler mirrors `routers/dataset_data.py`: legacy
+  `_nom_id` column resolution, `primary_unit_type`-based agg_func
+  (SUM/AVG), 5k row cap with `limit+1` truncation detection, and auto-retry
+  after stripping `Total`/`TOTAL` filter values when a query returns 0 rows.
+- Anthropic provider packs all tool results in a single `user` turn; OpenAI
+  uses individual `tool` messages — `run_agent()` branches on
+  `config.LLM_PROVIDER` to produce the right shape.
+- `chart_spec` is not built per-query during the loop — only attached once
+  after `end_turn` for the last queried matrix (avoids repeated work).
+
+**Verified offline (no API key required):**
+- `TOOLS` schema validation, `SYSTEM_PROMPT` contains required vocabulary
+- `search_datasets("somaj pe judete")` → 200 hits; `search_datasets("unemployment")` → 9 hits
+- `get_dataset_schema("POP107D")` → 6 dims, values capped correctly
+- `query_dataset_data("POP107D", group_by=["TIME_PERIOD"])` → 34 rows, SUM agg
+- Auto-retry: `POP107D` with `SEX=Total` filter → 0 rows → retry without filter → 34 rows + warning
+- `list_categories()` → 339 entries (levels 0–2 only, filtered from ~200k)
+- Disabled endpoint returns 404 with `{"detail": "Ask endpoint is disabled"}`
+- App mounts cleanly with `/api/ask` in the route list
+
+**Bug fixed during implementation:**
+- `_handle_list_categories` used the wrong column names (`code`, `name`,
+  `parent_code`) — actual schema is `context_code`, `context_name`,
+  `parent_code`, `level`. Fixed + filtered to levels ≤ 2 to avoid dumping
+  the entire category tree into the prompt.
+
+**Still pending:**
+- Live end-to-end test with a real `ANTHROPIC_API_KEY` (offline plumbing
+  verified; LLM loop itself not exercised yet).
+- Dependency pinning: `anthropic>=0.40` should be added to `requirements.txt`.
+- Optional: a tiny chat UI for `/api/ask` — currently only curl-testable.
+
+**How to run live test:**
+```bash
+source ~/devbox/envs/240826/bin/activate
+TEMPO_ASK_ENABLED=true ANTHROPIC_API_KEY=... \
+  uvicorn app.main:app --reload --port 8080
+
+curl -s -X POST localhost:8080/api/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"question": "Care este populația Clujului în 2023?"}' | jq
+```
+
 ## 2026-04-07 — MCP corpus quality fixes: geo fallback, unit classifier, chart selector
 
 Three fixes targeting classification/profiling gaps that cascaded into wrong chart selection:
