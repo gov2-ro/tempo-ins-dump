@@ -3,10 +3,10 @@
 Future tasks and intentions for the TEMPO INS data explorer.
 
 ## UI / Navigation
-- [ ] add static pages - how do we treat translations?
+- [x] add static pages - how do we treat translations?
 - [ ] add 'last updated' page 
 - [ ] Dataset page breadcrumbs: links click through but navigate to home instead of the correct category — needs investigation into how `/?code=` routing is handled on the landing page (explore-app.js) vs. direct URL navigation
-- [ ] create a release log. how? backwrds. 
+- [ ] create a release log. how? backwards? 
 
 ## Misc
 - [x] enhance table view
@@ -18,7 +18,7 @@ Future tasks and intentions for the TEMPO INS data explorer.
   - [ ] disseminate data. Kaggle, Hugging face? Check legal?
 - [ ] should we split repos, data fetching, UI? - so we make a dataset independent SDMX UI framework?
 - [ ] responsive
-- [ ] fetch newly updated datasets
+- [x] fetch newly updated datasets
   - [ ] continuous fetching, gh actions?
 - [ ] Look for same EU stats?
 - [ ] large datasets show no data: LOC108B
@@ -26,6 +26,7 @@ Future tasks and intentions for the TEMPO INS data explorer.
 - [ ] translate, Hu/De
 - [ ] clean up obsolete subts, refactor scripts - utils, scripts?
 - [ ] static site? - see `docs/misc-ideas/static-site/`
+- [ ] add llms.txt ?
 
 ## Landing
 - [x] Show latest updates
@@ -42,8 +43,7 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 ## SDMX / Multi-Source
 
-- [ ] **Phase 5: NL2SQL preparation** — Generate per-dataset JSON schema files, create
-  DuckDB views for all parquet-v3 files, build corpus description for LLM context.
+- [ ] **Phase 5: NL2SQL preparation** — Generate per-dataset JSON schema files, create DuckDB views for all parquet-v3 files, build corpus description for LLM context.
 
 - [ ] **Phase 6: Multi-source adapter** — Eurostat/OECD data ingestion alongside INS data.
   Design `dataset_registry` table, build Eurostat SDMX-CSV adapter.
