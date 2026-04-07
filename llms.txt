@@ -1,0 +1,133 @@
+# INS TEMPO Explorer
+
+> Romanian National Institute of Statistics (INS) data API. ~3,600 canonical statistical datasets from TEMPO Online covering demographics, economy, agriculture, education, health, and more. Bilingual (Romanian/English). Data spans 1990-2024+.
+
+## Base URL
+
+https://tempo-ins-explorer.fly.dev
+
+## Concepts
+
+- **matrix_code**: Unique dataset identifier (e.g., `POP101A`, `ACC102B`). Some datasets are split into sub-datasets with suffixes (e.g., `POP301A_judete`).
+- **Dimensions**: Each dataset has 2-6 dimensions of types: `time`, `geo`, `gender`, `age`, `unit`, `residence`, `indicator`.
+- **Archetypes**: Datasets are classified by structure: `geo_time`, `demographic`, `time_residence`, `time_series`.
+- **Language**: All endpoints accept `lang=ro` (default) or `lang=en` for bilingual labels.
+- **OBS_VALUE**: The numeric observation value column in all data responses.
+
+## REST API (JSON)
+
+### Search datasets
+
+```
+GET /api/datasets?q={text}&context={code}&archetype={type}&has_geo={bool}&lang={ro|en}&sort={updated|name|rows}&limit={n}&offset={n}
+```
+
+Returns `{total, datasets[]}`. Each dataset card includes `matrix_code`, `matrix_name`, `archetype`, `time_range`, `row_count`, `has_geo`.
+
+### Dataset metadata
+
+```
+GET /api/datasets/{matrix_code}?lang={ro|en}
+```
+
+Full metadata: name, definition, methodology, dimensions with all options, chart configuration, context path, split variants. This is the primary endpoint for understanding a dataset's structure before querying its data.
+
+### Query data
+
+```
+GET /api/datasets/{matrix_code}/data?filters={json}&limit={n}&group_by={json}
+```
+
+- `filters`: JSON object mapping column names to value arrays, e.g., `{"REF_AREA":["Bucuresti"],"TIME_PERIOD":["2023"]}`
+- `group_by`: JSON array of columns to aggregate by, e.g., `["TIME_PERIOD","SEX"]`
+- `limit`: Max 50,000 rows. Datasets over 50k rows require at least one filter.
+- Returns `{columns, rows[][], column_labels, total_rows, returned_rows, truncated}`.
+
+### Download data
+
+```
+GET /api/datasets/{matrix_code}/download?format={csv|xlsx}&filters={json}&lang={ro|en}
+```
+
+### Category tree
+
+```
+GET /api/categories?lang={ro|en}
+```
+
+Hierarchical category tree with dataset counts per node.
+
+### Category trends
+
+```
+GET /api/categories/trends
+```
+
+Trend aggregates (up/down/flat/volatile counts, avg YoY growth) per category.
+
+### Category summary
+
+```
+GET /api/categories/{code}/summary?lang={ro|en}
+```
+
+### Corpus summary
+
+```
+GET /api/corpus/summary?lang={ro|en}
+```
+
+Corpus-level statistics, headline indicators with sparklines and YoY growth, recently updated datasets.
+
+## SDMX 2.1 API (XML)
+
+Standard SDMX REST 2.1 endpoints returning SDMX-ML XML. Compatible with sdmxthon and SDMX Dashboard Generator.
+
+### Data query
+
+```
+GET /sdmx/2.1/data/INS,{flow_id}/{key}?startPeriod={year}&endPeriod={year}&lastNObservations={n}
+```
+
+- `key`: Dot-separated dimension values. Empty segments = wildcard. Use `+` for OR (e.g., `Total+Urban.Bucuresti.`).
+- Returns GenericData XML with observations (max 50,000).
+
+### Data Structure Definition
+
+```
+GET /sdmx/2.1/datastructure/INS/{flow_id}/1.0
+```
+
+DSD with dimension definitions and codelists (up to 500 values per codelist).
+
+### Dataflow
+
+```
+GET /sdmx/2.1/dataflow/INS/{flow_id}/1.0
+```
+
+## Examples
+
+Search for population datasets:
+```
+GET /api/datasets?q=populatie&lang=ro
+```
+
+Get GDP dataset metadata:
+```
+GET /api/datasets/ACC102B?lang=en
+```
+
+Query Bucharest population by year:
+```
+GET /api/datasets/POP101A/data?filters={"REF_AREA":["Municipiul Bucuresti"]}&group_by=["TIME_PERIOD"]
+```
+
+SDMX query — all 2023 observations for a dataset:
+```
+GET /sdmx/2.1/data/INS,ACC102B?startPeriod=2023&endPeriod=2023
+```
+
+## Source
+
+GitHub: https://github.com/gov2-ro/tempo-ins-dump

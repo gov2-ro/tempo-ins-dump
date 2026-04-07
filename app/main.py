@@ -1,6 +1,7 @@
 """INS TEMPO Data Explorer — FastAPI application."""
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 
@@ -22,6 +23,12 @@ app.include_router(categories.router, prefix="/api", tags=["categories"])
 app.include_router(datasets.router, prefix="/api", tags=["datasets"])
 app.include_router(dataset_data.router, prefix="/api", tags=["data"])
 app.include_router(sdmx.router, prefix="/sdmx", tags=["sdmx"])
+
+_LLMS_TXT = Path(__file__).parent.parent / "llms.txt"
+
+@app.get("/llms.txt", include_in_schema=False)
+async def llms_txt():
+    return FileResponse(_LLMS_TXT, media_type="text/plain")
 
 # Serve view profiles (must come before catch-all static mount)
 view_profiles_dir = CORPUS_DIR / "view-profiles"

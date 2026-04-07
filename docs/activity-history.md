@@ -1,5 +1,19 @@
 # Activity History
 
+## 2026-04-07 — LLM Tooling Plan (dev MCP + NL→Data agent)
+
+Designed a 4-step hybrid roadmap for adding LLM capabilities to the project. Plan stored at `~/.claude/plans/peppy-fluttering-bubble.md`.
+
+**Architectural decisions:**
+- **Not literal NL2SQL.** With 3,632 different parquet schemas, the hard problem is "which parquet + which columns," not "what SQL." A tool-calling agent over the existing safe `query_builder.build_data_query()` is the right shape — SQL is never LLM-generated.
+- **Dev MCP first.** A separate `tempo-dev` MCP server compounds across every future Claude Code session. Refactoring to extract `dataset_search.py` + `dataset_meta.py` is the shared substrate for both the MCP and the user-facing agent — one refactor, three reuses (MCP, agent, existing UI route).
+- **Hybrid build order:** minimal MCP (4 tools) → v1 user agent → expand MCP (informed by v1's friction) → v2 features.
+- **Provider abstraction** via `app/services/llm_client.py` (Anthropic + OpenAI), swappable through `TEMPO_LLM_PROVIDER` env var.
+- **DuckDB FTS in sidecar** `data/corpus/search.duckdb` to avoid the metadata.duckdb write-lock.
+- **Chart selection stays rule-based** — agent never picks chart types; `chart_selector.select_charts()` is called after the agent settles on data.
+
+Backlog updated with the full task breakdown for Steps 1–4. Implementation starts with Step 1 (extract services + minimal MCP server).
+
 ## 2026-04-07 — Split Dataset Metadata Propagation
 
 **Fixed split sub-datasets missing from "Actualizate recent" and lacking "Despre" panel:**

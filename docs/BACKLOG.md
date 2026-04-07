@@ -41,9 +41,48 @@ Future tasks and intentions for the TEMPO INS data explorer.
 - [ ] bar charts, order by value
 - [ ] if just 2 dimensions, don't give options to choose (axis, group), just to swap, transpose. 
 
+## LLM Tooling — see plan `~/.claude/plans/peppy-fluttering-bubble.md`
+
+Hybrid roadmap: minimal dev MCP → v1 user-facing agent → expand MCP → v2.
+Architectural decision: tool-calling agent over existing safe services, **not** literal NL2SQL.
+Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` once, reuse from MCP, agent, and existing routes.
+
+### Step 1 — Minimal `tempo-dev` MCP (~2h)
+- [ ] Refactor: extract `search_datasets()` and `get_dataset_meta()` from `app/routers/datasets.py` into `app/services/dataset_search.py` and `app/services/dataset_meta.py`. Keep route behaviour identical.
+- [ ] Write `tools/tempo-dev-mcp/server.py` (~150 lines, official `mcp` Python SDK) with 4 introspection tools: `tempo_dataset_info`, `tempo_search_datasets`, `tempo_chart_signature`, `tempo_sample`.
+- [ ] Add `.mcp.json` at repo root for repo-local registration.
+- [ ] Document in CLAUDE.md.
+
+### Step 2 — v1 user-facing NL→Data agent (~2.5h)
+- [ ] `app/services/llm_client.py` — provider abstraction (Anthropic + OpenAI), normalised `LLMResponse`.
+- [ ] `app/services/agent.py` — tool registry, system prompt, `run_agent()` loop (~80 line core, ~250 with prompt+registry).
+- [ ] `app/routers/ask.py` — `POST /api/ask` behind `TEMPO_ASK_ENABLED` flag.
+- [ ] `scripts/build-search-index.py` — sidecar `data/corpus/search.duckdb` with FTS over matrices + dataset_tags. Sidecar avoids the metadata.duckdb write-lock.
+- [ ] 4 agent tools: `search_datasets`, `get_dataset_schema`, `query_dataset_data`, `list_categories`. SQL never LLM-generated — calls `query_builder.build_data_query()` directly.
+
+### Step 3 — Expand the dev MCP (~3–4h, after Step 2 surfaces real friction)
+- [ ] Pipeline state introspection: `tempo_pipeline_status`, `tempo_dataset_lineage`, `tempo_outdated`.
+- [ ] Code introspection: `tempo_routes`, `tempo_call_endpoint` (FastAPI TestClient).
+- [ ] Eval: `tempo_eval_chart_selector` (diff vs baseline), `tempo_eval_agent` (YAML question set), `tempo_check_view_profiles`.
+- [ ] Frontend probing (Playwright): `tempo_render_dataset`, `tempo_console_errors`, `tempo_validate_echarts_spec`.
+- [ ] Gated mutations (`TEMPO_DEV_MUTATIONS=true`): `tempo_run_pipeline_script`, `tempo_regen_view_profile`, `tempo_clear_search_index`.
+- [ ] Eval baselines: `data/eval/chart_selector_baseline.json`, `data/eval/agent_questions.yaml`.
+
+### Step 4 — v2+ user features (varies)
+- [ ] Cross-dataset reasoning: `compute_ratio` / `query_two_datasets` tool (joins on shared SDMX dims).
+- [ ] Derived metrics tool: expose `dataset_trends` table as `get_trend_summary(matrix_code)`.
+- [ ] Multi-turn drill-down with session memory.
+- [ ] Hybrid retrieval: lexical FTS + multilingual embeddings (BGE-M3 / multilingual-e5-large).
+- [ ] Streaming + chat panel UI.
+- [ ] Methodology Q&A (RAG over `matrices.definitie` + `matrices.metodologie`).
+- [ ] Statistical narrative generation (auto-explanatory journalism over INS data).
+- [ ] LLM-driven chart customisation (override `chart_selector` defaults).
+- [ ] Auto-generated periodic reports (Markdown/PDF/HTML).
+- [ ] (See plan file Tier 2-4 for ambitious / research-grade ideas.)
+
 ## SDMX / Multi-Source
 
-- [ ] **Phase 5: NL2SQL preparation** — Generate per-dataset JSON schema files, create DuckDB views for all parquet-v3 files, build corpus description for LLM context.
+- [ ] **Phase 5: NL2SQL preparation** — Generate per-dataset JSON schema files, create DuckDB views for all parquet-v3 files, build corpus description for LLM context. *(Superseded by the LLM Tooling plan above — tool-calling agent reuses existing services rather than per-dataset views.)*
 
 - [ ] **Phase 6: Multi-source adapter** — Eurostat/OECD data ingestion alongside INS data.
   Design `dataset_registry` table, build Eurostat SDMX-CSV adapter.
