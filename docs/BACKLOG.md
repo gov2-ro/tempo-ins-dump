@@ -48,10 +48,10 @@ Architectural decision: tool-calling agent over existing safe services, **not** 
 Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` once, reuse from MCP, agent, and existing routes.
 
 ### Step 1 — Minimal `tempo-dev` MCP (~2h)
-- [ ] Refactor: extract `search_datasets()` and `get_dataset_meta()` from `app/routers/datasets.py` into `app/services/dataset_search.py` and `app/services/dataset_meta.py`. Keep route behaviour identical.
-- [ ] Write `tools/tempo-dev-mcp/server.py` (~150 lines, official `mcp` Python SDK) with 4 introspection tools: `tempo_dataset_info`, `tempo_search_datasets`, `tempo_chart_signature`, `tempo_sample`.
-- [ ] Add `.mcp.json` at repo root for repo-local registration.
-- [ ] Document in CLAUDE.md.
+- [x] Refactor: extract `search_datasets()` and `get_dataset_meta()` from `app/routers/datasets.py` into `app/services/dataset_search.py` and `app/services/dataset_meta.py`. Keep route behaviour identical.
+- [x] Write `tools/tempo-dev-mcp/server.py` (~150 lines, official `mcp` Python SDK) with 4 introspection tools: `tempo_dataset_info`, `tempo_search_datasets`, `tempo_chart_signature`, `tempo_sample`.
+- [x] Add `.mcp.json` at repo root for repo-local registration.
+- [x] Document in CLAUDE.md.
 
 ### Step 2 — v1 user-facing NL→Data agent (~2.5h)
 - [ ] `app/services/llm_client.py` — provider abstraction (Anthropic + OpenAI), normalised `LLMResponse`.

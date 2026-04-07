@@ -1,5 +1,19 @@
 # Activity History
 
+## 2026-04-07 — Step 1: Service layer extraction + tempo-dev MCP server
+
+**Service layer refactor:**
+- Extracted `search_datasets()` → `app/services/dataset_search.py` (from `app/routers/datasets.py:list_datasets`)
+- Extracted `get_dataset_meta()` → `app/services/dataset_meta.py` (from `app/routers/datasets.py:get_dataset`)
+- Route handlers now thin wrappers — same API behavior, verified via curl
+- Both services accept optional `conn=` param for DuckDB cursor injection (defaults to `get_conn()`)
+
+**MCP server (`tools/tempo-dev-mcp/server.py`):**
+- 4 tools: `tempo_dataset_info`, `tempo_search_datasets`, `tempo_chart_signature`, `tempo_sample`
+- Uses official `mcp` Python SDK (FastMCP), stdio transport
+- Registered in `.mcp.json` at repo root (repo-local, auto-loaded by Claude Code)
+- All tools import from the shared service layer — no duplicated logic
+
 ## 2026-04-07 — LLM Tooling Plan (dev MCP + NL→Data agent)
 
 Designed a 4-step hybrid roadmap for adding LLM capabilities to the project. Plan stored at `~/.claude/plans/peppy-fluttering-bubble.md`.

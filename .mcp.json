@@ -8,6 +8,13 @@
         "BROWSER_HEADLESS": "false",
         "BROWSER_DEFAULT_TIMEOUT": "30000"
       }
+    },
+    "tempo-dev": {
+      "command": "/Users/pax/devbox/envs/240826/bin/python",
+      "args": ["/Users/pax/devbox/gov2/tempo-ins-dump/tools/tempo-dev-mcp/server.py"],
+      "env": {
+        "TEMPO_REPO_ROOT": "/Users/pax/devbox/gov2/tempo-ins-dump"
+      }
     }
   }
 }

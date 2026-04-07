@@ -58,6 +58,8 @@ app/
     datasets.py        — /api/datasets list + search
     dataset_data.py    — /api/datasets/{id}/data + metadata
   services/
+    dataset_search.py  — search/list datasets (shared by route, MCP, agent)
+    dataset_meta.py    — full dataset metadata + chart config (shared by route, MCP, agent)
     chart_config.py    — archetype → chart config mapping
     chart_selector.py  — chart type selection engine
     query_builder.py   — DuckDB query construction
@@ -102,6 +104,18 @@ Standalone HTML pages served via `python -m http.server 8000`:
 | `tree-browser.html` | Hierarchical 3-level category navigation |
 
 Legacy/archived UIs are in `ui/prev/` and `ui/v1/`.
+
+### Dev MCP Server (`tools/tempo-dev-mcp/`)
+Claude Code introspection tools for this repo. Registered in `.mcp.json` (repo-local), auto-loaded every session.
+
+| Tool | Description |
+|---|---|
+| `tempo_dataset_info(matrix_code)` | Full metadata + dims + chart scores + sample rows + coverage/trends in one call |
+| `tempo_search_datasets(query, has_geo, archetype, limit)` | Catalog search (LIKE-based, FTS upgrade planned) |
+| `tempo_chart_signature(matrix_code)` | `build_signature()` + `select_charts()` scores per chart type |
+| `tempo_sample(matrix_code, n, filters)` | Labelled rows from parquet |
+
+All tools import from the shared service layer: `app/services/dataset_search.py` and `app/services/dataset_meta.py`.
 
 ## Development Commands
 
