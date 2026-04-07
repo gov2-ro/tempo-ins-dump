@@ -220,6 +220,15 @@ kbd {
     transition: all var(--transition);
 }
 .toggle-btn:hover { color: var(--text-0); background: var(--bg-3); }
+.about-btn {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--text-3);
+}
 
 .lang-toggle {
     width: auto;
@@ -398,9 +407,9 @@ kbd {
 }
 .browse-tagline {
     margin-top: 6px;
-    font-size: 12px;
-    color: var(--text-3);
-    font-style: italic;
+    font-size: 18px;
+    color: var(--text-3); margin-top: -1ex;
+    /* font-style: italic; */
 }
 
 /* --- Section Labels --- */
@@ -1770,6 +1779,35 @@ body.sidebar-open #app {
 }
 
 /* --- Footer --- */
+/* --- About Page --- */
+.about-page {
+    max-width: 720px;
+    padding: 32px 0 64px;
+    color: var(--text-1);
+    line-height: 1.7;
+}
+.about-page h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-0);
+    margin: 0 0 16px;
+    letter-spacing: -0.02em;
+}
+.about-page h3 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-2);
+    margin: 28px 0 8px;
+}
+.about-page p {
+    font-size: 14px;
+    margin: 0 0 12px;
+}
+.about-page a { color: var(--accent); text-decoration: underline; }
+.about-page a:hover { opacity: 0.8; }
+
 .site-footer {
     margin-top: 48px;
     border-top: 1px solid var(--border);

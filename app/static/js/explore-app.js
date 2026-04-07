@@ -9,10 +9,10 @@
 // ---------------------------------------------------------------------------
 const UI = {
     ro: {
-        browseTitle: 'Date statistice oficiale România',
+        browseTitle: 'Date statistice România',
         browseSub: (n, obs) => `${n} seturi de date · ${obs} observații`,
         browseTagline: 'Tempo INS, da nițel mai drăgu\'',
-        noticeText: 'Alpha / preview version / WIP. Versiune alpha / preview / WIP. Acesta nu este un proiect oficial al Guvernului României. Date preluate de pe <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank">insse.ro</a>.',
+        noticeText: 'Versiune alfa / preview. Acesta nu este un proiect oficial al Guvernului României. Date preluate de pe <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Actualizate recent',
         categoriesLabel: 'Categorii tematice',
         searchPlaceholder: 'Caută seturi de date, indicatori, coduri...',
@@ -60,12 +60,21 @@ const UI = {
         xAxisLabel: 'Axă',
         colorLabel: 'Grupare',
         noneDim: 'Niciuna',
+        aboutLink: 'Despre',
+        aboutTitle: 'Despre INS+',
+        aboutContent: `
+   
+            <p><b>INS+</b> (încă n-am găsit altă rimă) este un explorator de date statistice oficiale ale României, construit pe baza datelor publice disponibile prin <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank" rel="noopener">INS TEMPO Online</a> — platforma Institutului Național de Statistică.</p>
+            <p><b>Disclaimer</b>: proiectul este la nivelul alfa / prototip, încă n-a trecut printr-un control riguros al calității datelor. Cu alte cuvinte, mai avem câte una alta de făcut până la lansare.</p>
+            <p>Aplauze, sugestii sau dojene: <a href="mailto:cancelarie@gov2.ro">cancelarie@gov2.ro</a> sau, și mai bine: github &rarr; <a href="https://github.com/gov2-ro/tempo-ins-dump/issues/new" target="_blank" rel="noopener">gov2-ro/tempo-ins-dump</a>.</p>
+            <img src="img/tempo-ins.png" alt="Tempo online" style="max-width:100%; border-radius:8px; margin:16px 0;"><div style="font-size: 4rem; text-align: center;">🤷🏻‍♀️ 🏋🏻‍♀️ 🧚‍♂️ ✨ </div>
+        `,
     },
     en: {
-        browseTitle: 'Romanian Official Statistical Data',
+        browseTitle: 'Romanian Statistical Data',
         browseSub: (n, obs) => `${n} datasets · ${obs} observations`,
         browseTagline: 'Tempo INS, but nicer',
-        noticeText: 'Alpha / preview version / WIP. This is not an official Romanian Government project. Data sourced from <a href="https://insse.ro" target="_blank">insse.ro</a>.',
+        noticeText: 'Alpha/preview. This is not an official Romanian Government project. Data sourced from <a href="https://insse.ro" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Recently updated',
         categoriesLabel: 'Thematic categories',
         searchPlaceholder: 'Search datasets, indicators, codes...',
@@ -113,6 +122,17 @@ const UI = {
         xAxisLabel: 'Axis',
         colorLabel: 'Group',
         noneDim: 'None',
+        aboutLink: 'About',
+        aboutTitle: 'About INS+',
+        aboutContent: `
+            <h2>About INS+</h2>
+            <p>INS+ is an explorer for Romania's official statistical data, built on public data from <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank" rel="noopener">INS TEMPO Online</a> — the platform of Romania's National Institute of Statistics.</p>
+            <p><b>Disclaimer</b>: this is work in progress, the features and data have not undergone a proper quality check yet.</p>
+
+         <p>Contact: <a href="mailto:cancelarie@gov2.ro">cancelarie@gov2.ro</a> or <a href="https://github.com/gov2-ro/tempo-ins-dump/" target="_blank" rel="noopener">github.com/gov2-ro/tempo-ins-dump</a>.</p>
+            <img src="img/tempo-ins.png" alt="Tempo online" style="max-width:100%; border-radius:8px; margin:16px 0;">
+            <div style="font-size: 4rem; text-align: center;">🤷🏻‍♀️ 🏋🏻‍♀️ 🧚‍♂️ ✨ </div>
+        `,
     },
 };
 
@@ -292,8 +312,14 @@ class LensApp {
         // Footer notice is always shown, independent of notice bar state
         const footerNotice = document.getElementById('footer-notice');
         if (footerNotice) footerNotice.innerHTML = this.ui.noticeText;
-        const code = new URLSearchParams(location.search).get('code');
-        if (code) {
+        const params = new URLSearchParams(location.search);
+        const code = params.get('code');
+        const page = params.get('page');
+        const lnk = document.getElementById('about-link');
+        if (lnk) lnk.textContent = this.ui.aboutLink;
+        if (page === 'about') {
+            this.showAbout();
+        } else if (code) {
             this.showDashboard(code);
         } else {
             this.showBrowse();
@@ -328,6 +354,13 @@ class LensApp {
 
         // Back button
         document.getElementById('back-btn').addEventListener('click', () => this.showBrowse());
+
+        // About link + button (SPA — prevent full reload)
+        document.getElementById('about-link').addEventListener('click', e => {
+            e.preventDefault();
+            this.showAbout();
+        });
+        document.getElementById('about-btn').addEventListener('click', () => this.showAbout());
         document.getElementById('panel-back').addEventListener('click', () => {
             if (this.drillStack.length > 1) {
                 this.drillStack.pop();
@@ -446,6 +479,12 @@ class LensApp {
         }
         const footerNotice = document.getElementById('footer-notice');
         if (footerNotice) footerNotice.innerHTML = this.ui.noticeText;
+        const aboutLink = document.getElementById('about-link');
+        if (aboutLink) aboutLink.textContent = this.ui.aboutLink;
+        // Re-render about page if currently shown
+        if (!document.getElementById('about-view').classList.contains('hidden')) {
+            document.getElementById('about-content').innerHTML = `<div class="about-page">${this.ui.aboutContent}</div>`;
+        }
     }
 
     /** Dispose and re-create all charts (needed after theme change) */
@@ -458,14 +497,32 @@ class LensApp {
     }
 
     // --- Navigation ---------------------------------------------------------
-    navigate(code) {
+    navigate(code, page) {
         const url = new URL(location.href);
-        if (code) {
-            url.searchParams.set('code', code);
-        } else {
-            url.searchParams.delete('code');
-        }
+        url.searchParams.delete('code');
+        url.searchParams.delete('page');
+        if (code) url.searchParams.set('code', code);
+        if (page) url.searchParams.set('page', page);
         history.pushState({}, '', url);
+    }
+
+    // --- About view ---------------------------------------------------------
+    showAbout() {
+        this.navigate(null, 'about');
+        this.disposeCharts();
+        document.getElementById('browse-view').classList.add('hidden');
+        document.getElementById('dashboard-view').classList.add('hidden');
+        document.getElementById('about-view').classList.remove('hidden');
+        document.getElementById('back-btn').classList.remove('hidden');
+        document.getElementById('back-btn').textContent = this.ui.backExplore;
+
+        const el = document.getElementById('about-content');
+        el.innerHTML = `<div class="about-page">${this.ui.aboutContent}</div>`;
+        document.title = `${this.ui.aboutTitle} — INS+`;
+
+        // Update footer link label
+        const lnk = document.getElementById('about-link');
+        if (lnk) lnk.textContent = this.ui.aboutLink;
     }
 
     // --- Browse view --------------------------------------------------------
@@ -476,6 +533,7 @@ class LensApp {
 
         document.getElementById('browse-view').classList.remove('hidden');
         document.getElementById('dashboard-view').classList.add('hidden');
+        document.getElementById('about-view').classList.add('hidden');
         document.getElementById('back-btn').classList.add('hidden');
 
         const [catResp, trendsResp, summary] = await Promise.all([
@@ -2576,8 +2634,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Handle browser back/forward
 window.addEventListener('popstate', () => {
-    const code = new URLSearchParams(location.search).get('code');
-    if (code) {
+    const params = new URLSearchParams(location.search);
+    const code = params.get('code');
+    const page = params.get('page');
+    if (page === 'about') {
+        window.app.showAbout();
+    } else if (code) {
         window.app.showDashboard(code);
     } else {
         window.app.showBrowse();
