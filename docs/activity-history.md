@@ -1,5 +1,27 @@
 # Activity History
 
+## 2026-04-07 — MCP corpus quality fixes: geo fallback, unit classifier, chart selector
+
+Three fixes targeting classification/profiling gaps that cascaded into wrong chart selection:
+
+**Fix 1: chart_selector.py — geo_count NULL fallback** (`app/services/chart_selector.py:67-76`)
+- When `geo_county_count` is NULL in coverage data but `has_geo=True` and `geo_levels` contains 'county', now falls back to dimension option_count (or 42, Romania's county count)
+- Fixes choropleth eligibility for parent/sparse datasets like LOC108B
+
+**Fix 2: 11-coverage-profiler.py — geo stats when no parquet** (`11-coverage-profiler.py:172-185`)
+- Added `else` branch: when no parquet exists, geo stats (county count, national/locality flags) are estimated from `dimension_options_parsed` metadata using `dim_nids` lookup
+- LOC108B: `geo_county_count` now correctly shows 42 (was NULL)
+
+**Fix 3: 10-classify-dimensions.py — expanded unit recognition** (`10-classify-dimensions.py:82-200`)
+- Expanded `UNIT_MAP` with ~30 new entries: physical units (litri, kilograme, grame, mp, m2, m3, mii litri, mii m3), count variants (perechi, capete, mii capete, familii, gospodarii), energy (kwh, mwh, gwh, gigacalorii), distance, etc.
+- Added `UNIT_KEYWORDS` regex fallback after exact-match fails — 10 patterns covering lei/euro/currency, procent, weight, volume, area, distance, energy, time, index, count
+- Remaining 172 unknowns are genuinely composite/unusual strings (e.g. "lei preturile anului curent", "echivalent norma intreaga")
+
+**Verification:**
+- Re-ran `10-classify-dimensions.py` and `11-coverage-profiler.py` on full corpus
+- `tempo_dataset_info("LOC108B")`: `coverage.geo_county_count = 42`, `chart_selector.primary_chart = choropleth (score 0.85)`
+- `tempo_catalog_stats(group_by="unit_type")`: unknown=172 (stable; remaining unknowns are truly composite)
+
 ## 2026-04-07 — MCP v2: query tool, catalog stats, FTS search
 
 **MCP v1 documentation:**

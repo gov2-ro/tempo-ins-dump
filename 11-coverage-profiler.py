@@ -98,11 +98,18 @@ def load_metadata(rconn):
     ).fetchall():
         geo_levels[nid] = gl
 
+    # nom_item_ids per dimension (for fallback when no parquet)
+    dim_nids = {}
+    for dim_id, nid in rconn.execute(
+        "SELECT dimension_id, nom_item_id FROM dimension_options"
+    ).fetchall():
+        dim_nids.setdefault(dim_id, []).append(nid)
+
     matrices = rconn.execute(
         "SELECT matrix_code, row_count, parquet_path FROM matrices ORDER BY matrix_code"
     ).fetchall()
 
-    return dims_by_matrix, time_years, geo_levels, matrices
+    return dims_by_matrix, time_years, geo_levels, dim_nids, matrices
 
 
 def _pq_query(pconn, sql, ppath):
@@ -111,7 +118,7 @@ def _pq_query(pconn, sql, ppath):
     return pconn.execute(full_sql)
 
 
-def profile_dataset(mc, row_count, ppath, dims, time_years, geo_levels, pconn):
+def profile_dataset(mc, row_count, ppath, dims, time_years, geo_levels, dim_nids, pconn):
     time_dim = next((d for d in dims if d["dim_type"] == "time"), None)
     geo_dim = next((d for d in dims if d["dim_type"] == "geo"), None)
     has_parquet = ppath and os.path.exists(ppath)
@@ -162,6 +169,20 @@ def profile_dataset(mc, row_count, ppath, dims, time_years, geo_levels, pconn):
             rec["geo_has_national"] = lc.get("national", 0) > 0
             rec["geo_has_locality"] = lc.get("locality", 0) > 0
             rec["geo_level_counts"] = json.dumps(dict(lc)) if lc else None
+        else:
+            # Fallback: estimate geo stats from dimension metadata
+            dim_id = geo_dim["dimension_id"]
+            nids = dim_nids.get(dim_id, [])
+            lc = Counter()
+            for nid in nids:
+                gl = geo_levels.get(nid)
+                if gl:
+                    lc[gl] += 1
+            if lc:
+                rec["geo_county_count"] = lc.get("county", 0)
+                rec["geo_has_national"] = lc.get("national", 0) > 0
+                rec["geo_has_locality"] = lc.get("locality", 0) > 0
+                rec["geo_level_counts"] = json.dumps(dict(lc))
 
     # -- Fill rate --
     if dims:
@@ -275,7 +296,7 @@ def main():
         rconn = duckdb.connect(DB_PATH, read_only=True)
     pconn = duckdb.connect()
 
-    dims_by_matrix, time_years, geo_levels, matrices = load_metadata(rconn)
+    dims_by_matrix, time_years, geo_levels, dim_nids, matrices = load_metadata(rconn)
     total = len(matrices)
     print(f"Processing {total} datasets...")
 
@@ -289,7 +310,7 @@ def main():
             print(f"  [{i+1}/{total}] {time.time() - start:.1f}s elapsed")
         dims = dims_by_matrix.get(mc, [])
         try:
-            rec = profile_dataset(mc, row_count, ppath, dims, time_years, geo_levels, pconn)
+            rec = profile_dataset(mc, row_count, ppath, dims, time_years, geo_levels, dim_nids, pconn)
         except Exception as e:
             errors += 1
             rec = dict(EMPTY_REC)

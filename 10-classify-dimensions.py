@@ -80,59 +80,124 @@ RO_MONTHS = {
 # (unit_type, unit_scale, currency)
 
 UNIT_MAP = {
+    # Percentages / rates
     'procente':                ('percentage', 1,          None),
     '%':                       ('percentage', 1,          None),
     'procente puncte':         ('percentage', 1,          None),
     'puncte procentuale':      ('percentage', 1,          None),
     'pp':                      ('percentage', 1,          None),
+    'rata':                    ('rate',       1,          None),
+    'promile':                 ('rate',       1,          None),
+    # Counts
     'numar':                   ('count',      1,          None),
     'nr.':                     ('count',      1,          None),
     'nr':                      ('count',      1,          None),
     'numar de cazuri':         ('count',      1,          None),
     'numar de persoane':       ('count',      1,          None),
+    'numar persoane':          ('count',      1,          None),
     'persoane':                ('count',      1,          None),
     'mii persoane':            ('count',      1_000,      None),
     'mii':                     ('count',      1_000,      None),
     'milioane':                ('count',      1_000_000,  None),
-    'lei':                     ('currency',   1,          'RON'),
-    'mii lei':                 ('currency',   1_000,      'RON'),
-    'mil. lei':                ('currency',   1_000_000,  'RON'),
-    'milioane lei':            ('currency',   1_000_000,  'RON'),
-    'miliarde lei':            ('currency',   1_000_000_000, 'RON'),
-    'euro':                    ('currency',   1,          'EUR'),
-    'mii euro':                ('currency',   1_000,      'EUR'),
-    'milioane euro':           ('currency',   1_000_000,  'EUR'),
-    'dolari sua':              ('currency',   1,          'USD'),
-    'mii dolari sua':          ('currency',   1_000,      'USD'),
-    'dts':                     ('currency',   1,          'SDR'),
-    'hectare':                 ('area',       1,          None),
-    'ha':                      ('area',       1,          None),
-    'mii ha':                  ('area',       1_000,      None),
-    'km2':                     ('area',       1,          None),
-    'km patrati':              ('area',       1,          None),
-    'tone':                    ('weight',     1,          None),
-    'mii tone':                ('weight',     1_000,      None),
-    'milioane tone':           ('weight',     1_000_000,  None),
-    'tone co2 echivalent':     ('weight',     1,          None),
-    'mii tep':                 ('energy',     1_000,      None),
-    'kwh':                     ('energy',     1,          None),
-    'mii kwh':                 ('energy',     1_000,      None),
-    'mwh':                     ('energy',     1_000,      None),
-    'gwh':                     ('energy',     1_000_000,  None),
-    'indice':                  ('index',      1,          None),
-    'indici':                  ('index',      1,          None),
-    'indici de pret':          ('index',      1,          None),
-    'rata':                    ('rate',       1,          None),
-    'promile':                 ('rate',       1,          None),
-    'km':                      ('distance',   1,          None),
-    'zile':                    ('time_unit',  1,          None),
-    'ore':                     ('time_unit',  1,          None),
     'numar mediu':             ('count',      1,          None),
     'locuri':                  ('count',      1,          None),
     'locuri de munca':         ('count',      1,          None),
     'unitati':                 ('count',      1,          None),
     'mii unitati':             ('count',      1_000,      None),
+    'bucati':                  ('count',      1,          None),
+    'perechi':                 ('count',      1,          None),
+    'capete':                  ('count',      1,          None),
+    'mii capete':              ('count',      1_000,      None),
+    'familii':                 ('count',      1,          None),
+    'gospodarii':              ('count',      1,          None),
+    # Currency — RON
+    'lei':                     ('currency',   1,          'RON'),
+    'lei ron':                 ('currency',   1,          'RON'),
+    'mii lei':                 ('currency',   1_000,      'RON'),
+    'mii lei ron':             ('currency',   1_000,      'RON'),
+    'mil. lei':                ('currency',   1_000_000,  'RON'),
+    'milioane lei':            ('currency',   1_000_000,  'RON'),
+    'milioane lei ron':        ('currency',   1_000_000,  'RON'),
+    'miliarde lei':            ('currency',   1_000_000_000, 'RON'),
+    # Currency — EUR / USD / SDR
+    'euro':                    ('currency',   1,          'EUR'),
+    'mii euro':                ('currency',   1_000,      'EUR'),
+    'milioane euro':           ('currency',   1_000_000,  'EUR'),
+    'dolari sua':              ('currency',   1,          'USD'),
+    'mii dolari sua':          ('currency',   1_000,      'USD'),
+    'dolari (usd)':            ('currency',   1,          'USD'),
+    'mii dolari (usd)':       ('currency',   1_000,      'USD'),
+    'milioane dolari (usd)':   ('currency',   1_000_000,  'USD'),
+    'dts':                     ('currency',   1,          'SDR'),
+    # Area
+    'hectare':                 ('area',       1,          None),
+    'ha':                      ('area',       1,          None),
+    'mii ha':                  ('area',       1_000,      None),
+    'km2':                     ('area',       1,          None),
+    'km patrati':              ('area',       1,          None),
+    'metri patrati':           ('area',       1,          None),
+    'mp':                      ('area',       1,          None),
+    'm2':                      ('area',       1,          None),
+    'mii mp':                  ('area',       1_000,      None),
+    # Weight
+    'tone':                    ('weight',     1,          None),
+    'mii tone':                ('weight',     1_000,      None),
+    'milioane tone':           ('weight',     1_000_000,  None),
+    'tone co2 echivalent':     ('weight',     1,          None),
+    'kilograme':               ('weight',     1,          None),
+    'kg':                      ('weight',     1,          None),
+    'grame':                   ('weight',     1,          None),
+    # Volume
+    'litri':                   ('volume',     1,          None),
+    'mii litri':               ('volume',     1_000,      None),
+    'metri cubi':              ('volume',     1,          None),
+    'm3':                      ('volume',     1,          None),
+    'mii metri cubi':          ('volume',     1_000,      None),
+    'milioane metri cubi':     ('volume',     1_000_000,  None),
+    # Energy
+    'mii tep':                 ('energy',     1_000,      None),
+    'mii tone echivalent petrol': ('energy',  1_000,      None),
+    'kwh':                     ('energy',     1,          None),
+    'mii kwh':                 ('energy',     1_000,      None),
+    'mwh':                     ('energy',     1_000,      None),
+    'gwh':                     ('energy',     1_000_000,  None),
+    'milioane kilowatti-ora':  ('energy',     1_000_000,  None),
+    'gigacalorii':             ('energy',     1,          None),
+    # Distance
+    'km':                      ('distance',   1,          None),
+    'mii km':                  ('distance',   1_000,      None),
+    'kilometri':               ('distance',   1,          None),
+    # Time units
+    'zile':                    ('time_unit',  1,          None),
+    'ore':                     ('time_unit',  1,          None),
+    'ani':                     ('time_unit',  1,          None),
+    'mii ore':                 ('time_unit',  1_000,      None),
+    # Index
+    'indice':                  ('index',      1,          None),
+    'indici':                  ('index',      1,          None),
+    'indici de pret':          ('index',      1,          None),
 }
+
+# Keyword patterns for fuzzy matching when exact match fails
+# Order matters — first match wins. More specific patterns first.
+UNIT_KEYWORDS = [
+    (r'\blei\b',                          'currency'),
+    (r'\beuro\b',                         'currency'),
+    (r'\bdolari\b',                       'currency'),
+    (r'\bdts\b',                          'currency'),
+    (r'\bprocent',                        'percentage'),
+    (r'\bla 1000\b',                      'rate'),
+    (r'\bla 100\b',                       'rate'),
+    (r'\bla 10000\b',                     'rate'),
+    (r'\btone?\b|\bkg\b|\bkilograme?\b|\bgrame?\b', 'weight'),
+    (r'\blitri\b|\bm3\b|\bmetri cubi\b|\bhectolitri\b', 'volume'),
+    (r'\bhectare?\b|\bha\b|\bkm2\b|\bmp\b|\bm2\b|\bmetri patrati\b', 'area'),
+    (r'\bkm\b|\bkilometri\b|\bmetri\b',  'distance'),
+    (r'\bkwh\b|\bmwh\b|\bgwh\b|\btep\b|\btj\b|\bcalorii\b|\bkilowatti\b', 'energy'),
+    (r'\bore\b|\bzile\b|\bluni\b|\bani\b', 'time_unit'),
+    (r'\bindice?\b|\bindici\b',           'index'),
+    (r'\bnumar\b|\bnr\b|\bpersoane\b|\bunitati\b|\blocuri\b|\bbucati\b|\bcapete\b|\bspectatori\b|\bpasageri\b|\bexemplare\b|\bspectacole\b', 'count'),
+]
 
 
 # ── Parsers ───────────────────────────────────────────────────────────────────
@@ -293,11 +358,18 @@ def parse_unit(label: str) -> dict:
     # Strip "um: " prefix if present
     sn_clean = re.sub(r'^um:\s*', '', sn).strip()
 
+    # 1. Exact match
     for key in (sn_clean, sn):
         if key in UNIT_MAP:
             unit_type, scale, currency = UNIT_MAP[key]
             return {'dim_type': 'unit', 'unit_type': unit_type, 'unit_scale': scale,
                     'currency': currency, 'parse_confidence': 1.0}
+
+    # 2. Keyword fallback — catches composite strings like "lei / persoana", "metri patrati suprafata utila"
+    for pattern, unit_type in UNIT_KEYWORDS:
+        if re.search(pattern, sn_clean):
+            return {'dim_type': 'unit', 'unit_type': unit_type, 'unit_scale': 1,
+                    'currency': None, 'parse_confidence': 0.6}
 
     return {'dim_type': 'unit', 'unit_type': 'other', 'unit_scale': 1, 'currency': None, 'parse_confidence': 0.1}
 

@@ -58,12 +58,22 @@ def build_signature(profile: dict, dimensions: list,
         for d in dimensions if d.get('dim_type') == 'indicator'
     ]
 
-    geo_count = cov.get('geo_county_count') or 0
     geo_levels_raw = profile.get('geo_levels', '[]') or '[]'
     try:
         geo_levels = json.loads(geo_levels_raw) if isinstance(geo_levels_raw, str) else geo_levels_raw
     except (json.JSONDecodeError, TypeError):
         geo_levels = []
+
+    geo_count = cov.get('geo_county_count')
+    if geo_count is None and profile.get('has_geo'):
+        # Coverage profiler may not have populated geo_county_count (no parquet, sparse data).
+        # Fall back to dimension metadata when geo_levels confirms county-level data.
+        if 'county' in geo_levels:
+            geo_count = _dim_count(dimensions, 'geo') or 42
+        else:
+            geo_count = 0
+    else:
+        geo_count = geo_count or 0
 
     time_points = cov.get('time_year_count') or profile.get('time_year_max', 0) or 0
     if time_points == 0 and profile.get('time_year_min') and profile.get('time_year_max'):

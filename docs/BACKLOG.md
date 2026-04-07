@@ -21,12 +21,13 @@ Future tasks and intentions for the TEMPO INS data explorer.
 - [x] fetch newly updated datasets
   - [ ] continuous fetching, gh actions?
 - [ ] Look for same EU stats?
-- [ ] large datasets show no data: LOC108B
+- [ ] large datasets show no data: LOC108B — root cause: 0.4% fill rate (locality dimension has 3172 options × 43 counties × 7 categories × 23 years = theoretical 43M rows, actual 188k). Choropleth eligibility fixed (geo fallback). Remaining issue: needs REF_AREA_2 (locality) filtered before chart renders. Consider splitting into county-level vs locality-level sub-datasets.
 - [x] detect ro/intl -> language. (`?lang=en` URL param)
 - [ ] translate, Hu/De
 - [ ] clean up obsolete subts, refactor scripts - utils, scripts?
 - [ ] static site? - see `docs/misc-ideas/static-site/`
-- [ ] add llms.txt
+- [x] add llms.txt
+- [ ] description, title, og:info should follow language
 
 ## Landing
 - [x] Show latest updates
