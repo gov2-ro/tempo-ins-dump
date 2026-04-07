@@ -6,6 +6,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ app/
+COPY llms.txt .
 
 # Data is staged by scripts/prepare-deploy-data.sh
 COPY deploy-data/ data/
