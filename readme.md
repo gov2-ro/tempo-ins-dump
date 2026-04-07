@@ -5,7 +5,7 @@ _INS Tempo Online but make it nice._
 ![prima pagină](docs/misc/screenshots/landing.png)
 ![dataset](docs/misc/screenshots/dataset.png)
 
-📋 [Backlog](docs/backlog.md) · 📅 [Activity History](docs/activity-history.md)
+📋 [Backlog](docs/backlog.md) · 📅 [Activity History](docs/activity-history.md) · 🤖 [LLMs.txt](https://ins.gov2.ro/llms.txt)
 
 -----
 
