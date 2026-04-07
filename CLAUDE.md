@@ -147,6 +147,8 @@ bash scripts/prepare-deploy-data.sh   # Stage data for deployment
 # deploy/oracle/ for Oracle Cloud, deploy/hf-spaces/ for HF Spaces
 ```
 
+**Live URL**: https://ins.gov2.ro (Fly.io, app: `tempo-ins-explorer`)
+
 ## Data Structure
 
 ```

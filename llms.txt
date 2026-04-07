@@ -4,7 +4,7 @@
 
 ## Base URL
 
-https://tempo-ins-explorer.fly.dev
+https://ins.gov2.ro 
 
 ## Concepts
 
