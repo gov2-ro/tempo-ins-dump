@@ -1,51 +1,147 @@
-# NL→Data agent for INS TEMPO
+# INS TEMPO LLM tooling — minimal dev MCP, then NL→Data agent
 
 ## Context
 
-The user wants to add a natural-language interface to the INS TEMPO explorer (~3,632 Romanian statistical datasets, FastAPI + DuckDB + parquet). They asked "how would an NL2SQL set-up look like?"
+The user asked "how would an NL2SQL set-up look like?" and then asked a sharper follow-up: could an LLM toolset *also* help us develop the platform itself?
 
-**Key finding from exploration:** literal NL2SQL is the wrong frame here. Reasons:
+**Two architectural decisions came out of that conversation:**
 
-- 3,632 different parquet schemas — the LLM can't write correct SQL without first knowing *which* parquet and *which columns*. That is a retrieval problem, not a SQL problem.
-- The repo already has a battle-tested safe query layer ([app/services/query_builder.py](app/services/query_builder.py) `build_data_query()`) that handles parquet path resolution, escaping, group_by aggregation and the legacy `_nom_id` column issue. Generating SQL from an LLM throws all of that away.
-- Romanian + statistical vocabulary (`rata șomajului`, `pe județe`, `pe medii`) is the hard part. SQL is the easy step that comes after entity resolution.
-- Split datasets ([dataset_splits](data/corpus/metadata.duckdb)) require the agent to pick the right sub-variant (e.g. `_judete` vs the parent), which a SQL-only LLM cannot reliably do.
+1. **Literal NL2SQL is the wrong frame.** With 3,632 different parquet schemas, the hard problem is "which parquet + which columns," not "what SQL." The repo already has [app/services/query_builder.py](app/services/query_builder.py) `build_data_query()` doing safe parametrised SQL — throwing it away to let an LLM emit raw SQL would re-introduce every bug it solves. The right shape is a **tool-calling agent** that uses the existing safe layer; SQL is never LLM-generated. The loop is ~80 lines; no LangChain.
 
-**Recommended architecture: tool-calling agent.** A single LLM is given 4 tools that wrap the existing safe APIs. SQL is never LLM-generated. The agent loop is ~80 lines of Python; no LangChain, no LlamaIndex.
+2. **A separate dev-tooling MCP compounds across every future session.** The biggest cost in our current collaboration isn't writing code — it's re-discovering schema, sampling parquets, running `chart_selector` mentally, grepping for routes. A small MCP server exposing the same services gives both Claude Code (me) and the user fast introspection. Built once, reused forever.
 
----
-
-## v1 scope (per user)
-
-- Full agent: search → schema → data query → answer + chart spec
-- Multi-provider LLM abstraction (Anthropic + OpenAI to start, swappable via env var)
-- Retrieval via DuckDB FTS in a **sidecar** `data/corpus/search.duckdb` (kept out of `metadata.duckdb` to avoid the documented write-lock issue)
-- API only — no UI in v1. Test via curl.
-- Behind a feature flag (`TEMPO_ASK_ENABLED`)
+The plan combines them in an order that maximises compounding without overbuilding.
 
 ---
 
-## Architecture
+## Roadmap (4 steps)
+
+| Step | What | Time | Why this order |
+|---|---|---|---|
+| **1** | Minimal `tempo-dev` MCP (4 introspection tools) + extracted service layer | ~2h | Refactor forces `dataset_search.py` + `dataset_meta.py` extraction. Both Step 2 and Step 3 reuse them. Compounding starts immediately. |
+| **2** | v1 user-facing NL→Data agent (`POST /api/ask`) | ~2.5h | Built with the MCP loaded — every iteration is faster. Validates the LLM tool-calling pattern, FTS sidecar, provider abstraction against a real user flow. Ships public-facing value. |
+| **3** | Expand the MCP with heavy tools (eval, lineage, screenshots, route introspection) | ~3–4h | Now informed by what Step 2 surfaced as real friction. No overbuilding. |
+| **4** | v2 user features (cross-dataset, embeddings, narrative, methodology RAG, …) | varies | Built much faster thanks to Steps 1 + 3. See the v2+ vision section at the bottom. |
+
+**Critical shared substrate:** Step 1 extracts `app/services/dataset_search.py` and `app/services/dataset_meta.py`. Both surfaces (MCP server in Step 1, FastAPI agent in Step 2) call into them. One refactor, four reuses.
+
+---
+
+## Step-1 / Step-2 architecture
 
 ```
-POST /api/ask  ──▶  agent.run(question, history)
-                       │
-                       ├─ tool: search_datasets       ──▶ services/dataset_search.py
-                       │                                    └─ FTS query against search.duckdb
-                       │                                       (fallback: LIKE on metadata.duckdb)
-                       │
-                       ├─ tool: get_dataset_schema    ──▶ services/dataset_meta.py
-                       │                                    └─ matrices + dimensions + parsed options
-                       │                                       + splits + parent_matrix_code
-                       │
-                       └─ tool: query_dataset_data   ──▶ services/query_builder.build_data_query()
-                                                            └─ executes against corpus/parquet/{code}.parquet
-                                                            └─ chart_selector.select_charts() attaches chart_spec
+                          ┌──────────────────────────────────────────┐
+                          │   shared service layer (Step 1 extracts) │
+                          │                                          │
+                          │   app/services/dataset_search.py         │
+                          │   app/services/dataset_meta.py           │
+                          │   app/services/query_builder.py (exists) │
+                          │   app/services/chart_selector.py (exists)│
+                          └──────────────┬───────────────────────────┘
+                                         │
+                ┌────────────────────────┼─────────────────────────┐
+                ▼                        ▼                         ▼
+   ┌────────────────────────┐  ┌────────────────────┐   ┌────────────────────┐
+   │  tempo-dev MCP server  │  │  /api/datasets     │   │  POST /api/ask     │
+   │  (Step 1 + Step 3)     │  │  (existing route,  │   │  (Step 2)          │
+   │                        │  │   refactored)      │   │                    │
+   │  for Claude Code +     │  │  for the existing  │   │  agent.run() loop  │
+   │  developer use         │  │  static UI         │   │  user-facing NL    │
+   └────────────────────────┘  └────────────────────┘   └────────────────────┘
 ```
+
+The same Python services back three surfaces. The dev MCP is the simplest consumer (it just returns rich JSON for me to read). The existing UI route stays unchanged in behaviour but switches to the service layer. The agent in Step 2 wires the same services as tool-call handlers.
 
 ---
 
-## What you'll be able to ask in v1
+## Step 1: Minimal dev MCP (~2h)
+
+**Goal:** unblock everything else. After Step 1, every Claude Code session on this repo has fast schema introspection, instant chart-selector probing, and one-shot dataset sampling. Step 2 itself becomes faster to write because I can validate tool inputs/outputs interactively while writing the agent loop.
+
+### Step 1 — Tools (4)
+
+These are designed for **developer use**, not for an LLM tool loop. They return rich combined responses (a single call gives you everything you need), unlike the agent's atomic, predictable tools in Step 2.
+
+1. **`tempo_dataset_info(matrix_code)`** — the workhorse. Returns in one shot:
+   - Basic metadata (name, code, definitie, ultima_actualizare, context path)
+   - Dimensions + parsed options (capped to 50/dim)
+   - View profile JSON if present
+   - `chart_selector.build_signature()` output + top 3 chart eligibilities
+   - `dataset_value_profiles` row + `dataset_coverage` row + `dataset_trends` row
+   - 10 sample rows from the parquet
+   - Splits + `parent_matrix_code`
+   - Replaces what currently takes 5 file reads + 2 grep cycles per session.
+
+2. **`tempo_search_datasets(query, has_geo=None, archetype=None, limit=10)`** — same shape as the v1 agent's `search_datasets` tool. Wraps `services/dataset_search.py:search_datasets()`. Falls back to `LIKE` if no FTS sidecar exists yet.
+
+3. **`tempo_chart_signature(matrix_code)`** — runs `build_signature()` + `select_charts()` and returns the full eligibility table with scores per chart type. **This one alone changes how I tune chart selection.** Today I have to read code and guess; with this tool I just call it and read the scores.
+
+4. **`tempo_sample(matrix_code, n=10, filters=None)`** — labelled rows (joined with dimension labels for human readability). Useful for "what does this dataset actually look like."
+
+### Step 1 — Files
+
+```
+tools/tempo-dev-mcp/
+  pyproject.toml          # uv-compatible, single-file install
+  README.md               # how to register with Claude Code
+  server.py               # MCP server, ~150 lines, uses official `mcp` Python SDK
+
+app/services/
+  dataset_search.py       # NEW — extracted from app/routers/datasets.py:list_datasets
+  dataset_meta.py         # NEW — extracted from app/routers/datasets.py:get_dataset
+
+app/routers/
+  datasets.py             # MODIFIED — list_datasets and get_dataset become thin wrappers
+```
+
+### Step 1 — How the MCP gets registered
+
+Add to user-level Claude Code MCP config (or `.mcp.json` at repo root):
+
+```jsonc
+{
+  "mcpServers": {
+    "tempo-dev": {
+      "command": "python",
+      "args": ["/Users/pax/devbox/gov2/tempo-ins-dump/tools/tempo-dev-mcp/server.py"],
+      "env": {
+        "TEMPO_REPO_ROOT": "/Users/pax/devbox/gov2/tempo-ins-dump"
+      }
+    }
+  }
+}
+```
+
+Use the `.mcp.json` (repo-local) approach so it's checked into git and picked up by every session in this directory automatically.
+
+### Step 1 — Verification
+
+```bash
+source ~/devbox/envs/240826/bin/activate
+
+# 1. Sanity-check the extracted services don't break the existing route
+python -c "from app.services.dataset_search import search_datasets; print(len(search_datasets('somaj', limit=5)))"
+python -c "from app.services.dataset_meta import get_dataset_meta; print(get_dataset_meta('SOM103D')['matrix_code'])"
+
+# 2. Run the existing UI route and confirm parity (no behaviour change)
+uvicorn app.main:app --port 8080 &
+curl -s 'localhost:8080/api/datasets?q=somaj&limit=5' | jq '.[] | .matrix_code'
+curl -s 'localhost:8080/api/datasets/SOM103D' | jq '.matrix_code, .dimensions | length'
+
+# 3. Smoke-test the MCP server (manual JSON-RPC handshake)
+python tools/tempo-dev-mcp/server.py &
+# In Claude Code: restart, confirm tempo-dev tools appear in the tool list
+```
+
+After this step, in any future Claude Code session I can call `tempo_dataset_info("ACC101B")` and get everything I need in one shot, instead of grepping.
+
+---
+
+## Step 2: v1 user-facing NL→Data agent (~2.5h)
+
+The existing v1 design from this plan, now built **on top of** Step 1's service layer. Time drops from ~3h to ~2.5h because the MCP tools accelerate verification.
+
+### Step 2 — What you'll be able to ask
 
 The agent has 4 tools (search → schema → query → categories) over ~3,632 datasets covering demographics, economy, labor, health, education, and geography back to ~1990. Question categories it handles well:
 
@@ -91,7 +187,7 @@ The agent has 4 tools (search → schema → query → categories) over ~3,632 d
 | **Up-to-the-minute data** | INS publishes monthly at most | Inherent |
 | **Free chart customisation** ("stacked bar with log scale") | `chart_selector` is rule-based, not LLM-driven | v2 — let agent override defaults |
 
-### First-day test questions (exercise the full pipeline)
+### Smoke-test questions (exercise the full pipeline)
 
 1. *"Care este populația Clujului în 2023?"* — single fact, geo filter
 2. *"Show me unemployment trends by county in the last 5 years"* — bilingual query, group_by, time filter, split dataset
@@ -99,11 +195,11 @@ The agent has 4 tools (search → schema → query → categories) over ~3,632 d
 4. *"Compară numărul de nașteri în mediu urban și rural în 2024"* — RESIDENCE compare
 5. *"Ce date aveți despre comerțul exterior?"* — pure discovery, no data query
 
----
+### Step 2 — Files to create
 
-## Files to create
+(All files below are new in Step 2. The service-layer extractions `dataset_search.py` + `dataset_meta.py` already exist from Step 1.)
 
-### 1. `app/services/llm_client.py` — provider abstraction (~120 lines)
+#### `app/services/llm_client.py` — provider abstraction (~120 lines)
 
 A thin shim with one entry point:
 
@@ -124,7 +220,7 @@ def complete_with_tools(
 - Normalised tool-result message helper so the agent loop is provider-agnostic.
 - Add `anthropic` and `openai` to `requirements.txt` (or whatever the project uses; check first).
 
-### 2. `app/services/agent.py` — agent loop + tool registry + system prompt (~250 lines)
+#### `app/services/agent.py` — agent loop + tool registry + system prompt (~250 lines)
 
 ```python
 def run_agent(question: str, history: list[Message] = []) -> AgentResult:
@@ -137,37 +233,18 @@ def run_agent(question: str, history: list[Message] = []) -> AgentResult:
 - After the loop, if any tool call returned data, attach `chart_spec` from `chart_selector.select_charts()` based on the last queried matrix.
 - Returns the full `tool_trace` so curl debugging is easy.
 
-### 3. `app/services/dataset_search.py` — extracted search logic
+#### `app/services/dataset_search.py` and `app/services/dataset_meta.py`
 
-Extract the search/filter portion of [app/routers/datasets.py:list_datasets](app/routers/datasets.py) into a service function:
-
-```python
-def search_datasets(
-    query: str,
-    *,
-    has_geo: bool | None = None,
-    archetype: str | None = None,
-    limit: int = 10,
-    lang: str = "ro",
-) -> list[DatasetCard]
-```
-
-- Tries the FTS sidecar first (if `search.duckdb` exists), falls back to LIKE on `matrices.matrix_name` joined with `dataset_tags`.
-- Returns compact cards: `{matrix_code, name, dim_count, time_year_min, time_year_max, archetype, has_geo, is_split, parent_matrix_code, ultima_actualizare, score}`.
-- The existing `/api/datasets` route is refactored to call this function (no behaviour change). 30 minutes of refactor; the win is that the agent and the existing route share one code path.
-
-### 4. `app/services/dataset_meta.py` — extracted schema fetcher
-
-Extract from [app/routers/datasets.py](app/routers/datasets.py) `get_dataset()`:
+These already exist after Step 1. The Step 2 agent imports them directly:
 
 ```python
-def get_dataset_meta(matrix_code: str, lang: str = "ro") -> DatasetMeta
+from app.services.dataset_search import search_datasets   # used by `search_datasets` tool
+from app.services.dataset_meta   import get_dataset_meta  # used by `get_dataset_schema` tool
 ```
 
-- Returns dimensions + dimension_options_parsed (capped to 100 values per dim) + splits + parent_matrix_code + definitie + ultima_actualizare + time/geo coverage from `dataset_coverage`.
-- Existing `/api/datasets/{id}` route refactored to call this.
+No new files. The agent's tool handlers are 5-line wrappers around these calls, formatting the result for LLM consumption (compact JSON, capped to 25 cards / 100 dim values).
 
-### 5. `app/routers/ask.py` — single endpoint
+#### `app/routers/ask.py` — single endpoint
 
 ```python
 @router.post("/api/ask")
@@ -178,7 +255,7 @@ def ask(req: AskRequest) -> AskResponse:
 
 Mounted in [app/main.py](app/main.py) only when `ASK_ENABLED=true`.
 
-### 6. `scripts/build-search-index.py` — sidecar FTS index builder
+#### `scripts/build-search-index.py` — sidecar FTS index builder
 
 A one-off, re-runnable script:
 
@@ -207,9 +284,9 @@ A one-off, re-runnable script:
 
 - **Why a sidecar?** [app/db.py](app/db.py) opens `metadata.duckdb` and the documented write-lock issue says "only one process can write at a time". Writing the FTS index into the same file would conflict with the running app and pipeline scripts. A sidecar file is opened separately, read-only, and rebuilt out-of-band.
 - Document the script in [CLAUDE.md](CLAUDE.md) as part of the pipeline.
-- Add a graceful fallback in `dataset_search.py`: if `search.duckdb` is missing, fall back to `LIKE` queries against `metadata.duckdb` so the agent still works without the index.
+- Add a graceful fallback in `dataset_search.py`: if `search.duckdb` is missing, fall back to `LIKE` queries against `metadata.duckdb` so the agent still works without the index. Step 1 already wires this fallback (the MCP shipped before the FTS index existed); Step 2 just builds the index for real performance.
 
-### 7. `app/config.py` — add four flags
+#### `app/config.py` — add four flags
 
 ```python
 ASK_ENABLED        = os.environ.get("TEMPO_ASK_ENABLED", "false").lower() in ("1","true","yes")
@@ -223,9 +300,9 @@ API keys come from `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` env vars (standard SDK
 
 ---
 
-## Tool definitions (JSON Schema)
+### Step 2 — Agent tool definitions (JSON Schema)
 
-Keep the inventory small. Four tools cover everything:
+These are different from the Step 1 MCP tools — these are atomic, predictable tools for an LLM tool loop, not rich combined responses for a developer. Four tools cover everything:
 
 ```jsonc
 [
@@ -275,7 +352,7 @@ Keep the inventory small. Four tools cover everything:
 
 ---
 
-## System prompt outline
+### Step 2 — System prompt outline
 
 Keep under 800 tokens. Sections:
 
@@ -290,23 +367,13 @@ Keep under 800 tokens. Sections:
 
 ---
 
-## Functions to reuse (no changes)
+### Step 2 — Functions to reuse (no changes)
 
 - [app/db.py](app/db.py) `get_conn()` — cursor-per-request, mandatory pattern.
 - [app/services/query_builder.py](app/services/query_builder.py) `build_data_query()` — call as-is from the `query_dataset_data` tool. Already handles escaping, group_by, legacy column resolution.
 - [app/services/chart_selector.py](app/services/chart_selector.py) `build_signature()` + `select_charts()` — call after the agent picks data, attach `chart_spec` to the response. **Do not let the LLM choose chart types.**
 - [app/routers/dataset_data.py](app/routers/dataset_data.py) — copy the filter-parsing + large-dataset guard pattern into the `query_dataset_data` tool.
-
----
-
-## Files to refactor (existing-file changes)
-
-Two refactors, each ~30 minutes, behaviour-preserving:
-
-1. **[app/routers/datasets.py](app/routers/datasets.py)** — extract `list_datasets` body into `services/dataset_search.py:search_datasets()`. The route becomes a thin wrapper. The agent tool calls the same service function. Run dev server, hit `/api/datasets?q=somaj` to confirm parity.
-2. **[app/routers/datasets.py](app/routers/datasets.py)** — extract `get_dataset` body into `services/dataset_meta.py:get_dataset_meta()`. Same wrapper pattern. Hit `/api/datasets/SOM103D` to verify.
-
-Both refactors land in a single commit before any agent code is added.
+- `app/services/dataset_search.py` and `app/services/dataset_meta.py` — both created in Step 1, imported directly by the agent tool handlers.
 
 ---
 
@@ -376,57 +443,139 @@ Pass criterion: at least 2 of 3 questions return a sensible answer with the righ
 
 ---
 
-## What is explicitly NOT in v1
+## What is explicitly NOT in Step 2
 
 - UI / chat panel — deferred. API only.
-- Precomputed embeddings / vector search — FTS is enough for v1. Add `bge-m3` sidecar in v2.
-- Streaming responses (SSE) — v2.
-- Conversational memory beyond `history` parameter — v2.
-- LLM response caching — v2 (after eval harness exists).
-- Eval harness with hand-written test set — v2 but high priority.
-- Multi-dataset comparison charts — v2.
+- Precomputed embeddings / vector search — FTS is enough. Embedding upgrade lands in Step 4.
+- Streaming responses (SSE) — Step 4.
+- Conversational memory beyond `history` parameter — Step 4.
+- LLM response caching — Step 4 (after eval harness exists).
+- Eval harness with hand-written test set — Step 3 deliverable.
+- Multi-dataset comparison charts — Step 4.
 - LangChain / LlamaIndex — never. The loop is 80 lines.
 
-After v1 ships, add backlog entries to [docs/BACKLOG.md](docs/BACKLOG.md) for each of the above.
+---
+
+## Step 3: Expand the dev MCP (~3–4h)
+
+After Step 2 ships you'll know which dev tools you actually want, because v1's failures will surface the real friction. The candidate set below is what I'd build *unless* Step 2 surfaces something more urgent.
+
+### Step 3 — Additional MCP tools
+
+**Pipeline state introspection**
+- `tempo_pipeline_status()` — for each numbered pipeline stage, count of datasets present/missing/stale. Replaces ad-hoc DuckDB queries.
+- `tempo_dataset_lineage(matrix_code)` — raw CSV → compacted → parquet → view profile, with timestamps. Spot stale outputs.
+- `tempo_outdated()` — datasets where source CSV is newer than parquet (one query, many uses).
+
+**Code introspection**
+- `tempo_routes()` — all FastAPI routes via `app.openapi()` introspection. Returns path, method, params, response model.
+- `tempo_call_endpoint(path, params)` — invoke a route in-process via FastAPI's `TestClient` without spinning up uvicorn. Faster than curl, no port collisions.
+- `tempo_grep_python(pattern, path_glob)` — wraps ripgrep but scoped to Python files in `app/` and pipeline scripts. Cheaper than launching the Grep tool when I just need a quick lookup.
+
+**Eval / regression**
+- `tempo_eval_chart_selector(subset='all'|'archetype:geo_time'|matrix_code_list)` — runs `select_charts` across N datasets, diffs against a baseline file at `data/eval/chart_selector_baseline.json`, returns the rows that changed. **Critical for tuning chart_selector confidently.**
+- `tempo_eval_agent(question_file)` — runs the v1 agent against a YAML of reference questions (`data/eval/agent_questions.yaml`), reports per-question pass/fail with the expected vs actual `matrix_code` and tool_trace summary. Hand-write 30–50 questions covering the categories in Step 2's "what you'll be able to ask" section.
+- `tempo_check_view_profiles()` — validate every view profile JSON against the actual parquet schema. Returns mismatches. (Would have caught real bugs already.)
+
+**Frontend probing (Playwright is already installed per CLAUDE.md)**
+- `tempo_render_dataset(matrix_code, viewport='1280x800')` — Playwright opens the dataset page, takes a screenshot, returns the path. I can read the screenshot directly.
+- `tempo_console_errors(path)` — Playwright opens, captures `console.error` + uncaught exceptions, returns them.
+- `tempo_validate_echarts_spec(spec)` — schema-check an ECharts JSON spec before it ships. Catches typos in `series.type` etc.
+
+**Safe mutations** (gated behind a `TEMPO_DEV_MUTATIONS=true` env var)
+- `tempo_run_pipeline_script(name, args, dry_run=True)` — wraps the numbered scripts with stdout/stderr capture, default dry-run.
+- `tempo_regen_view_profile(matrix_code)` — single dataset, fast iteration when tuning.
+- `tempo_clear_search_index()` — drop and rebuild `data/corpus/search.duckdb`.
+
+### Step 3 — Files
+
+```
+tools/tempo-dev-mcp/
+  server.py               # MODIFIED — add ~10 new tools
+  pipeline_state.py       # NEW — pipeline introspection logic
+  eval.py                 # NEW — chart_selector and agent eval runners
+  playwright_tools.py     # NEW — screenshot, console-error capture
+  mutations.py            # NEW — gated wrappers for write operations
+
+data/eval/
+  chart_selector_baseline.json   # NEW — captured snapshot for diffing
+  agent_questions.yaml           # NEW — hand-written reference set (~30–50 questions)
+```
+
+### Step 3 — Verification
+
+```bash
+# Eval baselines exist and pass on a clean checkout
+python -c "from tools.tempo_dev_mcp.eval import run_chart_selector_eval; print(run_chart_selector_eval('all'))"
+# Should report: 0 regressions vs baseline
+
+# Pipeline state matches reality
+python -c "from tools.tempo_dev_mcp.pipeline_state import status; print(status())"
+# Should match what `ls data/corpus/parquet/ | wc -l` shows
+
+# Playwright snapshots work
+python -c "from tools.tempo_dev_mcp.playwright_tools import render_dataset; print(render_dataset('SOM103D'))"
+# Should return a screenshot path I can read
+```
+
+After Step 3, every Claude Code session on this repo loads the full toolset. v2 features (Step 4) are built with `tempo_eval_chart_selector` running after each tweak, `tempo_render_dataset` after each frontend change, `tempo_eval_agent` after each prompt change.
 
 ---
 
 ## "Tomorrow" checklist (in order)
 
-1. **(15 min)** Re-read [app/routers/datasets.py:28-142](app/routers/datasets.py#L28-L142), [app/services/query_builder.py](app/services/query_builder.py), [app/services/chart_selector.py](app/services/chart_selector.py) `build_signature` + `select_charts`.
-2. **(20 min)** `pip install anthropic openai`. Write [app/services/llm_client.py](app/services/llm_client.py) with both backends. Test each from a Python REPL with a no-op tool.
-3. **(30 min)** Refactor: extract `search_datasets()` and `get_dataset_meta()` from [app/routers/datasets.py](app/routers/datasets.py) into `app/services/`. Keep route behaviour identical. Commit.
-4. **(45 min)** Write [app/services/agent.py](app/services/agent.py): tool registry, system prompt constant, `run_agent()` loop, `AgentResult` dataclass.
-5. **(20 min)** Write [app/routers/ask.py](app/routers/ask.py): one POST endpoint, feature-flag gate. Mount in [app/main.py](app/main.py).
-6. **(20 min)** Write [scripts/build-search-index.py](scripts/build-search-index.py). Run it. Verify the FTS index works with a direct DuckDB query.
-7. **(30 min)** Run the three curl tests above. Inspect `tool_trace`, fix obvious prompt issues, repeat.
-8. **(10 min)** Update [CLAUDE.md](CLAUDE.md) with the new endpoint + script. Add v2 items to [docs/BACKLOG.md](docs/BACKLOG.md). Add a note to [docs/activity-history.md](docs/activity-history.md).
+### Day 1 — Step 1: Minimal MCP (~2h)
 
-Total: ~3 hours of focused work for a working v1.
+1. **(15 min)** Re-read [app/routers/datasets.py:28-142](app/routers/datasets.py#L28-L142), [app/services/query_builder.py](app/services/query_builder.py), [app/services/chart_selector.py](app/services/chart_selector.py) `build_signature` + `select_charts`.
+2. **(30 min)** Refactor: extract `search_datasets()` and `get_dataset_meta()` from [app/routers/datasets.py](app/routers/datasets.py) into [app/services/dataset_search.py](app/services/dataset_search.py) and [app/services/dataset_meta.py](app/services/dataset_meta.py). Keep route behaviour identical. Verify with curl on `/api/datasets?q=somaj` and `/api/datasets/SOM103D`. Commit.
+3. **(45 min)** Write `tools/tempo-dev-mcp/server.py` with the 4 introspection tools (`tempo_dataset_info`, `tempo_search_datasets`, `tempo_chart_signature`, `tempo_sample`). Use the official `mcp` Python SDK.
+4. **(15 min)** Add `.mcp.json` at repo root pointing at the server. Restart Claude Code, verify the `tempo_dev` tools appear in the tool list. Test each one against `ACC101B` and `SOM103D`.
+5. **(15 min)** Update [CLAUDE.md](CLAUDE.md) with the new MCP server (one paragraph + how to register). Add an entry to [docs/activity-history.md](docs/activity-history.md). Commit.
+
+### Day 1 cont. or Day 2 — Step 2: v1 user-facing agent (~2.5h)
+
+6. **(20 min)** `pip install anthropic openai`. Write [app/services/llm_client.py](app/services/llm_client.py) with both backends. Test each from a Python REPL with a no-op tool. (Use `tempo_dataset_info` to spot-check the data shapes you're about to feed the agent.)
+7. **(45 min)** Write [app/services/agent.py](app/services/agent.py): tool registry, system prompt constant, `run_agent()` loop, `AgentResult` dataclass.
+8. **(20 min)** Write [app/routers/ask.py](app/routers/ask.py): one POST endpoint, feature-flag gate. Mount in [app/main.py](app/main.py).
+9. **(20 min)** Write [scripts/build-search-index.py](scripts/build-search-index.py). Run it. Verify with a direct DuckDB query that the FTS index produces sensible results.
+10. **(30 min)** Run the smoke-test questions. Inspect `tool_trace`, fix obvious prompt issues, repeat. Use `tempo_chart_signature` to verify chart selection on the datasets the agent picked.
+11. **(15 min)** Update [CLAUDE.md](CLAUDE.md) with the new endpoint + script. Add Step 3/4 items to [docs/BACKLOG.md](docs/BACKLOG.md). Add an entry to [docs/activity-history.md](docs/activity-history.md). Commit.
+
+Total: ~4.5 hours of focused work for a working Step 1 + Step 2. Step 3 is a separate session once you've used Step 2 enough to know what you actually want.
 
 ---
 
 ## Critical files (cheat-sheet)
 
-| Path | Role in this plan |
-|---|---|
-| [app/services/query_builder.py](app/services/query_builder.py) | Reused as-is by the `query_dataset_data` tool |
-| [app/services/chart_selector.py](app/services/chart_selector.py) | `select_charts()` attached to agent response |
-| [app/routers/datasets.py](app/routers/datasets.py) | Refactored: `list_datasets` → service, `get_dataset` → service |
-| [app/routers/dataset_data.py](app/routers/dataset_data.py) | Filter-handling pattern copied into the data tool |
-| [app/db.py](app/db.py) | Cursor-per-request — mandatory, do not break |
-| [app/config.py](app/config.py) | New flags: `ASK_ENABLED`, `LLM_PROVIDER`, `LLM_MODEL`, `SEARCH_DB_PATH` |
-| [app/main.py](app/main.py) | Mount `ask` router behind feature flag |
-| [data/corpus/metadata.duckdb](data/corpus/metadata.duckdb) | Read-only source for FTS sidecar build |
-| [data/corpus/search.duckdb](data/corpus/search.duckdb) | NEW sidecar — FTS index over matrices + tags |
-| [CLAUDE.md](CLAUDE.md) | Document new endpoint + script |
-| [docs/BACKLOG.md](docs/BACKLOG.md) | v2 items: embeddings, streaming, eval harness, UI |
+| Path | Role in this plan | Step |
+|---|---|---|
+| [app/routers/datasets.py](app/routers/datasets.py) | Refactored: `list_datasets` → service, `get_dataset` → service | 1 |
+| `app/services/dataset_search.py` | NEW — extracted, reused by MCP, agent, existing route | 1 |
+| `app/services/dataset_meta.py` | NEW — extracted, reused by MCP, agent, existing route | 1 |
+| `tools/tempo-dev-mcp/server.py` | NEW — MCP server for Claude Code | 1, expanded in 3 |
+| `.mcp.json` | NEW — repo-local MCP registration | 1 |
+| [app/services/query_builder.py](app/services/query_builder.py) | Reused as-is by `query_dataset_data` | 2 |
+| [app/services/chart_selector.py](app/services/chart_selector.py) | `select_charts()` attached to agent response | 2 |
+| [app/routers/dataset_data.py](app/routers/dataset_data.py) | Filter-handling pattern copied into the data tool | 2 |
+| [app/db.py](app/db.py) | Cursor-per-request — mandatory, do not break | 1, 2 |
+| [app/config.py](app/config.py) | New flags: `ASK_ENABLED`, `LLM_PROVIDER`, `LLM_MODEL`, `SEARCH_DB_PATH` | 2 |
+| `app/services/llm_client.py` | NEW — provider abstraction (Anthropic + OpenAI) | 2 |
+| `app/services/agent.py` | NEW — tool-calling loop + system prompt | 2 |
+| `app/routers/ask.py` | NEW — `POST /api/ask` behind feature flag | 2 |
+| [app/main.py](app/main.py) | Mount `ask` router behind feature flag | 2 |
+| `scripts/build-search-index.py` | NEW — sidecar FTS index builder | 2 |
+| [data/corpus/metadata.duckdb](data/corpus/metadata.duckdb) | Read-only source for FTS sidecar build | 2 |
+| `data/corpus/search.duckdb` | NEW sidecar — FTS index over matrices + tags | 2 |
+| `data/eval/chart_selector_baseline.json` | NEW — regression baseline | 3 |
+| `data/eval/agent_questions.yaml` | NEW — hand-written reference set | 3 |
+| [CLAUDE.md](CLAUDE.md) | Document MCP server + agent endpoint | 1, 2 |
+| [docs/BACKLOG.md](docs/BACKLOG.md) | Step 3/4 items as `- [ ]` entries | 2 |
 
 ---
 
-## v2+ vision — what a more advanced LLM integration could achieve
+## Step 4: v2+ vision — what a more advanced LLM integration could achieve
 
-Once v1 is shipped and proven, the architecture (tool-calling agent + safe data layer) opens up much more ambitious capabilities. Grouped by horizon and grounded in what the existing data + DuckDB tables actually support.
+Once Steps 1–3 ship, the architecture (tool-calling agent + dev MCP + safe data layer) opens up much more ambitious capabilities. Every item below benefits from the dev MCP loaded in every session — `tempo_eval_chart_selector`, `tempo_render_dataset`, `tempo_eval_agent` make iterating on these features dramatically faster than building Steps 1–2 was. Grouped by horizon and grounded in what the existing data + DuckDB tables actually support.
 
 ### Tier 1 — Natural extensions (next steps after v1)
 

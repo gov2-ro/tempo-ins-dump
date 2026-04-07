@@ -51,18 +51,6 @@ Example: `/sdmx/2.1/data/INS,ACC102B/..` returns all observations for dataset `A
   static/geo/         — romania-counties/regions/macroregions.geojson
 ```
 
-### StatExplorer (`explorer/`)
-
-Alternative Tableau-inspired explorer with i18n and component-based JS architecture.
-
-```
-explorer/
-  main.py             — FastAPI ("StatExplorer")
-  services/           — chart_selector, query_builder, translations
-  static/js/charts/   — bar, geo, line, heatmap, pyramid, bubble, small-multiples, table
-  static/js/components/ — ChartCanvas, DatasetPicker, FilterBar, LeftSidebar, TopNav
-  static/js/lib/      — api, i18n, utils
-```
 
 ## Pipeline Scripts
 
@@ -258,3 +246,29 @@ Kill process for 5050
 - **phase2-dimension-overlap.md** — Agent 2B: related-dataset discovery via dimension fingerprints.
 - **phase2-chart-recommender.md** — Agent 2C: data-driven chart type recommendations.
 - **phase3-ia-designer.md** — Agent 3A: generates the full information architecture spec from enriched metadata.
+
+
+-----
+
+# Obsolete - archived
+
+### StatExplorer (`explorer/`)
+
+Alternative Tableau-inspired explorer with i18n and component-based JS architecture.
+
+```
+explorer/
+  main.py             — FastAPI ("StatExplorer")
+  services/           — chart_selector, query_builder, translations
+  static/js/charts/   — bar, geo, line, heatmap, pyramid, bubble, small-multiples, table
+  static/js/components/ — ChartCanvas, DatasetPicker, FilterBar, LeftSidebar, TopNav
+  static/js/lib/      — api, i18n, utils
+```
+
+Moved to [docs/misc-ideas/explorer](/docs/misc-ideas/explorer/)
+
+---
+
+### Static site exploration
+
+see [docs/misc-ideas/static-site](/docs/misc-ideas/static-site/), [STATIC-CONVERSION-SUMMARY.md](docs/STATIC-CONVERSION-SUMMARY.md), [STATIC-VS-PYTHON-COMPARISON.md](docs/STATIC-VS-PYTHON-COMPARISON.md)

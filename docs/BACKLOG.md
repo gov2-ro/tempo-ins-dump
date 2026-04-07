@@ -26,7 +26,7 @@ Future tasks and intentions for the TEMPO INS data explorer.
 - [ ] translate, Hu/De
 - [ ] clean up obsolete subts, refactor scripts - utils, scripts?
 - [ ] static site? - see `docs/misc-ideas/static-site/`
-- [ ] add llms.txt ?
+- [ ] add llms.txt
 
 ## Landing
 - [x] Show latest updates
