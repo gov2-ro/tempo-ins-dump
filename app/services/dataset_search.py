@@ -3,9 +3,60 @@
 Reusable across the FastAPI route (`app/routers/datasets.py`), the
 `tempo-dev` MCP server, and the LLM agent (Step 2 of the LLM tooling plan).
 The route handler is a thin wrapper around `search_datasets()`.
+
+Search strategy:
+  1. Try DuckDB FTS sidecar (`data/corpus/search.duckdb`) for bilingual
+     full-text search across names, tags, definitions, and categories.
+  2. Fallback to LIKE-based search if sidecar is missing or FTS returns nothing.
 """
+import logging
+
 from app.db import get_conn
-from app.config import DEFAULT_PAGE_SIZE
+from app.config import DEFAULT_PAGE_SIZE, CORPUS_DIR
+
+log = logging.getLogger(__name__)
+
+SEARCH_DB_PATH = CORPUS_DIR / "search.duckdb"
+
+# Cache the sidecar connection (read-only, safe to reuse)
+_search_conn = None
+
+
+def _get_search_conn():
+    """Lazy singleton for the FTS sidecar connection."""
+    global _search_conn
+    if _search_conn is not None:
+        return _search_conn
+    if not SEARCH_DB_PATH.exists():
+        return None
+    try:
+        import duckdb
+        _search_conn = duckdb.connect(str(SEARCH_DB_PATH), read_only=True)
+        _search_conn.execute("LOAD fts;")
+        return _search_conn
+    except Exception as e:
+        log.warning("Failed to open FTS sidecar: %s", e)
+        return None
+
+
+def _fts_search(query: str, max_results: int = 200) -> list[str] | None:
+    """Return ranked matrix_codes from the FTS sidecar, or None if unavailable."""
+    sconn = _get_search_conn()
+    if sconn is None:
+        return None
+    try:
+        rows = sconn.execute("""
+            SELECT sd.matrix_code,
+                   fts_main_search_docs.match_bm25(sd.matrix_code, ?) AS score
+            FROM search_docs sd
+            WHERE score IS NOT NULL
+            ORDER BY score
+            LIMIT ?
+        """, [query, max_results]).fetchall()
+        return [r[0] for r in rows] if rows else None
+    except Exception as e:
+        log.warning("FTS search failed: %s", e)
+        return None
 
 
 def search_datasets(
@@ -46,9 +97,18 @@ def search_datasets(
 
     name_col = "m.matrix_name_en" if lang == "en" else "m.matrix_name"
 
+    # FTS-first search: try sidecar, fallback to LIKE
+    _used_fts = False
     if q:
-        where.append(f"(LOWER({name_col}) LIKE LOWER(?) OR LOWER(m.matrix_code) LIKE LOWER(?))")
-        params.extend([f"%{q}%", f"%{q}%"])
+        fts_codes = _fts_search(q)
+        if fts_codes:
+            _used_fts = True
+            safe_codes = ", ".join(f"'{c}'" for c in fts_codes)
+            where.append(f"m.matrix_code IN ({safe_codes})")
+        else:
+            # Fallback: LIKE on name + code
+            where.append(f"(LOWER({name_col}) LIKE LOWER(?) OR LOWER(m.matrix_code) LIKE LOWER(?))")
+            params.extend([f"%{q}%", f"%{q}%"])
 
     if context:
         where.append("m.context_code = ?")

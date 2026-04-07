@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""tempo-dev MCP server — 4 introspection tools for Claude Code.
+"""tempo-dev MCP server — 6 introspection tools for Claude Code.
 
 Run via `.mcp.json` (repo-local) or manually:
     python tools/tempo-dev-mcp/server.py
@@ -9,6 +9,8 @@ Tools:
     tempo_search_datasets  — catalog search with filters
     tempo_chart_signature  — chart_selector scores for a dataset
     tempo_sample           — labelled rows from a parquet
+    tempo_query            — aggregated data queries via query_builder
+    tempo_catalog_stats    — corpus-level breakdowns
 """
 import json
 import logging
@@ -49,10 +51,12 @@ def _ensure_imports():
         return
     # These will be importable because REPO_ROOT is on sys.path
     global search_datasets, get_dataset_meta, build_signature, select_charts
+    global build_data_query
     global get_conn, PARQUET_DIR, CORPUS_DIR
     from app.services.dataset_search import search_datasets
     from app.services.dataset_meta import get_dataset_meta
     from app.services.chart_selector import build_signature, select_charts
+    from app.services.query_builder import build_data_query
     from app.db import get_conn
     from app.config import PARQUET_DIR, CORPUS_DIR
     _ready = True
@@ -232,6 +236,165 @@ def tempo_sample(
         "row_count": len(rows),
         "rows": rows,
     }, default=str, ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------------
+# 5. tempo_query — aggregated data queries
+# ---------------------------------------------------------------------------
+@mcp.tool()
+def tempo_query(
+    matrix_code: str,
+    filters: str | None = None,
+    group_by: str | None = None,
+    limit: int = 1000,
+) -> str:
+    """Query a dataset with filters and optional GROUP BY aggregation.
+
+    Wraps query_builder.build_data_query() — SQL is never LLM-generated.
+    Use group_by to aggregate (e.g. SUM by TIME_PERIOD, REF_AREA).
+    Without group_by, returns raw rows.
+
+    Args:
+        matrix_code: Dataset identifier (e.g. 'POP101A', 'ACC101B_judete')
+        filters:     Optional JSON string: {"COLUMN": ["val1","val2"], ...}
+        group_by:    Optional JSON string: ["TIME_PERIOD", "SEX"]
+        limit:       Max rows (default 1000, max 5000)
+    """
+    _ensure_imports()
+    limit = min(limit, 5000)
+
+    filter_dict = {}
+    if filters:
+        try:
+            filter_dict = json.loads(filters)
+        except json.JSONDecodeError:
+            return json.dumps({"error": "Invalid JSON in filters parameter"})
+
+    group_list = None
+    if group_by:
+        try:
+            group_list = json.loads(group_by)
+            if not isinstance(group_list, list):
+                return json.dumps({"error": "group_by must be a JSON array"})
+        except json.JSONDecodeError:
+            return json.dumps({"error": "Invalid JSON in group_by parameter"})
+
+    meta = get_dataset_meta(matrix_code)
+    if meta is None:
+        return json.dumps({"error": f"Dataset {matrix_code} not found"})
+
+    # Determine aggregation function based on unit type
+    unit_type = meta.get("profile", {}).get("primary_unit_type", "count")
+    agg_func = "AVG" if unit_type in ("percentage", "time_unit") else "SUM"
+
+    query_sql = build_data_query(
+        matrix_code,
+        meta["dimensions"],
+        filter_dict,
+        limit=limit,
+        group_by=group_list,
+        agg_func=agg_func,
+    )
+
+    conn = get_conn()
+    try:
+        rows = conn.execute(query_sql).fetchall()
+        cols = [d[0] for d in conn.description]
+        return json.dumps({
+            "matrix_code": matrix_code,
+            "columns": cols,
+            "rows": [dict(zip(cols, r)) for r in rows],
+            "row_count": len(rows),
+            "agg_func": agg_func if group_list else None,
+            "query_sql": query_sql.strip(),
+        }, default=str, ensure_ascii=False)
+    except Exception as e:
+        log.warning("Failed to query %s: %s", matrix_code, e)
+        return json.dumps({"error": f"Query failed: {e}"})
+
+
+# ---------------------------------------------------------------------------
+# 6. tempo_catalog_stats — corpus-level breakdowns
+# ---------------------------------------------------------------------------
+@mcp.tool()
+def tempo_catalog_stats(
+    group_by: str = "archetype",
+) -> str:
+    """Corpus-level statistics about the ~3,600 canonical datasets.
+
+    Returns breakdown counts grouped by the chosen dimension.
+    Useful for understanding what the corpus contains.
+
+    Args:
+        group_by: Grouping dimension — one of:
+                  'archetype' (geo_time, demographic, etc.),
+                  'category' (top-level INS themes),
+                  'unit_type' (percentage, count, currency, etc.),
+                  'geo' (has_geo true/false breakdown),
+                  'time_granularity' (monthly, quarterly, yearly)
+    """
+    _ensure_imports()
+    conn = get_conn()
+
+    queries = {
+        "archetype": """
+            SELECT COALESCE(p.archetype, 'unknown') AS label,
+                   COUNT(*) AS count
+            FROM matrices m
+            LEFT JOIN matrix_profiles p ON m.matrix_code = p.matrix_code
+            WHERE m.is_canonical = TRUE
+            GROUP BY label ORDER BY count DESC
+        """,
+        "category": """
+            SELECT c.context_name AS label,
+                   COUNT(*) AS count
+            FROM matrices m
+            JOIN contexts c ON m.ancestor_codes[1]::VARCHAR = c.context_code
+            WHERE m.is_canonical = TRUE
+            GROUP BY c.context_name ORDER BY count DESC
+        """,
+        "unit_type": """
+            SELECT COALESCE(p.primary_unit_type, 'unknown') AS label,
+                   COUNT(*) AS count
+            FROM matrices m
+            LEFT JOIN matrix_profiles p ON m.matrix_code = p.matrix_code
+            WHERE m.is_canonical = TRUE
+            GROUP BY label ORDER BY count DESC
+        """,
+        "geo": """
+            SELECT CASE WHEN p.has_geo THEN 'has_geo' ELSE 'no_geo' END AS label,
+                   COUNT(*) AS count
+            FROM matrices m
+            LEFT JOIN matrix_profiles p ON m.matrix_code = p.matrix_code
+            WHERE m.is_canonical = TRUE
+            GROUP BY label ORDER BY count DESC
+        """,
+        "time_granularity": """
+            SELECT COALESCE(p.time_granularity, 'unknown') AS label,
+                   COUNT(*) AS count
+            FROM matrices m
+            LEFT JOIN matrix_profiles p ON m.matrix_code = p.matrix_code
+            WHERE m.is_canonical = TRUE
+            GROUP BY label ORDER BY count DESC
+        """,
+    }
+
+    if group_by not in queries:
+        return json.dumps({
+            "error": f"Invalid group_by: {group_by}. Must be one of: {', '.join(queries.keys())}"
+        })
+
+    try:
+        rows = conn.execute(queries[group_by]).fetchall()
+        total = sum(r[1] for r in rows)
+        return json.dumps({
+            "group_by": group_by,
+            "total_datasets": total,
+            "breakdown": [{"label": r[0], "count": r[1]} for r in rows],
+        }, default=str, ensure_ascii=False)
+    except Exception as e:
+        log.warning("Failed to get catalog stats: %s", e)
+        return json.dumps({"error": f"Query failed: {e}"})
 
 
 # ---------------------------------------------------------------------------

@@ -47,17 +47,23 @@ Hybrid roadmap: minimal dev MCP → v1 user-facing agent → expand MCP → v2.
 Architectural decision: tool-calling agent over existing safe services, **not** literal NL2SQL.
 Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` once, reuse from MCP, agent, and existing routes.
 
-### Step 1 — Minimal `tempo-dev` MCP (~2h)
+### Step 1 — Minimal `tempo-dev` MCP (~2h) ✅
 - [x] Refactor: extract `search_datasets()` and `get_dataset_meta()` from `app/routers/datasets.py` into `app/services/dataset_search.py` and `app/services/dataset_meta.py`. Keep route behaviour identical.
 - [x] Write `tools/tempo-dev-mcp/server.py` (~150 lines, official `mcp` Python SDK) with 4 introspection tools: `tempo_dataset_info`, `tempo_search_datasets`, `tempo_chart_signature`, `tempo_sample`.
 - [x] Add `.mcp.json` at repo root for repo-local registration.
 - [x] Document in CLAUDE.md.
 
+### Step 1.5 — MCP v2: query, catalog stats, FTS ✅
+- [x] `tempo_query(matrix_code, filters?, group_by?, limit?)` — aggregated data queries via `build_data_query()`.
+- [x] `tempo_catalog_stats(group_by?)` — corpus-level breakdowns by archetype/category/unit_type/geo/time_granularity.
+- [x] `scripts/build-search-index.py` — FTS sidecar `data/corpus/search.duckdb` (14 MB, ~2s build). Bilingual search over names, 92k tags, definitions, categories.
+- [x] `dataset_search.py` FTS-first strategy with LIKE fallback. "unemployment rate" → 130 results (was 0).
+- [x] Full documentation in `tools/tempo-dev-mcp/README.md`.
+
 ### Step 2 — v1 user-facing NL→Data agent (~2.5h)
 - [ ] `app/services/llm_client.py` — provider abstraction (Anthropic + OpenAI), normalised `LLMResponse`.
 - [ ] `app/services/agent.py` — tool registry, system prompt, `run_agent()` loop (~80 line core, ~250 with prompt+registry).
 - [ ] `app/routers/ask.py` — `POST /api/ask` behind `TEMPO_ASK_ENABLED` flag.
-- [ ] `scripts/build-search-index.py` — sidecar `data/corpus/search.duckdb` with FTS over matrices + dataset_tags. Sidecar avoids the metadata.duckdb write-lock.
 - [ ] 4 agent tools: `search_datasets`, `get_dataset_schema`, `query_dataset_data`, `list_categories`. SQL never LLM-generated — calls `query_builder.build_data_query()` directly.
 
 ### Step 3 — Expand the dev MCP (~3–4h, after Step 2 surfaces real friction)

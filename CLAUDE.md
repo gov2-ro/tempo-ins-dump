@@ -106,14 +106,16 @@ Standalone HTML pages served via `python -m http.server 8000`:
 Legacy/archived UIs are in `ui/prev/` and `ui/v1/`.
 
 ### Dev MCP Server (`tools/tempo-dev-mcp/`)
-Claude Code introspection tools for this repo. Registered in `.mcp.json` (repo-local), auto-loaded every session.
+Claude Code introspection tools for this repo. Registered in `.mcp.json` (repo-local), auto-loaded every session. Full docs: `tools/tempo-dev-mcp/README.md`.
 
-| Tool | Description |
-|---|---|
-| `tempo_dataset_info(matrix_code)` | Full metadata + dims + chart scores + sample rows + coverage/trends in one call |
-| `tempo_search_datasets(query, has_geo, archetype, limit)` | Catalog search (LIKE-based, FTS upgrade planned) |
-| `tempo_chart_signature(matrix_code)` | `build_signature()` + `select_charts()` scores per chart type |
-| `tempo_sample(matrix_code, n, filters)` | Labelled rows from parquet |
+| Tool | Parameters | Returns |
+|---|---|---|
+| `tempo_dataset_info` | `matrix_code: str` | Full metadata + dims (options capped 50/dim) + chart scores + coverage/trends + 10 sample rows |
+| `tempo_search_datasets` | `query: str, has_geo?: bool, archetype?: str, limit?: int(10)` | `{total, datasets[]}` — catalog cards with archetype, time_range, unit_type |
+| `tempo_chart_signature` | `matrix_code: str` | `{archetype, signature, ranked_charts[]}` — chart scores + roles per type |
+| `tempo_sample` | `matrix_code: str, n?: int(10), filters?: json_str` | `{rows[]}` — labelled SDMX rows from parquet |
+| `tempo_query` | `matrix_code: str, filters?: json_str, group_by?: json_str, limit?: int(1000)` | `{columns, rows, row_count}` — aggregated data via query_builder |
+| `tempo_catalog_stats` | `group_by?: str("archetype")` | Corpus-level breakdowns by archetype/category/unit_type/geo |
 
 All tools import from the shared service layer: `app/services/dataset_search.py` and `app/services/dataset_meta.py`.
 

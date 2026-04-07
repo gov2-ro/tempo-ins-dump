@@ -1,5 +1,27 @@
 # Activity History
 
+## 2026-04-07 — MCP v2: query tool, catalog stats, FTS search
+
+**MCP v1 documentation:**
+- Created `tools/tempo-dev-mcp/README.md` — full documentation for all tools with parameters, return shapes, examples, architecture, and limitations
+- Expanded CLAUDE.md MCP section with parameter signatures for all tools
+
+**New MCP tools (v2):**
+- `tempo_query(matrix_code, filters?, group_by?, limit?)` — aggregated data queries wrapping `query_builder.build_data_query()`. Auto-picks agg function (AVG for percentage/time_unit, SUM otherwise). Returns columns, rows, row_count, and the generated SQL.
+- `tempo_catalog_stats(group_by?)` — corpus-level breakdowns by archetype/category/unit_type/geo/time_granularity. Shows 1,225 canonical datasets across 5 archetypes.
+
+**FTS search upgrade:**
+- Created `scripts/build-search-index.py` — builds a sidecar `data/corpus/search.duckdb` (14 MB, ~2s) with DuckDB FTS over matrix names (RO+EN), 92k bilingual tags, definitions, and category paths.
+- Updated `app/services/dataset_search.py` — FTS-first strategy with LIKE fallback. Sidecar connection cached as lazy singleton.
+- Before: "unemployment rate" → 0 results. After: → 130 results matching through English tags and definitions.
+- Before: "somaj" → 9 results (name match only). After: → 61 results (matches tags and definitions too).
+- FTS uses `stemmer='none'` — Romanian morphology not handled; "populatia" won't match "populatie". Planned for v3 with embeddings.
+
+**Key decisions:**
+- Sidecar DB (`search.duckdb`) avoids write-lock conflicts with `metadata.duckdb`. Read-only at runtime.
+- `tempo_query` never generates SQL from LLM input — wraps the existing safe `build_data_query()`.
+- Category stats show 71 datasets without ancestor_codes (split sub-datasets) — acceptable for v2.
+
 ## 2026-04-07 — Step 1: Service layer extraction + tempo-dev MCP server
 
 **Service layer refactor:**
