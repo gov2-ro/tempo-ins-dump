@@ -45,6 +45,62 @@ POST /api/ask  ──▶  agent.run(question, history)
 
 ---
 
+## What you'll be able to ask in v1
+
+The agent has 4 tools (search → schema → query → categories) over ~3,632 datasets covering demographics, economy, labor, health, education, and geography back to ~1990. Question categories it handles well:
+
+### 1. Single-fact lookup
+- *"Care era populația României în 2023?"*
+- *"How many hospitals are there in Cluj county?"*
+- *"What was the inflation rate in December 2024?"*
+
+### 2. Filter + aggregate within one dataset (the sweet spot)
+- *"Show me unemployment by county in 2023"* → group_by REF_AREA
+- *"Populația pe grupe de vârstă și sex în 2024"* → group_by AGE, SEX
+- *"Average wage by economic activity over the last 5 years"*
+- *"Births per county in 2023, sorted descending"*
+
+### 3. Time series for one indicator
+- *"Evoluția PIB-ului între 2010 și 2024"*
+- *"Unemployment rate trend in Iași over the last decade"*
+- *"Show me the CPI monthly series for 2024"*
+
+### 4. Compare across one dimension
+- *"Compare urban vs rural population in 2023"* → RESIDENCE filter
+- *"Male vs female employment by age group"*
+- *"Bucharest vs Cluj population growth since 2010"* (two queries on the same dataset)
+
+### 5. Dataset discovery (no data, just navigation)
+- *"What datasets do you have about education?"*
+- *"Ce date aveți despre migrație?"*
+- *"Find datasets with monthly data on prices"*
+
+### 6. Multi-step / disambiguation
+- *"I want population data by county"* → agent finds the dataset, sees it's split, picks the `_judete` sub-dataset, fetches schema, returns shape
+- *"Show me the labor force, but for women only and only people 25–54"*
+
+### What v1 will NOT do well
+
+| Limitation | Why | When it lands |
+|---|---|---|
+| **Cross-dataset JOIN** ("GDP per capita by county" combining GDP + population) | Different parquets, no JOIN tool | v2 — `compute_ratio` tool or two-query orchestration |
+| **Derived metrics** ("year-over-year growth rate") unless the dataset has them | Agent only filters/groups, doesn't compute | v2 — already sit in [dataset_trends](data/corpus/metadata.duckdb) table; expose via tool |
+| **Forecasts / predictions** | Not a statistical inference engine | Out of scope |
+| **"Why" questions** | Causation isn't in the data | Out of scope |
+| **Geospatial math** (density per km², distance) | No geo computation tools | v2 maybe |
+| **Up-to-the-minute data** | INS publishes monthly at most | Inherent |
+| **Free chart customisation** ("stacked bar with log scale") | `chart_selector` is rule-based, not LLM-driven | v2 — let agent override defaults |
+
+### First-day test questions (exercise the full pipeline)
+
+1. *"Care este populația Clujului în 2023?"* — single fact, geo filter
+2. *"Show me unemployment trends by county in the last 5 years"* — bilingual query, group_by, time filter, split dataset
+3. *"Câte spitale sunt în România pe județe?"* — split dataset disambiguation
+4. *"Compară numărul de nașteri în mediu urban și rural în 2024"* — RESIDENCE compare
+5. *"Ce date aveți despre comerțul exterior?"* — pure discovery, no data query
+
+---
+
 ## Files to create
 
 ### 1. `app/services/llm_client.py` — provider abstraction (~120 lines)
@@ -365,3 +421,84 @@ Total: ~3 hours of focused work for a working v1.
 | [data/corpus/search.duckdb](data/corpus/search.duckdb) | NEW sidecar — FTS index over matrices + tags |
 | [CLAUDE.md](CLAUDE.md) | Document new endpoint + script |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | v2 items: embeddings, streaming, eval harness, UI |
+
+---
+
+## v2+ vision — what a more advanced LLM integration could achieve
+
+Once v1 is shipped and proven, the architecture (tool-calling agent + safe data layer) opens up much more ambitious capabilities. Grouped by horizon and grounded in what the existing data + DuckDB tables actually support.
+
+### Tier 1 — Natural extensions (next steps after v1)
+
+**Cross-dataset reasoning.** Add a `query_two_datasets` or `compute_ratio` tool that fetches two parquets, joins them in pandas on shared SDMX dims (TIME_PERIOD, REF_AREA, SEX, …) and returns derived rows. Unlocks:
+- *"GDP per capita by county"* (GDP ÷ population)
+- *"Doctors per 1,000 inhabitants by county"*
+- *"Healthcare spending vs life expectancy"* — correlation across two datasets
+- *"Education spending as a share of GDP over time"*
+
+**Derived metrics tool.** Expose [dataset_trends](data/corpus/metadata.duckdb) (3,632 rows of trend_direction, slope, yoy_growth, breakpoint_years, seasonality) as a `get_trend_summary(matrix_code)` tool. The agent then answers:
+- *"Is unemployment growing or shrinking in Romania?"*
+- *"When did inflation break trend in the last decade?"*
+- *"Which counties are outliers in birth rates?"* (already in `geo_outlier_counties`)
+
+**Multi-turn drill-down with session memory.** A simple in-process session store keyed by session_id, holding (question, answer, citations, last_matrix_code). Lets the user say:
+- *"Show me population by county"* → *"Now break Cluj down by age group"* → *"Compare to Iași"* → *"Plot it as a line chart"*
+- The agent maintains pinned context (current dataset, current filters) and drills deeper.
+
+**Embedding-based retrieval upgrade.** Replace FTS with hybrid lexical + vector. Embed a "dataset card" (name + tags + dim names + context path + definition) using `BAAI/bge-m3` or `multilingual-e5-large`. Stored as a sidecar parquet. Reciprocal-rank-fusion against FTS. Unlocks:
+- *"Quality of life indicators"* → finds wellness, health, income, education datasets
+- *"Datasets relevant to climate policy"* → semantic match across categories
+- *"Locuri de muncă"* → matches `ocupare a forței de muncă` even though the literal phrase isn't in the tags
+
+**Eval harness.** Hand-write 50 reference questions with expected `matrix_code` + dimension filters + a sketch of the right answer. Run nightly. Track precision/recall as a CI signal. Without this, every prompt change is a leap of faith.
+
+**Streaming + UI panel.** SSE from the agent loop to a chat panel in [app/static/index.html](app/static/index.html). Inline charts via the existing [chart-factory.js](app/static/js/chart-factory.js). Pin charts to conversation history.
+
+### Tier 2 — New capabilities (medium-term)
+
+**Statistical narrative generation.** *"Tell me the story of Romanian unemployment from 2010 to 2024."* The agent calls `query_dataset_data` for the series, calls `get_trend_summary` for breakpoints, optionally calls a new `get_news_around(date)` tool against the existing [get-news.py](get-news.py) press-release scraper, then writes a narrative paragraph with citations. Effectively automated explanatory journalism over INS data.
+
+**Methodology Q&A (RAG).** [matrices.definitie](data/corpus/metadata.duckdb) and [matrices.metodologie](data/corpus/metadata.duckdb) already hold INS's own definitions. Embed them. Add a `lookup_methodology(matrix_code | concept)` tool. Answers:
+- *"How does INS measure inflation?"*
+- *"What's the difference between LFS unemployment and registered unemployment?"*
+- *"Which population concept does this dataset use — resident or de facto?"*
+
+**Anomaly detection across the corpus.** *"What's unusual about the latest data release?"* Cross-reference [dataset_trends.breakpoint_years](data/corpus/metadata.duckdb) (already detected!) and `geo_outlier_counties` for the most recent year. Surface as a daily/weekly briefing. Could run as a background cron.
+
+**Custom user-defined indicators.** User defines a derived dataset: `my_unemployment_index = unemployment_25-54 - vacancies`. Stored as a yaml file or a small `user_indicators` table. The agent can query custom indicators just like canonical ones via a wrapping tool. Lets power users curate their own dashboards.
+
+**LLM-driven chart customisation.** Beyond [chart_selector.py](app/services/chart_selector.py)'s rule-based picks: let the user say *"make it a stacked area with log scale, group by region"*. Agent emits an ECharts JSON delta that overrides the default spec. Validated against an ECharts schema before rendering.
+
+**Auto-generated periodic reports.** *"Quarterly economic summary for Q1 2025."* Multi-dataset, multi-chart, narrative output as Markdown / PDF / HTML. Templates per topic (labor, inflation, demographics) + generated commentary. Could power a public newsletter.
+
+### Tier 3 — Ambitious / research-grade
+
+**Cross-source augmentation.** Extend tools beyond INS: Eurostat, World Bank, OECD, BNR (national bank). *"How does Romanian unemployment compare to the EU average?"* Each source becomes a new tool. The agent picks the right one or calls multiple. Requires building (small) connectors but the tool-calling architecture handles it cleanly.
+
+**Correlation discovery across all datasets.** *"What datasets correlate with unemployment trends in Cluj?"* Pre-compute pairwise Pearson correlations on common time-and-geo indices, store as `dataset_correlations` table similar to existing `dataset_relationships`. Agent surfaces top hypotheses with the caveat that correlation ≠ causation. Becomes a legitimate research tool.
+
+**Semantic data model layer.** A "concept" maps to multiple matrix_codes depending on year/granularity/methodology. *"Show me population"* might resolve differently for 1990 vs 2024. A `resolve_concept(name) → [matrix_code]` tool with curated mappings. This is the analytics-engineering "metric layer" applied to public statistics.
+
+**Code generation for power users.** *"Give me a Python snippet to download this dataset and reproduce this chart."* The agent emits a runnable script (`pandas`/`duckdb`/`matplotlib`) that the user can paste into a notebook. Lowers the barrier between exploration and reproducible analysis.
+
+**Multilingual report rendering.** Same data, generate the report in Romanian OR English on demand. The bilingual data layer already supports this.
+
+**Voice / audio briefings.** TTS over the daily anomaly briefing. *"Listen to today's INS data update."* Niche, but the underlying pipeline is the same.
+
+**Agentic data quality patrol.** Background agent that runs after each pipeline incremental update, compares new vs old `dataset_value_profiles`, flags anomalies (sudden mean shifts, fill-rate drops, outlier years), opens entries in [docs/BACKLOG.md](docs/BACKLOG.md) for the user to review. Self-monitoring data infrastructure.
+
+**Embedded explorer / shareable answers.** Every agent answer becomes a URL with a deterministic ID (hash of question + tool_trace). Shareable, embeddable, citable. Turns the assistant from a chat tool into a knowledge graph node.
+
+### Tier 4 — Speculative
+
+**"Why" questions, partial answers.** True causation is out of reach, but the agent could surface *plausible explanations* by combining: trend breakpoints (`dataset_trends.breakpoint_years`) + correlated datasets + relevant news around the breakpoint date (from [get-news.py](get-news.py)). Honest framing: *"Unemployment rose 1.8 points in Q2 2020. Around the same period: COVID lockdowns began (news), labor force participation dropped (correlated dataset), and the breakpoint detector flagged this as a structural break."* It's pattern-matching, not causal inference, but it's useful.
+
+**Federated multi-agency agent.** Same architecture pointed at multiple statistical agencies' open data. The tool-calling abstraction is provider-agnostic for both LLMs and data sources. Could become a generic "ask the official statistics" interface.
+
+**Counterfactual exploration.** *"What would the unemployment rate look like if labor force participation had stayed at 2019 levels?"* Requires a small simulation layer on top of the data. Possible but well outside v1 scope.
+
+### What this means for the v1 architecture
+
+The good news: **none of these require throwing v1 away.** Every tier above adds new tools to the same agent loop, or new tables to the same DuckDB metadata layer, or new sidecars next to `search.duckdb`. The tool-calling architecture is the right substrate for all of them. That is the strongest argument against pure NL2SQL — it's a dead-end architecture, while tool-calling compounds.
+
+The only architectural change later tiers might force is a **task graph** instead of a single agent loop (multi-step plans with explicit dependencies), but even that drops in cleanly where `run_agent()` lives today.
