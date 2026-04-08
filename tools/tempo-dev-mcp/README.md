@@ -354,6 +354,56 @@ Trace a dataset across every pipeline stage. For each artifact (`metadata_json`,
 
 ---
 
+### 12. `tempo_eval_chart_selector(score_threshold=0.05)`
+
+Regression test for the chart-selection engine. Re-scores every dataset and diffs against the committed baseline at `data/eval/chart_selector_baseline.json`. Use after any change to `app/services/chart_selector.py` to surface ranking drift.
+
+**Parameters:**
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `score_threshold` | `float` | `0.05` | Min primary-score delta to flag as drift |
+
+**Returns** JSON: `{summary, primary_changes, top_set_changes, confidence_changes, score_drifts, missing, added, baseline_path, baseline_version}`. Caps: `primary_changes` always full, others 30-50 entries.
+
+```json
+{
+  "summary": {
+    "total_baseline": 1959,
+    "total_current": 1959,
+    "ok": 1959,
+    "primary_changed": 0,
+    "top_set_changed": 0,
+    "confidence_changed": 0,
+    "score_drift": 0,
+    "missing": 0,
+    "added": 0,
+    "score_threshold": 0.05
+  },
+  "primary_changes": [],
+  "top_set_changes": [],
+  "confidence_changes": [],
+  "score_drifts": [],
+  "missing": [],
+  "added": [],
+  "baseline_path": "data/eval/chart_selector_baseline.json",
+  "baseline_version": 1
+}
+```
+
+**Refresh the baseline** after an intentional `chart_selector.py` change:
+
+```bash
+python scripts/build_chart_selector_baseline.py
+# then review:  git diff data/eval/chart_selector_baseline.json
+```
+
+The baseline uses a custom compact format (one dataset per line) so single-row drifts produce tight git diffs. Both the build script and the MCP tool share `app/services/chart_selector_eval.py::evaluate_all()`, so the baseline and the live eval are guaranteed in lock-step.
+
+**Example use case:** "I tweaked the line-chart threshold — which datasets flipped their primary chart?" — run `tempo_eval_chart_selector()`, inspect `primary_changes` to see before/after.
+
+---
+
 ## Search
 
 Search uses a two-tier strategy:
@@ -379,15 +429,20 @@ The sidecar is ~14 MB, built in ~2 seconds, read-only at runtime. Rebuild after 
 
 ```
 tools/tempo-dev-mcp/
-  server.py          — MCP server (11 tools), uses official `mcp` Python SDK (FastMCP)
+  server.py          — MCP server (12 tools), uses official `mcp` Python SDK (FastMCP)
   README.md          — this file
 
-app/services/        — shared service layer (used by MCP, FastAPI routes, future agent)
-  dataset_search.py  — search_datasets() with FTS-first strategy
-  dataset_meta.py    — get_dataset_meta()
-  chart_selector.py  — build_signature(), select_charts(), assign_roles()
-  query_builder.py   — build_data_query()
+app/services/        — shared service layer (used by MCP, FastAPI routes, agent)
+  dataset_search.py       — search_datasets() with FTS-first strategy
+  dataset_meta.py         — get_dataset_meta()
+  chart_selector.py       — build_signature(), select_charts(), assign_roles()
+  chart_selector_eval.py  — evaluate_all(), diff_against_baseline()
+  query_builder.py        — build_data_query()
 
 scripts/
-  build-search-index.py  — builds FTS sidecar (data/corpus/search.duckdb)
+  build-search-index.py              — builds FTS sidecar (data/corpus/search.duckdb)
+  build_chart_selector_baseline.py   — regenerates data/eval/chart_selector_baseline.json
+
+data/eval/
+  chart_selector_baseline.json       — committed baseline (1959 datasets, ~290 KB)
 ```

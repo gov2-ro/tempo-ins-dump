@@ -1,16 +1,22 @@
 #!/usr/bin/env python
-"""tempo-dev MCP server — 6 introspection tools for Claude Code.
+"""tempo-dev MCP server — introspection + eval tools for Claude Code.
 
 Run via `.mcp.json` (repo-local) or manually:
     python tools/tempo-dev-mcp/server.py
 
 Tools:
-    tempo_dataset_info     — workhorse: full metadata + dims + charts + sample
-    tempo_search_datasets  — catalog search with filters
-    tempo_chart_signature  — chart_selector scores for a dataset
-    tempo_sample           — labelled rows from a parquet
-    tempo_query            — aggregated data queries via query_builder
-    tempo_catalog_stats    — corpus-level breakdowns
+    tempo_dataset_info        — workhorse: full metadata + dims + charts + sample
+    tempo_search_datasets     — catalog search with filters
+    tempo_chart_signature     — chart_selector scores for a dataset
+    tempo_sample              — labelled rows from a parquet
+    tempo_query               — aggregated data queries via query_builder
+    tempo_catalog_stats       — corpus-level breakdowns
+    tempo_routes              — list every FastAPI route
+    tempo_call_endpoint       — in-process TestClient call
+    tempo_outdated            — datasets by ultima_actualizare staleness
+    tempo_pipeline_status     — last run + recent logs + corpus audit
+    tempo_dataset_lineage     — trace a matrix across pipeline stages
+    tempo_eval_chart_selector — diff chart_selector vs committed baseline
 """
 import json
 import logging
@@ -769,6 +775,63 @@ def tempo_dataset_lineage(matrix_code: str) -> str:
         "db_state": db_state,
         "splits": splits_info,
     }, ensure_ascii=False, default=str, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# 12. tempo_eval_chart_selector — diff chart selector vs committed baseline
+# ---------------------------------------------------------------------------
+@mcp.tool()
+def tempo_eval_chart_selector(score_threshold: float = 0.05) -> str:
+    """Re-score every dataset and diff against the committed chart_selector baseline.
+
+    Loads `data/eval/chart_selector_baseline.json` (produced by
+    `scripts/build_chart_selector_baseline.py`), re-runs `evaluate_all()` on
+    the current code, and returns a compact regression report.
+
+    Flags four kinds of drift:
+      - primary_changes   — top-ranked chart_type changed (always full list)
+      - top_set_changes   — topN set of chart types changed
+      - confidence_changes — same primary but different confidence bucket
+      - score_drifts      — primary unchanged, score moved by ≥ threshold
+
+    Also reports `missing` (in baseline but not in current) and `added`
+    (in current but not in baseline) — useful after adding/removing datasets.
+
+    To refresh the baseline after intentional changes, run:
+        python scripts/build_chart_selector_baseline.py
+
+    Args:
+        score_threshold: Min primary-score delta to flag as drift (default 0.05).
+    """
+    from pathlib import Path
+    _ensure_imports()
+    from app.services.chart_selector_eval import evaluate_all, diff_against_baseline
+
+    baseline_path = Path(REPO_ROOT) / "data" / "eval" / "chart_selector_baseline.json"
+    if not baseline_path.exists():
+        return json.dumps({
+            "error": f"Baseline not found at {baseline_path.relative_to(Path(REPO_ROOT))}. "
+                     f"Run: python scripts/build_chart_selector_baseline.py",
+        })
+
+    try:
+        baseline_doc = json.loads(baseline_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return json.dumps({"error": f"Failed to parse baseline: {e}"})
+
+    baseline = baseline_doc.get("datasets") or {}
+    baseline_version = baseline_doc.get("version")
+
+    try:
+        current = evaluate_all(top_n=3)
+    except Exception as e:
+        log.exception("evaluate_all failed")
+        return json.dumps({"error": f"evaluate_all failed: {e}"})
+
+    report = diff_against_baseline(baseline, current, score_threshold=float(score_threshold))
+    report["baseline_path"] = str(baseline_path.relative_to(Path(REPO_ROOT)))
+    report["baseline_version"] = baseline_version
+    return json.dumps(report, ensure_ascii=False, default=str, indent=2)
 
 
 # ---------------------------------------------------------------------------

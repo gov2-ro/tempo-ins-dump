@@ -75,7 +75,8 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
 ### Step 3 — Expand the dev MCP (~3–4h, after Step 2 surfaces real friction)
 - [x] Pipeline state introspection: `tempo_pipeline_status`, `tempo_dataset_lineage`, `tempo_outdated`.
 - [x] Code introspection: `tempo_routes`, `tempo_call_endpoint` (FastAPI TestClient).
-- [ ] Eval: `tempo_eval_chart_selector` (diff vs baseline), `tempo_eval_agent` (YAML question set), `tempo_check_view_profiles`.
+- [x] Eval: `tempo_eval_chart_selector` (diff vs baseline). Shared `app/services/chart_selector_eval.py` + committed baseline `data/eval/chart_selector_baseline.json` (1959 datasets). Rebuild via `python scripts/build_chart_selector_baseline.py`. Fixed a latent non-determinism in `_load_inputs` dim_type majority vote: added `MIN(option_offset)` tie-breaker to match runtime `dataset_meta.py` "first-inserted wins" behavior (ACC102C UNIT_MEASURE was flipping between `unit`/`indicator` on ties).
+- [ ] Eval: `tempo_eval_agent` (YAML question set), `tempo_check_view_profiles`.
 - [ ] Frontend probing (Playwright): `tempo_render_dataset`, `tempo_console_errors`, `tempo_validate_echarts_spec`.
 - [ ] Gated mutations (`TEMPO_DEV_MUTATIONS=true`): `tempo_run_pipeline_script`, `tempo_regen_view_profile`, `tempo_clear_search_index`.
 - [ ] Eval baselines: `data/eval/chart_selector_baseline.json`, `data/eval/agent_questions.yaml`.

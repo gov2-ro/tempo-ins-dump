@@ -1,5 +1,49 @@
 # Activity History
 
+## 2026-04-08 — Dev MCP: chart_selector eval harness (Step 3b)
+
+Added regression-detection for the chart-selection engine. Every dataset is
+scored on-demand and diffed against a committed baseline so that changes to
+`chart_selector.py` surface concrete drift instead of silent ranking shifts.
+
+**New files:**
+
+- `app/services/chart_selector_eval.py` — shared `_load_inputs()`,
+  `evaluate_all(top_n=3)`, and `diff_against_baseline(baseline, current,
+  score_threshold)`. Bulk-loads every dim/profile/coverage/trend in one go
+  (~1s for the whole corpus) instead of calling `get_dataset_meta` per
+  dataset (would be ~20s).
+- `scripts/build_chart_selector_baseline.py` — run-once builder that writes
+  `data/eval/chart_selector_baseline.json` (1959 datasets, 290 KB, custom
+  compact format with one dataset per line so git diffs stay tight).
+- `tools/tempo-dev-mcp/server.py` :: `tempo_eval_chart_selector` — MCP tool
+  that loads the baseline, re-runs `evaluate_all()`, and returns a compact
+  report: `primary_changes` (full), `top_set_changes` (cap 50),
+  `confidence_changes` (cap 30), `score_drifts` (cap 50), `missing`/`added`
+  (cap 30). Uses the same `evaluate_all()` as the build script so baseline
+  generation and diffing are guaranteed in lock-step.
+
+**Non-determinism bug fixed:** the first baseline showed `ACC102C`'s top-3
+chart set flipping between `[…, horizontal_bar]` and `[…, stacked_bar]` on
+re-runs. Root cause: `_load_inputs`'s per-dimension `dim_type` majority-vote
+query had no tie-breaker on `COUNT(*) DESC`, so DuckDB returned tied rows in
+arbitrary order. `ACC102C`'s `UNIT_MEASURE` dim has exactly one option parsed
+as `unit` and one as `indicator` — a perfect tie.
+
+Fix: add `MIN(dopt.option_offset) ASC` as the secondary sort. This matches
+the runtime `dataset_meta.py:172` behavior, where `max(type_counts,
+key=type_counts.get)` implicitly picks the first-inserted key on ties, and
+insertion order there is `ORDER BY option_offset`. Verified ACC102C now
+agrees between runtime and eval (`UNIT_MEASURE` dim_type = `unit`, third
+chart = `horizontal_bar`).
+
+Five consecutive eval runs after the fix report `ok=1959, drift=0`.
+
+**To refresh the baseline after an intentional `chart_selector.py` change:**
+
+    python scripts/build_chart_selector_baseline.py
+    # then inspect `git diff data/eval/chart_selector_baseline.json`
+
 ## 2026-04-08 — Agent: fix double-counting via marginal Total rows
 
 `POST /api/ask`'s `query_dataset_data` tool was double-counting whenever it
