@@ -72,8 +72,8 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
 - [ ] Pin `anthropic>=0.40` in `requirements.txt` (SDK 0.89.0 installed in dev venv but not pinned).
 
 ### Step 3 — Expand the dev MCP (~3–4h, after Step 2 surfaces real friction)
-- [ ] Pipeline state introspection: `tempo_pipeline_status`, `tempo_dataset_lineage`, `tempo_outdated`.
-- [ ] Code introspection: `tempo_routes`, `tempo_call_endpoint` (FastAPI TestClient).
+- [x] Pipeline state introspection: `tempo_pipeline_status`, `tempo_dataset_lineage`, `tempo_outdated`.
+- [x] Code introspection: `tempo_routes`, `tempo_call_endpoint` (FastAPI TestClient).
 - [ ] Eval: `tempo_eval_chart_selector` (diff vs baseline), `tempo_eval_agent` (YAML question set), `tempo_check_view_profiles`.
 - [ ] Frontend probing (Playwright): `tempo_render_dataset`, `tempo_console_errors`, `tempo_validate_echarts_spec`.
 - [ ] Gated mutations (`TEMPO_DEV_MUTATIONS=true`): `tempo_run_pipeline_script`, `tempo_regen_view_profile`, `tempo_clear_search_index`.

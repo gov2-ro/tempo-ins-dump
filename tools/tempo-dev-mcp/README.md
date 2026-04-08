@@ -297,6 +297,63 @@ Corpus-level statistics. Answers "what does the catalog contain?"
 
 ---
 
+### 7. `tempo_routes()`
+
+List every FastAPI route registered on `app.main:app`. Useful as a sanity check after mounting new routers, or to discover endpoints for `tempo_call_endpoint`.
+
+**Returns** JSON: `{total, routes: [{methods, path, name, endpoint, tags}]}`. API routes (`/api/*`) are listed first, then static mounts.
+
+---
+
+### 8. `tempo_call_endpoint(method, path, params_json?, body_json?)`
+
+Hit any FastAPI endpoint in-process via `starlette.testclient.TestClient`. No live server required.
+
+**Parameters:**
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `method` | `str` (required) | — | HTTP method (`GET`/`POST`/`PUT`/`PATCH`/`DELETE`) |
+| `path` | `str` (required) | — | Route path, e.g. `/api/datasets/POP107D` |
+| `params_json` | `str` | `""` | JSON-encoded query params, e.g. `'{"lang":"en"}'` |
+| `body_json` | `str` | `""` | JSON-encoded request body for POST/PUT/PATCH |
+
+**Returns** JSON: `{status_code, content_type, body, truncated, json?}`. Body is capped to 8000 chars; JSON responses are also parsed into `json`.
+
+**Example use case:** Smoke-test the new `/api/ask` endpoint after a refactor — `tempo_call_endpoint("POST", "/api/ask", body_json='{"question":"populatia Cluj 2023"}')`. Note: requires `TEMPO_ASK_ENABLED=true` in the MCP server's environment to actually invoke the agent.
+
+---
+
+### 9. `tempo_outdated(days=180, limit=50)`
+
+List datasets with stale or missing `ultima_actualizare`. **Caveat:** the underlying column is sourced from INS metadata JSONs and is often stale — treat the output as a hint, not ground truth.
+
+**Returns** JSON: `{threshold_days, caveat, counts: {total, fresh, stale, unknown_null}, oldest: [...], null_sample: [...]}`.
+
+**Example use case:** "Which datasets haven't been refreshed in 5+ years?" — `tempo_outdated(days=1825, limit=20)`.
+
+---
+
+### 10. `tempo_pipeline_status(recent_log_count=10)`
+
+Report pipeline state: `last-pipeline-run.txt` marker, `corpus-audit.json` summary, and the most recently-modified log files in `data/logs/` with ERROR/WARNING line counts.
+
+**Returns** JSON: `{logs_dir, last_pipeline_run, corpus_audit: {timestamp, summary}, recent_logs: [{file, mtime, size_bytes, errors, warnings}]}`. Logs above 2 MB are listed without scanning their contents (counts default to 0).
+
+**Example use case:** "Did the latest update run cleanly?" — `tempo_pipeline_status()` and look for non-zero `errors` in the most recent entries.
+
+---
+
+### 11. `tempo_dataset_lineage(matrix_code)`
+
+Trace a dataset across every pipeline stage. For each artifact (`metadata_json`, `raw_csv`, `parquet_v2`, `corpus_parquet`, `view_profile`) reports presence/size/mtime, plus DuckDB row presence in `matrices`/`matrix_profiles`/`dataset_coverage`/`dataset_trends`/`dataset_value_profiles`, plus split/parent relationships.
+
+**Returns** JSON: `{matrix_code, stages: {…}, db_state: {matrices: {…}, matrix_profiles: {exists}, …, dimensions_count}, splits: {children, parent?}}`.
+
+**Example use case:** "Why is dataset X missing from the UI?" — `tempo_dataset_lineage("ACC102B")` shows which stage the artifact stops at.
+
+---
+
 ## Search
 
 Search uses a two-tier strategy:
@@ -322,7 +379,7 @@ The sidecar is ~14 MB, built in ~2 seconds, read-only at runtime. Rebuild after 
 
 ```
 tools/tempo-dev-mcp/
-  server.py          — MCP server (6 tools), uses official `mcp` Python SDK (FastMCP)
+  server.py          — MCP server (11 tools), uses official `mcp` Python SDK (FastMCP)
   README.md          — this file
 
 app/services/        — shared service layer (used by MCP, FastAPI routes, future agent)

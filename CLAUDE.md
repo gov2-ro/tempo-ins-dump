@@ -75,35 +75,6 @@ app/
     geo/               — romania-counties.geojson, romania-regions.geojson, romania-macroregions.geojson
 ```
 
-### StatExplorer (`explorer/`)
-Alternative Tableau-inspired explorer with i18n support and component-based JS.
-
-```
-explorer/
-  main.py              — FastAPI entry ("StatExplorer")
-  config.py, db.py
-  routers/             — categories, datasets, dataset_data
-  services/            — chart_selector, query_builder, translations
-  static/
-    js/charts/         — chart-bar, chart-geo, chart-line, chart-heatmap, chart-pyramid, etc.
-    js/components/     — ChartCanvas, DatasetPicker, FilterBar, LeftSidebar, TopNav, FooterBar
-    js/lib/            — api, i18n, utils
-    css/explorer.css
-```
-
-### Static UI Explorers (`ui/`)
-Standalone HTML pages served via `python -m http.server 8000`:
-
-| Page | Description |
-|---|---|
-| `dataset-navigator.html` | Primary unified dataset browser (category tree + cards + filters) |
-| `dataset-profile.html` | Individual dataset profile view |
-| `profile-preview.html` | Quick profile preview |
-| `index.html` + `app.js` | Dimension browser with tag-based interface |
-| `category-browser.html` | Grid layout of all categories with counts |
-| `tree-browser.html` | Hierarchical 3-level category navigation |
-
-Legacy/archived UIs are in `ui/prev/` and `ui/v1/`.
 
 ### Dev MCP Server (`tools/tempo-dev-mcp/`)
 Claude Code introspection tools for this repo. Registered in `.mcp.json` (repo-local), auto-loaded every session. Full docs: `tools/tempo-dev-mcp/README.md`.
@@ -116,6 +87,11 @@ Claude Code introspection tools for this repo. Registered in `.mcp.json` (repo-l
 | `tempo_sample` | `matrix_code: str, n?: int(10), filters?: json_str` | `{rows[]}` — labelled SDMX rows from parquet |
 | `tempo_query` | `matrix_code: str, filters?: json_str, group_by?: json_str, limit?: int(1000)` | `{columns, rows, row_count}` — aggregated data via query_builder |
 | `tempo_catalog_stats` | `group_by?: str("archetype")` | Corpus-level breakdowns by archetype/category/unit_type/geo |
+| `tempo_routes` | — | All FastAPI routes: `{total, routes[{methods, path, name, endpoint, tags}]}` |
+| `tempo_call_endpoint` | `method: str, path: str, params_json?: str, body_json?: str` | In-process TestClient call: `{status_code, content_type, body, json?}` (body capped 8k) |
+| `tempo_outdated` | `days?: int(180), limit?: int(50)` | Stale/null `ultima_actualizare` lists with reliability caveat |
+| `tempo_pipeline_status` | `recent_log_count?: int(10)` | `last-pipeline-run.txt` + corpus audit summary + recent logs with err/warn counts |
+| `tempo_dataset_lineage` | `matrix_code: str` | Per-stage artifact presence (5 stages) + DuckDB row presence + splits/parent |
 
 All tools import from the shared service layer: `app/services/dataset_search.py` and `app/services/dataset_meta.py`.
 
@@ -130,13 +106,6 @@ uvicorn app.main:app --reload --port 8080
 # http://localhost:8080
 ```
 
-### Static UI Pages
-```bash
-python -m http.server 8000
-# http://localhost:8000/ui/dataset-navigator.html
-# http://localhost:8000/ui/category-browser.html
-# http://localhost:8000/ui/tree-browser.html
-```
 
 ### StatExplorer (alternative)
 ```bash

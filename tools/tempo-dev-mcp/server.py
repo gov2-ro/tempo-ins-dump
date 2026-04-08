@@ -398,6 +398,380 @@ def tempo_catalog_stats(
 
 
 # ---------------------------------------------------------------------------
+# 7. tempo_routes — list all FastAPI routes
+# ---------------------------------------------------------------------------
+@mcp.tool()
+def tempo_routes() -> str:
+    """List every FastAPI route registered on app.main:app.
+
+    Useful as a sanity-check after mounting new routers, or to discover
+    endpoints for tempo_call_endpoint. Returns JSON array of
+    {methods, path, name, endpoint, tags}.
+    """
+    try:
+        from app.main import app
+    except Exception as e:
+        return json.dumps({"error": f"Failed to import app.main: {e}"})
+
+    routes = []
+    for r in app.routes:
+        path = getattr(r, "path", None)
+        if not path:
+            continue
+        methods = sorted(getattr(r, "methods", []) or [])
+        endpoint = getattr(r, "endpoint", None)
+        ep_name = (
+            f"{endpoint.__module__}.{endpoint.__name__}"
+            if endpoint and hasattr(endpoint, "__module__")
+            else None
+        )
+        routes.append({
+            "methods": methods,
+            "path": path,
+            "name": getattr(r, "name", None),
+            "endpoint": ep_name,
+            "tags": list(getattr(r, "tags", []) or []),
+        })
+    # Sort API routes first, then static mounts
+    routes.sort(key=lambda x: (not x["path"].startswith("/api"), x["path"]))
+    return json.dumps({"total": len(routes), "routes": routes}, ensure_ascii=False, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# 8. tempo_call_endpoint — hit any route via in-process TestClient
+# ---------------------------------------------------------------------------
+@mcp.tool()
+def tempo_call_endpoint(
+    method: str,
+    path: str,
+    params_json: str = "",
+    body_json: str = "",
+) -> str:
+    """Call any FastAPI endpoint in-process via starlette TestClient.
+
+    No live server required. Response body is capped to 8000 chars; if
+    the response is JSON it is also parsed into `json` alongside the raw
+    `body` string.
+
+    Args:
+        method:      HTTP method (GET/POST/PUT/PATCH/DELETE).
+        path:        Route path, e.g. "/api/datasets/POP107D".
+        params_json: Optional JSON string of query params, e.g. '{"lang":"en"}'.
+        body_json:   Optional JSON string of request body for POST/PUT/PATCH.
+    """
+    try:
+        from fastapi.testclient import TestClient
+        from app.main import app
+    except Exception as e:
+        return json.dumps({"error": f"Failed to import app: {e}"})
+
+    try:
+        params = json.loads(params_json) if params_json.strip() else {}
+    except Exception as e:
+        return json.dumps({"error": f"Invalid params_json: {e}"})
+    try:
+        body = json.loads(body_json) if body_json.strip() else None
+    except Exception as e:
+        return json.dumps({"error": f"Invalid body_json: {e}"})
+
+    m = method.upper().strip()
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        if m == "GET":
+            resp = client.get(path, params=params)
+        elif m == "DELETE":
+            resp = client.delete(path, params=params)
+        elif m in ("POST", "PUT", "PATCH"):
+            resp = client.request(m, path, params=params, json=body)
+        else:
+            return json.dumps({"error": f"Unsupported method: {method}"})
+    except Exception as e:
+        return json.dumps({"error": f"Request failed: {e}"})
+
+    raw = resp.text or ""
+    truncated = len(raw) > 8000
+    out = {
+        "status_code": resp.status_code,
+        "content_type": resp.headers.get("content-type"),
+        "body": raw[:8000],
+        "truncated": truncated,
+    }
+    try:
+        out["json"] = resp.json()
+    except Exception:
+        pass
+    return json.dumps(out, ensure_ascii=False, default=str, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# 9. tempo_outdated — datasets by ultima_actualizare staleness
+# ---------------------------------------------------------------------------
+@mcp.tool()
+def tempo_outdated(days: int = 180, limit: int = 50) -> str:
+    """List datasets with stale or missing `ultima_actualizare`.
+
+    CAVEAT: per `docs/BACKLOG.md`, `ultima_actualizare` values sourced from
+    INS metadata JSONs are often stale — the column reflects what INS *claims*
+    rather than the actual data freshness. Treat the list as a hint, not
+    ground truth. A proposed fix (sync from `insse_news.csv`) is tracked
+    in the backlog.
+
+    Args:
+        days:  Threshold in days. A dataset is "stale" if its last update is
+               older than today minus this many days. Default 180.
+        limit: Cap on oldest/null lists. Default 50.
+    """
+    _ensure_imports()
+    conn = get_conn()
+    days_int = int(days)  # validated/coerced — safe to inline (DuckDB INTERVAL won't bind)
+    try:
+        total = conn.execute("SELECT COUNT(*) FROM matrices").fetchone()[0]
+        null_count = conn.execute(
+            "SELECT COUNT(*) FROM matrices WHERE ultima_actualizare IS NULL"
+        ).fetchone()[0]
+        stale_count = conn.execute(
+            "SELECT COUNT(*) FROM matrices "
+            "WHERE ultima_actualizare IS NOT NULL "
+            f"  AND ultima_actualizare < CURRENT_DATE - INTERVAL {days_int} DAY"
+        ).fetchone()[0]
+        fresh_count = total - null_count - stale_count
+
+        oldest = conn.execute(
+            "SELECT matrix_code, matrix_name, ultima_actualizare, row_count "
+            "FROM matrices WHERE ultima_actualizare IS NOT NULL "
+            "ORDER BY ultima_actualizare ASC LIMIT ?",
+            [int(limit)],
+        ).fetchall()
+
+        null_sample = conn.execute(
+            "SELECT matrix_code, matrix_name, row_count "
+            "FROM matrices WHERE ultima_actualizare IS NULL "
+            "ORDER BY matrix_code LIMIT ?",
+            [int(limit)],
+        ).fetchall()
+    except Exception as e:
+        return json.dumps({"error": f"Query failed: {e}"})
+
+    return json.dumps({
+        "threshold_days": int(days),
+        "caveat": (
+            "ultima_actualizare is sourced from INS metadata JSONs and is "
+            "often stale. Treat as a hint, not ground truth."
+        ),
+        "counts": {
+            "total": total,
+            "fresh": fresh_count,
+            "stale": stale_count,
+            "unknown_null": null_count,
+        },
+        "oldest": [
+            {
+                "matrix_code": r[0],
+                "name": r[1],
+                "ultima_actualizare": r[2].isoformat() if r[2] else None,
+                "row_count": r[3],
+            }
+            for r in oldest
+        ],
+        "null_sample": [
+            {"matrix_code": r[0], "name": r[1], "row_count": r[2]}
+            for r in null_sample
+        ],
+    }, ensure_ascii=False, default=str, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# 10. tempo_pipeline_status — last run + recent logs + corpus audit
+# ---------------------------------------------------------------------------
+@mcp.tool()
+def tempo_pipeline_status(recent_log_count: int = 10) -> str:
+    """Report pipeline state: last run marker, recent log files, corpus audit.
+
+    Reads `data/logs/last-pipeline-run.txt`, lists the most recently-modified
+    log files under `data/logs/`, and loads `data/logs/corpus-audit.json`
+    if present. Each recent log entry includes a count of ERROR/WARNING
+    lines so you can spot regressions without opening files.
+
+    Args:
+        recent_log_count: How many recent log files to summarise. Default 10.
+    """
+    from pathlib import Path
+    _ensure_imports()
+    logs_dir = (CORPUS_DIR.parent / "logs").resolve() if CORPUS_DIR else None
+    # CORPUS_DIR = data/corpus; logs_dir = data/logs
+    if not logs_dir or not logs_dir.exists():
+        # Fall back to repo-relative path
+        logs_dir = Path(REPO_ROOT) / "data" / "logs"
+
+    out: dict = {"logs_dir": str(logs_dir)}
+
+    marker = logs_dir / "last-pipeline-run.txt"
+    if marker.exists():
+        out["last_pipeline_run"] = marker.read_text().strip()
+    else:
+        out["last_pipeline_run"] = None
+
+    audit = logs_dir / "corpus-audit.json"
+    if audit.exists():
+        try:
+            data = json.loads(audit.read_text())
+            out["corpus_audit"] = {
+                "timestamp": data.get("timestamp"),
+                "summary": data.get("summary"),
+            }
+        except Exception as e:
+            out["corpus_audit_error"] = str(e)
+
+    # Recent log files by mtime
+    try:
+        log_files = sorted(
+            [p for p in logs_dir.glob("*.log") if p.is_file()],
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )[: int(recent_log_count)]
+    except Exception as e:
+        return json.dumps({"error": f"Failed to list logs: {e}", **out})
+
+    recent = []
+    from datetime import datetime
+    for p in log_files:
+        st = p.stat()
+        err_count = warn_count = 0
+        try:
+            # Only scan small-ish logs to avoid blowing up — cap at 2 MB
+            if st.st_size < 2_000_000:
+                text = p.read_text(errors="ignore")
+                err_count = text.count(" - ERROR - ") + text.count("ERROR:")
+                warn_count = text.count(" - WARNING - ") + text.count("WARNING:")
+        except Exception:
+            pass
+        recent.append({
+            "file": p.name,
+            "mtime": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"),
+            "size_bytes": st.st_size,
+            "errors": err_count,
+            "warnings": warn_count,
+        })
+    out["recent_logs"] = recent
+    return json.dumps(out, ensure_ascii=False, default=str, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# 11. tempo_dataset_lineage — trace a matrix across pipeline stages
+# ---------------------------------------------------------------------------
+@mcp.tool()
+def tempo_dataset_lineage(matrix_code: str) -> str:
+    """Trace a dataset through every pipeline stage.
+
+    Reports presence/mtime/size for artifacts in data/2-metas, data/4-datasets,
+    data/parquet-v2, data/corpus/parquet, and data/corpus/view-profiles, plus
+    DuckDB row presence (matrices, matrix_profiles, dataset_coverage,
+    dataset_trends, dataset_value_profiles) and split/parent relationships.
+
+    Args:
+        matrix_code: Dataset identifier (e.g. 'POP107D').
+    """
+    from pathlib import Path
+    from datetime import datetime
+    _ensure_imports()
+    conn = get_conn()
+    root = Path(REPO_ROOT)
+
+    mx = matrix_code.strip()
+    if not mx:
+        return json.dumps({"error": "matrix_code is required"})
+
+    def _stat(p: Path) -> dict | None:
+        if not p.exists():
+            return None
+        st = p.stat()
+        return {
+            "path": str(p.relative_to(root)),
+            "size_bytes": st.st_size,
+            "mtime": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"),
+        }
+
+    stages = {
+        "metadata_json": _stat(root / "data" / "2-metas" / "ro" / f"{mx}.json"),
+        "raw_csv":       _stat(root / "data" / "4-datasets" / "ro" / f"{mx}.csv"),
+        "parquet_v2":    _stat(root / "data" / "parquet-v2" / "ro" / f"{mx}.parquet"),
+        "corpus_parquet":_stat(root / "data" / "corpus" / "parquet" / f"{mx}.parquet"),
+        "view_profile":  _stat(root / "data" / "corpus" / "view-profiles" / f"{mx}.json"),
+    }
+
+    # DuckDB state
+    matrix_row = conn.execute(
+        "SELECT matrix_code, matrix_name, row_count, ultima_actualizare, "
+        "       is_split, parent_matrix_code, is_canonical "
+        "FROM matrices WHERE matrix_code = ?",
+        [mx],
+    ).fetchone()
+
+    if not matrix_row:
+        return json.dumps({
+            "matrix_code": mx,
+            "error": "Not found in matrices table",
+            "stages": stages,
+        }, ensure_ascii=False, default=str, indent=2)
+
+    db_state = {
+        "matrices": {
+            "name": matrix_row[1],
+            "row_count": matrix_row[2],
+            "ultima_actualizare": matrix_row[3].isoformat() if matrix_row[3] else None,
+            "is_split": matrix_row[4],
+            "parent_matrix_code": matrix_row[5],
+            "is_canonical": matrix_row[6],
+        },
+    }
+
+    # Presence checks for auxiliary tables
+    for table in (
+        "matrix_profiles",
+        "dataset_coverage",
+        "dataset_trends",
+        "dataset_value_profiles",
+    ):
+        try:
+            row = conn.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE matrix_code = ?", [mx]
+            ).fetchone()
+            db_state[table] = {"exists": bool(row and row[0] > 0)}
+        except Exception as e:
+            db_state[table] = {"error": str(e)}
+
+    # Dimensions count
+    try:
+        dim_count = conn.execute(
+            "SELECT COUNT(*) FROM dimensions WHERE matrix_code = ?", [mx]
+        ).fetchone()[0]
+        db_state["dimensions_count"] = dim_count
+    except Exception:
+        pass
+
+    # Splits + parent info
+    splits_info: dict = {}
+    try:
+        children = conn.execute(
+            "SELECT matrix_code FROM matrices WHERE parent_matrix_code = ? "
+            "ORDER BY matrix_code",
+            [mx],
+        ).fetchall()
+        splits_info["children"] = [r[0] for r in children]
+    except Exception:
+        pass
+    if matrix_row[5]:  # parent_matrix_code
+        splits_info["parent"] = matrix_row[5]
+
+    return json.dumps({
+        "matrix_code": mx,
+        "stages": stages,
+        "db_state": db_state,
+        "splits": splits_info,
+    }, ensure_ascii=False, default=str, indent=2)
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 def _sample_parquet(matrix_code, *, n=10, conn=None, meta=None, filters=None):

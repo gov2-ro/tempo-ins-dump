@@ -1,5 +1,58 @@
 # Activity History
 
+## 2026-04-08 — Dev MCP Step 3a: introspection bundle (5 new tools)
+
+Extended `tools/tempo-dev-mcp/server.py` with the introspection half of Step 3
+(read-only, no new dependencies). Tools 7–11:
+
+- **`tempo_routes`** — lists every FastAPI route on `app.main:app` with
+  methods/path/name/endpoint/tags. API routes sorted before static mounts. Useful
+  to verify new routers mounted (e.g. confirms `/api/ask` is present).
+- **`tempo_call_endpoint(method, path, params_json?, body_json?)`** — hits any
+  route in-process via `starlette.testclient.TestClient`. No live server needed.
+  Returns `{status_code, content_type, body, json?}`, body capped to 8000 chars.
+  `raise_server_exceptions=False` so 500s come back as a status code rather than
+  raising.
+- **`tempo_outdated(days=180, limit=50)`** — datasets sorted by `ultima_actualizare`
+  age. Returns counts (`fresh / stale / unknown_null`) plus oldest and null
+  samples. Bundles a caveat about the underlying column being unreliable
+  (already tracked under "Data Pipeline" in BACKLOG). Confirmed real numbers:
+  1959 total, 453 fresh, 1505 stale (>180d), 1 null.
+- **`tempo_pipeline_status(recent_log_count=10)`** — reads
+  `data/logs/last-pipeline-run.txt`, parses `data/logs/corpus-audit.json`, lists
+  the most recently-modified `*.log` files with mtime/size and ERROR/WARNING
+  counts. Logs ≥2 MB skipped to keep response fast.
+- **`tempo_dataset_lineage(matrix_code)`** — for one matrix, walks 5 pipeline
+  stages (`metadata_json`, `raw_csv`, `parquet_v2`, `corpus_parquet`,
+  `view_profile`) reporting presence/size/mtime, plus DuckDB row presence in
+  `matrices`/`matrix_profiles`/`dataset_coverage`/`dataset_trends`/
+  `dataset_value_profiles`, plus split children and parent.
+
+**Notes / gotchas hit:**
+- DuckDB won't bind a parameter into `INTERVAL ? DAY`. Inlined the int (already
+  validated) instead of using a placeholder.
+- `@mcp.tool()` does not wrap the function — it just registers it on the
+  FastMCP instance and returns the original. Direct Python imports can call the
+  tools verbatim, no `.fn`/`.__wrapped__` needed.
+
+**Verification:** all 5 tools smoke-tested via direct Python import (the MCP
+server itself needs a Claude Code restart to surface them as
+`mcp__tempo-dev__tempo_*`). Verified happy paths (real route list,
+`/api/categories` 200, `/api/datasets/POP107D` 200, real outdated counts,
+real lineage for `POP107D` and split-child `ACC102B_judete_numar_persoane`)
+plus error path (`tempo_dataset_lineage("NONEXISTENT")` → clean error).
+
+**Files modified:**
+- `tools/tempo-dev-mcp/server.py` — +330 lines (5 new `@mcp.tool()` functions).
+- `tools/tempo-dev-mcp/README.md` — added sections 7–11, bumped tool count to 11.
+- `CLAUDE.md` — extended Dev MCP table with the 5 new tools.
+- `docs/BACKLOG.md` — checked off the introspection rows under Step 3.
+
+**Deferred (still under Step 3):** chart_selector / agent eval harness, Playwright
+frontend probing, gated mutation tools.
+
+---
+
 ## 2026-04-07 — LLM Agent Step 2: v1 user-facing NL→Data agent
 
 Built `POST /api/ask` tool-calling agent on top of the existing service layer.

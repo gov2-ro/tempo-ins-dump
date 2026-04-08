@@ -64,7 +64,7 @@ const UI = {
         aboutTitle: 'Despre INS+',
         aboutContent: `
    
-            <p><b>INS+</b> (încă n-am găsit altă rimă) este un explorator de date statistice oficiale ale României, construit pe baza datelor publice disponibile prin <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank" rel="noopener">INS TEMPO Online</a> — platforma Institutului Național de Statistică.</p>
+            <p><b>INS+</b> (n-am găsit încă altă rimă) este un explorator de date statistice oficiale ale României, construit pe baza datelor publice disponibile prin <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank" rel="noopener">INS TEMPO Online</a> — platforma Institutului Național de Statistică.</p>
             <p><b>Disclaimer</b>: proiectul este la nivelul alfa / prototip, încă n-a trecut printr-un control riguros al calității datelor. Cu alte cuvinte, mai avem câte una alta de făcut până la lansare.</p>
             <p>Aplauze, sugestii sau dojene: <a href="mailto:cancelarie@gov2.ro">cancelarie@gov2.ro</a> sau, și mai bine: github &rarr; <a href="https://github.com/gov2-ro/tempo-ins-dump/issues/new" target="_blank" rel="noopener">gov2-ro/tempo-ins-dump</a>.</p>
             <img src="img/tempo-ins.png" alt="Tempo online" style="max-width:100%; border-radius:8px; margin:16px 0;"><div style="font-size: 4rem; text-align: center;">🤷🏻‍♀️ 🏋🏻‍♀️ 🧚‍♂️ ✨ </div>
