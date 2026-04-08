@@ -1,5 +1,67 @@
 # Activity History
 
+## 2026-04-08 — Dev MCP: agent search eval + view-profile audit (Step 3b part 2)
+
+Shipped the remaining two eval tools for Step 3b, plus a critical FTS bug
+fix uncovered by the first one.
+
+**New tools:**
+
+- `tempo_eval_agent` — search-quality regression detection. Runs
+  `search_datasets()` for every question in `data/eval/agent_questions.yaml`
+  (15 seed questions covering population, unemployment, inflation, GDP,
+  etc.) and diffs the top-K hits against `data/eval/agent_search_baseline.json`.
+  Same baseline-diff pattern as `tempo_eval_chart_selector`.
+- `tempo_check_view_profiles` — diagnostic audit of `corpus/view-profiles/`.
+  Cross-checks against the parquet corpus and DB `matrix_profiles` table to
+  surface missing VPs, orphan VPs, schema version drift, archetype
+  mismatches, parse errors, and top warning categories.
+
+**New files:**
+
+- `app/services/agent_eval.py` — shared `run_search_eval(questions, top_k)`
+  + `diff_against_baseline()` + lightweight YAML loader (falls back to a
+  minimal parser if PyYAML isn't installed).
+- `scripts/build_agent_search_baseline.py` — baseline generator, same
+  compact one-line-per-question format used for `chart_selector_baseline`.
+- `data/eval/agent_questions.yaml` — 15 seed questions.
+- `data/eval/agent_search_baseline.json` — committed baseline (2.6 KB).
+
+**Search bugs found and fixed while calibrating the eval:**
+
+1. **FTS sort direction was inverted.** `_fts_search()` in
+   `dataset_search.py` had `ORDER BY score` (DuckDB default ASC) with
+   `LIMIT 200`. BM25 returns *higher* scores for *more* relevant docs, so
+   the candidate pool contained the 200 *worst* matches. POP107D/POP108D
+   scored 4.93 for `"populatie pe judete"` but were never seen — the top
+   200 were scores 0.066-0.086. Fixed to `ORDER BY score DESC`. This is a
+   serious production bug: search quality jumps immediately on every query.
+2. **Outer `ORDER BY` was non-deterministic.** Many canonical datasets
+   share `ultima_actualizare` values (or both are NULL), and there was no
+   tie-breaker. Result: same query returned different orderings across
+   runs, and the baseline/eval diff was perpetually flaky. Added
+   `m.matrix_code ASC` as the secondary sort on every branch of
+   `sort_map`. First eval run now reports `ok=15, drift=0` stably across
+   repeated runs.
+
+**View-profile audit findings (initial run):**
+
+- 197 parquets in `corpus/parquet/` lack view-profile JSONs — the generator
+  needs a re-run to catch up.
+- 675 orphan VPs — files for datasets no longer in the corpus.
+- 49 archetype mismatches on `PNS101D_*` splits (VP says `geo_time`, DB
+  says `geo_only`) — schema drift between the VP generator and the
+  classifier.
+- 933 VPs carry warnings — top categories: `multi_unit` (490),
+  `very_sparse` (230), `sparse_data` (205), `high_cardinality` (78),
+  `short_series` (40).
+
+All follow-ups logged in `docs/BACKLOG.md` under dedicated "Search quality"
+and "View profiles" sections.
+
+**Step 3 status:** Eval sub-steps complete. Remaining: Playwright frontend
+probing and gated mutation tools.
+
 ## 2026-04-08 — Dev MCP: chart_selector eval harness (Step 3b)
 
 Added regression-detection for the chart-selection engine. Every dataset is

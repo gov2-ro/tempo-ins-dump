@@ -76,7 +76,17 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
 - [x] Pipeline state introspection: `tempo_pipeline_status`, `tempo_dataset_lineage`, `tempo_outdated`.
 - [x] Code introspection: `tempo_routes`, `tempo_call_endpoint` (FastAPI TestClient).
 - [x] Eval: `tempo_eval_chart_selector` (diff vs baseline). Shared `app/services/chart_selector_eval.py` + committed baseline `data/eval/chart_selector_baseline.json` (1959 datasets). Rebuild via `python scripts/build_chart_selector_baseline.py`. Fixed a latent non-determinism in `_load_inputs` dim_type majority vote: added `MIN(option_offset)` tie-breaker to match runtime `dataset_meta.py` "first-inserted wins" behavior (ACC102C UNIT_MEASURE was flipping between `unit`/`indicator` on ties).
-- [ ] Eval: `tempo_eval_agent` (YAML question set), `tempo_check_view_profiles`.
+- [x] Eval: `tempo_eval_agent` (search-quality diff vs baseline). Shared `app/services/agent_eval.py` + committed baseline `data/eval/agent_search_baseline.json` + seed `data/eval/agent_questions.yaml` (15 questions). Rebuild via `python scripts/build_agent_search_baseline.py`. **Uncovered two search bugs in the process:** (1) `_fts_search` used `ORDER BY score` (ASC) with `LIMIT 200`, so the FTS candidate pool contained the 200 *least* relevant datasets — POP107D was invisible to `"populatie pe judete"`. Fixed to `ORDER BY score DESC`. (2) Outer `ORDER BY ultima_actualizare DESC NULLS LAST` had no tie-breaker; fixed with secondary `m.matrix_code ASC`.
+- [x] Eval: `tempo_check_view_profiles` — audits `corpus/view-profiles/` against parquet corpus + DB. Surfaced 197 missing VPs, 675 orphans, 49 archetype mismatches (mostly `geo_time`/`geo_only` schema drift on PNS101D splits), and 933 profiles carrying non-empty `warnings[]`.
+
+### Search quality — follow-ups surfaced by `tempo_eval_agent`
+- [ ] **Preserve FTS relevance ordering through the outer query.** `search_datasets()` currently uses FTS only as a candidate filter (`WHERE matrix_code IN (…)`) then re-sorts by `ultima_actualizare DESC`. This throws away BM25 relevance — so "populatie pe judete" returns LOC108B at top instead of POP107D/POP108D which are actually ranked #1-#2 by FTS. Fix: when `q` is set and FTS returns codes, propagate the FTS position into a `CASE`/`ARRAY_POSITION` expression and use that as the primary sort. Separate commit so the baseline-diff clearly shows the improvement.
+- [ ] Search is still poor for several questions in `agent_questions.yaml` — "exporturi pe tari" returns TUR…, "nasteri si decese" returns TQG1516/TQK1522 etc. These are likely downstream of the FTS-ordering issue above but may also need FTS corpus tweaks (add `definitie` stemming? Romanian stopwords?).
+
+### View profiles — follow-ups surfaced by `tempo_check_view_profiles`
+- [ ] 197 parquets without view profiles — regenerate VPs via `python generate_view_profiles.py` and add a pipeline-tail step that fails if the audit reports missing VPs.
+- [ ] 675 orphan VPs — cleanup pass to delete VPs for datasets no longer in `data/corpus/parquet/`.
+- [ ] 49 archetype mismatches on `PNS101D_*` splits (VP says `geo_time`, DB says `geo_only`). Investigate whether the VP generator or the classifier is authoritative.
 - [ ] Frontend probing (Playwright): `tempo_render_dataset`, `tempo_console_errors`, `tempo_validate_echarts_spec`.
 - [ ] Gated mutations (`TEMPO_DEV_MUTATIONS=true`): `tempo_run_pipeline_script`, `tempo_regen_view_profile`, `tempo_clear_search_index`.
 - [ ] Eval baselines: `data/eval/chart_selector_baseline.json`, `data/eval/agent_questions.yaml`.

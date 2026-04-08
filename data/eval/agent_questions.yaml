@@ -1,0 +1,67 @@
+# Seed questions for tempo_eval_agent.
+#
+# Each entry exercises the catalog search used by the NL→Data agent via
+# `app/services/dataset_search.py::search_datasets()`. The eval harness
+# records the top-K matrix_codes for every question and diffs against a
+# committed baseline (data/eval/agent_search_baseline.json) to detect
+# regressions after any change to FTS indexing, search ranking, or the
+# shared service layer.
+#
+# This is NOT a golden-answer set — the baseline reflects what the search
+# returns TODAY, whether or not that ranking is ideal. A human still has
+# to review `git diff data/eval/agent_search_baseline.json` after each
+# intentional change to decide whether a drift is an improvement or a
+# regression.
+#
+# Fields:
+#   question: free-text query (Romanian or English)
+#   top_k:    how many results to capture (default 10)
+#   notes:    optional human rationale, ignored by the eval
+#
+# Keep this file small and stable — add questions only when a new area of
+# the corpus needs coverage. ~15-25 questions is the sweet spot.
+
+- question: "populatie pe judete"
+  notes: "geo+time population counts, Romanian"
+
+- question: "population by county"
+  notes: "same intent in English — bilingual search sanity check"
+
+- question: "rata somajului"
+  notes: "unemployment rate, classic demographic/time_series"
+
+- question: "unemployment rate"
+  notes: "EN synonym"
+
+- question: "preturi de consum inflatie"
+  notes: "CPI / inflation"
+
+- question: "salariu mediu net"
+  notes: "wage dataset"
+
+- question: "PIB produsul intern brut"
+  notes: "GDP"
+
+- question: "nasteri si decese"
+  notes: "births and deaths (natural movement)"
+
+- question: "exporturi pe tari"
+  notes: "exports by country"
+
+- question: "accidente de munca"
+  notes: "workplace accidents"
+
+- question: "turisti sositi in unitati de cazare"
+  notes: "tourist arrivals"
+
+- question: "productie agricola vegetala"
+  notes: "agricultural crop production"
+
+- question: "cheltuieli educatie buget"
+  notes: "education spending"
+
+- question: "locuinte construite"
+  notes: "housing construction"
+
+- question: "energie electrica"
+  notes: "electricity production/consumption"

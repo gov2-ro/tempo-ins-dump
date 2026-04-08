@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "top_k": 10,
+  "total_questions": 15,
+  "questions": {
+    "PIB produsul intern brut": {"top":["EXP102M","IND101K","IND101L","IND101M","IND105F","EXP102I","IND104N","IND104O","IND104P","EXP102J"],"total_hits":200},
+    "accidente de munca": {"top":["AMG130M","AMG130N","AMG130O","AMG157G","AMG157H","AMG157I","PSC108M","FIN103B","FIN102C","SOM101E"],"total_hits":200},
+    "cheltuieli educatie buget": {"top":["FIN103B","TFE4101","TFF4102","FIN101B","FIN102C","INV102C","TDZ0421","TEC0431","TEF0441","TEX0491"],"total_hits":200},
+    "energie electrica": {"top":["EXP101M","EXP102M","LOC104D","IND105F","IPC102C","IPC102D","IPC102E","EXP101I","EXP102I","IND104N"],"total_hits":200},
+    "exporturi pe tari": {"top":["TUR105F","TUR106C","EXP102M","IND102K","IND102L","IND102M","CNS105L","CNS105M","CNS105N","PNS102D_judete_anual"],"total_hits":200},
+    "locuinte construite": {"top":["LOC108B","LOC101B_judet","LOC101B_localitate","LOC104B_judet","LOC104B_localitate","LOC104D","TFE4101","FIN101B","FIN102C","CON107B"],"total_hits":61},
+    "nasteri si decese": {"top":["TQG1516","TQK1522","IND101K","IND101L","IND101M","PSC1071","PSC1072","PSC1073","PSC1074","PSC1075"],"total_hits":200},
+    "populatie pe judete": {"top":["LOC108B","TUR105F","TUR106C","IND102K","IND102L","IND102M","PSC1071","PSC1072","PSC1073","PSC1074"],"total_hits":200},
+    "population by county": {"top":["AMG130M","AMG130N","AMG130O","PSC1071","PSC1072","PSC1073","PSC1074","PSC1075","PSC1076","ECC501A"],"total_hits":200},
+    "preturi de consum inflatie": {"top":["COM103P","COM103R","COM103S","COM103T","COM103U","COM103V","IND102K","IND102L","IND102M","CNS105L"],"total_hits":200},
+    "productie agricola vegetala": {"top":["PSC108M","PSC108N","PSC108O","PSC108P","PSC108R","PSC108S","IPC102A","IPC102B","IPC102C","IPC102D"],"total_hits":200},
+    "rata somajului": {"top":["AMG157G","AMG157H","AMG157I","TIT0825","TDZ0421","TLS1112","TAK0124","TGV0651","SAR102A","SAR102B"],"total_hits":126},
+    "salariu mediu net": {"top":["TMI1163","TUR106C","PNS101D_judete_anual","PNS101D_judete_trimestrial","PNS101D_macroregiuni_anual","PNS101D_macroregiuni_trimestrial","PNS101D_regiuni_anual","PNS101D_regiuni_trimestrial","PNS101F_anual_mii_persoane","PNS101F_anual_numar_persoane"],"total_hits":200},
+    "turisti sositi in unitati de cazare": {"top":["TUR104G","TUR105F","TUR106C","FIN103B","TFE4101","FIN101B","FIN102C","IPC102C","IPC102D","IPC102E"],"total_hits":200},
+    "unemployment rate": {"top":["AMG157G","AMG157H","AMG157I","TIT0825","TDZ0421","TLS1112","TAK0124","TGV0651","SAR102A","SAR102B"],"total_hits":130}
+  }
+}

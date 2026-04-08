@@ -404,6 +404,80 @@ The baseline uses a custom compact format (one dataset per line) so single-row d
 
 ---
 
+### 13. `tempo_check_view_profiles()`
+
+Diagnostic audit of `data/corpus/view-profiles/`. No parameters, no baseline — just a live cross-check against the parquet corpus and the DB `matrix_profiles` table.
+
+**Surfaces:**
+
+| Key | Meaning |
+|---|---|
+| `missing_vps` | Parquet files with no corresponding VP JSON — run `generate_view_profiles.py` |
+| `orphan_vps` | VP JSONs whose parquet no longer exists — candidates for cleanup |
+| `version_drift` | VPs whose `meta.profile_version` < the generator's current `PROFILE_VERSION` |
+| `archetype_mismatches` | VPs whose `archetype` disagrees with `matrix_profiles.archetype` |
+| `profiles_with_warnings` | Count of VPs carrying a non-empty `warnings[]` (e.g. `multi_unit`, `sparse_data`) |
+| `top_warnings` | Top 10 warning categories by count, with 5 sample matrix_codes each |
+| `parse_errors` | VPs that failed JSON parse |
+| `stale_files` | Files with `_stale` in their name |
+
+**Returns:**
+
+```json
+{
+  "summary": {
+    "parquet_files": 3706,
+    "view_profiles": 4184,
+    "stale_files": 1,
+    "missing_vps": 197,
+    "orphan_vps": 675,
+    "version_drift": 0,
+    "archetype_mismatches": 49,
+    "profiles_with_warnings": 933,
+    "parse_errors": 0,
+    "current_profile_version": 1
+  },
+  "missing_vps": [...cap 30...],
+  "orphan_vps": [...cap 30...],
+  "archetype_mismatches": [{"matrix_code", "vp_archetype", "db_archetype"}, ...],
+  "top_warnings": [{"warning", "count", "sample_matrix_codes"}, ...]
+}
+```
+
+**Example use case:** "Why is dataset X not rendering?" — run the audit, check `missing_vps`. "Why does dataset Y show the wrong chart?" — check `archetype_mismatches`.
+
+---
+
+### 14. `tempo_eval_agent()`
+
+Search-quality regression detection for the NL→Data agent's retrieval layer. Runs `search_datasets()` for every question in `data/eval/agent_questions.yaml` and diffs the top-K hits against `data/eval/agent_search_baseline.json`.
+
+Uses the same baseline-diff pattern as `tempo_eval_chart_selector`, but pins the *search* layer rather than the chart scorer. Because full agent runs need an API key and are non-deterministic, this harness exercises retrieval only — which is the biggest lever on agent correctness anyway.
+
+**Returns:** `{summary, top_set_changes, order_changes, total_hit_drifts, missing, added, baseline_path, questions_path, baseline_version}`. Drift categories:
+
+| Category | Trigger |
+|---|---|
+| `top_set_changes` | Top-K set of `matrix_code`s differs (order-insensitive). Always full list |
+| `order_changes` | Same set but ordering shifted. Cap 30 |
+| `total_hit_drifts` | `total_hits` moved by >20% AND delta > 5. Cap 20 (signals FTS scope shifts) |
+| `missing` / `added` | Questions gained/lost between runs |
+
+**Refresh the baseline** after an intentional change to FTS, ranking, or the corpus:
+
+```bash
+python scripts/build_agent_search_baseline.py
+# then review:  git diff data/eval/agent_search_baseline.json
+```
+
+The seed question set (`agent_questions.yaml`) covers 15 common query intents (population, unemployment, inflation, GDP, exports, tourism, agriculture, etc.). Add new questions sparingly — the baseline is most useful when small and stable.
+
+**Important:** This is *regression detection*, not a golden-answer test. The baseline captures whatever the search returns today — a human still has to review the diff to decide if a drift is an improvement or a regression.
+
+**Example use case:** "I rebuilt the FTS index — did anything get worse?" — run `tempo_eval_agent()`, inspect `top_set_changes`, then `git diff data/eval/agent_search_baseline.json` after regenerating the baseline.
+
+---
+
 ## Search
 
 Search uses a two-tier strategy:
@@ -429,20 +503,24 @@ The sidecar is ~14 MB, built in ~2 seconds, read-only at runtime. Rebuild after 
 
 ```
 tools/tempo-dev-mcp/
-  server.py          — MCP server (12 tools), uses official `mcp` Python SDK (FastMCP)
+  server.py          — MCP server (14 tools), uses official `mcp` Python SDK (FastMCP)
   README.md          — this file
 
 app/services/        — shared service layer (used by MCP, FastAPI routes, agent)
   dataset_search.py       — search_datasets() with FTS-first strategy
   dataset_meta.py         — get_dataset_meta()
   chart_selector.py       — build_signature(), select_charts(), assign_roles()
-  chart_selector_eval.py  — evaluate_all(), diff_against_baseline()
+  chart_selector_eval.py  — evaluate_all() + diff_against_baseline() for charts
+  agent_eval.py           — run_search_eval() + diff_against_baseline() for search
   query_builder.py        — build_data_query()
 
 scripts/
   build-search-index.py              — builds FTS sidecar (data/corpus/search.duckdb)
-  build_chart_selector_baseline.py   — regenerates data/eval/chart_selector_baseline.json
+  build_chart_selector_baseline.py   — regenerates chart_selector baseline
+  build_agent_search_baseline.py     — regenerates agent search baseline
 
 data/eval/
   chart_selector_baseline.json       — committed baseline (1959 datasets, ~290 KB)
+  agent_questions.yaml               — 15 seed questions for agent search eval
+  agent_search_baseline.json         — committed baseline (top-10 per question)
 ```

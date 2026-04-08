@@ -40,7 +40,12 @@ def _get_search_conn():
 
 
 def _fts_search(query: str, max_results: int = 200) -> list[str] | None:
-    """Return ranked matrix_codes from the FTS sidecar, or None if unavailable."""
+    """Return relevance-ranked matrix_codes from the FTS sidecar, or None if unavailable.
+
+    BM25 scores are higher for more relevant docs, so we sort DESC. The
+    secondary sort on matrix_code breaks score ties deterministically —
+    without it, the same query returns different orderings across runs.
+    """
     sconn = _get_search_conn()
     if sconn is None:
         return None
@@ -50,7 +55,7 @@ def _fts_search(query: str, max_results: int = 200) -> list[str] | None:
                    fts_main_search_docs.match_bm25(sd.matrix_code, ?) AS score
             FROM search_docs sd
             WHERE score IS NOT NULL
-            ORDER BY score
+            ORDER BY score DESC, sd.matrix_code ASC
             LIMIT ?
         """, [query, max_results]).fetchall()
         return [r[0] for r in rows] if rows else None
@@ -125,10 +130,14 @@ def search_datasets(
     if has_geo is not None:
         where.append(f"p.has_geo = {has_geo}")
 
+    # Secondary sort on matrix_code ensures deterministic ordering when the
+    # primary sort key ties (many rows share the same ultima_actualizare,
+    # especially NULL). Without this, identical queries produce different
+    # result orders across runs, breaking regression evals downstream.
     sort_map = {
-        'updated': 'm.ultima_actualizare DESC NULLS LAST',
-        'name': 'm.matrix_name',
-        'rows': 'm.row_count DESC NULLS LAST',
+        'updated': 'm.ultima_actualizare DESC NULLS LAST, m.matrix_code ASC',
+        'name': 'm.matrix_name, m.matrix_code ASC',
+        'rows': 'm.row_count DESC NULLS LAST, m.matrix_code ASC',
     }
     order_by = sort_map.get(sort, sort_map['updated'])
 

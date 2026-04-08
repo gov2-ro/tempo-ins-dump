@@ -63,6 +63,7 @@ app/
     chart_config.py         — archetype → chart config mapping
     chart_selector.py       — chart type selection engine
     chart_selector_eval.py  — bulk re-score + diff-against-baseline (MCP eval harness)
+    agent_eval.py           — search-quality regression harness (MCP eval harness)
     query_builder.py        — DuckDB query construction
   static/
     js/
@@ -93,9 +94,11 @@ Claude Code introspection tools for this repo. Registered in `.mcp.json` (repo-l
 | `tempo_outdated` | `days?: int(180), limit?: int(50)` | Stale/null `ultima_actualizare` lists with reliability caveat |
 | `tempo_pipeline_status` | `recent_log_count?: int(10)` | `last-pipeline-run.txt` + corpus audit summary + recent logs with err/warn counts |
 | `tempo_dataset_lineage` | `matrix_code: str` | Per-stage artifact presence (5 stages) + DuckDB row presence + splits/parent |
+| `tempo_check_view_profiles` | — | Audits `corpus/view-profiles/` vs parquets + DB: `{summary, missing_vps, orphan_vps, version_drift, archetype_mismatches, top_warnings, …}` |
 | `tempo_eval_chart_selector` | `score_threshold?: float(0.05)` | Diffs `chart_selector` vs `data/eval/chart_selector_baseline.json`: `{summary, primary_changes, top_set_changes, confidence_changes, score_drifts, missing, added}` |
+| `tempo_eval_agent` | — | Diffs `search_datasets` quality vs `data/eval/agent_search_baseline.json` for questions in `agent_questions.yaml`: `{summary, top_set_changes, order_changes, total_hit_drifts, missing, added}` |
 
-All tools import from the shared service layer: `app/services/dataset_search.py`, `app/services/dataset_meta.py`, and `app/services/chart_selector_eval.py`.
+All tools import from the shared service layer: `app/services/dataset_search.py`, `app/services/dataset_meta.py`, `app/services/chart_selector_eval.py`, and `app/services/agent_eval.py`.
 
 ## Development Commands
 

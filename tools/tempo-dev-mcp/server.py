@@ -16,7 +16,9 @@ Tools:
     tempo_outdated            — datasets by ultima_actualizare staleness
     tempo_pipeline_status     — last run + recent logs + corpus audit
     tempo_dataset_lineage     — trace a matrix across pipeline stages
+    tempo_check_view_profiles — audit view-profile JSONs vs corpus/DB
     tempo_eval_chart_selector — diff chart_selector vs committed baseline
+    tempo_eval_agent          — diff search quality vs committed baseline
 """
 import json
 import logging
@@ -778,7 +780,137 @@ def tempo_dataset_lineage(matrix_code: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 12. tempo_eval_chart_selector — diff chart selector vs committed baseline
+# 12. tempo_check_view_profiles — audit view-profile JSONs
+# ---------------------------------------------------------------------------
+@mcp.tool()
+def tempo_check_view_profiles() -> str:
+    """Audit `data/corpus/view-profiles/` for inconsistencies.
+
+    Cross-checks the view-profile JSON files against the parquet corpus and
+    the DB `matrix_profiles` table. Surfaces:
+
+      - missing_vps        — parquet files with no corresponding VP JSON
+      - orphan_vps         — VP JSONs with no corresponding parquet
+      - version_drift      — VPs whose profile_version < current version
+      - archetype_mismatches — VPs whose `archetype` differs from the
+        canonical `matrix_profiles.archetype` (only checked for codes
+        that appear in the matrices table)
+      - profiles_with_warnings — count of VPs carrying non-empty `warnings[]`
+      - stale_files         — files with `_stale` in the name
+
+    Output is purely diagnostic — no baseline to diff against. Use before
+    running the generator after a schema change, or to investigate "why is
+    dataset X missing from the UI?".
+    """
+    from pathlib import Path
+    _ensure_imports()
+
+    root = Path(REPO_ROOT)
+    vp_dir = root / "data" / "corpus" / "view-profiles"
+    parquet_dir = root / "data" / "corpus" / "parquet"
+
+    if not vp_dir.exists():
+        return json.dumps({"error": f"View profiles dir not found: {vp_dir.relative_to(root)}"})
+    if not parquet_dir.exists():
+        return json.dumps({"error": f"Parquet dir not found: {parquet_dir.relative_to(root)}"})
+
+    # Resolve the current profile_version from the generator module (best-effort)
+    current_version: int | None = None
+    try:
+        import importlib.util
+        gen_path = root / "generate_view_profiles.py"
+        if gen_path.exists():
+            spec = importlib.util.spec_from_file_location("_gen", gen_path)
+            gen = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(gen)  # type: ignore[union-attr]
+            current_version = getattr(gen, "PROFILE_VERSION", None)
+    except Exception as e:
+        log.warning("Could not load PROFILE_VERSION from generate_view_profiles.py: %s", e)
+
+    # Skip leading-underscore files (e.g. `_index.json`), they're meta files
+    # emitted by the generator, not per-dataset profiles.
+    vp_files = sorted(p for p in vp_dir.glob("*.json") if not p.name.startswith("_"))
+    stale_files = sorted(p.name for p in vp_dir.glob("*_stale*"))
+    parquet_files = {p.stem for p in parquet_dir.glob("*.parquet")}
+    vp_codes = {p.stem for p in vp_files}
+
+    missing_vps = sorted(parquet_files - vp_codes)
+    orphan_vps = sorted(vp_codes - parquet_files)
+
+    conn = get_conn()
+    db_archetypes: dict[str, str | None] = dict(conn.execute(
+        "SELECT matrix_code, archetype FROM matrix_profiles"
+    ).fetchall())
+
+    version_drift: list[dict] = []
+    archetype_mismatches: list[dict] = []
+    profiles_with_warnings = 0
+    warning_buckets: dict[str, list[str]] = {}
+    parse_errors: list[dict] = []
+
+    for p in vp_files:
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception as e:
+            parse_errors.append({"matrix_code": p.stem, "error": str(e)})
+            continue
+
+        meta = data.get("meta") or {}
+        vp_version = meta.get("profile_version")
+        if current_version is not None and vp_version != current_version:
+            version_drift.append({
+                "matrix_code": p.stem,
+                "vp_version": vp_version,
+                "current_version": current_version,
+            })
+
+        mc = data.get("matrix_code") or p.stem
+        db_arch = db_archetypes.get(mc)
+        vp_arch = data.get("archetype")
+        if db_arch is not None and vp_arch != db_arch:
+            archetype_mismatches.append({
+                "matrix_code": mc,
+                "vp_archetype": vp_arch,
+                "db_archetype": db_arch,
+            })
+
+        warnings = data.get("warnings") or []
+        if warnings:
+            profiles_with_warnings += 1
+            for w in warnings:
+                key = w if isinstance(w, str) else (w.get("type") or w.get("code") or "unknown")
+                warning_buckets.setdefault(key, []).append(mc)
+
+    top_warnings = [
+        {"warning": k, "count": len(v), "sample_matrix_codes": sorted(v)[:5]}
+        for k, v in sorted(warning_buckets.items(), key=lambda kv: len(kv[1]), reverse=True)
+    ][:10]
+
+    return json.dumps({
+        "summary": {
+            "parquet_files": len(parquet_files),
+            "view_profiles": len(vp_files),
+            "stale_files": len(stale_files),
+            "missing_vps": len(missing_vps),
+            "orphan_vps": len(orphan_vps),
+            "version_drift": len(version_drift),
+            "archetype_mismatches": len(archetype_mismatches),
+            "profiles_with_warnings": profiles_with_warnings,
+            "parse_errors": len(parse_errors),
+            "current_profile_version": current_version,
+        },
+        "missing_vps": missing_vps[:30],
+        "orphan_vps": orphan_vps[:30],
+        "version_drift": version_drift[:30],
+        "archetype_mismatches": archetype_mismatches[:30],
+        "top_warnings": top_warnings,
+        "parse_errors": parse_errors[:20],
+        "stale_files": stale_files[:20],
+    }, ensure_ascii=False, default=str, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# 13. tempo_eval_chart_selector — diff chart selector vs committed baseline
 # ---------------------------------------------------------------------------
 @mcp.tool()
 def tempo_eval_chart_selector(score_threshold: float = 0.05) -> str:
@@ -831,6 +963,80 @@ def tempo_eval_chart_selector(score_threshold: float = 0.05) -> str:
     report = diff_against_baseline(baseline, current, score_threshold=float(score_threshold))
     report["baseline_path"] = str(baseline_path.relative_to(Path(REPO_ROOT)))
     report["baseline_version"] = baseline_version
+    return json.dumps(report, ensure_ascii=False, default=str, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# 14. tempo_eval_agent — regression test for the agent's retrieval layer
+# ---------------------------------------------------------------------------
+@mcp.tool()
+def tempo_eval_agent() -> str:
+    """Re-run the search-quality eval and diff against the committed baseline.
+
+    Runs `search_datasets()` for every question in
+    `data/eval/agent_questions.yaml` and compares the top-K hits to the
+    baseline at `data/eval/agent_search_baseline.json`. Use after any
+    change that could affect retrieval: FTS index rebuild, ranking
+    tweaks, corpus updates, new splits.
+
+    Drift categories:
+      - top_set_changes   — top-K set of matrix_codes differs (always full)
+      - order_changes     — same set but ordering shifted (cap 30)
+      - total_hit_drifts  — `total_hits` changed by >20% (cap 20, signals
+        FTS scope shifts)
+      - missing / added   — questions gained/lost between runs
+
+    To refresh the baseline after an intentional change:
+
+        python scripts/build_agent_search_baseline.py
+
+    This is search-quality regression detection, NOT a golden-answer test.
+    The baseline captures whatever the search returns today — a human
+    still has to review the diff to decide if a drift is an improvement
+    or a regression.
+    """
+    from pathlib import Path
+    _ensure_imports()
+    from app.services.agent_eval import (
+        load_questions,
+        run_search_eval,
+        diff_against_baseline,
+    )
+
+    root = Path(REPO_ROOT)
+    questions_path = root / "data" / "eval" / "agent_questions.yaml"
+    baseline_path = root / "data" / "eval" / "agent_search_baseline.json"
+
+    if not questions_path.exists():
+        return json.dumps({
+            "error": f"Questions file not found at {questions_path.relative_to(root)}",
+        })
+    if not baseline_path.exists():
+        return json.dumps({
+            "error": f"Baseline not found at {baseline_path.relative_to(root)}. "
+                     f"Run: python scripts/build_agent_search_baseline.py",
+        })
+
+    try:
+        baseline_doc = json.loads(baseline_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return json.dumps({"error": f"Failed to parse baseline: {e}"})
+
+    try:
+        questions = load_questions(questions_path)
+    except Exception as e:
+        return json.dumps({"error": f"Failed to load questions: {e}"})
+
+    try:
+        current = run_search_eval(questions, top_k=int(baseline_doc.get("top_k") or 10))
+    except Exception as e:
+        log.exception("run_search_eval failed")
+        return json.dumps({"error": f"run_search_eval failed: {e}"})
+
+    report = diff_against_baseline(baseline_doc, current)
+    report["baseline_path"] = str(baseline_path.relative_to(root))
+    report["questions_path"] = str(questions_path.relative_to(root))
+    report["baseline_version"] = baseline_doc.get("version")
     return json.dumps(report, ensure_ascii=False, default=str, indent=2)
 
 
