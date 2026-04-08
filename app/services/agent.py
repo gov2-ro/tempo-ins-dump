@@ -134,8 +134,12 @@ Respond in the same language the user writes in (Romanian or English). When sear
 - comerț exterior → foreign trade
 - producție industrială → industrial production
 
-## "Total" rows
-Some datasets include aggregated "Total" rows. If a query returns 0 rows and you used a "Total" filter value, retry the query without that filter.
+## "Total" rows and double-counting
+Many datasets publish marginal "Total" rows alongside breakdown rows (e.g. SEX has Total + Masculin + Feminin). Aggregate queries can double-count by summing both. The query handler auto-locks unfiltered dims to their Total value when grouping, and reports it via `warnings`. Read the warnings on every result:
+- `Auto-applied Total filters: …` — already corrected, trust the numbers.
+- `POSSIBLE DOUBLE-COUNTING: …` — the dataset uses non-cross-product marginals; the result is unreliable. Re-query using the suggested explicit Total filter (always pick exactly ONE dim and lock it).
+- `Retried query after removing 'Total' filter values` — your filter was empty, the handler dropped it.
+If a query returns 0 rows and you used a "Total" filter, retry without that filter.
 
 ## Response format
 End every answer with:
@@ -290,10 +294,48 @@ def _handle_query_dataset_data(inp: dict, conn) -> dict:
         sql = build_data_query(matrix_code, dimensions, f, limit + 1, group_by=group_by, agg_func=agg_func)
         return conn.execute(sql).fetchall()
 
-    try:
-        rows = _execute_query(filters)
-    except Exception as e:
-        return {"error": f"Query failed: {e}"}
+    # ----------------------------------------------------------------------
+    # Anti double-counting: when aggregating, dims that are neither grouped
+    # nor explicitly filtered will be SUM'd over. If such a dim publishes a
+    # marginal `Total` row alongside its breakdown rows, the SUM adds the
+    # aggregate + the components and double-counts. Detect those dims, lock
+    # them to their Total value, and warn. If locking returns 0 rows (the
+    # dataset uses non-cross-product marginals — see AMG1010), fall back to
+    # the unfiltered query but emit a loud warning so the LLM can re-query.
+    # ----------------------------------------------------------------------
+    rows = None
+    if group_by:
+        total_locks = _detect_total_locks(matrix_code, dimensions, filters, group_by, conn)
+        if total_locks:
+            locked_filters = {**filters, **total_locks}
+            try:
+                test_rows = _execute_query(locked_filters)
+            except Exception:
+                test_rows = None
+            if test_rows:
+                filters = locked_filters
+                rows = test_rows
+                warnings.append(
+                    "Auto-applied Total filters to prevent double-counting: "
+                    + ", ".join(f"{c}={vs[0]}" for c, vs in total_locks.items())
+                )
+            else:
+                first_dim = next(iter(total_locks))
+                first_val = total_locks[first_dim][0]
+                warnings.append(
+                    "POSSIBLE DOUBLE-COUNTING: dim(s) "
+                    + ", ".join(total_locks.keys())
+                    + " have 'Total' options. Locking them all returned 0 rows, so the "
+                    + "dataset publishes non-cross-product marginal totals. The current "
+                    + "result may sum aggregate + breakdown rows. Re-query with a single "
+                    + f"explicit Total filter, e.g. filters={{'{first_dim}': ['{first_val}']}}."
+                )
+
+    if rows is None:
+        try:
+            rows = _execute_query(filters)
+        except Exception as e:
+            return {"error": f"Query failed: {e}"}
 
     # Auto-retry: strip "Total"/"TOTAL" filter values if 0 rows
     if len(rows) == 0 and filters:
@@ -334,6 +376,54 @@ def _handle_query_dataset_data(inp: dict, conn) -> dict:
         "truncated": truncated,
         "warnings": warnings,
     }
+
+
+def _detect_total_locks(
+    matrix_code: str,
+    dimensions: list[dict],
+    filters: dict,
+    group_by: list[str],
+    conn,
+) -> dict[str, list[str]]:
+    """Find dims eligible for auto-Total locking to prevent double-counting.
+
+    A dim is eligible when, for the given query shape, it is neither in
+    `group_by` nor in `filters`, and the parquet contains at least one row
+    where TRIM(LOWER(col)) == 'total'. Returns {col: [actual_value]} using
+    the value as it appears in the parquet (preserves case/whitespace).
+
+    `TIME_PERIOD` is never locked.
+    """
+    from pathlib import Path
+    from app.config import PARQUET_DIR
+
+    p = Path(PARQUET_DIR) / f"{matrix_code}.parquet"
+    if not p.exists():
+        return {}
+
+    grouped = set(group_by or [])
+    filtered = set(filters.keys())
+    candidates = [
+        d["dim_column_name"] for d in dimensions
+        if d["dim_column_name"] not in grouped
+        and d["dim_column_name"] not in filtered
+        and d["dim_column_name"] != "TIME_PERIOD"
+    ]
+    if not candidates:
+        return {}
+
+    locks: dict[str, list[str]] = {}
+    for col in candidates:
+        try:
+            rows = conn.execute(
+                f'SELECT DISTINCT "{col}" FROM read_parquet(\'{p}\') '
+                f'WHERE LOWER(TRIM(CAST("{col}" AS VARCHAR))) = \'total\''
+            ).fetchall()
+            if rows:
+                locks[col] = [r[0] for r in rows]
+        except Exception:
+            continue
+    return locks
 
 
 def _handle_list_categories(inp: dict, conn) -> dict:

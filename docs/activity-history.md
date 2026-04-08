@@ -1,5 +1,70 @@
 # Activity History
 
+## 2026-04-08 — Agent: fix double-counting via marginal Total rows
+
+`POST /api/ask`'s `query_dataset_data` tool was double-counting whenever it
+aggregated (`group_by`) over a dataset that publishes a marginal `Total` row
+alongside its breakdown rows. Phase 8 had only stripped totals from ~49 of
+3,600 parquets, so the bug was latent on the rest.
+
+**Fix** (in `app/services/agent.py`):
+
+- New helper `_detect_total_locks(matrix_code, dimensions, filters, group_by, conn)`
+  scans the parquet directly. For each dim that is neither in `group_by` nor in
+  `filters`, it issues a `SELECT DISTINCT col WHERE LOWER(TRIM(col))='total'`. If
+  any rows come back, that dim is eligible to be auto-locked to its Total value.
+  `TIME_PERIOD` is never locked. Datasets without a parquet (parents of split
+  datasets like `AMG1010`) return `{}` cleanly.
+- `_handle_query_dataset_data` now runs the locked query first when `group_by`
+  is set:
+  - **Locked query non-empty** → use it, emit
+    `Auto-applied Total filters to prevent double-counting: COL=val, …`.
+  - **Locked query empty** (non-cross-product marginals — `TFP0512`,
+    `AMG1010_*`) → fall back to the unfiltered query and emit a loud
+    `POSSIBLE DOUBLE-COUNTING: …` warning with a concrete re-query suggestion
+    (e.g. `filters={'SEX': ['Total']}`). The LLM can then self-correct.
+- System-prompt section *"Total" rows and double-counting* rewritten to teach
+  the LLM the two warning shapes and how to react.
+
+**Verification:**
+
+| Dataset | Query | Before | After |
+|---|---|---|---|
+| `POP107D` | group_by `[TIME_PERIOD]` | 41.78M (1992) | 41.78M, no warning (parquet pre-stripped, fix is no-op) |
+| `FOM104G` | group_by `[TIME_PERIOD]` | **28.25M** (2023, ~5.3× too high) | **5.36M**, warning lists the 3 auto-locked dims |
+| `FOM104G` | group_by `[TIME_PERIOD,SEX]` | broken | 2.79M Masculin + 2.57M Feminin = 5.36M ✓ |
+| `FOM104G` | filter `SEX=Masculin`, group_by `[TIME_PERIOD]` | broken | 2.79M (auto-lock respects user filter) |
+| `TFP0512` | group_by `[TIME_PERIOD]` | inflated SUM | inflated SUM **+ POSSIBLE DOUBLE-COUNTING warning** with re-query hint |
+
+**Design choices / non-obvious bits:**
+
+- Detection runs against the parquet, not metadata. Reason: `dimension_options.option_label`
+  has trailing-whitespace artefacts (`'Total '`) and `sdmx_codes.sdmx_value` may
+  not match the parquet's literal value. Querying the parquet is authoritative
+  and avoids the metadata→parquet normalization mismatch.
+- Detection cost is one `DISTINCT … WHERE` per candidate dim. For typical
+  4-dim datasets that's 2-3 extra queries (~50ms each on the corpus parquets).
+  Skipped entirely when `group_by` is empty or no candidate dims exist.
+- Only TRIM/LOWER='total' is treated as a marginal-total marker. Variants like
+  `'Total persoane'` or `'Industrie - total'` are intentionally NOT matched —
+  those are standalone categories, not aggregates of other rows.
+- `TIME_PERIOD` is excluded from candidates: time can never be a "Total".
+
+**Known follow-up** (added to `docs/BACKLOG.md`): the pre-existing
+0-rows-strip-Total fallback can still hide an explicit Total filter when the
+parquet really has no `(Total, Total, …)` cross-product cell (TFP0512 case).
+Fix is to only strip a dim's Total filter when the parquet has no Total for
+that dim.
+
+**Files modified:**
+
+- `app/services/agent.py` — added `_detect_total_locks`, rewrote the
+  aggregation-time guard in `_handle_query_dataset_data`, updated SYSTEM_PROMPT.
+- `docs/BACKLOG.md` — checked off the double-counting item under Step 2,
+  added the fallback follow-up.
+
+---
+
 ## 2026-04-08 — Dev MCP Step 3a: introspection bundle (5 new tools)
 
 Extended `tools/tempo-dev-mcp/server.py` with the introspection half of Step 3
