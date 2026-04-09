@@ -2,8 +2,12 @@
 
 Gated by TEMPO_ASK_ENABLED. Disabled by default.
 """
+import logging
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+
+log = logging.getLogger(__name__)
 
 from app import config
 from app.services.agent import run_agent
@@ -23,6 +27,7 @@ def ask(req: AskRequest) -> dict:
     try:
         result = run_agent(req.question, req.history)
     except Exception as e:
+        log.exception("Agent failed")
         raise HTTPException(status_code=500, detail=f"Agent error: {e}")
     return {
         "answer": result.answer,

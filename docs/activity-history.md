@@ -1,5 +1,64 @@
 # Activity History
 
+## 2026-04-09 — Agent spec doc, OpenAI provider bugfix, search strategy hardening
+
+First end-to-end test of `POST /api/ask` after Step 2/3b. Three fixes and one new doc.
+
+**New doc: `docs/agent-setup.md`**
+
+Full setup + usage spec for the NL→Data agent: prerequisites (anthropic/openai SDKs, API keys), env var table (`TEMPO_ASK_ENABLED`, `TEMPO_LLM_PROVIDER`, `TEMPO_LLM_MODEL`, `TEMPO_ASK_MAX_TOOL_CALLS`), minimal launch commands for both providers, full API reference for `POST /api/ask` (request/response shape, error codes), worked curl + Python + HTTPie examples, test-question bank (EN/RO + edge cases), tool-trace inspection snippet, and limitations. The agent was previously undocumented — config-only.
+
+**Bugfix: `_to_openai_message` in `app/services/llm_client.py`**
+
+OpenAI provider crashed on the second tool-calling iteration with `KeyError: 'name'`. Root cause: `_assistant_turn` produces an assistant message where `tool_calls` are *already* in OpenAI's `{id, type, function: {name, arguments}}` shape, but `_to_openai_message` tried to re-format them using our internal `{id, name, input}` shape — so it accessed `tc["name"]` on a dict that only has `tc["function"]["name"]`. Also fixed a related bug: `msg.get("text")` → `msg.get("content")` (the assistant message stores text under `"content"`). Fix: just pass `msg["tool_calls"]` through as-is.
+
+Only affected OpenAI provider (default is Anthropic), so it slipped through the initial Step 2 testing.
+
+**Agent search strategy hardening**
+
+First curl test ("unemployment rate in Romania by county for 2023") exposed that the agent:
+- Called `search_datasets` exactly once with the full verbose query + `has_geo=true`
+- `has_geo=true` excluded AMG157G (national, best match — `has_geo=false`)
+- Got fertility (POP203C) and tourism (TUR109C) as top hits
+- Gave up without retrying, without `get_dataset_schema`, without querying data
+
+Baseline investigation confirmed the FTS ranker is actually fine: "What is the unemployment rate by county in 2023?" ranks AMG157G at #1 *without* the `has_geo` filter. The entire failure was caused by the agent's over-eager use of the geo filter.
+
+Rewrote the `SYSTEM_PROMPT` search-strategy section in `app/services/agent.py`:
+- Explicit stopword-stripping rule (strip "rate", "by", "in", year numbers)
+- "Prefer Romanian keywords on the first search" (dataset names are Romanian)
+- **"Do NOT set `has_geo=true` on the first search"** — this was the load-bearing rule
+- "Read the entire result list, not just the top hit" — a match at position 7 beats a non-match at position 1
+- "Retry at least once if results look unrelated"
+- "When user asks for a granularity that doesn't exist, use the closest one and explain" — INS publishes most labor-market indicators at `regiuni de dezvoltare` (8 NUTS-2), not `județe` (42 counties)
+- Added a worked example walking through the unemployment query end-to-end
+
+**Eval harness expansion**
+
+Added two regression questions to `data/eval/agent_questions.yaml`:
+- "What is the unemployment rate by county in 2023?" (verbose EN w/ stopwords)
+- "Care este rata șomajului pe județe în 2023?" (same intent in RO)
+
+Rebuilt `data/eval/agent_search_baseline.json` via `scripts/build_agent_search_baseline.py` → 17 questions total, 3,017 bytes.
+
+**Minor: debug logging in `app/routers/ask.py`**
+
+Added `log.exception("Agent failed")` in the except block so unhandled agent errors now print their full traceback to the uvicorn terminal. Previously the only visible artifact was the short `"Agent error: {e}"` in the 500 response body.
+
+**Files modified:**
+- `app/services/llm_client.py` — bugfix in `_to_openai_message`
+- `app/services/agent.py` — rewrote search strategy section of SYSTEM_PROMPT + worked example
+- `app/routers/ask.py` — traceback logging
+- `data/eval/agent_questions.yaml` — 2 new questions
+- `data/eval/agent_search_baseline.json` — regenerated
+- `docs/agent-setup.md` — new file
+
+**Not done (deferred):**
+- Search-side stopword filter in `dataset_search.py` (Layer 3 in plan) — skipped, since the baseline showed FTS ranking is already fine once the agent stops adding `has_geo=true`. Revisit only if the prompt fix alone doesn't close the gap.
+- End-to-end re-test of the curl question with updated prompt — requires a live API key; deferred to the user.
+
+---
+
 ## 2026-04-08 — Dev MCP: agent search eval + view-profile audit (Step 3b part 2)
 
 Shipped the remaining two eval tools for Step 3b, plus a critical FTS bug

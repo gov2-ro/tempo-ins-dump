@@ -175,19 +175,11 @@ def _to_openai_message(msg: dict) -> dict:
         }
 
     if role == "assistant" and msg.get("tool_calls"):
-        # Re-pack tool_calls in OpenAI format
-        import json
+        # tool_calls are already in OpenAI format from _assistant_turn — pass through as-is
         return {
             "role": "assistant",
-            "content": msg.get("text"),
-            "tool_calls": [
-                {
-                    "id": tc["id"],
-                    "type": "function",
-                    "function": {"name": tc["name"], "arguments": json.dumps(tc["input"])},
-                }
-                for tc in msg["tool_calls"]
-            ],
+            "content": msg.get("content"),
+            "tool_calls": msg["tool_calls"],
         }
 
     return {"role": role, "content": msg["content"]}
