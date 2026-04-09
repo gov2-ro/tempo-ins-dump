@@ -982,12 +982,7 @@ kbd {
     padding: 32px 0 8px;
 }
 
-.dash-title-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-}
+
 
 .dash-download {
     display: flex;
@@ -1749,6 +1744,14 @@ body.sidebar-open #app {
 }
 
 /* --- Responsive --- */
+@media (min-width: 1000px) {
+    .dash-title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+}
 @media (max-width: 1000px) {
     .category-grid { columns: 2; }
 }
