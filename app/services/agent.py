@@ -42,7 +42,7 @@ TOOLS = [
                     "enum": ["geo_time", "demographic", "time_residence", "time_series"],
                     "description": "Filter by dataset archetype",
                 },
-                "limit": {"type": "integer", "default": 6, "maximum": 15},
+                "limit": {"type": "integer", "default": 10, "maximum": 15},
             },
             "required": ["query"],
         },
@@ -161,7 +161,7 @@ def _handle_search_datasets(inp: dict, conn) -> dict:
         q=inp.get("query", ""),
         has_geo=inp.get("has_geo"),
         archetype=inp.get("archetype"),
-        limit=min(int(inp.get("limit", 6)), 15),
+        limit=min(int(inp.get("limit", 10)), 15),
         conn=conn,
     )
     # Return compact cards — strip fields the LLM doesn't need
@@ -453,6 +453,7 @@ def run_agent(question: str, history: list[dict] | None = None) -> AgentResult:
     last_query_result = None
     last_queried_matrix = None
     agent_warnings = []
+    _guardrail_fired = False  # one-shot: only inject the data-query nudge once per run
 
     for iteration in range(config.ASK_MAX_TOOL_CALLS + 1):
         if config.DEBUG:
@@ -465,6 +466,29 @@ def run_agent(question: str, history: list[dict] | None = None) -> AgentResult:
             pass
 
         if not resp.tool_calls or resp.stop_reason == "end_turn":
+            # Guardrail: model gave up without querying data, but search returned results.
+            # Inject one synthetic user turn to force schema + query. Fires once per run.
+            # Primarily targets OpenAI models that ignore "MUST call query_dataset_data".
+            search_had_results = any(
+                t["tool"] == "search_datasets" and t["output"].get("total", 0) > 0
+                for t in tool_trace
+            )
+            if not _guardrail_fired and last_query_result is None and search_had_results:
+                _guardrail_fired = True
+                if resp.text or resp.tool_calls:
+                    messages.append(_assistant_turn(resp))
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "You found relevant datasets but did not query any data. "
+                        "Please call get_dataset_schema on the most relevant dataset, "
+                        "then call query_dataset_data to retrieve actual numbers before answering."
+                    ),
+                })
+                agent_warnings.append("Guardrail: model skipped data query — injected follow-up turn.")
+                log.debug("Guardrail fired at iteration %d", iteration)
+                continue
+
             # Done — extract final answer
             answer = resp.text or "(no answer)"
             citations = _extract_citations(answer, tool_trace)

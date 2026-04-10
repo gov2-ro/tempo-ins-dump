@@ -104,8 +104,9 @@ def search_datasets(
 
     # FTS-first search: try sidecar, fallback to LIKE
     _used_fts = False
+    fts_codes: list[str] = []
     if q:
-        fts_codes = _fts_search(q)
+        fts_codes = _fts_search(q) or []
         if fts_codes:
             _used_fts = True
             safe_codes = ", ".join(f"'{c}'" for c in fts_codes)
@@ -140,6 +141,13 @@ def search_datasets(
         'rows': 'm.row_count DESC NULLS LAST, m.matrix_code ASC',
     }
     order_by = sort_map.get(sort, sort_map['updated'])
+
+    # When FTS is active and no explicit sort requested, preserve BM25 relevance
+    # order. The fts_codes list is already ranked by score DESC; list_position()
+    # maps each code to its 1-based rank so the SQL ORDER BY mirrors it exactly.
+    if _used_fts and sort == 'updated':
+        arr_literal = "ARRAY[" + ", ".join(f"'{c}'" for c in fts_codes) + "]"
+        order_by = f"list_position({arr_literal}, m.matrix_code) ASC, m.matrix_code ASC"
 
     where_sql = " AND ".join(where)
 

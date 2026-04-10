@@ -13,6 +13,7 @@ data*/*
 .github/*
 .claude/settings.local.json
 .github/*
+.codesight
 */_obsolete
 */*.log
 *.log
@@ -23,7 +24,8 @@ _obsolete
 .playwright-mcp/
 deploy-data.tar.gz
 deploy-data/
-docs/misc/*.png
+docs/misc/
+docs/misc/*
 .mcp.json
 test-results/*
 _site/

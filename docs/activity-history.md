@@ -1,5 +1,45 @@
 # Activity History
 
+## 2026-04-11 — Chat UI for /api/ask + OpenAI query guardrail
+
+**Chat UI (`app/static/ask.html` + `app/static/js/ask.js`)**
+
+New page at `/ask.html` with a full multi-turn chat interface for the NL→Data agent. Features: multi-turn history (user/assistant turns passed back to `/api/ask`), markdown-lite rendering (bold, code, lists, headings), citation pills linking to dataset pages, amber warnings banner, collapsible tool trace, data table (up to 200 rows with sticky headers), and auto-chart for line/bar/area primary chart types via inline eCharts. Empty state with 5 example questions. "Ask" link added to main topbar.
+
+**Query guardrail (`app/services/agent.py`)**
+
+One-shot guardrail in `run_agent()`: when the model hits `end_turn` without ever calling `query_dataset_data` but search returned results, injects a synthetic `user` turn forcing schema + query. Fires once per run max (`_guardrail_fired` flag). Targets OpenAI models that ignore the system prompt directive; Anthropic models never trigger it.
+
+**Files modified/created:**
+- `app/static/ask.html` — new chat page
+- `app/static/js/ask.js` — chat logic
+- `app/static/index.html` — "Ask" link in topbar
+- `app/services/agent.py` — query guardrail
+
+## 2026-04-10 — FTS relevance ordering fix + agent search limit restored
+
+**FTS ordering fix (`app/services/dataset_search.py`)**
+
+`search_datasets()` was using FTS only as a candidate filter (`WHERE matrix_code IN (…)`) then re-sorting by `ultima_actualizare DESC`, which discarded all BM25 relevance signal. When `q` is provided and FTS succeeds, and `sort='updated'` (the default), the function now orders by `list_position(ARRAY[...ranked codes...], m.matrix_code) ASC` — preserving the BM25 relevance ranking exactly. Explicit sort overrides (`sort='name'`, `sort='rows'`) are unaffected.
+
+Result: massive improvements across all 17 eval questions. Notable fixes:
+- "populatie pe judete": LOC108B (construction permits) was #1 → now POP108D/POP107D at #1-2
+- "exporturi pe tari": TUR105F (tourism) was #1 → now INT106B/EXP101I at #1-2
+- "accidente de munca": AMG130M (unemployment) was #1 → now ACC102B (accidents) at #1
+- "energia electrica": now IND118A (electricity production) leads, not export datasets
+- "cheltuieli educatie buget": now CAV101C (education-specific) leads
+
+Baseline rebuilt and committed: `data/eval/agent_search_baseline.json`.
+
+**Agent search limit restored (`app/services/agent.py`)**
+
+Tool schema default and `_handle_search_datasets` limit both reverted from 6→10. AMG159E (regional unemployment, the best geo dataset for "rata somajului") was sitting at position 7 and getting cut off. Token overhead is minimal (~200 toks/search × 3 searches).
+
+**Files modified:**
+- `app/services/dataset_search.py` — FTS ordering via `list_position()`
+- `app/services/agent.py` — limit 6→10 in schema + handler
+- `data/eval/agent_search_baseline.json` — rebuilt from improved search
+
 ## 2026-04-09 — Agent spec doc, OpenAI provider bugfix, search strategy hardening
 
 First end-to-end test of `POST /api/ask` after Step 2/3b. Three fixes and one new doc.

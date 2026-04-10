@@ -242,6 +242,10 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
                 formatter: (v) => formatNumber(v),
             },
         },
+        dataZoom: [
+            { type: 'inside', xAxisIndex: 0 },  // mouse wheel/pinch zoom
+            { type: 'slider', xAxisIndex: 0 }   // draggable slider below chart
+        ],
         series,
         animationDuration: 300,
     };

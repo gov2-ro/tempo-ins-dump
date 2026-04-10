@@ -392,6 +392,10 @@ function createStackedBarChart(container, config, data, metadata) {
             type: 'value',
             axisLabel: { fontSize: 11, formatter: v => formatNumber(v) },
         },
+        dataZoom: [
+            { type: 'inside', xAxisIndex: 0 },
+            { type: 'slider', xAxisIndex: 0 }
+        ],
         series,
         animationDuration: 300,
     };
@@ -977,6 +981,13 @@ function createSmallMultiplesChart(container, config, data, metadata) {
         });
     }
 
+    // Create dataZoom for each small multiple
+    const dataZoomArr = [];
+    for (let i = 0; i < n; i++) {
+        dataZoomArr.push({ type: 'inside', xAxisIndex: i });
+        dataZoomArr.push({ type: 'slider', xAxisIndex: i, height: 16 });
+    }
+
     chart.setOption({
         title: titles,
         tooltip: {
@@ -984,6 +995,7 @@ function createSmallMultiplesChart(container, config, data, metadata) {
             formatter: params => `<b>${params[0].axisValue}</b><br/>${formatNumber(params[0].value)}`,
         },
         grid: gridArr, xAxis: xAxes, yAxis: yAxes, series: seriesArr,
+        dataZoom: dataZoomArr,
         animationDuration: 300,
     });
     return chart;

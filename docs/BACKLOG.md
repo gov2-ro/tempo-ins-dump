@@ -9,7 +9,8 @@ Future tasks and intentions for the TEMPO INS data explorer.
 - [ ] create a release log. how? backwards? 
 
 ## Misc
-- [ ] research data dissemination, where could we expose the data. Kaggle, Hugging Face, torrent, Jupyter notebooks or similar? Could we set an automatic pipeline to update data when it updates?
+- [x] research data dissemination, where could we expose the data. Kaggle, Hugging Face, torrent, Jupyter notebooks or similar? Could we set an automatic pipeline to update data when it updates?
+- [ ] check if all the datasets are in Tempo Online or also other sources from INS
 - [x] enhance table view
 - [ ] more, nice themes - mai light a bit off-white, Financial Times, or Anthropic, lighter dark theme
 - [x] add dataset code to explorer
@@ -29,6 +30,13 @@ Future tasks and intentions for the TEMPO INS data explorer.
 - [ ] static site? - see `docs/misc-ideas/static-site/`
 - [x] add llms.txt
 - [ ] description, title, og:info should follow language
+- [ ] how to deal with parent columns, like judete and localitati - SOM101E
+- [ ] older datasets like sustainable development 2020 should be archived?
+
+
+## Data intelligence
+- [ ] correlations? 
+- [ ] county profiles, demographics?
 
 
 ## Landing
@@ -36,13 +44,13 @@ Future tasks and intentions for the TEMPO INS data explorer.
 - [x] Flag interesting datasets
 - [x] Some widgets per theme/subtheme/dataset
 
-## misc
-- [ ] sustainable development 2020 should be archived?
 
 ## Chart rules
 - [ ] for long horizontal bar charts, prever vertical view
 - [ ] bar charts, order by value
 - [ ] if just 2 dimensions, don't give options to choose (axis, group), just to swap, transpose. 
+- [ ] Max 3 dimensions no bubble but overlayed bars? Or up to 4? Matrix of bars?
+
 
 ## LLM Tooling — see plan `~/.claude/plans/peppy-fluttering-bubble.md`
 
@@ -69,10 +77,10 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
 - [x] `app/routers/ask.py` — `POST /api/ask` behind `TEMPO_ASK_ENABLED` flag.
 - [x] 4 agent tools: `search_datasets`, `get_dataset_schema`, `query_dataset_data`, `list_categories`. SQL never LLM-generated — calls `query_builder.build_data_query()` directly.
 - [x] Live end-to-end test — done (2026-04-09). See `docs/misc/nl2br-output/` for 5 iteration outputs.
-- [ ] Minimal chat UI for `/api/ask` (currently only curl-testable).
-- [ ] **Agent: code-level query guardrail** — when model returns `end_turn` without ever calling `query_dataset_data`, AND at least one `search_datasets` call returned results, inject one synthetic user turn forcing schema+query before accepting the final answer. Bounded: fires once per run max. Needed because OpenAI models (gpt-4-turbo, gpt-4o) ignore "MUST call query_dataset_data" directives and give up after 3 failed searches. ~20 lines in `run_agent()` in `app/services/agent.py`. Anthropic models follow the directive reliably — so this guardrail is primarily for OpenAI compat. See `docs/misc/nl2br-output/unemployment rate 2023_v5.json` for failure evidence.
+- [x] Minimal chat UI for `/api/ask` — `app/static/ask.html` + `app/static/js/ask.js`. Multi-turn history, text answer with markdown-lite rendering, citations, data table (up to 200 rows), auto chart (line/bar), warnings banner, collapsible tool trace. "Ask" link in main topbar.
+- [x] **Agent: code-level query guardrail** — implemented in `run_agent()`. When model hits `end_turn` without calling `query_dataset_data` but search returned results, injects one synthetic user turn forcing schema+query. One-shot per run (`_guardrail_fired` flag). Fires for OpenAI models; Anthropic models never trigger the condition.
 - [ ] **Agent: search ranking "județe" buries topic matches** — queries containing "județe" (or "judete") consistently rank LOC108B (construction permits with "judete si localitati" in name) at #1, pushing labor-market datasets like AMG157G/AMG159E to positions 3-7 or off the top-6. Root cause: FTS treats "judete" as a strong content match for datasets whose names contain the phrase literally, while thematic terms like "somaj" are treated as equal weight. Fix options: (a) boost datasets where query terms match the *indicator* part of the name vs the *geo qualifier* part, (b) strip known geo filler terms ("pe judete", "pe regiuni", "pe localitati") from search queries before FTS, (c) penalize LOC* context_code when query contains labor/employment vocabulary. Tracked separately from the agent — this also affects the catalog `/datasets` page.
-- [ ] **Agent: restore `search_datasets` default limit to 10** — was reduced from 10 to 6 to save tokens (2026-04-09), but AMG159E (regional unemployment) sits at position 7 in the baseline for "rata somajului". Cutting to 6 hides the best geo-unemployment dataset entirely. Token impact is small (~200 toks/search × 3 searches = 600 toks extra, well within 30k TPM budget after the prompt trimming). Just revert `min(int(inp.get("limit", 6)), 15)` → `min(int(inp.get("limit", 10)), 15)` in `_handle_search_datasets` and tool schema in `app/services/agent.py`.
+- [x] **Agent: restore `search_datasets` default limit to 10** — reverted from 6→10. AMG159E (regional unemployment) at position 7 now visible.
 - [x] **Agent: double-counting via unfiltered Total rows** — fixed via per-query parquet inspection. When the agent's `query_dataset_data` is called with `group_by`, `_detect_total_locks` scans each non-grouped, non-filtered dim for a `Total` value (`LOWER(TRIM(col))='total'`). If found, the handler locks those dims to Total and warns `Auto-applied Total filters: …`. If locking returns 0 rows (non-cross-product marginals like `TFP0512`), it falls back to the unfiltered SUM and warns `POSSIBLE DOUBLE-COUNTING: …` with an explicit re-query suggestion. Verified on `FOM104G`: buggy 28.25M → correct 5.36M for 2023. POP107D unchanged (parquet was pre-stripped). System prompt updated to teach the LLM how to read both warnings.
   - [ ] Follow-up: tighten the `query_dataset_data` 0-rows-strip-Total fallback so it doesn't undermine an explicit Total filter when the parquet truly has no cross-product cell (TFP0512 case). Currently the fallback strips Total filters even when Total exists in the parquet, returning the buggy unfiltered SUM. Fix: only strip a dim's Total filter if the parquet has no Total value for that dim.
 - [ ] Pin `anthropic>=0.40` in `requirements.txt` (SDK 0.89.0 installed in dev venv but not pinned).
@@ -85,8 +93,8 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
 - [x] Eval: `tempo_check_view_profiles` — audits `corpus/view-profiles/` against parquet corpus + DB. Surfaced 197 missing VPs, 675 orphans, 49 archetype mismatches (mostly `geo_time`/`geo_only` schema drift on PNS101D splits), and 933 profiles carrying non-empty `warnings[]`.
 
 ### Search quality — follow-ups surfaced by `tempo_eval_agent`
-- [ ] **Preserve FTS relevance ordering through the outer query.** `search_datasets()` currently uses FTS only as a candidate filter (`WHERE matrix_code IN (…)`) then re-sorts by `ultima_actualizare DESC`. This throws away BM25 relevance — so "populatie pe judete" returns LOC108B at top instead of POP107D/POP108D which are actually ranked #1-#2 by FTS. Fix: when `q` is set and FTS returns codes, propagate the FTS position into a `CASE`/`ARRAY_POSITION` expression and use that as the primary sort. Separate commit so the baseline-diff clearly shows the improvement.
-- [ ] Search is still poor for several questions in `agent_questions.yaml` — "exporturi pe tari" returns TUR…, "nasteri si decese" returns TQG1516/TQK1522 etc. These are likely downstream of the FTS-ordering issue above but may also need FTS corpus tweaks (add `definitie` stemming? Romanian stopwords?).
+- [x] **Preserve FTS relevance ordering through the outer query.** Fixed via `list_position(ARRAY[...], m.matrix_code)` ORDER BY when FTS is active and `sort='updated'`. Major improvements: "populatie pe judete" → POP108D/POP107D #1-2 (was LOC108B); "exporturi pe tari" → INT106B/EXP101I (was TUR105F); "accidente de munca" → ACC102B (was AMG130M). Baseline updated.
+- [x] **Agent: restore `search_datasets` default limit to 10** — reverted from 6→10 in schema default and `_handle_search_datasets`. AMG159E (regional unemployment) at position 7 is now visible.
 
 ### View profiles — follow-ups surfaced by `tempo_check_view_profiles`
 - [ ] 197 parquets without view profiles — regenerate VPs via `python generate_view_profiles.py` and add a pipeline-tail step that fails if the audit reports missing VPs.
@@ -291,3 +299,8 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
   Decisions stored in `data/logs/total-decisions.json`.
 
 - [ ] Review `docs/TODO_COMPACTION.md` — label normalisation issues in 7-data-compactor.py
+
+
+## Bugs
+- [ ] large datasets: LOC108B
+  - [ ] SOM101E map not showing: 'Se afișează doar o selecție — setul de date are prea multe rânduri pentru afișare completă'
