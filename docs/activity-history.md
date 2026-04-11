@@ -1,5 +1,9 @@
 # Activity History
 
+## 2026-04-11 — View Profile Orphan Cleanup
+
+Deleted 676 orphan view-profile JSON files from `data/corpus/view-profiles/` that had no corresponding parquet file in `data/corpus/parquet/`. These accumulated from removed/split datasets. Remaining: 3,509 VPs matching 3,706 parquets (some parquets have no VP yet — filled via `generate_view_profiles.py`).
+
 ## 2026-04-11 — BYOK (Bring Your Own Key) for ask.html
 
 Added per-user API key support to the `/ask.html` chat UI. Users can set their own Anthropic or OpenAI key via a gear icon settings panel in the topbar. Key stored in `localStorage` only — never persisted server-side.

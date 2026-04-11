@@ -3,3 +3,5 @@ uvicorn[standard]==0.30.6
 duckdb==1.4.2
 pydantic==2.8.2
 openpyxl
+anthropic
+openai
