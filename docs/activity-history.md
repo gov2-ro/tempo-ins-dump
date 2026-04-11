@@ -1,5 +1,35 @@
 # Activity History
 
+## 2026-04-11 — URL state persistence for index.html (explore-app.js)
+
+Implemented full URL state persistence in `explore-app.js` (the actual current UI, loaded by `index.html`). Pages are now shareable/bookmarkable with chart type, period, and filter state encoded in the URL.
+
+**Params:** `?code=POP107D&tchart=bar&schart=grouped_bar&period=2022&filters={"COL":"val"}`  
+- `tchart` — time panel chart type (omitted if default `line`)  
+- `schart` — snapshot panel chart type  
+- `period` — snapshot period ID (omitted if latest)  
+- `filters` — JSON flat object of active filter selections  
+
+**Writing** — `_syncURL()` calls `history.replaceState()` after every `fetchAndRender()`, chart type button clicks, manual period navigation, and when play stops. Skips `replaceState` during animation (play interval active) to avoid rapid calls.
+
+**Restoration** — `init()` reads `tchart/schart/period/filters` into `_url*` fields. Applied in `showDashboard()` after `panelSetup` is computed (so available chart types are known). Each param is consumed (set to null) after first use. Filters are applied in `renderFilters()` via `_urlFilters` fallback, consumed at end of first `fetchAndRender()`.
+
+Note: previous session had implemented this for `dataset-page-v2.js`/`dataset.html` which is not linked from the main app. That work is superseded by this.
+
+## 2026-04-11 — URL state persistence for dataset page (SUPERSEDED)
+
+`?code=`, `view=`, `chart=`, `period=`, `filters=` now all written via `replaceState` on every render and restored on page load. Pages are fully shareable/bookmarkable.
+
+**Writing** — `_syncURL()` called after every `fetchAndRender()` and on tab switches. Builds `filters` as JSON of `controlsPanel.getValues()` (time column excluded — stored as `period`).
+
+**Restoration** — `init()` reads all params into `_urlView/Chart/Period/Filters`. View is applied immediately in the initial `switchView()` call. Chart type is restored before `renderChartSelector()` so the active button renders correctly (bug fix: initial code restored after render, making the active button wrong). Handles both primary `chart_type` and toggle variants (`toggles[]`). Filters passed as `initialValues` to `ViewControlsPanel` constructor, overriding computed defaults in `resolveDefault()`.
+
+**Files modified:**
+- `app/static/js/dataset-page-v2.js` — `_syncURL()`, URL param reading, restoration logic
+- `app/static/js/view-controls.js` — `initialValues` constructor param + `resolveDefault()` override
+
+Verified with Playwright: direct URL load restores Snapshot tab + H-Bar chart + single age group filter correctly.
+
 ## 2026-04-11 — Chat UI for /api/ask + OpenAI query guardrail
 
 **Chat UI (`app/static/ask.html` + `app/static/js/ask.js`)**

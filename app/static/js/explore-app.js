@@ -315,6 +315,12 @@ class LensApp {
         const params = new URLSearchParams(location.search);
         const code = params.get('code');
         const page = params.get('page');
+        // URL-restored dashboard state (consumed on first showDashboard call)
+        this._urlTChart  = params.get('tchart') || null;
+        this._urlSChart  = params.get('schart') || null;
+        this._urlPeriod  = params.get('period') || null;
+        this._urlFilters = {};
+        try { const f = params.get('filters'); if (f) this._urlFilters = JSON.parse(f); } catch {}
         const lnk = document.getElementById('about-link');
         if (lnk) lnk.textContent = this.ui.aboutLink;
         if (page === 'about') {
@@ -1090,6 +1096,20 @@ class LensApp {
             this.snapshotChartType = this.panelSetup.snapshotChartTypes[0] || null;
             this.selectedPeriodIdx = -1; // latest
 
+            // Restore URL state (first load only — consumed below)
+            const setup = this.panelSetup;
+            if (this._urlTChart && setup.timeChartTypes.includes(this._urlTChart))
+                this.timeChartType = this._urlTChart;
+            if (this._urlSChart && setup.snapshotChartTypes.includes(this._urlSChart))
+                this.snapshotChartType = this._urlSChart;
+            if (this._urlPeriod) {
+                const pidx = setup.periods.findIndex(p => p.id === this._urlPeriod);
+                if (pidx >= 0) this.selectedPeriodIdx = pidx;
+            }
+            this._urlTChart = null;
+            this._urlSChart = null;
+            this._urlPeriod = null;
+
             this.renderDashHeader();
             this.renderInfoPanel();
             this.renderFilters();
@@ -1097,6 +1117,7 @@ class LensApp {
             this.renderSnapshotPanel();
             this.highlightSidebarDataset(code);
             await this.fetchAndRender();
+            this._urlFilters = {}; // consume after first render
         } catch (err) {
             document.getElementById('dash-header').innerHTML =
                 `<div class="dash-title" style="color:var(--red)">Error loading dataset: ${err.message}</div>`;
@@ -1366,6 +1387,7 @@ class LensApp {
                 this.renderTimeChart();
                 el.style.opacity = '';
                 el.style.transition = '';
+                this._syncURL();
             });
             pills.appendChild(btn);
         }
@@ -1433,6 +1455,7 @@ class LensApp {
                 this.renderSnapshotChart();
                 el.style.opacity = '';
                 el.style.transition = '';
+                this._syncURL();
             });
             pills.appendChild(btn);
         }
@@ -1556,6 +1579,8 @@ class LensApp {
         this.selectedPeriodIdx = idx;
         this.renderPeriodNav();
         this.renderSnapshotChart();
+        // Sync URL on manual nav (skip during animation to avoid rapid replaceState calls)
+        if (!this.playInterval) this._syncURL();
     }
 
     togglePlay() {
@@ -1580,6 +1605,7 @@ class LensApp {
             clearInterval(this.playInterval);
             this.playInterval = null;
             this.renderPeriodNav();
+            this._syncURL();
         }
     }
 
@@ -1648,6 +1674,8 @@ class LensApp {
             // Restore previous selection if this dim was a filter before
             if (prevSelections[dim.dim_column_name]) {
                 select.value = prevSelections[dim.dim_column_name];
+            } else if (this._urlFilters?.[dim.dim_column_name]) {
+                select.value = this._urlFilters[dim.dim_column_name];
             }
 
             select.addEventListener('change', () => this.fetchAndRender());
@@ -1710,6 +1738,7 @@ class LensApp {
             await this.renderTimeChart();
             await this.renderSnapshotChart();
             if (!document.getElementById('table-panel').classList.contains('hidden')) this.renderTable();
+            this._syncURL();
         } catch (err) {
             const msg = err.message || 'Failed to load data';
             const isLarge = msg.includes('filter');
@@ -1724,6 +1753,7 @@ class LensApp {
                         await this.renderTimeChart();
                         await this.renderSnapshotChart();
                         if (!document.getElementById('table-panel').classList.contains('hidden')) this.renderTable();
+                        this._syncURL();
                         return;
                     } catch (_) { /* fall through */ }
                 }
@@ -1734,6 +1764,47 @@ class LensApp {
                     ${isLarge ? '⚠ ' : ''}${msg}
                 </div>`;
         }
+    }
+
+    /** Sync current dashboard state to URL (replaceState — no history pollution). */
+    _syncURL() {
+        const code = this.metadata?.matrix_code;
+        if (!code) return;
+        const url = new URL(location.href);
+        url.searchParams.set('code', code);
+        url.searchParams.delete('page');
+
+        // Time chart type (omit default 'line' to keep URLs clean)
+        if (this.timeChartType && this.timeChartType !== 'line')
+            url.searchParams.set('tchart', this.timeChartType);
+        else
+            url.searchParams.delete('tchart');
+
+        // Snapshot chart type
+        if (this.snapshotChartType)
+            url.searchParams.set('schart', this.snapshotChartType);
+        else
+            url.searchParams.delete('schart');
+
+        // Period — only persist if not latest
+        const periods = this.panelSetup?.periods || [];
+        const pidx = this.selectedPeriodIdx < 0 ? periods.length - 1 : this.selectedPeriodIdx;
+        if (pidx >= 0 && pidx !== periods.length - 1 && periods[pidx])
+            url.searchParams.set('period', periods[pidx].id);
+        else
+            url.searchParams.delete('period');
+
+        // Filters (flatten single-value arrays to strings for compactness)
+        const filters = this.getFilters();
+        const flat = {};
+        for (const [k, v] of Object.entries(filters))
+            flat[k] = Array.isArray(v) ? v[0] : v;
+        if (Object.keys(flat).length > 0)
+            url.searchParams.set('filters', JSON.stringify(flat));
+        else
+            url.searchParams.delete('filters');
+
+        history.replaceState(null, '', url);
     }
 
     /** Auto-pick first available filter value for large datasets (skip "TOTAL" aggregates) */

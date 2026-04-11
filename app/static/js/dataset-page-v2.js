@@ -25,6 +25,16 @@ class DatasetPageV2 {
         const params = new URLSearchParams(window.location.search);
         this.matrixCode = params.get('code');
 
+        // Read optional URL state (consumed after first use)
+        this._urlView    = params.get('view') || null;
+        this._urlChart   = params.get('chart') || null;
+        this._urlPeriod  = params.get('period') || null;
+        this._urlFilters = {};
+        try {
+            const f = params.get('filters');
+            if (f) this._urlFilters = JSON.parse(f);
+        } catch { /* invalid JSON — ignore */ }
+
         if (!this.matrixCode) {
             document.getElementById('v2-content').innerHTML =
                 '<div class="empty-state" style="padding:40px;text-align:center"><h3>No dataset selected</h3><p>Add ?code=ACC101B to the URL</p></div>';
@@ -81,11 +91,13 @@ class DatasetPageV2 {
                 document.getElementById('table-footer')
             );
 
-            // Pick initial view
+            // Pick initial view — prefer URL-persisted view, fallback to first available
             const views = this.profile?.views || {};
-            let initial = 'timeline';
-            if (!views.timeline?.available) {
-                initial = views.snapshot?.available ? 'snapshot' : 'table';
+            let initial = this._urlView || 'timeline';
+            // Validate: custom view state isn't restored from URL; unknown/unavailable → fallback
+            if (initial === 'custom' || (initial !== 'table' && !views[initial]?.available)) {
+                initial = views.timeline?.available ? 'timeline'
+                        : views.snapshot?.available ? 'snapshot' : 'table';
             }
 
             this.switchView(initial);
@@ -325,6 +337,7 @@ class DatasetPageV2 {
         }
 
         this.activeView = viewName;
+        this._syncURL();
 
         // Update tab bar
         document.querySelectorAll('.tab-bar .tab').forEach(tab => {
@@ -376,12 +389,37 @@ class DatasetPageV2 {
         const primaryIdx = charts.findIndex(c => c.is_primary);
         this.activeChartIdx = primaryIdx >= 0 ? primaryIdx : 0;
 
-        // Render chart selector
+        // Restore URL-provided chart type BEFORE rendering selector so the
+        // correct button renders as active. Consumed after first use.
+        if (this._urlChart) {
+            // Primary match: chart_type === urlChart
+            let idx = charts.findIndex(c => c.chart_type === this._urlChart);
+            if (idx >= 0) {
+                this.activeChartIdx = idx;
+                this._toggleType = null;
+            } else {
+                // Toggle match: urlChart is a toggle variant of a parent chart
+                idx = charts.findIndex(c => c.toggles?.includes(this._urlChart));
+                if (idx >= 0) {
+                    this.activeChartIdx = idx;
+                    this._toggleType = this._urlChart;
+                }
+            }
+            this._urlChart = null;
+        }
+
+        // Render chart selector (with correct activeChartIdx already set)
         this.renderChartSelector(charts);
 
         // Restore saved state
         if (this.viewStates[viewName] && this.controlsPanel) {
             this.controlsPanel.restoreState(this.viewStates[viewName]);
+        }
+
+        // Restore URL-provided period (first load only — consumed after use)
+        if (this._urlPeriod && this.controlsPanel?.getPeriodBrowser()) {
+            this.controlsPanel.getPeriodBrowser().setPeriod(this._urlPeriod);
+            this._urlPeriod = null;
         }
 
         if (charts.length === 0) {
@@ -406,7 +444,8 @@ class DatasetPageV2 {
             container,
             controls,
             this.metadata.dimensions,
-            () => this.fetchAndRender()
+            () => this.fetchAndRender(),
+            this._urlFilters || {}
         );
     }
 
@@ -626,7 +665,8 @@ class DatasetPageV2 {
             container,
             controls,
             this.metadata.dimensions,
-            () => this.fetchAndRender()
+            () => this.fetchAndRender(),
+            this._urlFilters || {}
         );
     }
 
@@ -937,6 +977,7 @@ class DatasetPageV2 {
             const chartConfig = this.buildChartConfig();
 
             this.chartInstance = await createChart(chartEl, chartConfig, data, this.metadata);
+            this._syncURL();
         } catch (err) {
             document.getElementById('main-chart').innerHTML =
                 `<div class="error-msg" style="padding:20px">${err.message}</div>`;
@@ -944,6 +985,44 @@ class DatasetPageV2 {
         } finally {
             this.showLoading(false);
         }
+    }
+
+    /** Persist current view/chart/period/filters in the URL via replaceState. */
+    _syncURL() {
+        if (!this.matrixCode) return;
+        const url = new URL(location.href);
+        url.searchParams.set('code', this.matrixCode);
+
+        if (this.activeView) url.searchParams.set('view', this.activeView);
+
+        const chartType = this.getActiveChartType();
+        if (chartType) url.searchParams.set('chart', chartType);
+        else url.searchParams.delete('chart');
+
+        // Period: only meaningful for snapshot view
+        const pb = this.controlsPanel?.getPeriodBrowser();
+        if (this.activeView === 'snapshot' && pb) {
+            const pid = pb.getCurrentPeriodId();
+            if (pid) url.searchParams.set('period', pid);
+            else url.searchParams.delete('period');
+        } else {
+            url.searchParams.delete('period');
+        }
+
+        // Filters: dimension selections — exclude the time column (stored as period)
+        if (this.controlsPanel) {
+            const vals = this.controlsPanel.getValues();
+            const timeCol = this.profile?.dimensions?.time?.column;
+            if (timeCol) delete vals[timeCol];
+            if (Object.keys(vals).length > 0)
+                url.searchParams.set('filters', JSON.stringify(vals));
+            else
+                url.searchParams.delete('filters');
+        } else {
+            url.searchParams.delete('filters');
+        }
+
+        history.replaceState(null, '', url);
     }
 
     computeGroupBy() {

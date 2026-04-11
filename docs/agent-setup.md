@@ -61,24 +61,24 @@ All settings are env vars. None are required except enabling the endpoint and pr
 | `TEMPO_ASK_MAX_TOOL_CALLS` | `8` | Max LLM→tool iterations per request |
 | `TEMPO_DEBUG` | `false` | Set `true` for verbose agent iteration logs |
 
-### Minimal launch
+### Launch examples
 
+**Anthropic (default)**
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-export TEMPO_ASK_ENABLED=true
 source ~/devbox/envs/240826/bin/activate
-uvicorn app.main:app --reload --port 8080
+TEMPO_ASK_ENABLED=1 ANTHROPIC_API_KEY=sk-ant-... uvicorn app.main:app --reload --port 8080
 ```
 
-### OpenAI alternative
-
+**OpenAI**
 ```bash
-export OPENAI_API_KEY=sk-...
-export TEMPO_LLM_PROVIDER=openai
-export TEMPO_LLM_MODEL=gpt-4o
-export TEMPO_ASK_ENABLED=true
-uvicorn app.main:app --reload --port 8080
+source ~/devbox/envs/240826/bin/activate
+TEMPO_ASK_ENABLED=1 TEMPO_LLM_PROVIDER=openai TEMPO_LLM_MODEL=gpt-4o OPENAI_API_KEY=sk-proj-... uvicorn app.main:app --reload --port 8080
 ```
+
+> **Common mistakes:**
+> - Setting `OPENAI_API_KEY` without `TEMPO_LLM_PROVIDER=openai` → the app still uses Anthropic and fails with "authentication" error.
+> - Setting `TEMPO_LLM_PROVIDER=openai` without `TEMPO_LLM_MODEL` → sends `claude-sonnet-4-6` (the default) to OpenAI, which returns 404 "model not found".
+> - All three vars (`TEMPO_LLM_PROVIDER`, `TEMPO_LLM_MODEL`, `OPENAI_API_KEY`) are required together when using OpenAI.
 
 ---
 

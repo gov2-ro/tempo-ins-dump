@@ -65,3 +65,9 @@
 
 - question: "energie electrica"
   notes: "electricity production/consumption"
+
+- question: "What is the unemployment rate by county in 2023?"
+  notes: "verbose EN w/ stopwords — regression test for search-ranker robustness (no county-level data exists; closest is AMG159E regional)"
+
+- question: "Care este rata șomajului pe județe în 2023?"
+  notes: "same intent in Romanian — should cleanly surface AMG159E/SOM101D family"

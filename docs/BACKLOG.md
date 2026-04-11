@@ -209,9 +209,7 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
 
 ### Lens UI Improvements
 
-- [ ] **URL state persistence** — persist filters, chart type, and selected period in URL. Also, language.
-  so dashboard views are shareable/bookmarkable (e.g. `?code=POP301A&period=2020&snap=heatmap`).
-  Currently only `?code=` is saved; filter/chart/period selections reset on reload.
+- [x] **URL state persistence** — `?code=`, `view=`, `chart=`, `period=`, `filters=` all persisted via `replaceState`. Shareable/bookmarkable. Filter defaults restored via `ViewControlsPanel` `initialValues` param. Language not yet included.
 
 - [x] **Data table toggle** — Done. Collapsible data table with dropdown column filters,
   zebra striping, sticky headers, filtered/total row count. Client-side filtering via

@@ -5,11 +5,12 @@
 class ViewControlsPanel {
     static TOTAL_RE = /^\s*(total|toate|ambele sexe|ambele|urban\s*\+\s*rural|m\s*\+\s*f)\s*$/i;
 
-    constructor(container, controls, dimensions, onChange) {
+    constructor(container, controls, dimensions, onChange, initialValues = {}) {
         this.container = container;
         this.controls = controls || [];
         this.dimensions = dimensions || [];
         this.onChange = onChange;
+        this.initialValues = initialValues;  // URL-restored filter overrides
         this.widgets = [];       // { control, element, getValue }
         this.periodBrowser = null;
         this.render();
@@ -27,6 +28,11 @@ class ViewControlsPanel {
      * For pill_group / multi_select with few options, empty = "All" is OK.
      */
     resolveDefault(control, options) {
+        // URL-restored value takes priority over computed defaults
+        if (this.initialValues[control.column]?.length > 0) {
+            return this.initialValues[control.column];
+        }
+
         const def = control.default;
         if (Array.isArray(def)) return def;
 
