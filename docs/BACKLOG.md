@@ -95,6 +95,8 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
 ### Search quality — follow-ups surfaced by `tempo_eval_agent`
 - [x] **Preserve FTS relevance ordering through the outer query.** Fixed via `list_position(ARRAY[...], m.matrix_code)` ORDER BY when FTS is active and `sort='updated'`. Major improvements: "populatie pe judete" → POP108D/POP107D #1-2 (was LOC108B); "exporturi pe tari" → INT106B/EXP101I (was TUR105F); "accidente de munca" → ACC102B (was AMG130M). Baseline updated.
 - [x] **Agent: restore `search_datasets` default limit to 10** — reverted from 6→10 in schema default and `_handle_search_datasets`. AMG159E (regional unemployment) at position 7 is now visible.
+- [ ] **ask.html: Save/bookmark queries** — Allow users to save question+answer pairs from the chat UI.  Options to consider: localStorage-based history list (sidebar or modal), shareable URLs encoding the question. Related: conversation history is already tracked in-memory per session (`history[]` in ask.js) — persisting it to localStorage across sessions would be the simplest first step.
+
 
 ### View profiles — follow-ups surfaced by `tempo_check_view_profiles`
 - [ ] 197 parquets without view profiles — regenerate VPs via `python generate_view_profiles.py` and add a pipeline-tail step that fails if the audit reports missing VPs.
