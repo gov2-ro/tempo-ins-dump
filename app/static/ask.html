@@ -339,6 +339,28 @@
             text-align: center;
             margin-top: 6px;
         }
+        #byok-notice {
+            font-size: 0.8rem;
+            color: var(--text-2);
+            background: var(--bg-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #byok-notice.hidden { display: none; }
+        #byok-notice-btn {
+            font-size: 0.78rem;
+            color: var(--accent);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            text-decoration: underline;
+        }
 
         /* ---------------------------------------------------------------
            BYOK Settings panel
@@ -498,6 +520,10 @@
 
         <!-- Input -->
         <div class="chat-input-area">
+            <div id="byok-notice" class="hidden">
+                <span>🔑 Set your API key to start chatting.</span>
+                <button id="byok-notice-btn">Open settings</button>
+            </div>
             <div class="chat-input-row">
                 <textarea id="chat-input" rows="1" placeholder="Întreabă ceva despre datele statistice…" autocomplete="off" spellcheck="false"></textarea>
                 <button id="chat-send" title="Trimite (Enter)">

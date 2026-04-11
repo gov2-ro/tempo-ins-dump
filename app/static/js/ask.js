@@ -42,9 +42,11 @@ function clearBYOK() {
 }
 
 function updateKeyBadge() {
-    const badge = document.getElementById('settings-badge');
     const hasKey = !!localStorage.getItem('ask_api_key');
+    const badge = document.getElementById('settings-badge');
     if (badge) badge.classList.toggle('hidden', !hasKey);
+    const notice = document.getElementById('byok-notice');
+    if (notice) notice.classList.toggle('hidden', hasKey);
 }
 
 /** Returns extra payload fields when a user key is stored, empty object otherwise. */
@@ -96,6 +98,10 @@ async function initSettings() {
     document.getElementById('s-provider').addEventListener('change', e => {
         populateModelSelect(e.target.value, '');
     });
+
+    // "Open settings" link in the no-key notice
+    const noticeBtn = document.getElementById('byok-notice-btn');
+    if (noticeBtn) noticeBtn.addEventListener('click', e => { e.stopPropagation(); panel.classList.remove('hidden'); });
 
     // Toggle panel visibility
     toggle.addEventListener('click', e => {
