@@ -16,7 +16,8 @@ let isLoading = false;
 // BYOK — Bring Your Own Key settings (persisted in localStorage)
 // ---------------------------------------------------------------------------
 
-const PROVIDER_DEFAULTS = { anthropic: 'claude-sonnet-4-6', openai: 'gpt-4o' };
+const PROVIDER_DEFAULTS = { anthropic: 'claude-sonnet-4-6', openai: 'gpt-4o', gemini: 'gemini-2.0-flash' };
+let PROVIDER_MODELS = {};  // loaded from /ask-models.json
 
 function getBYOK() {
     const apiKey = localStorage.getItem('ask_api_key') || '';
@@ -50,29 +51,51 @@ function updateKeyBadge() {
 function byokPayload() {
     const { apiKey, provider, model } = getBYOK();
     if (!apiKey) return {};
-    const resolvedModel = model || PROVIDER_DEFAULTS[provider] || '';
-    return { provider, api_key: apiKey, ...(resolvedModel ? { model: resolvedModel } : {}) };
+    return { provider, model: model || PROVIDER_DEFAULTS[provider] || undefined, api_key: apiKey };
 }
 
-function initSettings() {
+function populateModelSelect(provider, selectedModel) {
+    const sel = document.getElementById('s-model');
+    if (!sel) return;
+    sel.innerHTML = '';
+    const models = PROVIDER_MODELS[provider] || [];
+    for (const m of models) {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.label;
+        sel.appendChild(opt);
+    }
+    // Select saved model, or first option
+    if (selectedModel && models.some(m => m.id === selectedModel)) sel.value = selectedModel;
+    else if (models.length) sel.value = models[0].id;
+}
+
+async function initSettings() {
     const toggle = document.getElementById('settings-toggle');
     const panel  = document.getElementById('ask-settings');
     if (!toggle || !panel) return;
 
+    // Load model list from JSON
+    try {
+        const resp = await fetch('/ask-models.json');
+        PROVIDER_MODELS = await resp.json();
+    } catch {
+        // Fallback: one entry per provider using defaults
+        for (const [p, id] of Object.entries(PROVIDER_DEFAULTS))
+            PROVIDER_MODELS[p] = [{ id, label: id }];
+    }
+
     // Populate fields from localStorage
     const { provider, model, apiKey } = getBYOK();
     document.getElementById('s-provider').value = provider;
-    document.getElementById('s-model').value = model;
+    populateModelSelect(provider, model);
     document.getElementById('s-key').value = apiKey;
     updateKeyBadge();
 
-    // Auto-fill model placeholder on provider change
+    // Rebuild model dropdown when provider changes
     document.getElementById('s-provider').addEventListener('change', e => {
-        const sel = e.target.value;
-        const modelInput = document.getElementById('s-model');
-        modelInput.placeholder = PROVIDER_DEFAULTS[sel] || '';
+        populateModelSelect(e.target.value, '');
     });
-    document.getElementById('s-provider').dispatchEvent(new Event('change'));
 
     // Toggle panel visibility
     toggle.addEventListener('click', e => {
@@ -86,14 +109,14 @@ function initSettings() {
 
     document.getElementById('s-save').addEventListener('click', () => {
         const p = document.getElementById('s-provider').value;
-        const m = document.getElementById('s-model').value.trim();
+        const m = document.getElementById('s-model').value;
         const k = document.getElementById('s-key').value.trim();
         saveBYOK(p, m, k);
         panel.classList.add('hidden');
     });
 
     document.getElementById('s-clear').addEventListener('click', () => {
-        document.getElementById('s-model').value = '';
+        populateModelSelect(document.getElementById('s-provider').value, '');
         document.getElementById('s-key').value = '';
         clearBYOK();
         panel.classList.add('hidden');

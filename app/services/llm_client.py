@@ -47,6 +47,14 @@ def complete_with_tools(
 
     if prov == "openai":
         return _openai(messages, tools, model=mdl, system=system, max_tokens=max_tokens, api_key=api_key)
+    if prov == "gemini":
+        # Gemini via OpenAI-compatible endpoint — no extra dependency needed
+        key = api_key or config.GEMINI_API_KEY or None
+        return _openai(
+            messages, tools, model=mdl, system=system, max_tokens=max_tokens,
+            api_key=key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
     return _anthropic(messages, tools, model=mdl, system=system, max_tokens=max_tokens, api_key=api_key)
 
 
@@ -119,10 +127,10 @@ def _to_anthropic_message(msg: dict) -> dict:
 # OpenAI backend
 # ---------------------------------------------------------------------------
 
-def _openai(messages, tools, *, model, system, max_tokens, api_key=None) -> LLMResponse:
+def _openai(messages, tools, *, model, system, max_tokens, api_key=None, base_url=None) -> LLMResponse:
     import openai
 
-    client = openai.OpenAI(api_key=api_key)  # None → reads OPENAI_API_KEY from env
+    client = openai.OpenAI(api_key=api_key, base_url=base_url)  # None → reads OPENAI_API_KEY / default base URL
 
     oai_messages = [{"role": "system", "content": system}] if system else []
     oai_messages += [_to_openai_message(m) for m in messages]

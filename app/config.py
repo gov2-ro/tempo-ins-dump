@@ -19,6 +19,7 @@ DEBUG = os.environ.get("TEMPO_DEBUG", "false").lower() in ("1", "true", "yes")
 
 # LLM agent (POST /api/ask) — disabled by default
 ASK_ENABLED        = os.environ.get("TEMPO_ASK_ENABLED", "false").lower() in ("1", "true", "yes")
-LLM_PROVIDER       = os.environ.get("TEMPO_LLM_PROVIDER", "anthropic")   # anthropic | openai
+LLM_PROVIDER       = os.environ.get("TEMPO_LLM_PROVIDER", "anthropic")   # anthropic | openai | gemini
 LLM_MODEL          = os.environ.get("TEMPO_LLM_MODEL", "claude-sonnet-4-6")
 ASK_MAX_TOOL_CALLS = int(os.environ.get("TEMPO_ASK_MAX_TOOL_CALLS", "8"))
+GEMINI_API_KEY     = os.environ.get("GEMINI_API_KEY", "")  # server-side Gemini key (optional)
