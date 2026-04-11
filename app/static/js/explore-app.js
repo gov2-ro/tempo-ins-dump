@@ -60,6 +60,12 @@ const UI = {
         xAxisLabel: 'Axă',
         colorLabel: 'Grupare',
         noneDim: 'Niciuna',
+        indexMode: 'Index',
+        yoyMode: 'Δ%',
+        rankMode: 'Rang',
+        indexTooltip: 'Perioadă de bază = 100',
+        yoyTooltip: 'Variație anuală %',
+        distribution: 'Distribuție',
         aboutLink: 'Despre',
         aboutTitle: 'Despre INS+',
         aboutContent: `
@@ -122,6 +128,12 @@ const UI = {
         xAxisLabel: 'Axis',
         colorLabel: 'Group',
         noneDim: 'None',
+        indexMode: 'Index',
+        yoyMode: 'Δ%',
+        rankMode: 'Rank',
+        indexTooltip: 'Base period = 100',
+        yoyTooltip: 'Year-over-year %',
+        distribution: 'Distribution',
         aboutLink: 'About',
         aboutTitle: 'About INS+',
         aboutContent: `
@@ -285,6 +297,7 @@ class LensApp {
         this.selectedPeriodIdx = -1;       // -1 = latest period
         this.playInterval = null;          // auto-advance timer
         this.panelSetup = null;            // result of determinePanelSetup()
+        this.timeTransform = null;         // null | 'index' | 'yoy'
 
         // Sidebar state
         this._sidebarLoaded = false;
@@ -319,6 +332,8 @@ class LensApp {
         this._urlTChart  = params.get('tchart') || null;
         this._urlSChart  = params.get('schart') || null;
         this._urlPeriod  = params.get('period') || null;
+        const tmode = params.get('tmode');
+        if (tmode === 'index' || tmode === 'yoy') this.timeTransform = tmode;
         this._urlFilters = {};
         try { const f = params.get('filters'); if (f) this._urlFilters = JSON.parse(f); } catch {}
         const lnk = document.getElementById('about-link');
@@ -1296,7 +1311,9 @@ class LensApp {
         }
 
         // Time chart types
-        const timeChartTypes = hasTimePanel ? ['line', 'bar', 'area_stacked', 'stacked_bar'] : [];
+        const seriesDimMeta = timeSeriesDim ? dims.find(d => d.dim_column_name === timeSeriesDim) : null;
+        const seriesCount = seriesDimMeta ? (seriesDimMeta.option_count || 0) : 0;
+        const timeChartTypes = hasTimePanel ? ['line', 'bar', 'area_stacked', 'stacked_bar', ...(seriesCount >= 3 ? ['ranking'] : [])] : [];
 
         // Snapshot chart types
         let snapshotChartTypes = [];
@@ -1370,7 +1387,7 @@ class LensApp {
         pills.innerHTML = '';
 
         const LABELS = {
-            line: 'Line', bar: 'Bar', area_stacked: 'Area', stacked_bar: 'Stacked',
+            line: 'Line', bar: 'Bar', area_stacked: 'Area', stacked_bar: 'Stacked', ranking: this.ui.rankMode,
         };
 
         for (const type of setup.timeChartTypes) {
@@ -1379,7 +1396,7 @@ class LensApp {
             btn.textContent = LABELS[type] || type;
             btn.addEventListener('click', () => {
                 this.timeChartType = type;
-                pills.querySelectorAll('.ct-btn').forEach(b => b.classList.remove('active'));
+                pills.querySelectorAll('.ct-btn:not(.transform-btn)').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 const el = document.getElementById('time-chart');
                 el.style.opacity = '0.4';
@@ -1387,6 +1404,27 @@ class LensApp {
                 this.renderTimeChart();
                 el.style.opacity = '';
                 el.style.transition = '';
+                this._syncURL();
+            });
+            pills.appendChild(btn);
+        }
+
+        // Transform mode toggles (Index, YoY) — separator + two toggle buttons
+        const sep = document.createElement('span');
+        sep.className = 'ct-sep';
+        sep.textContent = '·';
+        pills.appendChild(sep);
+
+        for (const [mode, label, tooltip] of [['index', this.ui.indexMode, this.ui.indexTooltip], ['yoy', this.ui.yoyMode, this.ui.yoyTooltip]]) {
+            const btn = document.createElement('button');
+            btn.className = 'ct-btn transform-btn' + (this.timeTransform === mode ? ' active' : '');
+            btn.textContent = label;
+            btn.title = tooltip;
+            btn.addEventListener('click', () => {
+                this.timeTransform = this.timeTransform === mode ? null : mode;
+                pills.querySelectorAll('.transform-btn').forEach(b => b.classList.remove('active'));
+                if (this.timeTransform) btn.classList.add('active');
+                this.renderTimeChart();
                 this._syncURL();
             });
             pills.appendChild(btn);
@@ -1780,6 +1818,12 @@ class LensApp {
         else
             url.searchParams.delete('tchart');
 
+        // Time transform mode
+        if (this.timeTransform)
+            url.searchParams.set('tmode', this.timeTransform);
+        else
+            url.searchParams.delete('tmode');
+
         // Snapshot chart type
         if (this.snapshotChartType)
             url.searchParams.set('schart', this.snapshotChartType);
@@ -2007,6 +2051,107 @@ class LensApp {
         container.appendChild(card);
     }
 
+    /**
+     * Apply index/rebase or YoY transform to data rows.
+     * Returns a new data object with transformed OBS_VALUE column.
+     */
+    _applyTimeTransform(data, timeDim, seriesDim) {
+        if (!this.timeTransform || !data || !data.rows.length) return data;
+        const cols = data.columns;
+        const timeIdx = cols.indexOf(timeDim);
+        if (timeIdx === -1) return data;
+        const seriesIdx = seriesDim ? cols.indexOf(seriesDim) : -1;
+        const valIdx = cols.length - 1;
+
+        // Group rows by series key
+        const groups = new Map();
+        for (const row of data.rows) {
+            const key = seriesIdx >= 0 ? String(row[seriesIdx]) : '__all__';
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(row);
+        }
+
+        const newRows = [];
+        for (const rows of groups.values()) {
+            const sorted = [...rows].sort((a, b) => String(a[timeIdx]).localeCompare(String(b[timeIdx])));
+            if (this.timeTransform === 'index') {
+                const base = sorted[0]?.[valIdx];
+                if (base == null || base === 0) continue;
+                for (const row of sorted) {
+                    const nr = [...row];
+                    nr[valIdx] = row[valIdx] != null ? (row[valIdx] / base) * 100 : null;
+                    newRows.push(nr);
+                }
+            } else if (this.timeTransform === 'yoy') {
+                for (let i = 1; i < sorted.length; i++) {
+                    const prev = sorted[i - 1][valIdx];
+                    const curr = sorted[i][valIdx];
+                    if (prev == null || prev === 0 || curr == null) continue;
+                    const nr = [...sorted[i]];
+                    nr[valIdx] = ((curr - prev) / Math.abs(prev)) * 100;
+                    newRows.push(nr);
+                }
+            }
+        }
+        return { ...data, rows: newRows };
+    }
+
+    /**
+     * Render distribution strip chart (box + scatter) below choropleth.
+     * Extracts geo values for the selected period.
+     */
+    _renderDistribution(data, setup) {
+        const strip = document.getElementById('distribution-strip');
+        if (!strip) return;
+
+        const isChoropleth = this.snapshotChartType === 'choropleth';
+        if (!isChoropleth || !setup?.geoDim || !data?.rows.length) {
+            strip.classList.add('hidden');
+            return;
+        }
+
+        const cols = data.columns;
+        const timeIdx = setup.timeDim ? cols.indexOf(setup.timeDim) : -1;
+        const valIdx = cols.length - 1;
+
+        // Use selected period if it has data, otherwise fall back to latest period present in data
+        let targetPeriod = null;
+        if (timeIdx !== -1) {
+            const periods = setup.periods;
+            const pidx = this.selectedPeriodIdx < 0 ? periods.length - 1 : this.selectedPeriodIdx;
+            const selectedPeriod = periods[pidx];
+            // Check if selected period has data
+            const inData = new Set(data.rows.map(r => String(r[timeIdx])));
+            if (selectedPeriod && inData.has(String(selectedPeriod.id))) {
+                targetPeriod = String(selectedPeriod.id);
+            } else {
+                // Find latest period actually in data
+                const dataPeriods = [...inData].sort();
+                targetPeriod = dataPeriods[dataPeriods.length - 1] || null;
+            }
+        }
+
+        let rows = data.rows;
+        if (targetPeriod && timeIdx !== -1) {
+            rows = rows.filter(r => String(r[timeIdx]) === targetPeriod);
+        }
+
+        const values = rows.map(r => r[valIdx]).filter(v => v != null && !isNaN(v));
+        if (values.length < 3) {
+            strip.classList.add('hidden');
+            return;
+        }
+
+        strip.classList.remove('hidden');
+        const container = document.getElementById('distribution-chart');
+        if (!container) return;
+
+        // Dispose old chart
+        if (this._distChart && !this._distChart.isDisposed()) this._distChart.dispose();
+
+        this._distChart = createDistributionChart(container, values, targetPeriod || '');
+    }
+
     formatBigNumber(n) {
         if (n == null) return '—';
         const abs = Math.abs(n);
@@ -2044,8 +2189,12 @@ class LensApp {
                 time_dim: setup.timeDim,
                 series_dim: setup.timeSeriesDim,
                 x_axis_dim: setup.timeDim,  // time is always on x-axis for this panel
+                _valueFormat: this.timeTransform === 'index' ? 'index' :
+                              this.timeTransform === 'yoy'   ? 'pct_change' : null,
             };
-            const chart = await createChart(container, cfg, this._translateData(this.data), this.metadata);
+            const translated = this._translateData(this.data);
+            const transformed = this._applyTimeTransform(translated, setup.timeDim, setup.timeSeriesDim);
+            const chart = await createChart(container, cfg, transformed, this.metadata);
             if (chart) {
                 chart._timePanel = true;
                 this.charts.push(chart);
@@ -2063,6 +2212,7 @@ class LensApp {
 
         if (!setup?.hasSnapshotPanel || !this.snapshotChartType) {
             container.innerHTML = '';
+            document.getElementById('distribution-strip')?.classList.add('hidden');
             return;
         }
 
@@ -2091,8 +2241,13 @@ class LensApp {
             }
         }
 
-        if (filteredData.rows.length === 0) {
+        const isChoropleth = this.snapshotChartType === 'choropleth';
+
+        // For non-choropleth charts, bail early if the selected period has no data
+        // Choropleth uses all time periods internally, so skip this check for it
+        if (!isChoropleth && filteredData.rows.length === 0) {
             container.innerHTML = `<div class="chart-loading">${this.ui.noDataFilters}</div>`;
+            document.getElementById('distribution-strip')?.classList.add('hidden');
             return;
         }
 
@@ -2104,7 +2259,6 @@ class LensApp {
         container.innerHTML = '';
 
         try {
-            const isChoropleth = this.snapshotChartType === 'choropleth';
             const cfg = {
                 ...this.chartConfig,
                 ranked_charts: [],
@@ -2126,6 +2280,8 @@ class LensApp {
                 const btn = document.getElementById('snapshot-png-btn');
                 if (btn) { btn.classList.remove('hidden'); btn.onclick = () => _exportPng(chart, `${this.metadata.matrix_code}-snapshot`); }
             }
+            // Distribution strip: auto-shown below choropleth
+            this._renderDistribution(this.data, setup);
         } catch (err) {
             container.innerHTML = `<div class="chart-loading" style="color:var(--red)">Chart error: ${err.message}</div>`;
         }

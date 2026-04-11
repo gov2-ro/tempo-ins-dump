@@ -1,6 +1,6 @@
 /**
  * New chart renderers: population_pyramid, horizontal_bar, stacked_bar, heatmap,
- *                      bubble, small_multiples
+ *                      bubble, small_multiples, ranking (bump), distribution (box+scatter)
  */
 
 // ---------------------------------------------------------------------------
@@ -998,5 +998,215 @@ function createSmallMultiplesChart(container, config, data, metadata) {
         dataZoom: dataZoomArr,
         animationDuration: 300,
     });
+    return chart;
+}
+
+// ---------------------------------------------------------------------------
+// Ranking / Bump chart — rank positions over time (rank 1 = highest value)
+// ---------------------------------------------------------------------------
+
+function createRankingChart(container, config, data, metadata) {
+    const chart = echarts.init(container);
+    const cols = data.columns;
+    const labels = data.column_labels || {};
+    const timeDim = config.time_dim;
+    const seriesDim = config.series_dim;
+    const valIdx = cols.length - 1;
+    const timeIdx = timeDim ? cols.indexOf(timeDim) : -1;
+    const seriesIdx = seriesDim ? cols.indexOf(seriesDim) : -1;
+
+    if (timeIdx === -1 || seriesIdx === -1) {
+        return createTimeSeriesChart(container, config, data, metadata);
+    }
+
+    const timeLabels = labels[timeDim] || {};
+    const seriesLabels = labels[seriesDim] || {};
+
+    const timePts = uniqueValues(data.rows, timeIdx);
+    const allSeries = uniqueValues(data.rows, seriesIdx);
+
+    // Build value map: series → time → value
+    const valueMap = {};
+    for (const row of data.rows) {
+        const s = row[seriesIdx];
+        const t = row[timeIdx];
+        const v = row[valIdx];
+        if (!valueMap[s]) valueMap[s] = {};
+        if (valueMap[s][t] == null && v != null) valueMap[s][t] = v;
+    }
+
+    // Compute rank per time point (1 = highest)
+    const rankMap = {};
+    for (const t of timePts) {
+        const valid = allSeries
+            .filter(s => valueMap[s]?.[t] != null)
+            .sort((a, b) => (valueMap[b][t] || 0) - (valueMap[a][t] || 0));
+        valid.forEach((s, i) => {
+            if (!rankMap[s]) rankMap[s] = {};
+            rankMap[s][t] = i + 1;
+        });
+    }
+
+    // Cap to top 15 by average rank
+    const MAX_SERIES = 15;
+    let displaySeries = allSeries;
+    if (allSeries.length > MAX_SERIES) {
+        displaySeries = allSeries
+            .map(s => {
+                const ranks = timePts.map(t => rankMap[s]?.[t] ?? 999);
+                return { s, avg: ranks.reduce((a, b) => a + b, 0) / ranks.length };
+            })
+            .sort((a, b) => a.avg - b.avg)
+            .slice(0, MAX_SERIES)
+            .map(x => x.s);
+    }
+
+    const maxRank = Math.max(...displaySeries.flatMap(s => timePts.map(t => rankMap[s]?.[t] || 0)));
+    const xData = timePts.map(t => (timeLabels[String(t)] || String(t)).replace(/^Anul\s+/, ''));
+
+    const palette = ['#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#3ba272','#fc8452','#9a60b4','#ea7ccc',
+        '#91cc75','#5470c6','#fac858','#ee6666','#73c0de','#3ba272'];
+
+    const series = displaySeries.map((s, i) => ({
+        name: seriesLabels[String(s)] || String(s),
+        type: 'line',
+        data: timePts.map(t => rankMap[s]?.[t] ?? null),
+        smooth: 0.2,
+        symbol: 'circle',
+        symbolSize: 7,
+        lineStyle: { width: 2, color: palette[i % palette.length] },
+        itemStyle: { color: palette[i % palette.length] },
+        label: {
+            show: true,
+            position: 'right',
+            formatter: p => p.dataIndex === timePts.length - 1 ? (seriesLabels[String(s)] || String(s)) : '',
+            fontSize: 10,
+        },
+        emphasis: { lineStyle: { width: 4 } },
+        connectNulls: false,
+    }));
+
+    chart.setOption({
+        backgroundColor: 'transparent',
+        tooltip: {
+            trigger: 'axis',
+            formatter: params => {
+                const header = `<b>${params[0]?.axisValue}</b><br/>`;
+                return header + params
+                    .filter(p => p.value != null)
+                    .sort((a, b) => a.value - b.value)
+                    .map(p => `${p.marker}${p.seriesName}: <b>#${p.value}</b>`)
+                    .join('<br/>');
+            },
+        },
+        legend: { show: false },
+        grid: { top: 20, right: 140, bottom: 40, left: 50 },
+        xAxis: { type: 'category', data: xData, boundaryGap: false },
+        yAxis: {
+            type: 'value',
+            inverse: true,
+            min: 1,
+            max: maxRank,
+            interval: 1,
+            axisLabel: { formatter: '#{value}' },
+            name: 'Rank',
+            nameLocation: 'middle',
+            nameGap: 35,
+        },
+        series,
+        animationDuration: 400,
+    });
+
+    window.addEventListener('resize', () => { if (!chart.isDisposed()) chart.resize(); });
+    return chart;
+}
+
+// ---------------------------------------------------------------------------
+// Distribution strip — box plot + scatter dots (compact, for distribution-strip)
+// ---------------------------------------------------------------------------
+
+function createDistributionChart(container, values, periodLabel) {
+    const chart = echarts.init(container);
+    const sorted = [...values].filter(v => v != null && !isNaN(v)).sort((a, b) => a - b);
+    const n = sorted.length;
+    if (n === 0) return chart;
+
+    const q = p => sorted[Math.max(0, Math.floor(n * p))];
+    const min = sorted[0], max = sorted[n - 1];
+    const q1 = q(0.25), median = q(0.5), q3 = q(0.75);
+    const mean = sorted.reduce((a, b) => a + b, 0) / n;
+
+    // Jitter y for scatter (avoid all dots on same line)
+    const scatterData = sorted.map(v => [v, (Math.random() - 0.5) * 0.6]);
+
+    chart.setOption({
+        backgroundColor: 'transparent',
+        tooltip: {
+            trigger: 'item',
+            formatter: p => {
+                if (p.seriesType === 'boxplot') {
+                    return `Min: ${formatNumber(min)}<br/>Q1: ${formatNumber(q1)}<br/>Median: ${formatNumber(median)}<br/>Q3: ${formatNumber(q3)}<br/>Max: ${formatNumber(max)}`;
+                }
+                return formatNumber(p.value[0]);
+            },
+        },
+        grid: { top: 8, bottom: 28, left: 16, right: 16, containLabel: true },
+        xAxis: {
+            type: 'value',
+            name: periodLabel,
+            nameLocation: 'middle',
+            nameGap: 18,
+            nameTextStyle: { fontSize: 10, opacity: 0.6 },
+            axisLabel: { fontSize: 10, formatter: v => formatNumber(v) },
+            splitLine: { show: false },
+        },
+        yAxis: {
+            type: 'value',
+            show: false,
+            min: -1,
+            max: 1,
+        },
+        series: [
+            {
+                type: 'scatter',
+                data: scatterData,
+                symbolSize: 5,
+                itemStyle: { color: 'var(--accent, #5470c6)', opacity: 0.45 },
+                z: 1,
+            },
+            {
+                type: 'custom',
+                renderItem(params, api) {
+                    const x1 = api.coord([min, 0]);
+                    const x2 = api.coord([q1, 0]);
+                    const x3 = api.coord([median, 0]);
+                    const x4 = api.coord([q3, 0]);
+                    const x5 = api.coord([max, 0]);
+                    const halfH = 12;
+                    const y = x1[1];
+                    return {
+                        type: 'group',
+                        children: [
+                            // whisker lines
+                            { type: 'line', shape: { x1: x1[0], y1: y, x2: x2[0], y2: y }, style: { stroke: 'var(--accent, #5470c6)', lineWidth: 1.5, opacity: 0.7 } },
+                            { type: 'line', shape: { x1: x4[0], y1: y, x2: x5[0], y2: y }, style: { stroke: 'var(--accent, #5470c6)', lineWidth: 1.5, opacity: 0.7 } },
+                            // min/max caps
+                            { type: 'line', shape: { x1: x1[0], y1: y - halfH/2, x2: x1[0], y2: y + halfH/2 }, style: { stroke: 'var(--accent, #5470c6)', lineWidth: 1.5, opacity: 0.7 } },
+                            { type: 'line', shape: { x1: x5[0], y1: y - halfH/2, x2: x5[0], y2: y + halfH/2 }, style: { stroke: 'var(--accent, #5470c6)', lineWidth: 1.5, opacity: 0.7 } },
+                            // IQR box
+                            { type: 'rect', shape: { x: x2[0], y: y - halfH, width: x4[0] - x2[0], height: halfH * 2 }, style: { fill: 'var(--accent, #5470c6)', opacity: 0.2, stroke: 'var(--accent, #5470c6)', lineWidth: 1.5 } },
+                            // median line
+                            { type: 'line', shape: { x1: x3[0], y1: y - halfH, x2: x3[0], y2: y + halfH }, style: { stroke: 'var(--accent, #5470c6)', lineWidth: 2.5 } },
+                        ],
+                    };
+                },
+                data: [0],  // single entry triggers renderItem once
+                z: 2,
+                tooltip: { show: false },
+            },
+        ],
+    });
+
+    window.addEventListener('resize', () => { if (!chart.isDisposed()) chart.resize(); });
     return chart;
 }

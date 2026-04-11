@@ -1231,6 +1231,36 @@ kbd {
     cursor: not-allowed;
 }
 
+/* Transform mode toggles (Index / YoY) — subtle style distinction */
+.ct-btn.transform-btn {
+    font-family: monospace;
+    font-size: 11px;
+    letter-spacing: 0.03em;
+}
+.ct-btn.transform-btn.active {
+    color: var(--green, #22c55e);
+    background: rgba(34,197,94,0.12);
+    border-color: rgba(34,197,94,0.25);
+}
+
+/* Separator dot between chart type pills and transform toggles */
+.ct-sep {
+    color: var(--text-3, var(--text-2));
+    font-size: 12px;
+    opacity: 0.5;
+    padding: 0 2px;
+    pointer-events: none;
+    user-select: none;
+}
+
+/* Distribution strip below choropleth */
+.distribution-strip {
+    border-top: 1px solid var(--border);
+    padding: 4px 0 0;
+    background: var(--bg-1);
+}
+.distribution-strip.hidden { display: none; }
+
 /* Dimension pickers (inline with panel pills) */
 .dim-picker {
     display: inline-flex;

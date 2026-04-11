@@ -160,6 +160,9 @@
                     <button class="panel-png-btn hidden" id="snapshot-png-btn" title="Export PNG">↓ PNG</button>
                 </div>
                 <div class="chart-container"><div id="snapshot-chart" style="width:100%;height:100%"></div></div>
+                <div class="distribution-strip hidden" id="distribution-strip">
+                    <div id="distribution-chart" style="width:100%;height:110px"></div>
+                </div>
             </div>
             <div class="filter-strip" id="filter-strip"></div>
             <div class="table-toggle-row" id="table-toggle-row">
@@ -197,11 +200,11 @@
     <!-- Scripts: reuse existing API + chart modules -->
     <script src="/js/utils.js?v=22"></script>
     <script src="/js/api.js?v=26"></script>
-    <script src="/js/chart-factory.js?v=30"></script>
-    <script src="/js/chart-new-types.js?v=28"></script>
+    <script src="/js/chart-factory.js?v=31"></script>
+    <script src="/js/chart-new-types.js?v=29"></script>
     <script src="/js/chart-geo.js?v=21"></script>
     <script src="/js/chart-demographic.js?v=25"></script>
-    <script src="/js/explore-app.js?v=49"></script>
+    <script src="/js/explore-app.js?v=52"></script>
 <style>
     #zelogo:after { opacity: .5;
 content: "α WIP"; font-weight: normal; font-size: 11px; color: #FFF; background-color: #C99; line-height: 1; padding: 1px 3px;

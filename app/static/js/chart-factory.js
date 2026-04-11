@@ -83,6 +83,8 @@ async function createChart(container, chartConfig, data, metadata) {
             return createScatterChart(container, cfg, data, metadata);
         case 'small_multiples':
             return createSmallMultiplesChart(container, cfg, data, metadata);
+        case 'ranking':
+            return createRankingChart(container, cfg, data, metadata);
         default:
             return createTimeSeriesChart(container, cfg, data, metadata);
     }
@@ -193,6 +195,17 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
 
     const showTotal = series.length > 1;
 
+    const vfmt = config._valueFormat;
+    const fmtVal = v => {
+        if (v == null) return '—';
+        if (vfmt === 'index') return v.toFixed(1);
+        if (vfmt === 'pct_change') return (v > 0 ? '+' : '') + v.toFixed(2) + '%';
+        return formatNumber(v);
+    };
+    const yAxisLabel = vfmt === 'index' ? v => v.toFixed(0)
+                     : vfmt === 'pct_change' ? v => v.toFixed(1) + '%'
+                     : v => formatNumber(v);
+
     const option = {
         tooltip: {
             trigger: 'axis',
@@ -203,13 +216,13 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
                 let hasValues = false;
                 for (const p of params) {
                     if (p.value !== null && p.value !== undefined) {
-                        rows += `${p.marker} ${p.seriesName}: <b>${formatNumber(p.value)}</b><br/>`;
+                        rows += `${p.marker} ${p.seriesName}: <b>${fmtVal(p.value)}</b><br/>`;
                         total += p.value;
                         hasValues = true;
                     }
                 }
                 let html = `<b>${params[0].axisValue}</b>`;
-                if (showTotal && hasValues) {
+                if (!vfmt && showTotal && hasValues) {
                     html += `<br/>∑ <b>${formatNumber(total)}</b>`;
                     html += `<hr style="margin:4px 0;border-color:currentColor;opacity:0.15"/>`;
                 } else {
@@ -239,7 +252,7 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
             type: 'value',
             axisLabel: {
                 fontSize: 11,
-                formatter: (v) => formatNumber(v),
+                formatter: yAxisLabel,
             },
         },
         dataZoom: [
