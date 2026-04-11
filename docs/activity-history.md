@@ -1,5 +1,13 @@
 # Activity History
 
+## 2026-04-11 — BYOK (Bring Your Own Key) for ask.html
+
+Added per-user API key support to the `/ask.html` chat UI. Users can set their own Anthropic or OpenAI key via a gear icon settings panel in the topbar. Key stored in `localStorage` only — never persisted server-side.
+
+**Frontend** (`ask.html`, `ask.js`): gear icon in topbar opens a dropdown panel with provider select, model input, and password key input. Save/Clear buttons. `🔑` badge on gear when key active. Key included in request payload via `byokPayload()` helper only when set.
+
+**Backend** (`ask.py`, `agent.py`, `llm_client.py`): `AskRequest` extended with optional `provider`, `model`, `api_key` fields. Gate logic updated to allow requests with `api_key` even when `TEMPO_ASK_ENABLED=false`. `api_key` threaded through `run_agent()` → `complete_with_tools()` → SDK constructors (`anthropic.Anthropic(api_key=...)` / `openai.OpenAI(api_key=...)`). `None` key preserves existing env-var behavior.
+
 ## 2026-04-11 — URL state persistence for index.html (explore-app.js)
 
 Implemented full URL state persistence in `explore-app.js` (the actual current UI, loaded by `index.html`). Pages are now shareable/bookmarkable with chart type, period, and filter state encoded in the URL.

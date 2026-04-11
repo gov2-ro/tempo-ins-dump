@@ -434,12 +434,22 @@ TOOL_HANDLERS = {
 # Agent loop
 # ---------------------------------------------------------------------------
 
-def run_agent(question: str, history: list[dict] | None = None) -> AgentResult:
+def run_agent(
+    question: str,
+    history: list[dict] | None = None,
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+) -> AgentResult:
     """Run the NL→Data agent loop.
 
     Args:
         question: User's natural language question.
         history:  Prior conversation turns in the format [{role, content}, ...].
+        provider: LLM provider override ("anthropic" | "openai"). None → env default.
+        model:    Model ID override. None → env default.
+        api_key:  BYOK API key. None → reads from env (default behaviour).
                   Passed directly to the LLM as message history.
 
     Returns:
@@ -459,7 +469,8 @@ def run_agent(question: str, history: list[dict] | None = None) -> AgentResult:
         if config.DEBUG:
             log.debug("Agent iteration %d, %d messages", iteration, len(messages))
 
-        resp = complete_with_tools(messages, TOOLS, system=SYSTEM_PROMPT)
+        resp = complete_with_tools(messages, TOOLS, system=SYSTEM_PROMPT,
+                                   provider=provider, model=model, api_key=api_key)
 
         if resp.text:
             # LLM produced a text response — may be mixed with tool calls

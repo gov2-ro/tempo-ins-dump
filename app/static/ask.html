@@ -339,16 +339,137 @@
             text-align: center;
             margin-top: 6px;
         }
+
+        /* ---------------------------------------------------------------
+           BYOK Settings panel
+        --------------------------------------------------------------- */
+        .settings-toggle-wrap {
+            position: relative;
+        }
+        .settings-badge {
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            font-size: 9px;
+            line-height: 1;
+            pointer-events: none;
+        }
+        .ask-settings-panel {
+            position: absolute;
+            top: calc(100% + 6px);
+            right: 12px;
+            z-index: 200;
+            background: var(--bg-1);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+            padding: 16px;
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .ask-settings-panel.hidden { display: none; }
+        .settings-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-1);
+            margin-bottom: 2px;
+        }
+        .settings-row {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .settings-row label {
+            font-size: 0.75rem;
+            color: var(--text-2);
+            font-weight: 500;
+        }
+        .settings-row select,
+        .settings-row input[type="text"],
+        .settings-row input[type="password"] {
+            background: var(--bg-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-0);
+            font-size: 0.83rem;
+            font-family: inherit;
+            padding: 6px 9px;
+            width: 100%;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        .settings-row input:focus,
+        .settings-row select:focus { border-color: var(--accent); }
+        .settings-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+        .s-btn {
+            font-size: 0.8rem;
+            padding: 5px 14px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: var(--bg-2);
+            color: var(--text-1);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .s-btn:hover { background: var(--bg-hover); }
+        .s-btn-primary {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+        .s-btn-primary:hover { opacity: 0.88; background: var(--accent); }
+        .settings-note {
+            font-size: 0.72rem;
+            color: var(--text-3);
+            line-height: 1.4;
+        }
     </style>
 </head>
 <body>
     <!-- Top bar -->
-    <nav class="topbar" id="topbar">
+    <nav class="topbar" id="topbar" style="position:relative;">
         <div class="topbar-left">
             <a id="zelogo" href="/" class="logo"><span class="logo-dot"></span>INS<span style="margin: -1ex 0 0 -1ex;">+</span></a>
             <a href="/" class="back-btn" style="display:inline-flex;align-items:center;gap:4px;font-size:0.85rem;color:var(--text-2);text-decoration:none;padding:4px 8px;border-radius:6px;transition:background 0.15s" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">&larr; Datasets</a>
         </div>
         <div class="topbar-right">
+            <!-- BYOK settings toggle -->
+            <div class="settings-toggle-wrap">
+                <button class="toggle-btn" id="settings-toggle" title="API key settings">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </button>
+                <span id="settings-badge" class="settings-badge hidden" title="Using your API key">🔑</span>
+                <!-- Settings panel -->
+                <div id="ask-settings" class="ask-settings-panel hidden">
+                    <div class="settings-title">API Key Settings</div>
+                    <div class="settings-row">
+                        <label for="s-provider">Provider</label>
+                        <select id="s-provider">
+                            <option value="anthropic">Anthropic</option>
+                            <option value="openai">OpenAI</option>
+                        </select>
+                    </div>
+                    <div class="settings-row">
+                        <label for="s-model">Model</label>
+                        <input id="s-model" type="text" placeholder="claude-sonnet-4-6" autocomplete="off">
+                    </div>
+                    <div class="settings-row">
+                        <label for="s-key">API Key</label>
+                        <input id="s-key" type="password" placeholder="sk-ant-… or sk-proj-…" autocomplete="off">
+                    </div>
+                    <div class="settings-actions">
+                        <button id="s-clear" class="s-btn">Clear</button>
+                        <button id="s-save" class="s-btn s-btn-primary">Save</button>
+                    </div>
+                    <div class="settings-note">Key is stored in your browser only and sent with each request. The server never logs or persists it.</div>
+                </div>
+            </div>
             <button class="toggle-btn" id="theme-toggle" title="Toggle light/dark theme">
                 <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
                 <svg id="theme-icon-moon" class="hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>

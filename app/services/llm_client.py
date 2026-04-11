@@ -28,6 +28,7 @@ def complete_with_tools(
     model: str | None = None,
     system: str = "",
     max_tokens: int = 2048,
+    api_key: str | None = None,
 ) -> LLMResponse:
     """Call an LLM with tool definitions, return a normalised LLMResponse.
 
@@ -39,23 +40,24 @@ def complete_with_tools(
         model:      Model ID. Defaults to config.LLM_MODEL.
         system:     System prompt text.
         max_tokens: Maximum output tokens.
+        api_key:    Optional BYOK API key. None → reads from env (default behaviour).
     """
     prov = provider or config.LLM_PROVIDER
     mdl = model or config.LLM_MODEL
 
     if prov == "openai":
-        return _openai(messages, tools, model=mdl, system=system, max_tokens=max_tokens)
-    return _anthropic(messages, tools, model=mdl, system=system, max_tokens=max_tokens)
+        return _openai(messages, tools, model=mdl, system=system, max_tokens=max_tokens, api_key=api_key)
+    return _anthropic(messages, tools, model=mdl, system=system, max_tokens=max_tokens, api_key=api_key)
 
 
 # ---------------------------------------------------------------------------
 # Anthropic backend
 # ---------------------------------------------------------------------------
 
-def _anthropic(messages, tools, *, model, system, max_tokens) -> LLMResponse:
+def _anthropic(messages, tools, *, model, system, max_tokens, api_key=None) -> LLMResponse:
     import anthropic
 
-    client = anthropic.Anthropic()
+    client = anthropic.Anthropic(api_key=api_key)  # None → reads ANTHROPIC_API_KEY from env
 
     # Convert generic messages to Anthropic format (handles tool results)
     ant_messages = [_to_anthropic_message(m) for m in messages]
@@ -117,10 +119,10 @@ def _to_anthropic_message(msg: dict) -> dict:
 # OpenAI backend
 # ---------------------------------------------------------------------------
 
-def _openai(messages, tools, *, model, system, max_tokens) -> LLMResponse:
+def _openai(messages, tools, *, model, system, max_tokens, api_key=None) -> LLMResponse:
     import openai
 
-    client = openai.OpenAI()
+    client = openai.OpenAI(api_key=api_key)  # None → reads OPENAI_API_KEY from env
 
     oai_messages = [{"role": "system", "content": system}] if system else []
     oai_messages += [_to_openai_message(m) for m in messages]

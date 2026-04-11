@@ -13,6 +13,94 @@ const history = [];   // [{role:'user'|'assistant', content: str}]
 let isLoading = false;
 
 // ---------------------------------------------------------------------------
+// BYOK — Bring Your Own Key settings (persisted in localStorage)
+// ---------------------------------------------------------------------------
+
+const PROVIDER_DEFAULTS = { anthropic: 'claude-sonnet-4-6', openai: 'gpt-4o' };
+
+function getBYOK() {
+    const apiKey = localStorage.getItem('ask_api_key') || '';
+    const provider = localStorage.getItem('ask_provider') || 'anthropic';
+    const model = localStorage.getItem('ask_model') || '';
+    return { apiKey, provider, model };
+}
+
+function saveBYOK(provider, model, apiKey) {
+    localStorage.setItem('ask_provider', provider);
+    localStorage.setItem('ask_model', model);
+    if (apiKey) localStorage.setItem('ask_api_key', apiKey);
+    else localStorage.removeItem('ask_api_key');
+    updateKeyBadge();
+}
+
+function clearBYOK() {
+    localStorage.removeItem('ask_provider');
+    localStorage.removeItem('ask_model');
+    localStorage.removeItem('ask_api_key');
+    updateKeyBadge();
+}
+
+function updateKeyBadge() {
+    const badge = document.getElementById('settings-badge');
+    const hasKey = !!localStorage.getItem('ask_api_key');
+    if (badge) badge.classList.toggle('hidden', !hasKey);
+}
+
+/** Returns extra payload fields when a user key is stored, empty object otherwise. */
+function byokPayload() {
+    const { apiKey, provider, model } = getBYOK();
+    if (!apiKey) return {};
+    const resolvedModel = model || PROVIDER_DEFAULTS[provider] || '';
+    return { provider, api_key: apiKey, ...(resolvedModel ? { model: resolvedModel } : {}) };
+}
+
+function initSettings() {
+    const toggle = document.getElementById('settings-toggle');
+    const panel  = document.getElementById('ask-settings');
+    if (!toggle || !panel) return;
+
+    // Populate fields from localStorage
+    const { provider, model, apiKey } = getBYOK();
+    document.getElementById('s-provider').value = provider;
+    document.getElementById('s-model').value = model;
+    document.getElementById('s-key').value = apiKey;
+    updateKeyBadge();
+
+    // Auto-fill model placeholder on provider change
+    document.getElementById('s-provider').addEventListener('change', e => {
+        const sel = e.target.value;
+        const modelInput = document.getElementById('s-model');
+        modelInput.placeholder = PROVIDER_DEFAULTS[sel] || '';
+    });
+    document.getElementById('s-provider').dispatchEvent(new Event('change'));
+
+    // Toggle panel visibility
+    toggle.addEventListener('click', e => {
+        e.stopPropagation();
+        panel.classList.toggle('hidden');
+    });
+    document.addEventListener('click', e => {
+        if (!panel.contains(e.target) && e.target !== toggle)
+            panel.classList.add('hidden');
+    });
+
+    document.getElementById('s-save').addEventListener('click', () => {
+        const p = document.getElementById('s-provider').value;
+        const m = document.getElementById('s-model').value.trim();
+        const k = document.getElementById('s-key').value.trim();
+        saveBYOK(p, m, k);
+        panel.classList.add('hidden');
+    });
+
+    document.getElementById('s-clear').addEventListener('click', () => {
+        document.getElementById('s-model').value = '';
+        document.getElementById('s-key').value = '';
+        clearBYOK();
+        panel.classList.add('hidden');
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Theme
 // ---------------------------------------------------------------------------
 
@@ -339,7 +427,7 @@ async function sendMessage() {
         const resp = await fetch('/api/ask', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question, history }),
+            body: JSON.stringify({ question, history, ...byokPayload() }),
         });
 
         loadingEl.remove();
@@ -388,6 +476,7 @@ function autoResize(el) {
 
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
+    initSettings();
 
     // Theme toggle
     document.getElementById('theme-toggle').addEventListener('click', () => {
