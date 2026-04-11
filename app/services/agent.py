@@ -487,7 +487,7 @@ def run_agent(
             if not _guardrail_fired and last_query_result is None and search_had_results:
                 _guardrail_fired = True
                 if resp.text or resp.tool_calls:
-                    messages.append(_assistant_turn(resp))
+                    messages.append(_assistant_turn(resp, provider=provider or config.LLM_PROVIDER))
                 messages.append({
                     "role": "user",
                     "content": (
@@ -527,7 +527,7 @@ def run_agent(
             )
 
         # Append the assistant turn (with tool_use blocks for Anthropic)
-        messages.append(_assistant_turn(resp))
+        messages.append(_assistant_turn(resp, provider=provider or config.LLM_PROVIDER))
 
         # Dispatch all tool calls in this turn
         tool_result_messages = []
@@ -563,8 +563,9 @@ def run_agent(
             })
 
         # For Anthropic: all tool results go in a single user turn
-        # For OpenAI: each tool result is its own message
-        if config.LLM_PROVIDER == "anthropic":
+        # For OpenAI/Gemini: each tool result is its own message
+        prov = provider or config.LLM_PROVIDER
+        if prov == "anthropic":
             messages.append(_anthropic_tool_results_turn(tool_result_messages))
         else:
             messages.extend(tool_result_messages)
@@ -577,9 +578,10 @@ def run_agent(
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _assistant_turn(resp) -> dict:
+def _assistant_turn(resp, provider: str | None = None) -> dict:
     """Build an assistant message from an LLMResponse."""
-    if config.LLM_PROVIDER == "anthropic":
+    prov = provider or config.LLM_PROVIDER
+    if prov == "anthropic":
         content = []
         if resp.text:
             content.append({"type": "text", "text": resp.text})

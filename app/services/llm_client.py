@@ -175,6 +175,7 @@ def _openai(messages, tools, *, model, system, max_tokens, api_key=None, base_ur
 
 def _to_openai_message(msg: dict) -> dict:
     """Convert a generic message dict to OpenAI API format."""
+    import json as _json
     role = msg["role"]
 
     if role == "tool":
@@ -184,12 +185,41 @@ def _to_openai_message(msg: dict) -> dict:
             "content": msg["content"] if isinstance(msg["content"], str) else str(msg["content"]),
         }
 
-    if role == "assistant" and msg.get("tool_calls"):
-        # tool_calls are already in OpenAI format from _assistant_turn — pass through as-is
-        return {
-            "role": "assistant",
-            "content": msg.get("content"),
-            "tool_calls": msg["tool_calls"],
-        }
+    if role == "assistant":
+        # Already in OpenAI format (has tool_calls field)
+        if msg.get("tool_calls"):
+            return {
+                "role": "assistant",
+                "content": msg.get("content"),
+                "tool_calls": msg["tool_calls"],
+            }
+
+        # Convert from Anthropic format (content list with tool_use blocks)
+        content = msg.get("content")
+        if isinstance(content, list):
+            tool_uses = [b for b in content if isinstance(b, dict) and b.get("type") == "tool_use"]
+            if tool_uses:
+                # Extract text and tool calls
+                text_blocks = [b for b in content if b.get("type") == "text"]
+                text = text_blocks[0]["text"] if text_blocks else None
+                tool_calls = [
+                    {
+                        "id": t["id"],
+                        "type": "function",
+                        "function": {
+                            "name": t["name"],
+                            "arguments": _json.dumps(t["input"]),
+                        },
+                    }
+                    for t in tool_uses
+                ]
+                return {
+                    "role": "assistant",
+                    "content": text,
+                    "tool_calls": tool_calls,
+                }
+
+        # Plain text message
+        return {"role": role, "content": content}
 
     return {"role": role, "content": msg["content"]}
