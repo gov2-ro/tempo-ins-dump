@@ -11,6 +11,7 @@ primary_region = 'ams'
 [env]
   TEMPO_DATA_DIR = '/app/data'
   TEMPO_DEBUG = 'false'
+  TEMPO_ASK_LOG_CHATS = 'true'
 
 [http_service]
   internal_port = 8080

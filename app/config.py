@@ -23,3 +23,5 @@ LLM_PROVIDER       = os.environ.get("TEMPO_LLM_PROVIDER", "anthropic")   # anthr
 LLM_MODEL          = os.environ.get("TEMPO_LLM_MODEL", "claude-sonnet-4-6")
 ASK_MAX_TOOL_CALLS = int(os.environ.get("TEMPO_ASK_MAX_TOOL_CALLS", "8"))
 GEMINI_API_KEY     = os.environ.get("GEMINI_API_KEY", "")  # server-side Gemini key (optional)
+ASK_LOG_CHATS      = os.environ.get("TEMPO_ASK_LOG_CHATS", "false").lower() in ("1", "true", "yes")
+ASK_LOG_DIR        = Path(os.environ.get("TEMPO_ASK_LOG_DIR", str(PROJECT_ROOT / "logs")))

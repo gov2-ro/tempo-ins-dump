@@ -476,7 +476,7 @@ def run_agent(
             # LLM produced a text response — may be mixed with tool calls
             pass
 
-        if not resp.tool_calls or resp.stop_reason == "end_turn":
+        if not resp.tool_calls:
             # Guardrail: model gave up without querying data, but search returned results.
             # Inject one synthetic user turn to force schema + query. Fires once per run.
             # Primarily targets OpenAI models that ignore "MUST call query_dataset_data".
@@ -620,19 +620,22 @@ def _anthropic_tool_results_turn(tool_result_messages: list[dict]) -> dict:
     }
 
 
-def _extract_citations(answer: str, tool_trace: list[dict]) -> list[str]:
-    """Extract matrix_codes from the answer text and tool trace."""
-    codes = set()
+def _extract_citations(answer: str, tool_trace: list[dict]) -> list[dict]:
+    """Extract matrix_codes + names from the answer text and tool trace."""
+    codes: dict[str, str] = {}  # matrix_code → matrix_name
     # From tool trace
     for entry in tool_trace:
         if entry["tool"] in ("get_dataset_schema", "query_dataset_data"):
             mc = entry["input"].get("matrix_code")
             if mc:
-                codes.add(mc)
+                name = ""
+                if isinstance(entry.get("output"), dict):
+                    name = entry["output"].get("matrix_name", "")
+                codes[mc] = name or codes.get(mc, "")
     # Also scan answer for parenthesised codes like (POP101A_judete)
     for match in re.finditer(r'\(([A-Z][A-Z0-9_]{3,})\)', answer):
-        codes.add(match.group(1))
-    return sorted(codes)
+        codes.setdefault(match.group(1), "")
+    return [{"matrix_code": k, "matrix_name": v} for k, v in sorted(codes.items())]
 
 
 def _get_chart_spec(matrix_code: str, conn) -> dict | None:

@@ -367,21 +367,24 @@ function appendAssistantResponse(result) {
         const cites = document.createElement('div');
         cites.className = 'chat-citations';
         result.citations.forEach(c => {
+            const code = typeof c === 'string' ? c : c.matrix_code;
+            const name = typeof c === 'string' ? '' : (c.matrix_name || '');
             const a = document.createElement('a');
-            a.href = `/dataset.html?code=${c.matrix_code}`;
+            a.href = `/dataset.html?code=${code}`;
             a.target = '_blank';
             a.className = 'chat-citation';
-            a.textContent = `↗ ${c.matrix_code}${c.matrix_name ? ' — ' + c.matrix_name : ''}`;
+            a.textContent = `↗ ${code}${name ? ' — ' + name : ''}`;
             cites.appendChild(a);
         });
         div.appendChild(cites);
     }
 
-    // Warnings
-    if (result.warnings && result.warnings.length > 0) {
+    // Warnings (filter out internal diagnostics)
+    const userWarnings = (result.warnings || []).filter(w => !w.startsWith('Guardrail:'));
+    if (userWarnings.length > 0) {
         const warn = document.createElement('div');
         warn.className = 'chat-warnings';
-        result.warnings.forEach(w => {
+        userWarnings.forEach(w => {
             const item = document.createElement('div');
             item.className = 'chat-warning-item';
             item.textContent = w;
