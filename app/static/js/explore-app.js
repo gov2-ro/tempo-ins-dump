@@ -65,6 +65,8 @@ const UI = {
         rankMode: 'Rang',
         indexTooltip: 'Perioadă de bază = 100',
         yoyTooltip: 'Variație anuală %',
+        yearlyMode: 'Anual',
+        yearlyTooltip: 'Grupează datele pe ani',
         distribution: 'Distribuție',
         aboutLink: 'Despre',
         aboutTitle: 'Despre INS+',
@@ -133,6 +135,8 @@ const UI = {
         rankMode: 'Rank',
         indexTooltip: 'Base period = 100',
         yoyTooltip: 'Year-over-year %',
+        yearlyMode: 'Yearly',
+        yearlyTooltip: 'Group data by year',
         distribution: 'Distribution',
         aboutLink: 'About',
         aboutTitle: 'About INS+',
@@ -332,6 +336,7 @@ class LensApp {
         this._urlTChart  = params.get('tchart') || null;
         this._urlSChart  = params.get('schart') || null;
         this._urlPeriod  = params.get('period') || null;
+        this._urlTAgg    = params.get('tagg');   // '0' = yearly-agg explicitly off
         const tmode = params.get('tmode');
         if (tmode === 'index' || tmode === 'yoy') this.timeTransform = tmode;
         this._urlFilters = {};
@@ -1122,6 +1127,12 @@ class LensApp {
             this.snapshotChartType = _bestSnap ? _bestSnap.chart_type : (this.panelSetup.snapshotChartTypes[0] || null);
             this.selectedPeriodIdx = -1; // latest
 
+            // Yearly aggregation default for monthly/quarterly datasets
+            // time_granularity lives in meta.profile (matrix_profiles), not the view profile
+            const _gran = this.metadata?.profile?.time_granularity;
+            this.timeGranularity = _gran || null;
+            this.yearlyAgg = (_gran === 'monthly' || _gran === 'quarterly');
+
             // Restore URL state (first load only — consumed below)
             const setup = this.panelSetup;
             if (this._urlTChart && setup.timeChartTypes.includes(this._urlTChart))
@@ -1132,9 +1143,11 @@ class LensApp {
                 const pidx = setup.periods.findIndex(p => p.id === this._urlPeriod);
                 if (pidx >= 0) this.selectedPeriodIdx = pidx;
             }
+            if (this._urlTAgg !== null) this.yearlyAgg = this._urlTAgg !== '0';
             this._urlTChart = null;
             this._urlSChart = null;
             this._urlPeriod = null;
+            this._urlTAgg = null;
 
             this.renderDashHeader();
             this.renderInfoPanel();
@@ -1445,6 +1458,26 @@ class LensApp {
                 this._syncURL();
             });
             pills.appendChild(btn);
+        }
+
+        // Yearly aggregation toggle — only for monthly/quarterly datasets
+        if (this.timeGranularity === 'monthly' || this.timeGranularity === 'quarterly') {
+            const sep2 = document.createElement('span');
+            sep2.className = 'ct-sep';
+            sep2.textContent = '·';
+            pills.appendChild(sep2);
+
+            const yearlyBtn = document.createElement('button');
+            yearlyBtn.className = 'ct-btn transform-btn' + (this.yearlyAgg ? ' active' : '');
+            yearlyBtn.textContent = this.ui.yearlyMode;
+            yearlyBtn.title = this.ui.yearlyTooltip;
+            yearlyBtn.addEventListener('click', () => {
+                this.yearlyAgg = !this.yearlyAgg;
+                yearlyBtn.classList.toggle('active', this.yearlyAgg);
+                this.renderTimeChart();
+                this._syncURL();
+            });
+            pills.appendChild(yearlyBtn);
         }
 
         // Dimension picker for time series (which dim colors the lines)
@@ -1850,6 +1883,12 @@ class LensApp {
         else
             url.searchParams.delete('tmode');
 
+        // Yearly aggregation — only store when user explicitly turned it OFF (default is ON for monthly/quarterly)
+        if (this.yearlyAgg === false && (this.timeGranularity === 'monthly' || this.timeGranularity === 'quarterly'))
+            url.searchParams.set('tagg', '0');
+        else
+            url.searchParams.delete('tagg');
+
         // Snapshot chart type
         if (this.snapshotChartType)
             url.searchParams.set('schart', this.snapshotChartType);
@@ -2186,6 +2225,61 @@ class LensApp {
     }
 
     /**
+     * Aggregate monthly/quarterly rows to yearly resolution (client-side).
+     * Groups TIME_PERIOD by year prefix: "2024-01" → "2024", "1995-Q1" → "1995".
+     * AVG for percentage/rate/time_unit; SUM for counts/currency.
+     */
+    _aggregateByYear(data, timeDim, seriesDim) {
+        if (!data || !data.rows.length) return data;
+        const cols = data.columns;
+        const timeIdx = cols.indexOf(timeDim);
+        if (timeIdx === -1) return data;
+        const seriesIdx = seriesDim ? cols.indexOf(seriesDim) : -1;
+        const valIdx = cols.length - 1;
+
+        const unitType = this.chartConfig?.primary_unit_type;
+        const useAvg = unitType === 'percentage' || unitType === 'time_unit' || unitType === 'rate';
+
+        // key = seriesValue + '|' + year
+        const sums = new Map();
+        const counts = new Map();
+        const firstRow = new Map();
+
+        for (const row of data.rows) {
+            const period = String(row[timeIdx] || '');
+            const year = period.slice(0, 4);  // "2024-01" → "2024"
+            const seriesVal = seriesIdx >= 0 ? row[seriesIdx] : '__';
+            const key = `${seriesVal}|${year}`;
+            const v = row[valIdx];
+            if (v == null) continue;
+            sums.set(key, (sums.get(key) || 0) + v);
+            counts.set(key, (counts.get(key) || 0) + 1);
+            if (!firstRow.has(key)) firstRow.set(key, row);
+        }
+
+        const newRows = [];
+        for (const [key, sum] of sums) {
+            const cnt = counts.get(key);
+            const template = [...firstRow.get(key)];
+            const year = key.slice(key.lastIndexOf('|') + 1);
+            template[timeIdx] = year;
+            template[valIdx] = useAvg ? sum / cnt : sum;
+            newRows.push(template);
+        }
+
+        newRows.sort((a, b) => {
+            if (seriesIdx >= 0 && a[seriesIdx] !== b[seriesIdx])
+                return String(a[seriesIdx]).localeCompare(String(b[seriesIdx]));
+            return String(a[timeIdx]).localeCompare(String(b[timeIdx]));
+        });
+
+        const newLabels = { ...data.column_labels };
+        newLabels[timeDim] = Object.fromEntries(newRows.map(r => [r[timeIdx], r[timeIdx]]));
+
+        return { ...data, rows: newRows, column_labels: newLabels };
+    }
+
+    /**
      * Render distribution strip chart (box + scatter) below choropleth.
      * Extracts geo values for the selected period.
      */
@@ -2280,9 +2374,15 @@ class LensApp {
                 x_axis_dim: setup.timeDim,  // time is always on x-axis for this panel
                 _valueFormat: this.timeTransform === 'index' ? 'index' :
                               this.timeTransform === 'yoy'   ? 'pct_change' : null,
+                _yearlyAgg: this.yearlyAgg,
+                _timeGranularity: this.timeGranularity,
             };
             const translated = this._translateData(this.data);
-            const transformed = this._applyTimeTransform(translated, setup.timeDim, setup.timeSeriesDim);
+            // Yearly aggregation (default ON for monthly/quarterly; user can toggle)
+            const aggregated = this.yearlyAgg
+                ? this._aggregateByYear(translated, setup.timeDim, setup.timeSeriesDim)
+                : translated;
+            const transformed = this._applyTimeTransform(aggregated, setup.timeDim, setup.timeSeriesDim);
             const chart = await createChart(container, cfg, transformed, this.metadata);
             if (chart) {
                 chart._timePanel = true;

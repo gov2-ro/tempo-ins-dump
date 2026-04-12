@@ -1,5 +1,13 @@
 # Activity History
 
+## 2026-04-12 — Monthly/Quarterly Yearly Aggregation Toggle
+
+90 monthly + 27 quarterly datasets previously rendered 200–416 x-axis data points, making charts unreadable. Fixed with two changes:
+
+**Yearly aggregation (explore-app.js)**: For monthly/quarterly datasets, `this.yearlyAgg` defaults `true`. `_aggregateByYear()` groups `TIME_PERIOD` by 4-char year prefix (`2024-01` → `2024`, `1995-Q1` → `1995`), SUM for counts/currency, AVG for percentage/rate/time_unit. A toggle button "Anual" appears in the chart type pill bar (same pattern as Index/Δ%). URL state: `?tagg=0` when user turns it off. IPC102A: 416 months → 35 yearly points.
+
+**Raw monthly zoom (chart-factory.js)**: When user switches to raw monthly view, `dispatchAction({ type: 'dataZoom', start: X })` zooms to last ~5 years (60 periods) by default. `setOption` alone doesn't apply initial start/end — needed `dispatchAction` after render.
+
 ## 2026-04-12 — Register POP201A Split Datasets
 
 POP201A (Nascuti vii pe sexe, medii de rezidenta) was missing from the app — the parent parquet doesn't exist in corpus/parquet/ and the splits were unregistered in DuckDB. The split parquets (POP201A_judete/regiuni/macroregiuni) had been generated but the `12-split-datasets.py` DB registration step never completed. Fixed by re-running `python 12-split-datasets.py --matrix POP201A`. Now registered: 3 children in `matrices`, 3 rows in `dataset_splits`, 15 dimension rows across children.

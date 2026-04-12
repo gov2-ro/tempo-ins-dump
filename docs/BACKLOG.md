@@ -219,6 +219,13 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
   zebra striping, sticky headers, filtered/total row count. Client-side filtering via
   exact match on dimension columns.
 
+- [x] **Monthly/quarterly yearly aggregation toggle** — Done. For monthly (90 datasets) and
+  quarterly (27 datasets) data, Trends chart defaults to yearly-aggregated values. "Anual"
+  toggle button in chart type pill bar (same pattern as Index/Δ% transforms). Client-side:
+  group TIME_PERIOD by year prefix, SUM for counts/currency, AVG for percentage/rate/time_unit.
+  Raw monthly view defaults zoom to last ~5 years (60 periods) via ECharts dispatchAction.
+  URL state: `?tagg=0` persists when user explicitly turns off yearly mode.
+
 - [ ] **Visual polish pass** — x-axis label truncation on rotated labels, responsive
   breakpoints for mobile (category grid, insight cards, chart panels), smooth transitions
   between chart type switches.
