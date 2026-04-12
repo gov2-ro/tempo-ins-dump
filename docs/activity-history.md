@@ -1,5 +1,9 @@
 # Activity History
 
+## 2026-04-12 — Register POP201A Split Datasets
+
+POP201A (Nascuti vii pe sexe, medii de rezidenta) was missing from the app — the parent parquet doesn't exist in corpus/parquet/ and the splits were unregistered in DuckDB. The split parquets (POP201A_judete/regiuni/macroregiuni) had been generated but the `12-split-datasets.py` DB registration step never completed. Fixed by re-running `python 12-split-datasets.py --matrix POP201A`. Now registered: 3 children in `matrices`, 3 rows in `dataset_splits`, 15 dimension rows across children.
+
 ## 2026-04-12 — Large Dataset Handling: Time Windowing + GROUP BY Bypass
 
 Two improvements for datasets too large to render without explicit filtering:
