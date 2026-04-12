@@ -2,6 +2,8 @@
 
 Future tasks and intentions for the TEMPO INS data explorer.
 
+see also [charting-ideas.md](charting-ideas.md)
+
 ## UI / Navigation
 - [x] add static pages - how do we treat translations?
 - [ ] add 'last updated' page 
@@ -270,14 +272,34 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
 
 ## Chart Selection — Future Improvements
 
+See also: `docs/chart-taxonomy.md` for full gap analysis per cluster (33 exemplar screenshots).
+
+- [x] **Fix 50k limit for choropleth / large datasets** (HIGH, 452 datasets / 23%) — Done (partial).
+  Two fixes applied: (1) GROUP BY bypass: large-dataset rejection skipped when `group_by` param present,
+  allowing aggregated views of datasets >50k rows. (2) Server-side time windowing: datasets >500k rows
+  auto-filter `TIME_PERIOD` to the latest N periods that fit within 50k budget (min 2 for >5M row datasets).
+  Response includes `time_windowed: true` flag; frontend shows bilingual notice.
+  Remaining gap: datasets with legacy `_nom_id` columns (e.g. LOC103B_judet) still have column-resolution issues.
+- [x] **Boost area_stacked for percentage data** (HIGH, 295 datasets / 15%) — Done.
+  Frontend now uses chart_selector's recommendation for default chart type.
+  Selector already scored area_stacked correctly; frontend was ignoring it.
+- [ ] **Small multiples / heatmap for high-cardinality time** (MED, 520 datasets / 27%) —
+  Categorical Time cluster (6-50 options) renders cluttered lines. Default to heatmap/small_multiples for >8 series.
+- [x] **Fix population_pyramid selection** (MED, 69 datasets / 4%) — Done.
+  Relaxed gender_count threshold from ≤3 to ≤6 (INS mixes gender+residence in one dim).
+  Added population_pyramid to frontend snapshot chart types when age+gender dims present.
+- [x] **Fix snapshot chart type for non-time datasets** (MED, 49 datasets / 2.5%) — Done.
+  Frontend now uses selector's ranked_charts to pick default time/snapshot chart type.
+  Fixed geo_count for region/macroregion datasets (was 0, now uses actual count).
+
 - [ ] **Treemap chart type** — For hierarchical categorical data (CAEN economic sectors),
   treemap would show proportions better than horizontal bar. Requires frontend implementation.
 
 - [ ] **Sparkline/KPI view** — Datasets with 1 dimension (pure time series, no categories)
   are perfect for a large KPI number + sparkline, not a full chart.
 
-- [ ] **Ratio/change chart mode** — Year-over-year change, growth rates, indexed values.
-  The trend data already detects these patterns; expose as an alternative view.
+- [x] **Ratio/change chart mode** — Year-over-year change, growth rates, indexed values.
+  Done: Index/Rebase, YoY Δ%, Ranking/Bump, Distribution strip — all as frontend transforms.
 
 - [ ] **Radar chart** — For comparing a small number of categories across multiple
   metrics (e.g., county profiles across health/education/economy indicators).

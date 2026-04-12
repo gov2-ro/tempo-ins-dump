@@ -1,0 +1,297 @@
+"""Dataset shape taxonomy — classify datasets into chart-relevant clusters.
+
+Groups ~1,958 datasets into 12 natural clusters based on existing metadata
+(archetype, dimensions, unit type, trends). Picks 2-3 exemplars per cluster.
+
+Usage:
+    python scripts/chart-taxonomy.py               # generate taxonomy + markdown
+    python scripts/chart-taxonomy.py --screenshot   # also screenshot exemplars (needs dev server on :8080)
+"""
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import duckdb
+
+PROJECT_ROOT = Path(__file__).parent.parent
+DB_PATH = PROJECT_ROOT / "data" / "corpus" / "metadata.duckdb"
+VP_DIR = PROJECT_ROOT / "data" / "corpus" / "view-profiles"
+OUT_MD = PROJECT_ROOT / "docs" / "chart-taxonomy.md"
+OUT_JSON = PROJECT_ROOT / "data" / "eval" / "chart_taxonomy.json"
+SCREENSHOT_DIR = PROJECT_ROOT / "docs" / "chart-taxonomy"
+
+CLUSTERS = [
+    {"id": 1,  "name": "Simple Time Series",    "desc": "Single indicator over time, no structural dims"},
+    {"id": 2,  "name": "Categorical Time",       "desc": "Time + medium-cardinality categorical dim (6-50 options)"},
+    {"id": 3,  "name": "Composition (%)",         "desc": "Percentage unit, parts-of-whole over time"},
+    {"id": 4,  "name": "Gender-Split",            "desc": "Binary gender breakdown over time"},
+    {"id": 5,  "name": "Age Cohort",              "desc": "Age groups over time (no gender)"},
+    {"id": 6,  "name": "Population Pyramid",      "desc": "Age + gender over time"},
+    {"id": 7,  "name": "Cartographic",            "desc": "Geographic (county/region) + time, no demographic dims"},
+    {"id": 8,  "name": "Geo + Demographic",       "desc": "Geographic + gender/age/residence"},
+    {"id": 9,  "name": "Urban/Rural",             "desc": "Residence (urban/rural) splits over time"},
+    {"id": 10, "name": "Categorical Snapshot",    "desc": "No time, no geo — pure categorical cross-tabs"},
+    {"id": 11, "name": "Geo Snapshot",            "desc": "Geographic, no time dimension"},
+    {"id": 12, "name": "Edge Cases",              "desc": "High-dimensional or rare combos"},
+]
+
+
+def load_datasets(conn):
+    """Load all datasets with their metadata for classification."""
+    rows = conn.execute("""
+        SELECT
+            mp.matrix_code,
+            mp.archetype,
+            mp.has_time,
+            mp.has_geo,
+            mp.has_gender,
+            mp.has_age,
+            mp.has_residence,
+            mp.primary_unit_type,
+            mp.dim_count,
+            mp.time_granularity,
+            COALESCE(dc.fill_rate, 0) AS fill_rate,
+            COALESCE(dc.actual_rows, 0) AS actual_rows,
+            COALESCE(dt.trend_direction, 'unknown') AS trend_direction,
+            COALESCE(dt.has_seasonality, false) AS has_seasonality,
+            m.matrix_name,
+            m.ultima_actualizare
+        FROM matrix_profiles mp
+        LEFT JOIN dataset_coverage dc ON mp.matrix_code = dc.matrix_code
+        LEFT JOIN dataset_trends dt ON mp.matrix_code = dt.matrix_code
+        LEFT JOIN matrices m ON mp.matrix_code = m.matrix_code
+    """).fetchdf()
+    return rows
+
+
+def get_max_cat_options(conn):
+    """Get max non-time/non-unit dimension option count per dataset."""
+    rows = conn.execute("""
+        SELECT matrix_code, MAX(option_count) AS max_cat_options
+        FROM dimensions
+        WHERE dim_column_name NOT IN ('TIME_PERIOD', 'UNIT_MEASURE', 'FREQ')
+        GROUP BY matrix_code
+    """).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
+def classify(row, max_cat_opts):
+    """Assign a dataset to one of the 12 clusters."""
+    arch = row["archetype"]
+    mc = row["matrix_code"]
+    max_opts = max_cat_opts.get(mc, 0) or 0
+
+    # Snapshots (no time)
+    if arch == "categorical":
+        return 10
+    if arch == "geo_only":
+        return 11
+
+    # Demographic clusters (check before geo since some geo datasets also have demographics)
+    if row["has_age"] and row["has_gender"] and not row["has_geo"]:
+        return 6  # Population Pyramid
+    if row["has_age"] and not row["has_gender"] and not row["has_geo"]:
+        return 5  # Age Cohort
+    if row["has_gender"] and not row["has_age"] and not row["has_geo"]:
+        return 4  # Gender-Split
+
+    # Geographic clusters
+    if arch == "geo_time" or (row["has_geo"] and row["has_time"]):
+        if row["has_gender"] or row["has_age"] or row["has_residence"]:
+            return 8  # Geo + Demographic
+        return 7  # Pure Cartographic
+
+    # Urban/Rural
+    if arch == "time_residence" or (row["has_residence"] and not row["has_geo"]):
+        return 9
+
+    # Time series variants
+    if arch == "time_series" or row["has_time"]:
+        if row["primary_unit_type"] == "percentage":
+            return 3  # Composition
+        if max_opts >= 6:
+            return 2  # Categorical Time
+        return 1  # Simple Time Series
+
+    return 12  # Edge Cases
+
+
+def pick_exemplars(df, cluster_id, n=3):
+    """Pick n exemplars from a cluster, preferring good coverage + VP existence."""
+    subset = df[df["cluster"] == cluster_id].copy()
+    if subset.empty:
+        return []
+
+    # Prefer: VP exists, moderate size, good fill rate, recently updated
+    vp_codes = {p.stem for p in VP_DIR.glob("*.json")} if VP_DIR.exists() else set()
+    subset["has_vp"] = subset["matrix_code"].isin(vp_codes)
+    subset["size_ok"] = (subset["actual_rows"] >= 100) & (subset["actual_rows"] <= 50000)
+
+    # Score for ranking
+    subset["pick_score"] = (
+        subset["has_vp"].astype(int) * 10 +
+        subset["size_ok"].astype(int) * 5 +
+        subset["fill_rate"] * 3
+    )
+
+    top = subset.nlargest(n, "pick_score")
+    return top[["matrix_code", "matrix_name", "fill_rate", "actual_rows", "trend_direction"]].to_dict("records")
+
+
+def generate_markdown(taxonomy, total):
+    """Generate docs/chart-taxonomy.md."""
+    lines = [
+        "# Dataset Shape Taxonomy",
+        "",
+        f"Auto-generated classification of {total} datasets into 12 chart-relevant clusters.",
+        f"Use this to identify chart improvement opportunities per cluster.",
+        "",
+        "## Summary",
+        "",
+        "| # | Cluster | Count | % | Primary Chart | Description |",
+        "|---|---------|-------|---|---------------|-------------|",
+    ]
+    for c in taxonomy:
+        pct = f"{c['count'] / total * 100:.1f}%" if total else "0%"
+        lines.append(f"| {c['id']} | {c['name']} | {c['count']} | {pct} | {c.get('primary_chart', '—')} | {c['desc']} |")
+
+    lines += ["", "## Exemplars per Cluster", ""]
+
+    for c in taxonomy:
+        lines.append(f"### {c['id']}. {c['name']} ({c['count']} datasets)")
+        lines.append(f"_{c['desc']}_")
+        lines.append("")
+        if c["exemplars"]:
+            lines.append("| Code | Name | Fill Rate | Rows | Trend | Screenshot |")
+            lines.append("|------|------|-----------|------|-------|------------|")
+            for ex in c["exemplars"]:
+                name = (ex["matrix_name"] or "")[:60]
+                fr = f"{ex['fill_rate']:.1%}" if ex["fill_rate"] else "—"
+                rows = f"{ex['actual_rows']:,}" if ex["actual_rows"] else "—"
+                trend = ex.get("trend_direction", "—")
+                ss = f"![{ex['matrix_code']}](chart-taxonomy/{ex['matrix_code']}.png)"
+                lines.append(f"| `{ex['matrix_code']}` | {name} | {fr} | {rows} | {trend} | {ss} |")
+        else:
+            lines.append("_No exemplars found._")
+        lines.append("")
+
+    lines.append("---")
+    lines.append("_Generated by `scripts/chart-taxonomy.py`_")
+    return "\n".join(lines)
+
+
+# Chart type heuristics per cluster (what chart_selector typically picks)
+CLUSTER_CHARTS = {
+    1: "line",
+    2: "small_multiples / heatmap",
+    3: "area_stacked",
+    4: "line",
+    5: "heatmap / grouped_bar",
+    6: "population_pyramid",
+    7: "choropleth",
+    8: "choropleth / line",
+    9: "line",
+    10: "grouped_bar",
+    11: "choropleth",
+    12: "varies",
+}
+
+
+def take_screenshots(taxonomy, base_url="http://localhost:8080"):
+    """Screenshot each exemplar via Playwright."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("ERROR: playwright not installed. Run: pip install playwright && playwright install chromium")
+        return
+
+    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+
+    all_codes = []
+    for c in taxonomy:
+        for ex in c["exemplars"]:
+            all_codes.append(ex["matrix_code"])
+
+    print(f"\nTaking {len(all_codes)} screenshots...")
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+
+        for i, code in enumerate(all_codes):
+            path = SCREENSHOT_DIR / f"{code}.png"
+            if path.exists():
+                print(f"  [{i+1}/{len(all_codes)}] {code} — already exists, skipping")
+                continue
+            try:
+                page.goto(f"{base_url}/?code={code}", wait_until="networkidle", timeout=15000)
+                page.wait_for_timeout(3500)  # let charts render
+                page.screenshot(path=str(path), full_page=False)
+                print(f"  [{i+1}/{len(all_codes)}] {code} — OK")
+            except Exception as e:
+                print(f"  [{i+1}/{len(all_codes)}] {code} — ERROR: {e}")
+
+        browser.close()
+
+    print(f"\nScreenshots saved to {SCREENSHOT_DIR}/")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Dataset shape taxonomy generator")
+    parser.add_argument("--screenshot", action="store_true", help="Also take Playwright screenshots (needs dev server on :8080)")
+    args = parser.parse_args()
+
+    if not DB_PATH.exists():
+        print(f"ERROR: Database not found at {DB_PATH}")
+        sys.exit(1)
+
+    conn = duckdb.connect(str(DB_PATH), read_only=True)
+
+    print("Loading datasets...")
+    df = load_datasets(conn)
+    max_cat_opts = get_max_cat_options(conn)
+
+    print(f"Classifying {len(df)} datasets into 12 clusters...")
+    df["cluster"] = df.apply(lambda r: classify(r, max_cat_opts), axis=1)
+
+    # Build taxonomy
+    taxonomy = []
+    for c in CLUSTERS:
+        cid = c["id"]
+        count = int((df["cluster"] == cid).sum())
+        exemplars = pick_exemplars(df, cid)
+        taxonomy.append({
+            **c,
+            "count": count,
+            "primary_chart": CLUSTER_CHARTS.get(cid, "—"),
+            "exemplars": exemplars,
+        })
+
+    # Console output
+    total = len(df)
+    print(f"\n{'#':<3} {'Cluster':<24} {'Count':>6} {'%':>6}  {'Primary Chart':<24} Exemplars")
+    print("-" * 100)
+    for c in taxonomy:
+        pct = f"{c['count']/total*100:.1f}%"
+        codes = ", ".join(e["matrix_code"] for e in c["exemplars"])
+        print(f"{c['id']:<3} {c['name']:<24} {c['count']:>6} {pct:>6}  {c['primary_chart']:<24} {codes}")
+    print(f"\nTotal: {total} datasets")
+
+    # Write markdown
+    OUT_MD.parent.mkdir(parents=True, exist_ok=True)
+    md = generate_markdown(taxonomy, total)
+    OUT_MD.write_text(md, encoding="utf-8")
+    print(f"\nMarkdown written to {OUT_MD}")
+
+    # Write JSON
+    OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
+    OUT_JSON.write_text(json.dumps(taxonomy, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    print(f"JSON written to {OUT_JSON}")
+
+    if args.screenshot:
+        take_screenshots(taxonomy)
+
+
+if __name__ == "__main__":
+    main()

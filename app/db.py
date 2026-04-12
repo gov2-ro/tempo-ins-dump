@@ -13,5 +13,5 @@ def get_conn() -> duckdb.DuckDBPyConnection:
     """
     global _conn
     if _conn is None:
-        _conn = duckdb.connect(str(DB_PATH), read_only=True, config={"memory_limit": "200MB"})
+        _conn = duckdb.connect(str(DB_PATH), read_only=True, config={"memory_limit": "400MB"})
     return _conn.cursor()

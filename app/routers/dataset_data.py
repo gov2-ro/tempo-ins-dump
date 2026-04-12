@@ -42,8 +42,18 @@ def get_dataset_data(
 
     row_count = matrix[0] or 0
 
-    # Require filters for large datasets
-    if row_count > LARGE_DATASET_THRESHOLD and not filter_dict:
+    # Parse group_by early (needed for large dataset check)
+    group_by_cols = None
+    if group_by:
+        try:
+            group_by_cols = json.loads(group_by)
+            if not isinstance(group_by_cols, list):
+                group_by_cols = None
+        except json.JSONDecodeError:
+            pass
+
+    # Require filters for large datasets — skip when GROUP BY aggregates
+    if row_count > LARGE_DATASET_THRESHOLD and not filter_dict and not group_by_cols:
         raise HTTPException(
             400,
             f"Dataset has {row_count:,} rows. Please apply at least one filter "
@@ -77,15 +87,44 @@ def get_dataset_data(
             if d['dim_column_name'].endswith('_nom_id'):
                 d['dim_column_name'] = col_map.get(d['dim_column_name'], d['dim_column_name'])
 
-    # Parse group_by
-    group_by_cols = None
-    if group_by:
-        try:
-            group_by_cols = json.loads(group_by)
-            if not isinstance(group_by_cols, list):
-                group_by_cols = None
-        except json.JSONDecodeError:
-            pass
+    # Auto time-window for very large datasets to prevent OOM during parquet scan.
+    # Even with GROUP BY, DuckDB must read the full file without a filter pushdown.
+    TIME_WINDOW_THRESHOLD = 500_000
+    time_windowed = False
+    if row_count > TIME_WINDOW_THRESHOLD:
+        time_dim = next((d['dim_column_name'] for d in dimensions
+                         if d['dim_column_name'] == 'TIME_PERIOD'), None)
+        if time_dim and time_dim not in filter_dict:
+            # Try parquet scan first (fast for moderate files), fall back to metadata
+            from app.config import PARQUET_DIR
+            parquet_path = PARQUET_DIR / f"{matrix_code}.parquet"
+            time_vals = []
+            try:
+                time_vals = [r[0] for r in conn.execute(f"""
+                    SELECT DISTINCT "TIME_PERIOD"
+                    FROM read_parquet('{parquet_path}')
+                    ORDER BY "TIME_PERIOD" DESC
+                """).fetchall()]
+            except Exception:
+                pass
+            # Fallback: generate year strings from metadata year range
+            if not time_vals:
+                yr_row = conn.execute(
+                    "SELECT time_year_min, time_year_max FROM matrix_profiles WHERE matrix_code = ?",
+                    [matrix_code]
+                ).fetchone()
+                if yr_row and yr_row[0] and yr_row[1]:
+                    time_vals = [str(y) for y in range(yr_row[1], yr_row[0] - 1, -1)]
+            if time_vals:
+                n_periods = len(time_vals)
+                rows_per_period = row_count / max(n_periods, 1)
+                # For extremely large datasets, allow a smaller minimum to avoid OOM
+                min_periods = 2 if row_count > 5_000_000 else 5
+                safe_periods = max(min_periods, int(MAX_DATA_ROWS / max(rows_per_period, 1)))
+                safe_periods = min(safe_periods, n_periods)
+                if safe_periods < n_periods:
+                    filter_dict[time_dim] = time_vals[:safe_periods]
+                    time_windowed = True
 
     # Determine aggregation function based on unit type
     agg_func = "SUM"
@@ -155,7 +194,7 @@ def get_dataset_data(
     # Convert rows to plain lists
     data_rows = [list(r) for r in rows]
 
-    return {
+    resp = {
         'columns': columns,
         'column_labels': column_labels,
         'rows': data_rows,
@@ -163,6 +202,9 @@ def get_dataset_data(
         'returned_rows': len(data_rows),
         'truncated': truncated,
     }
+    if time_windowed:
+        resp['time_windowed'] = True
+    return resp
 
 
 @router.get("/datasets/{matrix_code}/download")

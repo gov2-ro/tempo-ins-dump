@@ -1,0 +1,340 @@
+[
+  {
+    "id": 1,
+    "name": "Simple Time Series",
+    "desc": "Single indicator over time, no structural dims",
+    "count": 161,
+    "primary_chart": "line",
+    "exemplars": [
+      {
+        "matrix_code": "CON107B",
+        "matrix_name": "Principalele agregate, pe locuitor - SEC 2010, preturi curente\n",
+        "fill_rate": 1.0,
+        "actual_rows": 150,
+        "trend_direction": "increasing"
+      },
+      {
+        "matrix_code": "SAN107A",
+        "matrix_name": "Asistenta medicala de urgenta, pe elemente specifice",
+        "fill_rate": 1.0,
+        "actual_rows": 102,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "TRN120A",
+        "matrix_name": "Nave de navigatie interioara, pe categorii de nave, inregistrate la sfarsitul anului",
+        "fill_rate": 1.0,
+        "actual_rows": 102,
+        "trend_direction": "volatile"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "name": "Categorical Time",
+    "desc": "Time + medium-cardinality categorical dim (6-50 options)",
+    "count": 520,
+    "primary_chart": "small_multiples / heatmap",
+    "exemplars": [
+      {
+        "matrix_code": "AGR201G",
+        "matrix_name": "Efectivele de porcine existente la 1 mai, pe grupe de greutate si destinatie economica",
+        "fill_rate": 1.0,
+        "actual_rows": 238,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "BUF101A",
+        "matrix_name": "ABF Bunuri de folosinta indelungata la 100 gospodarii",
+        "fill_rate": 1.0,
+        "actual_rows": 136,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "CDP102D",
+        "matrix_name": "Cercetatori din activitatea cercetare-dezvoltare pe domenii stiintifice, la sfarsitul anului",
+        "fill_rate": 1.0,
+        "actual_rows": 203,
+        "trend_direction": "volatile"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "name": "Composition (%)",
+    "desc": "Percentage unit, parts-of-whole over time",
+    "count": 295,
+    "primary_chart": "area_stacked",
+    "exemplars": [
+      {
+        "matrix_code": "COM109B",
+        "matrix_name": "Indicii volumului cifrei de afaceri la nivelul sectiunii G din CAEN REV.2 - an de baza 2021",
+        "fill_rate": 1.0,
+        "actual_rows": 564,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "CON104R",
+        "matrix_name": "Produsul intern brut trimestrial - serie ajustata sezonier CAEN Rev.2, indici de volum - % fata de trimestrul precedent",
+        "fill_rate": 1.0,
+        "actual_rows": 3509,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "CON104S",
+        "matrix_name": "Produsul intern brut trimestrial - serie ajustata sezonier CAEN Rev.2, indici de pret - % fata de trimestrul precedent",
+        "fill_rate": 1.0,
+        "actual_rows": 3509,
+        "trend_direction": "volatile"
+      }
+    ]
+  },
+  {
+    "id": 4,
+    "name": "Gender-Split",
+    "desc": "Binary gender breakdown over time",
+    "count": 107,
+    "primary_chart": "line",
+    "exemplars": [
+      {
+        "matrix_code": "TLR1111",
+        "matrix_name": "Tinta 1 - Social - Rata de supraaglomerare",
+        "fill_rate": 0.909091,
+        "actual_rows": 170,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "TIC113A",
+        "matrix_name": "Ponderea persoanelor de 16-74 ani care au utilizat internetul in ultimele 3 luni, dupa dispozitivele folosite sau sistemele conectate la internet in scopuri personale, pe grupe de varsta si sexe",
+        "fill_rate": 0.825,
+        "actual_rows": 198,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "CAV103A",
+        "matrix_name": "Structura persoanelor de 16 ani si peste dupa opinia privind starea de sanatate, pe sexe\n",
+        "fill_rate": 0.666667,
+        "actual_rows": 102,
+        "trend_direction": "volatile"
+      }
+    ]
+  },
+  {
+    "id": 5,
+    "name": "Age Cohort",
+    "desc": "Age groups over time (no gender)",
+    "count": 86,
+    "primary_chart": "heatmap / grouped_bar",
+    "exemplars": [
+      {
+        "matrix_code": "AGR201E",
+        "matrix_name": "Efectivele de bovine existente la 1 iunie, pe grupe de varsta si destinatie economica",
+        "fill_rate": 1.0,
+        "actual_rows": 567,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "CDP102H",
+        "matrix_name": "Cercetatori din activitatea de cercetare-dezvoltare pe grupe de varsta, la sfarsitul anului",
+        "fill_rate": 1.0,
+        "actual_rows": 147,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "POP208F",
+        "matrix_name": "Decedati sub 1 an cu resedinta obisnuita in Romania pe grupe de varsta",
+        "fill_rate": 0.956522,
+        "actual_rows": 286,
+        "trend_direction": "decreasing"
+      }
+    ]
+  },
+  {
+    "id": 6,
+    "name": "Population Pyramid",
+    "desc": "Age + gender over time",
+    "count": 69,
+    "primary_chart": "population_pyramid",
+    "exemplars": [
+      {
+        "matrix_code": "TFA0494",
+        "matrix_name": "Tinta 9 - Social - Rata tinerilor neocupati care nu urmeaza nicio forma de educatie sau de instruire",
+        "fill_rate": 0.8,
+        "actual_rows": 408,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "TLH1019",
+        "matrix_name": "Tinta 1 - Social - RATA TINERILOR NEOCUPATI CARE NU URMEAZA NICIO FORMA DE EDUCATIE SAU DE INSTRUIRE",
+        "fill_rate": 0.8,
+        "actual_rows": 408,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "SAR118A",
+        "matrix_name": "Raportul dintre chintila superioara si cea inferioara S80/S20, pe sexe si grupe de varsta",
+        "fill_rate": 0.666667,
+        "actual_rows": 102,
+        "trend_direction": "volatile"
+      }
+    ]
+  },
+  {
+    "id": 7,
+    "name": "Cartographic",
+    "desc": "Geographic (county/region) + time, no demographic dims",
+    "count": 452,
+    "primary_chart": "choropleth",
+    "exemplars": [
+      {
+        "matrix_code": "LOC103B_judet",
+        "matrix_name": "Suprafata locuibila existenta la sfarsitul anului pe forme de proprietate, judete si localitati [judet]",
+        "fill_rate": 65.107317,
+        "actual_rows": 160164,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "LOC101B_judet",
+        "matrix_name": "Locuinte existente la sfarsitul anului pe forme de proprietate, judete si localitati [judet]",
+        "fill_rate": 51.562943,
+        "actual_rows": 131073,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "LOC104B_judet",
+        "matrix_name": "Locuinte terminate in cursul anului pe surse de finantare, judete si localitati [judet]",
+        "fill_rate": 12.957437,
+        "actual_rows": 54188,
+        "trend_direction": "volatile"
+      }
+    ]
+  },
+  {
+    "id": 8,
+    "name": "Geo + Demographic",
+    "desc": "Geographic + gender/age/residence",
+    "count": 135,
+    "primary_chart": "choropleth / line",
+    "exemplars": [
+      {
+        "matrix_code": "AMG158G",
+        "matrix_name": "AMIGO-Rata de ocupare (20-64 ani), pe grupe de varsta si regiuni de dezvoltare ( date comparabile)",
+        "fill_rate": 0.888889,
+        "actual_rows": 1152,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "POP203C",
+        "matrix_name": "Rata de fertilitate pentru nascutii-vii cu resedinta obisnuita in Romania dupa varsta mamei si regiuni de dezvoltare",
+        "fill_rate": 0.864198,
+        "actual_rows": 3640,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "TAN0131",
+        "matrix_name": "Tinta 3 - Mediu - Numarul de interventii ale Inspectoratului General pentru Situatii de Urgenta, pe medii de rezidenta si judete",
+        "fill_rate": 0.813492,
+        "actual_rows": 3485,
+        "trend_direction": "increasing"
+      }
+    ]
+  },
+  {
+    "id": 9,
+    "name": "Urban/Rural",
+    "desc": "Residence (urban/rural) splits over time",
+    "count": 84,
+    "primary_chart": "line",
+    "exemplars": [
+      {
+        "matrix_code": "TAV0212",
+        "matrix_name": "Tinta 1 - Social - PREVALENTA MALNUTRITIEI (GREUTATEA RAPORTATA LA INALTIME >+2 SAU <-2 SD FATA DE MEDIANA STANDARDELOR OMS PRIVIND CRESTEREA COPIILOR) IN RANDUL COPIILOR SUB CINCI ANI, PE TIPURI",
+        "fill_rate": 0.705556,
+        "actual_rows": 127,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "CAV101L",
+        "matrix_name": "Structura gospodariilor dupa masura in care fac fata cheltuielilor curente, pe medii de rezidenta\n",
+        "fill_rate": 0.666667,
+        "actual_rows": 216,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "CAV102S",
+        "matrix_name": "Structura gospodariilor dupa numarul camerelor de locuit, pe medii de rezidenta\n",
+        "fill_rate": 0.666667,
+        "actual_rows": 108,
+        "trend_direction": "volatile"
+      }
+    ]
+  },
+  {
+    "id": 10,
+    "name": "Categorical Snapshot",
+    "desc": "No time, no geo — pure categorical cross-tabs",
+    "count": 25,
+    "primary_chart": "grouped_bar",
+    "exemplars": [
+      {
+        "matrix_code": "PPA103A_lunar_lei_buc",
+        "matrix_name": "Preturile medii ale principalelor produse agricole pe total tara, pe ani, luni si trimestre [lunar × lei_buc]",
+        "fill_rate": 1.0,
+        "actual_rows": 260,
+        "trend_direction": "decreasing"
+      },
+      {
+        "matrix_code": "PPA103A_anual_lei_kg",
+        "matrix_name": "Preturile medii ale principalelor produse agricole pe total tara, pe ani, luni si trimestre [anual × lei_kg]",
+        "fill_rate": 0.768362,
+        "actual_rows": 952,
+        "trend_direction": "decreasing"
+      },
+      {
+        "matrix_code": "PNS101F_trimestrial_numar_persoane",
+        "matrix_name": "Numarul mediu trimestrial / anual al pensionarilor pe sisteme de pensionare si tipuri de asigurari sociale [trimestrial × numar_persoane]",
+        "fill_rate": 0.601387,
+        "actual_rows": 3903,
+        "trend_direction": "increasing"
+      }
+    ]
+  },
+  {
+    "id": 11,
+    "name": "Geo Snapshot",
+    "desc": "Geographic, no time dimension",
+    "count": 24,
+    "primary_chart": "choropleth",
+    "exemplars": [
+      {
+        "matrix_code": "PNS101D_regiuni_anual",
+        "matrix_name": "Numarul mediu trimestrial / anual al pensionarilor pe tipuri de asigurari sociale, macroregiuni, regiuni de dezvoltare si judete [regiuni × anual]",
+        "fill_rate": 1.0,
+        "actual_rows": 560,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "PNS101D_regiuni_trimestrial",
+        "matrix_name": "Numarul mediu trimestrial / anual al pensionarilor pe tipuri de asigurari sociale, macroregiuni, regiuni de dezvoltare si judete [regiuni × trimestrial]",
+        "fill_rate": 1.0,
+        "actual_rows": 1808,
+        "trend_direction": "volatile"
+      },
+      {
+        "matrix_code": "PNS101D_macroregiuni_anual",
+        "matrix_name": "Numarul mediu trimestrial / anual al pensionarilor pe tipuri de asigurari sociale, macroregiuni, regiuni de dezvoltare si judete [macroregiuni × anual]",
+        "fill_rate": 1.0,
+        "actual_rows": 280,
+        "trend_direction": "volatile"
+      }
+    ]
+  },
+  {
+    "id": 12,
+    "name": "Edge Cases",
+    "desc": "High-dimensional or rare combos",
+    "count": 0,
+    "primary_chart": "varies",
+    "exemplars": []
+  }
+]

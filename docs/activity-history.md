@@ -1,5 +1,55 @@
 # Activity History
 
+## 2026-04-12 — Large Dataset Handling: Time Windowing + GROUP BY Bypass
+
+Two improvements for datasets too large to render without explicit filtering:
+
+**GROUP BY bypass** (`dataset_data.py`): The 50k-row rejection check is skipped when `group_by` param is present. Aggregated queries (GROUP BY) collapse rows significantly, so the raw-rows rejection no longer applies.
+
+**Server-side time windowing** (`dataset_data.py`): Datasets >500k rows auto-filter `TIME_PERIOD` to the latest N periods that fit within the 50k row budget. Period count estimated as `max(min_periods, int(50000 / rows_per_period))`. For datasets >5M rows, `min_periods=2` to avoid OOM (e.g., POP107D: 21.6M rows → 2-year window ≈ 554k rows scanned). Response includes `time_windowed: true`; frontend shows bilingual notice. Fallback path: if parquet DISTINCT scan OOMs, falls back to metadata `time_year_min/time_year_max`.
+
+**DuckDB memory** (`db.py`): Raised from 200MB to 400MB to support larger parquet scans.
+
+**Frontend** (`explore-app.js`): `_autoApplyTimeWindow()` estimates safe period count and pre-selects recent TIME_PERIOD values before the first fetch. `_showServerTimeWindowNotice()` displays a collapsible amber banner when the server applies windowing.
+
+Verified: SOM101F (1.3M), EXP102J (764k), POP107D (21.6M) all load with time windowing.
+
+## 2026-04-12 — Fix Chart Selector Gaps (Taxonomy Items 3, 4, 5)
+
+Fixed three chart selection issues identified by the taxonomy visual audit:
+
+**Backend (`chart_selector.py`)**:
+- Population pyramid eligibility: relaxed `gender_count` threshold from ≤3 to ≤6. INS "Sexe si medii" dims mix gender+residence (Total+M+F+Urban+Rural = 5), making the old threshold too restrictive. 69 datasets now eligible.
+- Region/macroregion geo_count: was 0 for non-county geo datasets (coverage profiler only tracked `geo_county_count`). Now falls back to dimension count or known geo level sizes (8 regions, 4 macroregions). Enables choropleth for ~24 region-level datasets.
+
+**Frontend (`explore-app.js` v53)**:
+- Default chart type now uses `chart_selector`'s `ranked_charts` recommendation instead of hardcoded `timeChartTypes[0]` = 'line'. Maps backend `bar_vertical` → frontend `bar` alias.
+- Added `population_pyramid` to snapshot chart types when both age and gender dims exist.
+- Rebuilt eval baseline (1,959 datasets).
+
+**Verified via Playwright**: COM109B (area_stacked ✓), TFA0494 (population_pyramid ✓), PNS101D_regiuni_anual (choropleth+bar ✓), PPA103A_lunar_lei_buc (bar ✓), POP107D (no regression ✓).
+
+## 2026-04-11 — Dataset Shape Taxonomy + Visual Audit
+
+Created `scripts/chart-taxonomy.py` — classifies all 1,958 datasets into 12 shape clusters based on DuckDB metadata (archetype, dims, unit type). Picks 2-3 exemplars per cluster, outputs `docs/chart-taxonomy.md` and `data/eval/chart_taxonomy.json`. `--screenshot` flag takes Playwright screenshots of all 33 exemplars.
+
+**Visual audit findings** (added to `docs/chart-taxonomy.md` Gap Analysis section):
+- 71% of datasets (1,386) render suboptimally
+- Top 3 issues: choropleth 50k limit (23%), cluttered high-cardinality lines (27%), wrong chart type for percentage data (15%)
+- Population pyramid, categorical snapshot, and geo snapshot clusters all picking wrong chart types
+- Backlog updated with 5 prioritized chart_selector fixes
+
+## 2026-04-11 — Analytical Chart Modes (Index, YoY, Ranking, Distribution)
+
+Added 4 pure-frontend chart transform modes to the Lens UI:
+- **Index/Rebase**: divides each series by first value × 100, enables cross-scale comparison
+- **YoY Δ%**: year-over-year percentage change, highlights growth vs contraction
+- **Ranking/Bump**: inverted Y-axis with rank positions over time (capped 15 series)
+- **Distribution strip**: box plot + jitter scatter for geographic spread in snapshot panel
+
+Files: `explore-app.js` (v52), `chart-new-types.js` (v29), `chart-factory.js` (v31), `explore.css`.
+Transform buttons (Idx/Δ%) appear in time panel toolbar. Ranking added to chart type picker when ≥3 series. Distribution strip auto-renders below choropleth snapshot.
+
 ## 2026-04-11 — View Profile Orphan Cleanup
 
 Deleted 676 orphan view-profile JSON files from `data/corpus/view-profiles/` that had no corresponding parquet file in `data/corpus/parquet/`. These accumulated from removed/split datasets. Remaining: 3,509 VPs matching 3,706 parquets (some parquets have no VP yet — filled via `generate_view_profiles.py`).

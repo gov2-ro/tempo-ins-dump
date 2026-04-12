@@ -1107,8 +1107,19 @@ class LensApp {
             this.buildValueMap();
 
             this.panelSetup = this.determinePanelSetup();
-            this.timeChartType = this.panelSetup.timeChartTypes[0] || 'line';
-            this.snapshotChartType = this.panelSetup.snapshotChartTypes[0] || null;
+            // Use chart_selector's recommendation for defaults (instead of always 'line')
+            // Normalize backend names → frontend names (bar_vertical → bar)
+            const _chartAlias = { 'bar_vertical': 'bar' };
+            const _ranked = this.chartConfig?.ranked_charts || [];
+            const _bestTime = _ranked.find(r => {
+                const name = _chartAlias[r.chart_type] || r.chart_type;
+                return this.panelSetup.timeChartTypes.includes(name);
+            });
+            this.timeChartType = _bestTime
+                ? (_chartAlias[_bestTime.chart_type] || _bestTime.chart_type)
+                : (this.panelSetup.timeChartTypes[0] || 'line');
+            const _bestSnap = _ranked.find(r => this.panelSetup.snapshotChartTypes.includes(r.chart_type));
+            this.snapshotChartType = _bestSnap ? _bestSnap.chart_type : (this.panelSetup.snapshotChartTypes[0] || null);
             this.selectedPeriodIdx = -1; // latest
 
             // Restore URL state (first load only — consumed below)
@@ -1338,6 +1349,12 @@ class LensApp {
                     else if (lvlCounts['region'] > 0 && !lvlCounts['county']) geoLevel = 'region';
                 }
                 if (typeof loadRomaniaGeoJSON === 'function') loadRomaniaGeoJSON(geoLevel);
+            }
+            // For age+gender datasets, add population pyramid
+            const hasAgeDim = dims.some(d => d.dim_type === 'age' && d.option_count > 1);
+            const hasGenderDim = dims.some(d => d.dim_type === 'gender' && d.option_count > 1);
+            if (hasAgeDim && hasGenderDim && !snapshotChartTypes.includes('population_pyramid')) {
+                snapshotChartTypes.push('population_pyramid');
             }
         }
 
@@ -1757,21 +1774,29 @@ class LensApp {
     async fetchAndRender() {
         const code = this.metadata.matrix_code;
         const filters = this.getFilters();
+        const groupBy = this.computeGroupBy();
 
-        // Smarter large dataset handling: auto-apply filter if needed
+        // Large dataset handling: GROUP BY bypasses the server limit,
+        // so only auto-filter when no GROUP BY (e.g. table view)
         const rowCount = this.metadata.row_count || 0;
         const hasActiveFilters = Object.keys(filters).length > 0;
         let autoFilterApplied = false;
 
-        if (rowCount > 50000 && !hasActiveFilters) {
-            autoFilterApplied = this._autoApplyFilter(filters);
+        if (rowCount > 50000 && !hasActiveFilters && !groupBy) {
+            autoFilterApplied = this._autoApplyTimeWindow(filters);
+            if (!autoFilterApplied) autoFilterApplied = this._autoApplyFilter(filters);
         }
-
-        const groupBy = this.computeGroupBy();
 
         try {
             this.data = await API.getDatasetData(code, filters, 50000, { groupBy });
-            if (autoFilterApplied) this._showLargeDatasetNotice(); else this._hideLargeDatasetNotice();
+            // Server may have auto-applied time window for very large datasets
+            if (this.data.time_windowed) {
+                this._showServerTimeWindowNotice();
+            } else if (autoFilterApplied) {
+                this._showLargeDatasetNotice();
+            } else {
+                this._hideLargeDatasetNotice();
+            }
             this.renderInsights();
             await this.renderTimeChart();
             await this.renderSnapshotChart();
@@ -1780,9 +1805,10 @@ class LensApp {
         } catch (err) {
             const msg = err.message || 'Failed to load data';
             const isLarge = msg.includes('filter');
-            // Retry with auto-filter on large dataset error
+            // Retry with time window or auto-filter on large dataset error
             if (isLarge && !autoFilterApplied) {
-                autoFilterApplied = this._autoApplyFilter(filters);
+                autoFilterApplied = this._autoApplyTimeWindow(filters)
+                    || this._autoApplyFilter(filters);
                 if (autoFilterApplied) {
                     try {
                         this.data = await API.getDatasetData(code, filters, 50000, { groupBy: this.computeGroupBy() });
@@ -1851,6 +1877,33 @@ class LensApp {
         history.replaceState(null, '', url);
     }
 
+    /**
+     * Auto-restrict to latest N time periods for large datasets.
+     * Estimates how many periods fit within the 50k row budget.
+     */
+    _autoApplyTimeWindow(filters) {
+        const setup = this.panelSetup;
+        if (!setup || !setup.timeDim || !setup.periods.length) return false;
+
+        const totalRows = this.metadata.row_count || 0;
+        const totalPeriods = setup.periods.length;
+        if (totalPeriods <= 1) return false;
+
+        // Estimate rows per period, then how many periods fit in budget
+        const rowsPerPeriod = Math.ceil(totalRows / totalPeriods);
+        let windowSize = Math.max(5, Math.floor(50000 / rowsPerPeriod));
+        windowSize = Math.min(windowSize, totalPeriods);
+
+        if (windowSize >= totalPeriods) return false; // all periods fit
+
+        // Take the latest N periods (periods are chronological, oldest first)
+        const latestPeriods = setup.periods.slice(-windowSize);
+        const periodValues = latestPeriods.map(p => p.id);
+        filters[setup.timeDim] = periodValues;
+        this._timeWindowInfo = { shown: windowSize, total: totalPeriods };
+        return true;
+    }
+
     /** Auto-pick first available filter value for large datasets (skip "TOTAL" aggregates) */
     _autoApplyFilter(filters) {
         const selects = document.querySelectorAll('#filter-strip .filter-select');
@@ -1877,7 +1930,43 @@ class LensApp {
             const filterStrip = document.getElementById('filter-strip');
             filterStrip.insertAdjacentElement('beforebegin', notice);
         }
-        notice.innerHTML = `<span class="notice-icon">⚠</span> ${this.ui.largeDatasetNotice}`;
+        const tw = this._timeWindowInfo;
+        const msg = tw
+            ? (this.lang === 'ro'
+                ? `Se afișează ultimele ${tw.shown} perioade (din ${tw.total} disponibile)`
+                : `Showing last ${tw.shown} periods (of ${tw.total} available)`)
+            : this.ui.largeDatasetNotice;
+        notice.innerHTML = `<span class="notice-icon">⚠</span> ${msg}`;
+        notice.classList.remove('hidden');
+        this._timeWindowInfo = null;
+    }
+
+    _showServerTimeWindowNotice() {
+        // Server auto-applied time window — detect period count from returned data
+        const periods = this.panelSetup?.periods || [];
+        const data = this.data;
+        const timeDim = this.panelSetup?.timeDim;
+        let shownPeriods = 0;
+        if (timeDim && data?.rows) {
+            const timeIdx = data.columns.indexOf(timeDim);
+            if (timeIdx >= 0) {
+                const seen = new Set();
+                for (const r of data.rows) seen.add(r[timeIdx]);
+                shownPeriods = seen.size;
+            }
+        }
+        const msg = this.lang === 'ro'
+            ? `Se afișează ultimele ${shownPeriods || '?'} perioade (din ${periods.length} disponibile) — set de date mare`
+            : `Showing last ${shownPeriods || '?'} periods (of ${periods.length} available) — large dataset`;
+        let notice = document.getElementById('large-dataset-notice');
+        if (!notice) {
+            notice = document.createElement('div');
+            notice.id = 'large-dataset-notice';
+            notice.className = 'large-dataset-notice';
+            const filterStrip = document.getElementById('filter-strip');
+            filterStrip.insertAdjacentElement('beforebegin', notice);
+        }
+        notice.innerHTML = `<span class="notice-icon">⚠</span> ${msg}`;
         notice.classList.remove('hidden');
     }
 

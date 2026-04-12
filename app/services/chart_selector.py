@@ -64,16 +64,18 @@ def build_signature(profile: dict, dimensions: list,
     except (json.JSONDecodeError, TypeError):
         geo_levels = []
 
-    geo_count = cov.get('geo_county_count')
-    if geo_count is None and profile.get('has_geo'):
-        # Coverage profiler may not have populated geo_county_count (no parquet, sparse data).
-        # Fall back to dimension metadata when geo_levels confirms county-level data.
+    geo_count = cov.get('geo_county_count') or 0
+    if geo_count == 0 and profile.get('has_geo'):
+        # geo_county_count only tracks counties; for region/macroregion datasets it's 0.
+        # Fall back to dimension metadata or known geo level counts.
         if 'county' in geo_levels:
             geo_count = _dim_count(dimensions, 'geo') or 42
+        elif 'region' in geo_levels:
+            geo_count = _dim_count(dimensions, 'geo') or 8
+        elif 'macroregion' in geo_levels:
+            geo_count = _dim_count(dimensions, 'geo') or 4
         else:
-            geo_count = 0
-    else:
-        geo_count = geo_count or 0
+            geo_count = _dim_count(dimensions, 'geo') or 0
 
     time_points = cov.get('time_year_count') or profile.get('time_year_max', 0) or 0
     if time_points == 0 and profile.get('time_year_min') and profile.get('time_year_max'):
@@ -175,7 +177,8 @@ def _eligible(chart_type: str, sig: dict) -> bool:
     if chart_type == 'choropleth':
         return has_geo and geo >= 5
     if chart_type == 'population_pyramid':
-        return has_age and has_gender and 2 <= gender_count <= 3
+        # INS "Sexe si medii" dims mix gender+residence (Total+M+F+Urban+Rural = 5)
+        return has_age and has_gender and 2 <= gender_count <= 6
     if chart_type == 'heatmap':
         return total_dims >= 2 and not is_sparse
     if chart_type == 'small_multiples':
