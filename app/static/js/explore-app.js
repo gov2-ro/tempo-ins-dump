@@ -67,6 +67,7 @@ const UI = {
         yoyTooltip: 'Variație anuală %',
         yearlyMode: 'Anual',
         yearlyTooltip: 'Grupează datele pe ani',
+        zoomPresets: ['1A', '3A', '5A', 'Tot'],
         distribution: 'Distribuție',
         aboutLink: 'Despre',
         aboutTitle: 'Despre INS+',
@@ -137,6 +138,7 @@ const UI = {
         yoyTooltip: 'Year-over-year %',
         yearlyMode: 'Yearly',
         yearlyTooltip: 'Group data by year',
+        zoomPresets: ['1Y', '3Y', '5Y', 'All'],
         distribution: 'Distribution',
         aboutLink: 'About',
         aboutTitle: 'About INS+',
@@ -337,6 +339,7 @@ class LensApp {
         this._urlSChart  = params.get('schart') || null;
         this._urlPeriod  = params.get('period') || null;
         this._urlTAgg    = params.get('tagg');   // '0' = yearly-agg explicitly off
+        this._urlTZoom   = params.get('tzoom') || null;  // '1y'|'3y'|'5y'|'all'
         const tmode = params.get('tmode');
         if (tmode === 'index' || tmode === 'yoy') this.timeTransform = tmode;
         this._urlFilters = {};
@@ -1132,6 +1135,7 @@ class LensApp {
             const _gran = this.metadata?.profile?.time_granularity;
             this.timeGranularity = _gran || null;
             this.yearlyAgg = (_gran === 'monthly' || _gran === 'quarterly');
+            this.timeZoomPreset = '5y';  // default raw-monthly zoom window
 
             // Restore URL state (first load only — consumed below)
             const setup = this.panelSetup;
@@ -1144,10 +1148,12 @@ class LensApp {
                 if (pidx >= 0) this.selectedPeriodIdx = pidx;
             }
             if (this._urlTAgg !== null) this.yearlyAgg = this._urlTAgg !== '0';
+            if (this._urlTZoom) this.timeZoomPreset = this._urlTZoom;
             this._urlTChart = null;
             this._urlSChart = null;
             this._urlPeriod = null;
             this._urlTAgg = null;
+            this._urlTZoom = null;
 
             this.renderDashHeader();
             this.renderInfoPanel();
@@ -1460,7 +1466,7 @@ class LensApp {
             pills.appendChild(btn);
         }
 
-        // Yearly aggregation toggle — only for monthly/quarterly datasets
+        // Yearly aggregation toggle + zoom presets — only for monthly/quarterly datasets
         if (this.timeGranularity === 'monthly' || this.timeGranularity === 'quarterly') {
             const sep2 = document.createElement('span');
             sep2.className = 'ct-sep';
@@ -1471,13 +1477,37 @@ class LensApp {
             yearlyBtn.className = 'ct-btn transform-btn' + (this.yearlyAgg ? ' active' : '');
             yearlyBtn.textContent = this.ui.yearlyMode;
             yearlyBtn.title = this.ui.yearlyTooltip;
+
+            // Zoom preset buttons (1Y/3Y/5Y/All) — visible only in raw monthly mode
+            const presetWrap = document.createElement('span');
+            presetWrap.className = 'zoom-preset-wrap' + (this.yearlyAgg ? ' hidden' : '');
+            const presetKeys = ['1y', '3y', '5y', 'all'];
+            const presetLabels = this.ui.zoomPresets;  // ['1A','3A','5A','Tot'] or ['1Y','3Y','5Y','All']
+            presetKeys.forEach((key, i) => {
+                const pbtn = document.createElement('button');
+                pbtn.className = 'ct-btn zoom-preset-btn' + (this.timeZoomPreset === key ? ' active' : '');
+                pbtn.textContent = presetLabels[i];
+                pbtn.dataset.zoomKey = key;
+                pbtn.addEventListener('click', () => {
+                    this.timeZoomPreset = key;
+                    presetWrap.querySelectorAll('.zoom-preset-btn').forEach(b => b.classList.remove('active'));
+                    pbtn.classList.add('active');
+                    this._applyZoomPreset(key);
+                    this._syncURL();
+                });
+                presetWrap.appendChild(pbtn);
+            });
+
             yearlyBtn.addEventListener('click', () => {
                 this.yearlyAgg = !this.yearlyAgg;
                 yearlyBtn.classList.toggle('active', this.yearlyAgg);
+                presetWrap.classList.toggle('hidden', this.yearlyAgg);
                 this.renderTimeChart();
                 this._syncURL();
             });
+
             pills.appendChild(yearlyBtn);
+            pills.appendChild(presetWrap);
         }
 
         // Dimension picker for time series (which dim colors the lines)
@@ -1889,6 +1919,12 @@ class LensApp {
         else
             url.searchParams.delete('tagg');
 
+        // Zoom preset — only store when not default (5y)
+        if (!this.yearlyAgg && this.timeZoomPreset && this.timeZoomPreset !== '5y')
+            url.searchParams.set('tzoom', this.timeZoomPreset);
+        else
+            url.searchParams.delete('tzoom');
+
         // Snapshot chart type
         if (this.snapshotChartType)
             url.searchParams.set('schart', this.snapshotChartType);
@@ -2280,6 +2316,26 @@ class LensApp {
     }
 
     /**
+     * Apply a named zoom preset to the time chart.
+     * preset: '1y' (12 periods), '3y' (36), '5y' (60), 'all' (reset)
+     */
+    _applyZoomPreset(preset) {
+        const chart = this.charts.find(c => c && !c.isDisposed() && c._timePanel);
+        if (!chart) return;
+        const totalPeriods = this.panelSetup?.periods?.length || 1;
+        const windowMap = { '1y': 12, '3y': 36, '5y': 60, 'all': Infinity };
+        const w = windowMap[preset] ?? 60;
+        const start = w >= totalPeriods ? 0 : Math.max(0, Math.round((1 - w / totalPeriods) * 100));
+        // setOption merge is more reliable than dispatchAction for initial zoom
+        chart.setOption({
+            dataZoom: [
+                { type: 'inside', start, end: 100 },
+                { type: 'slider', start, end: 100 },
+            ]
+        });
+    }
+
+    /**
      * Render distribution strip chart (box + scatter) below choropleth.
      * Extracts geo values for the selected period.
      */
@@ -2389,6 +2445,10 @@ class LensApp {
                 this.charts.push(chart);
                 const btn = document.getElementById('time-png-btn');
                 if (btn) { btn.classList.remove('hidden'); btn.onclick = () => _exportPng(chart, `${this.metadata.matrix_code}-trends`); }
+                // Apply zoom preset for raw monthly/quarterly view
+                if (!this.yearlyAgg && (this.timeGranularity === 'monthly' || this.timeGranularity === 'quarterly')) {
+                    this._applyZoomPreset(this.timeZoomPreset || '5y');
+                }
             }
         } catch (err) {
             container.innerHTML = `<div class="chart-loading" style="color:var(--red)">Chart error: ${err.message}</div>`;

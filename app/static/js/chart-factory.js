@@ -133,10 +133,6 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
         return lbl;
     });
 
-    // Default zoom to last ~5 years for dense raw monthly data (not yearly-aggregated)
-    const _isDenseRaw = !config._yearlyAgg && config._timeGranularity === 'monthly' && xData.length > 60;
-    const _zoomStart = _isDenseRaw ? Math.max(0, Math.round((1 - 60 / xData.length) * 100)) : 0;
-
     let series = [];
     const chartType = config.primary_chart;
     const isArea = chartType === 'area' || chartType === 'area_stacked';
@@ -268,10 +264,6 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
     };
 
     chart.setOption(option);
-    // ECharts ignores start/end in the initial setOption — must dispatchAction after render
-    if (_isDenseRaw) {
-        chart.dispatchAction({ type: 'dataZoom', start: _zoomStart, end: 100 });
-    }
     return chart;
 }
 
