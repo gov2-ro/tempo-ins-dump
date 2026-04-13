@@ -547,6 +547,7 @@ class LensApp {
 
         const el = document.getElementById('about-content');
         el.innerHTML = `<div class="about-page">${this.ui.aboutContent}</div>`;
+        this._updatePageMeta(null);
         document.title = `${this.ui.aboutTitle} — INS+`;
 
         // Update footer link label
@@ -559,6 +560,7 @@ class LensApp {
         this.navigate(null);
         this.disposeCharts();
         this.hideTableToggleRow();
+        this._updatePageMeta(null);
 
         document.getElementById('browse-view').classList.remove('hidden');
         document.getElementById('dashboard-view').classList.add('hidden');
@@ -1156,6 +1158,7 @@ class LensApp {
             this._urlTZoom = null;
 
             this.renderDashHeader();
+            this._updatePageMeta(this.metadata);
             this.renderInfoPanel();
             this.renderFilters();
             this.renderTimePanel();
@@ -1240,6 +1243,43 @@ class LensApp {
                 }
             });
         });
+    }
+
+    /**
+     * Update document.title and meta/OG tags for the current dataset view.
+     * Pass null to reset to the default landing-page values.
+     */
+    _updatePageMeta(m) {
+        const setMeta = (sel, val) => {
+            const el = document.querySelector(sel);
+            if (el) el.setAttribute('content', val);
+        };
+        if (!m) {
+            // Reset to defaults
+            document.title = 'INS+ — Date statistice România';
+            setMeta('meta[name="description"]', 'Explorați peste 1900 de seturi de date statistice oficiale din România. Cifre pentru forța de muncă, economie, demografie, turism și multe altele — date de la INS Tempo Online, prezentate mai accesibil.');
+            setMeta('meta[property="og:title"]', 'INS+ Date statistice');
+            setMeta('meta[property="og:description"]', 'Explorați peste 1900 de seturi de date statistice oficiale din România — cifre pentru forța de muncă, economie, demografie, turism și multe altele.');
+            setMeta('meta[property="og:url"]', 'https://ins.gov2.ro/');
+            setMeta('meta[name="twitter:title"]', 'INS+ Date statistice');
+            setMeta('meta[name="twitter:description"]', 'Explorați peste 1900 de seturi de date statistice oficiale din România.');
+            return;
+        }
+        const profile = m.profile || {};
+        const timeRange = profile.time_year_min && profile.time_year_max
+            ? ` (${profile.time_year_min}–${profile.time_year_max})` : '';
+        const updatedPart = m.ultima_actualizare ? `. Actualizat ${m.ultima_actualizare}` : '';
+        const description = `${m.matrix_name}${timeRange}. Date statistice oficiale România, INS TEMPO Online${updatedPart}.`;
+        const pageTitle = `${m.matrix_name} — INS+`;
+        const pageUrl = `https://ins.gov2.ro/?code=${m.matrix_code}`;
+
+        document.title = pageTitle;
+        setMeta('meta[name="description"]', description);
+        setMeta('meta[property="og:title"]', pageTitle);
+        setMeta('meta[property="og:description"]', description);
+        setMeta('meta[property="og:url"]', pageUrl);
+        setMeta('meta[name="twitter:title"]', pageTitle);
+        setMeta('meta[name="twitter:description"]', description);
     }
 
     renderInfoPanel() {

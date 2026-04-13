@@ -6,6 +6,7 @@ see also [charting-ideas.md](charting-ideas.md)
 
 ## UI / Navigation
 - [x] add static pages - how do we treat translations?
+- [ ] add proper title: 'INS+' + {code} + {title - first 15 words}
 - [ ] add 'last updated' page 
 - [ ] Dataset page breadcrumbs: links click through but navigate to home instead of the correct category — needs investigation into how `/?code=` routing is handled on the landing page (explore-app.js) vs. direct URL navigation
 - [ ] create a release log. how? backwards? 
@@ -31,7 +32,10 @@ see also [charting-ideas.md](charting-ideas.md)
 - [ ] clean up obsolete subts, refactor scripts - utils, scripts?
 - [ ] static site? - see `docs/misc-ideas/static-site/`
 - [x] add llms.txt
-- [ ] description, title, og:info should follow language
+- [x] Dynamic page title + meta/og:description per dataset — set from matrix_name, time range, updated date on dashboard load; reset to defaults on browse/about
+- [ ] description, title, og:info should follow language (og:description currently always in Romanian regardless of lang)
+- [ ] **OG images per dataset** — pre-generate a chart screenshot or branded card per dataset code, cache in `app/static/og/` (e.g. `IPC102A.png`). Set `og:image` dynamically to `https://ins.gov2.ro/og/{code}.png` when available, fall back to default `landing.png`. Could be generated headlessly via Playwright during pipeline runs.
+- [ ] **Clean dataset URLs** — serve datasets at `/{dataset-id}/` (e.g. `/IPC102A/`) instead of `?code={dataset}` for better SEO and shareability. Requires either a catch-all route in FastAPI returning `index.html` + JS routing via `location.pathname`, or static pre-rendering. Current `?code=` param can stay as alias for backwards-compat.
 - [ ] how to deal with parent columns, like judete and localitati - SOM101E
 - [ ] older datasets like sustainable development 2020 should be archived?
 
@@ -59,6 +63,8 @@ see also [charting-ideas.md](charting-ideas.md)
 Hybrid roadmap: minimal dev MCP → v1 user-facing agent → expand MCP → v2.
 Architectural decision: tool-calling agent over existing safe services, **not** literal NL2SQL.
 Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` once, reuse from MCP, agent, and existing routes.
+
+- [ ] [OpenRouter](https://openrouter.ai/) version
 
 ### Step 1 — Minimal `tempo-dev` MCP (~2h) ✅
 - [x] Refactor: extract `search_datasets()` and `get_dataset_meta()` from `app/routers/datasets.py` into `app/services/dataset_search.py` and `app/services/dataset_meta.py`. Keep route behaviour identical.
