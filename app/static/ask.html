@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>INS+ — Întreabă</title>
+    <title>INS+ — Întreabă 🤖</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -14,7 +14,11 @@
            Layout
         --------------------------------------------------------------- */
         body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-
+        .chat-empty-title:after {content: '⚠️ very alpha'; vertical-align: super; font-size: .69rem; display: inline-block; border-radius: 3px; padding: 2px 3px; line-height: 1; font-style: italic; }
+        .chat-empty-title:after {background-color: rgba(255, 228, 196, 0.761); }
+        html[data-theme="dark"] .chat-empty-title:after {
+            background-color: rgba(0, 0, 139, 0.544); color: white; 
+        }
         .ask-page {
             flex: 1;
             display: flex;
@@ -506,7 +510,7 @@
         <div id="chat-messages">
             <!-- Empty state (hidden once messages appear) -->
             <div class="chat-empty" id="chat-empty">
-                <div class="chat-empty-title">Întreabă despre date statistice</div>
+                <div class="chat-empty-title">🤖 Întreabă despre date statistice</div>
                 <div class="chat-empty-sub">Caută seturi de date, analizează tendințe, compară cifre — în limbaj natural.</div>
                 <div class="chat-examples">
                     <button class="chat-example" data-q="Care este rata șomajului pe județe în 2023?">Rata șomajului pe județe în 2023</button>
@@ -555,5 +559,6 @@
             if (msgs.length > 0 && chatEmpty) chatEmpty.style.display = 'none';
         }).observe(chatMessages, { childList: true });
     </script>
+    
 </body>
 </html>
