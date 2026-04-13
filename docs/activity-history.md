@@ -1,5 +1,15 @@
 # Activity History
 
+## 2026-04-13 — Category URL State + Breadcrumb Fixes + Category Meta Tags
+
+Three related improvements to `app/static/js/explore-app.js`:
+
+**Category URL state**: Category drill-down navigation now syncs to the URL as `?cat=CODE1:CODE2` (e.g. `?cat=E:E1`). Uses `replaceState` within a drill session (no history spam) and `pushState` on major navigations. Refreshing the page while browsing a category restores the full drill state. Back button in the browser works correctly.
+
+**Breadcrumb fix (dashboard → browse)**: Previously, clicking a breadcrumb on a dataset page silently failed because `context_path` objects only contain `{code, name}` — not the full category objects (with `children`, `total_datasets`) that `drillCategory()` requires. Fixed by adding `_findCategoryByCode(code, tree)` (recursive search through `this.categories`) and `_restoreDrillFromUrl(catPath)` helpers. Breadcrumb click now sets `_urlCat` and calls `showBrowse()`, which restores the drill stack.
+
+**Category page meta tags**: `_updatePageMeta()` extended to handle `{ type: 'category', cat, catPath }`. When drilling into any category/theme, `document.title`, `meta[description]`, `og:title`, `og:description`, and `og:url` are updated to reflect the category name and dataset count. `showBrowse()` resets meta to landing-page defaults; drilling overrides it again.
+
 ## 2026-04-12 — Monthly/Quarterly Yearly Aggregation Toggle
 
 90 monthly + 27 quarterly datasets previously rendered 200–416 x-axis data points, making charts unreadable. Fixed with two changes:

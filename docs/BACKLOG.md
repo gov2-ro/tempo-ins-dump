@@ -6,9 +6,10 @@ see also [charting-ideas.md](charting-ideas.md)
 
 ## UI / Navigation
 - [x] add static pages - how do we treat translations?
-- [ ] add proper title: 'INS+' + {code} + {title - first 15 words}
+- [x] add proper title: 'INS+' + {code} + {title - first 15 words}
 - [ ] add 'last updated' page 
-- [ ] Dataset page breadcrumbs: links click through but navigate to home instead of the correct category — needs investigation into how `/?code=` routing is handled on the landing page (explore-app.js) vs. direct URL navigation
+- [x] Dataset page breadcrumbs: links click through but navigate to home instead of the correct category — fixed: breadcrumb clicks now use `_findCategoryByCode` + `_restoreDrillFromUrl`
+- [ ] **Pretty permalink URLs for category/theme pages** — currently `?cat=E:E1` (code-based). Should use slugs like `/?cat=economie/preturi` for SEO and shareability. Requires slug mapping (code → slug) built from category names, a slug→code reverse map on load, and updating `_syncURL`/`_restoreDrillFromUrl` accordingly. The `?cat=CODE:CODE` format can stay as a fallback alias.
 - [ ] create a release log. how? backwards? 
 
 ## Misc

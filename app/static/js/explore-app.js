@@ -344,6 +344,7 @@ class LensApp {
         if (tmode === 'index' || tmode === 'yoy') this.timeTransform = tmode;
         this._urlFilters = {};
         try { const f = params.get('filters'); if (f) this._urlFilters = JSON.parse(f); } catch {}
+        this._urlCat = params.get('cat') || null;
         const lnk = document.getElementById('about-link');
         if (lnk) lnk.textContent = this.ui.aboutLink;
         if (page === 'about') {
@@ -530,6 +531,7 @@ class LensApp {
         const url = new URL(location.href);
         url.searchParams.delete('code');
         url.searchParams.delete('page');
+        url.searchParams.delete('cat');
         if (code) url.searchParams.set('code', code);
         if (page) url.searchParams.set('page', page);
         history.pushState({}, '', url);
@@ -585,6 +587,11 @@ class LensApp {
         if (catLabel) catLabel.textContent = this.ui.categoriesLabel;
 
         this.showCategoryGrid();
+        if (this._urlCat) {
+            const target = this._urlCat;
+            this._urlCat = null;
+            await this._restoreDrillFromUrl(target);
+        }
     }
 
     showCategoryGrid() {
@@ -930,8 +937,45 @@ class LensApp {
         `;
     }
 
+    /** Recursive search for a category by code in the loaded categories tree. */
+    _findCategoryByCode(code, tree = null) {
+        const cats = tree || this.categories || [];
+        for (const cat of cats) {
+            if (cat.code === code) return cat;
+            if (cat.children?.length) {
+                const found = this._findCategoryByCode(code, cat.children);
+                if (found) return found;
+            }
+        }
+        return null;
+    }
+
+    /** Restore drill stack from a colon-separated cat URL param (e.g. "E:E1"). */
+    async _restoreDrillFromUrl(catPath) {
+        const codes = catPath.split(':').filter(Boolean);
+        if (!codes.length) return;
+        this.drillStack = [];
+        for (let i = 0; i < codes.length - 1; i++) {
+            const cat = this._findCategoryByCode(codes[i]);
+            if (cat) this.drillStack.push({ cat, colorIdx: 0 });
+        }
+        const lastCat = this._findCategoryByCode(codes[codes.length - 1]);
+        if (lastCat) await this.drillCategory(lastCat, 0, false);
+    }
+
     async drillCategory(cat, colorIdx, pushToStack = true) {
         if (pushToStack) this.drillStack.push({ cat, colorIdx });
+
+        // Sync drill path to URL (replaceState — no history spam)
+        const catPath = this.drillStack.map(e => e.cat.code).join(':');
+        const _url = new URL(location.href);
+        _url.searchParams.delete('code');
+        _url.searchParams.delete('page');
+        _url.searchParams.set('cat', catPath);
+        history.replaceState(null, '', _url);
+
+        // Update page title + meta tags for category
+        this._updatePageMeta({ type: 'category', cat, catPath });
 
         // Hide landing-page-only sections
         document.getElementById('headlines-section')?.classList.add('hidden');
@@ -1228,26 +1272,24 @@ class LensApp {
 
         // Bind breadcrumb clicks → navigate to category drill
         header.querySelectorAll('.dash-crumb-link').forEach(el => {
-            el.addEventListener('click', () => {
-                const code = el.dataset.code;
-                const cat = m.context_path.find(p => p.code === code);
-                if (cat) {
-                    this.drillStack = [];
-                    // Build stack up to clicked level
-                    const idx = m.context_path.indexOf(cat);
-                    for (let i = 0; i <= idx; i++) {
-                        this.drillStack.push({ cat: m.context_path[i], colorIdx: 0 });
-                    }
-                    this.showBrowse();
-                    this.drillCategory(cat, 0, false);
+            el.addEventListener('click', async () => {
+                const targetCode = el.dataset.code;
+                const pathCodes = [];
+                for (const p of m.context_path) {
+                    pathCodes.push(p.code);
+                    if (p.code === targetCode) break;
                 }
+                this._urlCat = pathCodes.join(':');
+                await this.showBrowse();
             });
         });
     }
 
     /**
-     * Update document.title and meta/OG tags for the current dataset view.
-     * Pass null to reset to the default landing-page values.
+     * Update document.title and meta/OG tags.
+     * Pass null to reset to landing-page defaults.
+     * Pass { type: 'category', cat, catPath } for category/theme pages.
+     * Pass a dataset metadata object for dataset pages.
      */
     _updatePageMeta(m) {
         const setMeta = (sel, val) => {
@@ -1263,6 +1305,21 @@ class LensApp {
             setMeta('meta[property="og:url"]', 'https://ins.gov2.ro/');
             setMeta('meta[name="twitter:title"]', 'INS+ Date statistice');
             setMeta('meta[name="twitter:description"]', 'Explorați peste 1900 de seturi de date statistice oficiale din România.');
+            return;
+        }
+        if (m.type === 'category') {
+            const { cat, catPath } = m;
+            const count = cat.total_datasets || 0;
+            const pageTitle = `${cat.name} — INS+ Statistici`;
+            const description = `${count} seturi de date statistice în categoria ${cat.name}. Date oficiale INS România, TEMPO Online.`;
+            const pageUrl = `https://ins.gov2.ro/?cat=${encodeURIComponent(catPath)}`;
+            document.title = pageTitle;
+            setMeta('meta[name="description"]', description);
+            setMeta('meta[property="og:title"]', pageTitle);
+            setMeta('meta[property="og:description"]', description);
+            setMeta('meta[property="og:url"]', pageUrl);
+            setMeta('meta[name="twitter:title"]', pageTitle);
+            setMeta('meta[name="twitter:description"]', description);
             return;
         }
         const profile = m.profile || {};
@@ -3153,10 +3210,14 @@ window.addEventListener('popstate', () => {
     const params = new URLSearchParams(location.search);
     const code = params.get('code');
     const page = params.get('page');
+    const cat  = params.get('cat');
     if (page === 'about') {
         window.app.showAbout();
     } else if (code) {
         window.app.showDashboard(code);
+    } else if (cat) {
+        window.app._urlCat = cat;
+        window.app.showBrowse();
     } else {
         window.app.showBrowse();
     }
