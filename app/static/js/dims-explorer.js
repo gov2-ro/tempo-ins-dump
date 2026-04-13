@@ -3,7 +3,8 @@
  * Left: dimension list; Right: filter bar + dataset list
  */
 
-const TOP_N = 25;
+const TOP_N = 15;
+const TOP_UM = 10;
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -11,6 +12,7 @@ let activeDim = null;
 let lang = localStorage.getItem('lens_lang') || 'ro';
 let allDims = [];
 let showAll = false;
+let showAllUm = false;
 
 let filters = {
     sort: 'updated',
@@ -231,10 +233,21 @@ function renderDimList() {
         groupLabel.textContent = `Units of Measure (${unitDims.length})`;
         container.appendChild(groupLabel);
 
+        const visibleUm = showAllUm ? unitDims : unitDims.slice(0, TOP_UM);
+        const remainingUm = unitDims.length - TOP_UM;
+
         const unitCloud = document.createElement('div');
         unitCloud.className = 'dims-pill-cloud';
-        unitDims.forEach(d => unitCloud.appendChild(makeDimPill(d)));
+        visibleUm.forEach(d => unitCloud.appendChild(makeDimPill(d)));
         container.appendChild(unitCloud);
+
+        if (!showAllUm && remainingUm > 0) {
+            const btn = document.createElement('button');
+            btn.className = 'dim-show-more';
+            btn.textContent = `+ ${remainingUm} more`;
+            btn.addEventListener('click', () => { showAllUm = true; renderDimList(); });
+            container.appendChild(btn);
+        }
     }
 
     if (activeDim) highlightDimPill(activeDim);
