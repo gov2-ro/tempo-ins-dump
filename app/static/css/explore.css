@@ -405,6 +405,12 @@ kbd {
     font-size: 13px;
     color: var(--text-2);
 }
+.browse-dims-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 13px;
+}
+.browse-dims-link:hover { text-decoration: underline; }
 .browse-tagline {
     margin-top: 6px;
     font-size: 18px;
@@ -1645,6 +1651,16 @@ body.sidebar-open #app {
     flex: 1;
     padding: 6px 0;
 }
+
+/* Sidebar dimensions link shortcut */
+.sb-dims-link {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 14px; font-size: 12px; font-weight: 500;
+    color: var(--text-2); text-decoration: none;
+    border-bottom: 1px solid var(--border); margin-bottom: 4px;
+    transition: color var(--transition), background var(--transition);
+}
+.sb-dims-link:hover { color: var(--accent); background: var(--bg-2); }
 
 /* Sidebar tree items */
 .sb-section {

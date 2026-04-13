@@ -198,6 +198,25 @@ def get_category_summary(code: str, lang: str = Query("ro", regex="^(ro|en)$")):
     }
 
 
+@router.get("/dimensions")
+def list_dimensions(limit: int = Query(100, le=500)):
+    """Return dimension labels ranked by number of datasets that have them."""
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT dim_label,
+               COUNT(DISTINCT matrix_code) AS dataset_count,
+               SUM(option_count)           AS total_options
+        FROM dimensions
+        GROUP BY dim_label
+        ORDER BY dataset_count DESC, dim_label ASC
+        LIMIT ?
+    """, [limit]).fetchall()
+    return [
+        {'label': r[0], 'dataset_count': r[1], 'total_options': r[2] or 0}
+        for r in rows
+    ]
+
+
 def _clean_context_name(name: str) -> str:
     """Remove leading numbering/prefixes like 'A. ', '1. ' from context names."""
     if not name:

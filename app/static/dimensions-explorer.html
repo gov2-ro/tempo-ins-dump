@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INS+ — Dimension Browser</title>
+    <meta name="description" content="Browse Romanian INS statistical datasets by shared dimension — counties, age groups, economic sectors, and more.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/explore.css?v=37">
+    <style>
+        /* ── Two-column layout ───────────────────────────────────────────── */
+        .dims-layout {
+            display: flex;
+            gap: 0;
+            min-height: calc(100vh - 50px);
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* ── Left sidebar ────────────────────────────────────────────────── */
+        .dims-sidebar {
+            width: 220px;
+            flex-shrink: 0;
+            border-right: 1px solid var(--border);
+            padding: 20px 0;
+            position: sticky;
+            top: 50px;
+            height: calc(100vh - 50px);
+            overflow-y: auto;
+        }
+
+        .dims-sidebar-title {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-2);
+            padding: 0 14px 10px;
+        }
+
+        .dim-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 14px;
+            font-size: 12.5px;
+            color: var(--text-1);
+            cursor: pointer;
+            transition: background var(--transition), color var(--transition);
+            border-left: 2px solid transparent;
+            gap: 6px;
+        }
+
+        .dim-item:hover {
+            background: var(--bg-2);
+            color: var(--text-0);
+        }
+
+        .dim-item.active {
+            background: color-mix(in srgb, var(--accent) 10%, transparent);
+            color: var(--accent);
+            border-left-color: var(--accent);
+            font-weight: 500;
+        }
+
+        .dim-item-label {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .dim-item-count {
+            font-size: 10px;
+            color: var(--text-3, var(--text-2));
+            flex-shrink: 0;
+        }
+
+        .dim-show-more {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 6px 14px;
+            font-size: 12px;
+            color: var(--accent);
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+
+        .dim-show-more:hover { text-decoration: underline; }
+
+        .dims-sidebar-sep {
+            height: 1px;
+            background: var(--border);
+            margin: 10px 0;
+        }
+
+        .dims-sidebar-group-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-2);
+            padding: 4px 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+        }
+
+        /* ── Right main ──────────────────────────────────────────────────── */
+        .dims-main {
+            flex: 1;
+            min-width: 0;
+            padding: 20px 24px 60px;
+        }
+
+        .dims-main-title {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--text-0);
+            margin: 0 0 4px;
+        }
+
+        .dims-main-sub {
+            font-size: 0.82rem;
+            color: var(--text-2);
+            margin: 0 0 16px;
+        }
+
+        /* ── Filter bar ──────────────────────────────────────────────────── */
+        #dims-filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            padding: 10px 0 14px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 20px;
+        }
+
+        .facet-select-wrap { position: relative; }
+
+        .facet-select {
+            appearance: none;
+            padding: 5px 26px 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-family: inherit;
+            border: 1px solid var(--border);
+            background: var(--bg-2);
+            color: var(--text-1);
+            cursor: pointer;
+            transition: border-color var(--transition);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+        }
+
+        .facet-select:focus { outline: none; border-color: var(--accent); }
+
+        /* ── Dataset list ────────────────────────────────────────────────── */
+        #dims-dataset-header {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-2);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 10px;
+        }
+
+        .dims-loading {
+            padding: 16px 0;
+            color: var(--text-2);
+            font-size: 13px;
+        }
+
+        /* ── Responsive ──────────────────────────────────────────────────── */
+        @media (max-width: 640px) {
+            .dims-sidebar { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Top bar -->
+    <nav class="topbar" id="topbar">
+        <div class="topbar-left">
+            <a id="zelogo" href="/" class="logo"><span class="logo-dot"></span>INS<span style="margin: -1ex 0 0 -1ex;">+</span></a>
+            <a href="/" class="back-btn" style="display:inline-flex;align-items:center;gap:4px;font-size:0.85rem;color:var(--text-2);text-decoration:none;padding:4px 8px;border-radius:6px;transition:background 0.15s;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">&larr; Explore</a>
+        </div>
+        <div class="topbar-right">
+            <button class="toggle-btn" id="theme-toggle" title="Toggle light/dark theme">
+                <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                <svg id="theme-icon-moon" class="hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </button>
+            <button class="toggle-btn lang-toggle" id="lang-toggle" title="Switch language">
+                <img id="lang-flag" class="lang-flag" src="" alt="">
+                <span id="lang-label">EN</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Two-column layout -->
+    <div class="dims-layout">
+
+        <!-- Left: dimension sidebar -->
+        <nav class="dims-sidebar" id="dims-sidebar">
+            <div class="dims-sidebar-title">Dimensions</div>
+            <div id="dims-dim-list"><div class="dims-loading" style="padding:8px 14px;">Loading…</div></div>
+        </nav>
+
+        <!-- Right: filter bar + dataset list -->
+        <main class="dims-main">
+            <h1 class="dims-main-title">Dimension Browser</h1>
+            <p class="dims-main-sub">Select a dimension on the left to filter datasets that share it.</p>
+
+            <!-- Filter bar -->
+            <div id="dims-filter-bar"></div>
+
+            <!-- Dataset list -->
+            <div id="dims-dataset-header"></div>
+            <div id="dims-dataset-list"><div class="dims-loading">Loading datasets…</div></div>
+        </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+        <div class="footer-inner">
+            <span class="footer-notice"></span>
+            <div class="footer-links">
+                <a href="/" class="footer-link">← Explore</a>
+                <a href="https://github.com/gov2-ro/tempo-ins-dump/" target="_blank" rel="noopener" class="footer-link footer-link-github">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+                    tempo-ins-dump
+                </a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/js/utils.js?v=22"></script>
+    <script src="/js/api.js?v=27"></script>
+    <script src="/js/dims-explorer.js?v=2"></script>
+<style>
+    #zelogo:after { opacity: .5;
+content: "α WIP"; font-weight: normal; font-size: 11px; color: #FFF; background-color: #C99; line-height: 1; padding: 1px 3px;
+position: absolute; margin: 3em 0 0 1.4em; border-radius: 1px;
+    }
+</style>
+</body>
+</html>

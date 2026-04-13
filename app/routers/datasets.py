@@ -22,6 +22,7 @@ def list_datasets(
     has_gender: bool = Query(None),
     has_age: bool = Query(None),
     has_residence: bool = Query(None),
+    dim: str = Query(None, description="Filter by dimension label"),
     lang: str = Query("ro", description="Language: ro|en"),
     sort: str = Query("updated", description="Sort: updated|name|rows|dims|options"),
     limit: int = Query(DEFAULT_PAGE_SIZE, le=200),
@@ -31,7 +32,7 @@ def list_datasets(
     return search_datasets(
         q, context=context, ancestor=ancestor, archetype=archetype,
         has_geo=has_geo, granularity=granularity, has_gender=has_gender,
-        has_age=has_age, has_residence=has_residence,
+        has_age=has_age, has_residence=has_residence, dim=dim,
         lang=lang, sort=sort, limit=limit, offset=offset,
     )
 

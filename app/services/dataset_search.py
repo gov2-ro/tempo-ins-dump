@@ -75,6 +75,7 @@ def search_datasets(
     has_gender: bool | None = None,
     has_age: bool | None = None,
     has_residence: bool | None = None,
+    dim: str | None = None,
     lang: str = "ro",
     sort: str = "updated",
     limit: int = DEFAULT_PAGE_SIZE,
@@ -147,6 +148,10 @@ def search_datasets(
 
     if has_residence is not None:
         where.append(f"p.has_residence = {has_residence}")
+
+    if dim:
+        where.append("m.matrix_code IN (SELECT matrix_code FROM dimensions WHERE dim_label = ?)")
+        params.append(dim)
 
     # Secondary sort on matrix_code ensures deterministic ordering when the
     # primary sort key ties (many rows share the same ultima_actualizare,

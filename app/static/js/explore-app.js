@@ -687,10 +687,10 @@ class LensApp {
         const tagline = document.getElementById('browse-tagline');
         if (title) title.textContent = this.ui.browseTitle;
         if (sub && corpus) {
-            sub.textContent = this.ui.browseSub(
+            sub.innerHTML = this.ui.browseSub(
                 formatNumber(corpus.datasets, 0),
                 formatNumber(corpus.observations, 0)
-            );
+            ) + ` · <a href="/dimensions-explorer.html" class="browse-dims-link">${this.lang === 'ro' ? 'Explorează după dimensiuni' : 'Explore by dimension'} →</a>`;
         }
         if (tagline) tagline.textContent = this.ui.browseTagline;
     }
@@ -2874,6 +2874,14 @@ class LensApp {
             }
 
             tree.innerHTML = '';
+
+            // Dimensions Explorer shortcut at top of sidebar
+            const dimsLink = document.createElement('a');
+            dimsLink.href = '/dimensions-explorer.html';
+            dimsLink.className = 'sb-dims-link';
+            dimsLink.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> Dimension Browser`;
+            tree.appendChild(dimsLink);
+
             for (const cat of this.categories) {
                 this._buildSidebarSection(cat, tree);
             }

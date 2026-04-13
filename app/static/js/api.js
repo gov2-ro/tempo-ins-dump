@@ -44,6 +44,10 @@ const API = {
         return this.fetch(`/datasets/${code}/data`, params);
     },
 
+    getDimensions(params = {}) {
+        return this.fetch('/dimensions', params);
+    },
+
     getCorpusSummary(params = {}) {
         return this.fetch('/corpus/summary', params);
     },
