@@ -1269,8 +1269,8 @@ class LensApp {
         const timeRange = profile.time_year_min && profile.time_year_max
             ? ` (${profile.time_year_min}–${profile.time_year_max})` : '';
         const updatedPart = m.ultima_actualizare ? `. Actualizat ${m.ultima_actualizare}` : '';
-        const description = `${m.matrix_name}${timeRange}. Date statistice oficiale România, INS TEMPO Online${updatedPart}.`;
-        const pageTitle = `${m.matrix_name} — INS+`;
+        const description = `INS+ ${m.matrix_code}: ${m.matrix_name}${timeRange}. Date statistice oficiale România, INS TEMPO Online${updatedPart}.`;
+        const pageTitle = `${m.matrix_name} — INS+ ${m.matrix_code}`;
         const pageUrl = `https://ins.gov2.ro/?code=${m.matrix_code}`;
 
         document.title = pageTitle;
