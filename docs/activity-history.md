@@ -1,5 +1,14 @@
 # Activity History
 
+## 2026-04-13 — Language-aware meta/OG tags
+
+`_updatePageMeta()` now respects `this.lang` in all three cases:
+- **Home page**: title, og:title, description all switch to English when `lang=en`
+- **Category page**: title and description follow lang (category names already come from API with lang)
+- **Dataset page**: description suffix ("Updated" vs "Actualizat") follows lang; `matrix_name` is already localized by the backend
+
+Also marked two already-done items in backlog: PNG export and `lang` on `get_dataset()` were both already implemented.
+
 ## 2026-04-13 — Category URL State + Breadcrumb Fixes + Category Meta Tags
 
 Three related improvements to `app/static/js/explore-app.js`:

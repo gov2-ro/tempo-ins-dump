@@ -8,9 +8,11 @@ see also [charting-ideas.md](charting-ideas.md)
 - [x] add static pages - how do we treat translations?
 - [x] add proper title: 'INS+' + {code} + {title - first 15 words}
 - [ ] add 'last updated' page 
+  - [ ] investigate current situation, aren't the metadatas read right?
 - [x] Dataset page breadcrumbs: links click through but navigate to home instead of the correct category — fixed: breadcrumb clicks now use `_findCategoryByCode` + `_restoreDrillFromUrl`
 - [ ] **Pretty permalink URLs for category/theme pages** — currently `?cat=E:E1` (code-based). Should use slugs like `/?cat=economie/preturi` for SEO and shareability. Requires slug mapping (code → slug) built from category names, a slug→code reverse map on load, and updating `_syncURL`/`_restoreDrillFromUrl` accordingly. The `?cat=CODE:CODE` format can stay as a fallback alias.
 - [ ] create a release log. how? backwards? 
+- [ ] cleanup, refactor folders, move most scripts in a folder (`scripts`?) - and current scripts into `utils`?
 
 ## Misc
 - [x] research data dissemination, where could we expose the data. Kaggle, Hugging Face, torrent, Jupyter notebooks or similar? Could we set an automatic pipeline to update data when it updates?
@@ -34,7 +36,7 @@ see also [charting-ideas.md](charting-ideas.md)
 - [ ] static site? - see `docs/misc-ideas/static-site/`
 - [x] add llms.txt
 - [x] Dynamic page title + meta/og:description per dataset — set from matrix_name, time range, updated date on dashboard load; reset to defaults on browse/about
-- [ ] description, title, og:info should follow language (og:description currently always in Romanian regardless of lang)
+- [x] description, title, og:info should follow language — all three cases (home, category, dataset) now language-aware in `_updatePageMeta()`
 - [ ] **OG images per dataset** — pre-generate a chart screenshot or branded card per dataset code, cache in `app/static/og/` (e.g. `IPC102A.png`). Set `og:image` dynamically to `https://ins.gov2.ro/og/{code}.png` when available, fall back to default `landing.png`. Could be generated headlessly via Playwright during pipeline runs.
 - [ ] **Clean dataset URLs** — serve datasets at `/{dataset-id}/` (e.g. `/IPC102A/`) instead of `?code={dataset}` for better SEO and shareability. Requires either a catch-all route in FastAPI returning `index.html` + JS routing via `location.pathname`, or static pre-rendering. Current `?code=` param can stay as alias for backwards-compat.
 - [ ] how to deal with parent columns, like judete and localitati - SOM101E
@@ -238,10 +240,9 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
   between chart type switches.
 
 - [x] **Export** — CSV/XLSX download of filtered data with language support.
-- [ ] **Export** — PNG export of charts.
+- [x] **Export** — PNG export of charts — already implemented via `_exportPng()` + `time-png-btn`/`snapshot-png-btn` in index.html.
 
-- [ ] **Add `lang` to `get_dataset()` endpoint** — dataset names in the dashboard header still
-  show in Romanian when EN is selected. Add `lang` param, use `COALESCE(matrix_name_en, matrix_name)`.
+- [x] **Add `lang` to `get_dataset()` endpoint** — already implemented: router accepts `lang` param, `dataset_meta.py` returns `COALESCE(matrix_name_en, matrix_name)`, frontend passes `lang` in `API.getDataset()`.
 
 - [ ] **Responsive mobile layout** — 3-column category grid and 4-column insight cards don't
   adapt well to phones. Add `@media (max-width: 768px)` breakpoints for stacking.
