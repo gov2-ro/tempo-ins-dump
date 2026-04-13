@@ -148,17 +148,15 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
 
 ## Data Pipeline
 
-- [ ] **"Actualizate recent" shows only ~8 of 220 2026-updated datasets**
-  `sync_ultima_actualizare()` reads `ultimaActualizare` from metadata JSONs, but those fields
-  are often stale — e.g. LCI101I news date is 2026-03-06 but its JSON says `02-09-2025`.
-  **First investigate**: check whether the actual data in the parquet/CSV for LCI101I contains
-  2026 observations, or whether INS is announcing an update but the data itself hasn't changed.
-  If data IS updated (new rows in parquet), the metadata JSON field `ultimaActualizare` at
-  the INS API level is simply not being refreshed promptly — aggravating but fixable by
-  syncing dates from `insse_news.csv` instead of the metadata JSON.
-  **Proposed fix**: replace `sync_ultima_actualizare()` with `sync_from_news()` that reads
-  announcement dates directly from `insse_news.csv` and updates DuckDB for all news entries,
-  not just the processed ones. Add `--sync-dates-only` flag for standalone runs.
+- [x] **"Actualizate recent" shows only ~8 of 220 2026-updated datasets** — investigated 2026-04-13,
+  not a bug. `2-metas` dates are correct (stored as DD-MM-YYYY, parsed correctly by pipeline).
+  DB dates match `2-metas`; original symptom was from a stale pipeline run. Now 201 canonical
+  datasets have 2026 `ultima_actualizare`. News vs DB date difference (1–5 days) is expected:
+  news = INS press release date, DB = actual data file update date.
+- [ ] **13 datasets in `insse_news.csv` not in corpus** — appear in 2026 news but missing from DB:
+  `FOM105I, FOM106G, FOM107G, FOM108C, FOM108D, FOM109C, FOM109D, PMI115C, PMI117B,
+  SAR102G, SAR107B, IAPC102, IPPR101`. Likely new datasets added to TEMPO Online since
+  last full scrape. Fix: run pipeline fetch steps for these codes.
 
 
 - [ ] **Fix `10-import-metadata.py` — schema mismatch on `lang` column**
