@@ -17,6 +17,7 @@ data*/*
 */_obsolete
 */*.log
 *.log
+/docs/chart-taxonomy/*
 */data/*
 */data*/*
 _obsolete
