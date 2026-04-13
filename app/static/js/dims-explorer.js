@@ -238,7 +238,7 @@ function renderDimList() {
 
         const unitCloud = document.createElement('div');
         unitCloud.className = 'dims-pill-cloud';
-        visibleUm.forEach(d => unitCloud.appendChild(makeDimPill(d)));
+        visibleUm.forEach(d => unitCloud.appendChild(makeDimPill(d, 'UM: ')));
         container.appendChild(unitCloud);
 
         if (!showAllUm && remainingUm > 0) {
@@ -253,12 +253,15 @@ function renderDimList() {
     if (activeDim) highlightDimPill(activeDim);
 }
 
-function makeDimPill(d) {
+function makeDimPill(d, stripPrefix = '') {
+    const display = stripPrefix && d.label.startsWith(stripPrefix)
+        ? d.label.slice(stripPrefix.length)
+        : d.label;
     const btn = document.createElement('button');
     btn.className = 'dim-pill' + (activeDim === d.label ? ' active' : '');
     btn.dataset.label = d.label;
     btn.title = d.label;
-    btn.innerHTML = `${escHtml(d.label)}<span class="dim-pill-count">${d.dataset_count}</span>`;
+    btn.innerHTML = `${escHtml(display)}<span class="dim-pill-count">${d.dataset_count}</span>`;
     btn.addEventListener('click', () => setActiveDim(activeDim === d.label ? null : d.label));
     return btn;
 }

@@ -5,6 +5,7 @@ Future tasks and intentions for the TEMPO INS data explorer.
 see also [charting-ideas.md](charting-ideas.md)
 
 ## UI / Navigation
+- [ ] **Dimension Browser — language support** — dimension labels in the `dimensions` table are Romanian-only (no `lang` column in the actual DB). For EN lang, either: (a) add an `en` row per dim by translating labels during pipeline, or (b) fall back to Romanian labels with a note. The `dims-explorer.js` already passes `lang` to `getDatasets` for dataset names but dimension labels stay in Romanian regardless.
 - [x] add static pages - how do we treat translations?
 - [x] add proper title: 'INS+' + {code} + {title - first 15 words}
 - [ ] add 'last updated' page 
