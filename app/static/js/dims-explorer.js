@@ -44,10 +44,9 @@ const SORTS = [
     { value: 'options', label: 'Most options' },
 ];
 
-const UNIT_KEYWORDS = ['unitate', ' um', 'măsură', 'masura', 'unit of measure'];
 function isUnitDim(label) {
-    const lc = label.toLowerCase();
-    return UNIT_KEYWORDS.some(kw => lc.includes(kw));
+    const lc = label.toLowerCase().trim();
+    return lc.startsWith('um:') || lc === 'unitati de masura' || lc === 'unitate de masura';
 }
 
 // ── URL sync ───────────────────────────────────────────────────────────────
@@ -203,24 +202,25 @@ function renderDimList() {
     const container = document.getElementById('dims-dim-list');
     container.innerHTML = '';
 
-    // Partition dims: skip unit-of-measure dims for the main list
     const mainDims = allDims.filter(d => !isUnitDim(d.label));
     const unitDims = allDims.filter(d => isUnitDim(d.label));
 
     const visible = showAll ? mainDims : mainDims.slice(0, TOP_N);
     const remaining = mainDims.length - TOP_N;
 
-    visible.forEach(d => container.appendChild(makeDimItem(d)));
+    const cloud = document.createElement('div');
+    cloud.className = 'dims-pill-cloud';
+    visible.forEach(d => cloud.appendChild(makeDimPill(d)));
+    container.appendChild(cloud);
 
     if (!showAll && remaining > 0) {
         const btn = document.createElement('button');
         btn.className = 'dim-show-more';
-        btn.textContent = `+ ${remaining} more dimensions`;
+        btn.textContent = `+ ${remaining} more`;
         btn.addEventListener('click', () => { showAll = true; renderDimList(); });
         container.appendChild(btn);
     }
 
-    // Unit dims (always at bottom, collapsed by default)
     if (unitDims.length > 0) {
         const sep = document.createElement('div');
         sep.className = 'dims-sidebar-sep';
@@ -228,37 +228,37 @@ function renderDimList() {
 
         const groupLabel = document.createElement('div');
         groupLabel.className = 'dims-sidebar-group-label';
-        groupLabel.textContent = 'Units of Measure';
+        groupLabel.textContent = `Units of Measure (${unitDims.length})`;
         container.appendChild(groupLabel);
 
-        unitDims.forEach(d => container.appendChild(makeDimItem(d)));
+        const unitCloud = document.createElement('div');
+        unitCloud.className = 'dims-pill-cloud';
+        unitDims.forEach(d => unitCloud.appendChild(makeDimPill(d)));
+        container.appendChild(unitCloud);
     }
 
-    // Re-highlight active dim if restored from URL
-    if (activeDim) highlightDimItem(activeDim);
+    if (activeDim) highlightDimPill(activeDim);
 }
 
-function makeDimItem(d) {
-    const item = document.createElement('div');
-    item.className = 'dim-item' + (activeDim === d.label ? ' active' : '');
-    item.dataset.label = d.label;
-    item.innerHTML = `
-        <span class="dim-item-label" title="${escHtml(d.label)}">${escHtml(d.label)}</span>
-        <span class="dim-item-count">${d.dataset_count}</span>
-    `;
-    item.addEventListener('click', () => setActiveDim(activeDim === d.label ? null : d.label));
-    return item;
+function makeDimPill(d) {
+    const btn = document.createElement('button');
+    btn.className = 'dim-pill' + (activeDim === d.label ? ' active' : '');
+    btn.dataset.label = d.label;
+    btn.title = d.label;
+    btn.innerHTML = `${escHtml(d.label)}<span class="dim-pill-count">${d.dataset_count}</span>`;
+    btn.addEventListener('click', () => setActiveDim(activeDim === d.label ? null : d.label));
+    return btn;
 }
 
-function highlightDimItem(label) {
-    document.querySelectorAll('.dim-item').forEach(el => {
+function highlightDimPill(label) {
+    document.querySelectorAll('.dim-pill').forEach(el => {
         el.classList.toggle('active', el.dataset.label === label);
     });
 }
 
 function setActiveDim(label) {
     activeDim = label;
-    highlightDimItem(label);
+    highlightDimPill(label);
     syncUrl();
     loadDatasets();
 }

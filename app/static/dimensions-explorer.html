@@ -21,10 +21,10 @@
 
         /* ── Left sidebar ────────────────────────────────────────────────── */
         .dims-sidebar {
-            width: 220px;
+            width: 260px;
             flex-shrink: 0;
             border-right: 1px solid var(--border);
-            padding: 20px 0;
+            padding: 16px 0;
             position: sticky;
             top: 50px;
             height: calc(100vh - 50px);
@@ -40,50 +40,48 @@
             padding: 0 14px 10px;
         }
 
-        .dim-item {
+        /* Pills cloud inside sidebar */
+        .dims-pill-cloud {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 6px 14px;
-            font-size: 12.5px;
-            color: var(--text-1);
-            cursor: pointer;
-            transition: background var(--transition), color var(--transition);
-            border-left: 2px solid transparent;
-            gap: 6px;
+            flex-wrap: wrap;
+            gap: 5px;
+            padding: 0 12px 6px;
         }
 
-        .dim-item:hover {
+        .dim-pill {
+            padding: 3px 8px;
+            border-radius: 20px;
+            font-size: 11.5px;
+            border: 1px solid var(--border);
             background: var(--bg-2);
+            color: var(--text-1);
+            cursor: pointer;
+            transition: all var(--transition);
+            white-space: nowrap;
+            line-height: 1.5;
+        }
+
+        .dim-pill:hover {
+            border-color: var(--accent);
             color: var(--text-0);
         }
 
-        .dim-item.active {
-            background: color-mix(in srgb, var(--accent) 10%, transparent);
-            color: var(--accent);
-            border-left-color: var(--accent);
-            font-weight: 500;
+        .dim-pill.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
         }
 
-        .dim-item-label {
-            flex: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .dim-item-count {
+        .dim-pill-count {
             font-size: 10px;
-            color: var(--text-3, var(--text-2));
-            flex-shrink: 0;
+            opacity: 0.65;
+            margin-left: 3px;
         }
 
         .dim-show-more {
             display: block;
-            width: 100%;
-            text-align: left;
-            padding: 6px 14px;
-            font-size: 12px;
+            padding: 4px 12px 6px;
+            font-size: 11.5px;
             color: var(--accent);
             background: none;
             border: none;
@@ -102,7 +100,7 @@
             font-size: 10px;
             font-weight: 600;
             color: var(--text-2);
-            padding: 4px 14px;
+            padding: 4px 14px 6px;
             text-transform: uppercase;
             letter-spacing: 0.07em;
         }
@@ -238,7 +236,7 @@
 
     <script src="/js/utils.js?v=22"></script>
     <script src="/js/api.js?v=27"></script>
-    <script src="/js/dims-explorer.js?v=2"></script>
+    <script src="/js/dims-explorer.js?v=3"></script>
 <style>
     #zelogo:after { opacity: .5;
 content: "α WIP"; font-weight: normal; font-size: 11px; color: #FFF; background-color: #C99; line-height: 1; padding: 1px 3px;
