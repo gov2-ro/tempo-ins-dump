@@ -18,15 +18,21 @@ def list_datasets(
     ancestor: str = Query(None, description="Filter by ancestor code"),
     archetype: str = Query(None, description="Filter by archetype"),
     has_geo: bool = Query(None),
+    granularity: str = Query(None, description="Filter by time_granularity: annual|monthly|quarterly"),
+    has_gender: bool = Query(None),
+    has_age: bool = Query(None),
+    has_residence: bool = Query(None),
     lang: str = Query("ro", description="Language: ro|en"),
-    sort: str = Query("updated", description="Sort: updated|name|rows"),
+    sort: str = Query("updated", description="Sort: updated|name|rows|dims|options"),
     limit: int = Query(DEFAULT_PAGE_SIZE, le=200),
     offset: int = Query(0, ge=0),
 ):
     """List datasets with search and filters."""
     return search_datasets(
         q, context=context, ancestor=ancestor, archetype=archetype,
-        has_geo=has_geo, lang=lang, sort=sort, limit=limit, offset=offset,
+        has_geo=has_geo, granularity=granularity, has_gender=has_gender,
+        has_age=has_age, has_residence=has_residence,
+        lang=lang, sort=sort, limit=limit, offset=offset,
     )
 
 

@@ -305,6 +305,10 @@ class LensApp {
         this.panelSetup = null;            // result of determinePanelSetup()
         this.timeTransform = null;         // null | 'index' | 'yoy'
 
+        // Drill filter/sort state
+        this.drillSort = 'updated';
+        this.drillFilters = {};  // { granularity, has_geo, has_gender, has_age }
+
         // Sidebar state
         this._sidebarLoaded = false;
 
@@ -345,6 +349,14 @@ class LensApp {
         this._urlFilters = {};
         try { const f = params.get('filters'); if (f) this._urlFilters = JSON.parse(f); } catch {}
         this._urlCat = params.get('cat') || null;
+        // Restore drill sort/filters from URL
+        const urlSort = params.get('sort');
+        if (urlSort && ['updated','name','rows','dims','options'].includes(urlSort)) this.drillSort = urlSort;
+        const urlGran = params.get('gran');
+        if (urlGran) this.drillFilters.granularity = urlGran;
+        if (params.get('has_geo') === 'true') this.drillFilters.has_geo = true;
+        if (params.get('has_gender') === 'true') this.drillFilters.has_gender = true;
+        if (params.get('has_age') === 'true') this.drillFilters.has_age = true;
         const lnk = document.getElementById('about-link');
         if (lnk) lnk.textContent = this.ui.aboutLink;
         if (page === 'about') {
@@ -597,6 +609,7 @@ class LensApp {
     showCategoryGrid() {
         document.getElementById('category-grid').classList.remove('hidden');
         document.getElementById('dataset-panel').classList.add('hidden');
+        document.getElementById('facet-bar')?.classList.add('hidden');
         // Show landing sections (recent-section only if it has content)
         document.getElementById('headlines-section')?.classList.remove('hidden');
         const recentGrid = document.getElementById('recent-grid');
@@ -991,14 +1004,19 @@ class LensApp {
         document.getElementById('panel-count').textContent = `${cat.total_datasets || 0} ${this.ui.datasets}`;
 
         this.renderBreadcrumbs();
+        this.renderFacetBar();
         this.renderThemeStats(cat.code);
         this.renderThemeHeadlines(cat.code);
 
         const list = document.getElementById('dataset-list');
         list.innerHTML = '<div class="skeleton" style="height:200px;margin:8px 0"></div>';
 
-        // Fetch datasets for this category (use ancestor filter)
-        const resp = await API.getDatasets({ ancestor: cat.code, limit: 100, sort: 'updated', lang: this.lang });
+        // Fetch datasets for this category (use ancestor filter, respecting current sort/filters)
+        const resp = await API.getDatasets({
+            ancestor: cat.code, limit: 100,
+            sort: this.drillSort, lang: this.lang,
+            ...this.drillFilters,
+        });
         list.innerHTML = '';
 
         // Show subcategory cards first (if any)
@@ -1120,6 +1138,129 @@ class LensApp {
             }
             bc.appendChild(crumb);
         });
+    }
+
+    renderFacetBar() {
+        const bar = document.getElementById('facet-bar');
+        if (!bar) return;
+        bar.classList.remove('hidden');
+        bar.innerHTML = '';
+
+        const sortOptions = [
+            { key: 'updated', label: 'Updated' },
+            { key: 'name',    label: 'Name' },
+            { key: 'rows',    label: 'Records' },
+            { key: 'dims',    label: 'Dims' },
+            { key: 'options', label: 'Options' },
+        ];
+
+        // Sort pills group
+        const sortGroup = document.createElement('div');
+        sortGroup.className = 'facet-group';
+        const sortLabel = document.createElement('span');
+        sortLabel.className = 'facet-label';
+        sortLabel.textContent = 'Sort:';
+        sortGroup.appendChild(sortLabel);
+        sortOptions.forEach(({ key, label }) => {
+            const pill = document.createElement('button');
+            pill.className = 'sort-pill' + (this.drillSort === key ? ' active' : '');
+            pill.textContent = label;
+            pill.addEventListener('click', () => {
+                this.drillSort = key;
+                this._syncDrillUrl();
+                const top = this.drillStack[this.drillStack.length - 1];
+                if (top) this.drillCategory(top.cat, top.colorIdx, false);
+            });
+            sortGroup.appendChild(pill);
+        });
+        bar.appendChild(sortGroup);
+
+        // Separator
+        const sep1 = document.createElement('div');
+        sep1.className = 'facet-sep';
+        bar.appendChild(sep1);
+
+        // Granularity group
+        const granGroup = document.createElement('div');
+        granGroup.className = 'facet-group';
+        const granLabel = document.createElement('span');
+        granLabel.className = 'facet-label';
+        granLabel.textContent = 'Period:';
+        granGroup.appendChild(granLabel);
+        [['', 'All'], ['annual', 'Annual'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly']].forEach(([val, label]) => {
+            const chip = document.createElement('button');
+            const active = (val === '' && !this.drillFilters.granularity) || (val && this.drillFilters.granularity === val);
+            chip.className = 'facet-chip' + (active ? ' active' : '');
+            chip.textContent = label;
+            chip.addEventListener('click', () => {
+                if (val) this.drillFilters.granularity = val;
+                else delete this.drillFilters.granularity;
+                this._syncDrillUrl();
+                const top = this.drillStack[this.drillStack.length - 1];
+                if (top) this.drillCategory(top.cat, top.colorIdx, false);
+            });
+            granGroup.appendChild(chip);
+        });
+        bar.appendChild(granGroup);
+
+        // Separator
+        const sep2 = document.createElement('div');
+        sep2.className = 'facet-sep';
+        bar.appendChild(sep2);
+
+        // Has: toggles group
+        const hasGroup = document.createElement('div');
+        hasGroup.className = 'facet-group';
+        const hasLabel = document.createElement('span');
+        hasLabel.className = 'facet-label';
+        hasLabel.textContent = 'Has:';
+        hasGroup.appendChild(hasLabel);
+        [['has_geo', 'Geo'], ['has_gender', 'Gender'], ['has_age', 'Age']].forEach(([key, label]) => {
+            const chip = document.createElement('button');
+            chip.className = 'facet-chip' + (this.drillFilters[key] ? ' active' : '');
+            chip.textContent = label;
+            chip.addEventListener('click', () => {
+                if (this.drillFilters[key]) delete this.drillFilters[key];
+                else this.drillFilters[key] = true;
+                this._syncDrillUrl();
+                const top = this.drillStack[this.drillStack.length - 1];
+                if (top) this.drillCategory(top.cat, top.colorIdx, false);
+            });
+            hasGroup.appendChild(chip);
+        });
+        bar.appendChild(hasGroup);
+
+        // Clear all (if any filter active)
+        const hasActiveFilters = Object.keys(this.drillFilters).length > 0 || this.drillSort !== 'updated';
+        if (hasActiveFilters) {
+            const sep3 = document.createElement('div');
+            sep3.className = 'facet-sep';
+            bar.appendChild(sep3);
+            const clear = document.createElement('span');
+            clear.className = 'facet-clear';
+            clear.textContent = '× Clear';
+            clear.addEventListener('click', () => {
+                this.drillSort = 'updated';
+                this.drillFilters = {};
+                this._syncDrillUrl();
+                const top = this.drillStack[this.drillStack.length - 1];
+                if (top) this.drillCategory(top.cat, top.colorIdx, false);
+            });
+            bar.appendChild(clear);
+        }
+    }
+
+    _syncDrillUrl() {
+        const url = new URL(location.href);
+        if (this.drillSort === 'updated') url.searchParams.delete('sort');
+        else url.searchParams.set('sort', this.drillSort);
+        if (this.drillFilters.granularity) url.searchParams.set('gran', this.drillFilters.granularity);
+        else url.searchParams.delete('gran');
+        ['has_geo', 'has_gender', 'has_age'].forEach(k => {
+            if (this.drillFilters[k]) url.searchParams.set(k, 'true');
+            else url.searchParams.delete(k);
+        });
+        history.replaceState(null, '', url);
     }
 
     // --- Dashboard view -----------------------------------------------------

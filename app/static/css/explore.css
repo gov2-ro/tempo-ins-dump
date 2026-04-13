@@ -783,6 +783,71 @@ kbd {
 }
 .panel-back:hover { background: var(--bg-3); color: var(--text-0); }
 
+/* Facet bar — sort pills + filter chips above dataset list */
+.facet-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    padding: 10px 0 14px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+}
+.facet-group {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+}
+.facet-label {
+    font-size: 11px;
+    color: var(--text-2);
+    margin-right: 2px;
+    white-space: nowrap;
+}
+.facet-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+    margin: 0 4px;
+    flex-shrink: 0;
+}
+.sort-pill, .facet-chip {
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    background: var(--bg-2);
+    color: var(--text-1);
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+}
+.sort-pill:hover, .facet-chip:hover {
+    border-color: var(--border-hover);
+    color: var(--text-0);
+    background: var(--bg-3);
+}
+.sort-pill.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+.facet-chip.active {
+    background: var(--bg-3);
+    color: var(--accent);
+    border-color: var(--accent);
+    font-weight: 500;
+}
+.facet-clear {
+    font-size: 11px;
+    color: var(--text-2);
+    cursor: pointer;
+    padding: 3px 6px;
+    border-radius: 4px;
+    transition: all var(--transition);
+}
+.facet-clear:hover { color: var(--text-0); background: var(--bg-3); }
+
 /* Breadcrumbs */
 .breadcrumb-trail {
     display: flex;

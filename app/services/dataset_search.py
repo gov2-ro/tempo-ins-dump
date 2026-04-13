@@ -71,6 +71,10 @@ def search_datasets(
     ancestor: str | None = None,
     archetype: str | None = None,
     has_geo: bool | None = None,
+    granularity: str | None = None,
+    has_gender: bool | None = None,
+    has_age: bool | None = None,
+    has_residence: bool | None = None,
     lang: str = "ro",
     sort: str = "updated",
     limit: int = DEFAULT_PAGE_SIZE,
@@ -131,14 +135,29 @@ def search_datasets(
     if has_geo is not None:
         where.append(f"p.has_geo = {has_geo}")
 
+    if granularity:
+        where.append("p.time_granularity = ?")
+        params.append(granularity)
+
+    if has_gender is not None:
+        where.append(f"p.has_gender = {has_gender}")
+
+    if has_age is not None:
+        where.append(f"p.has_age = {has_age}")
+
+    if has_residence is not None:
+        where.append(f"p.has_residence = {has_residence}")
+
     # Secondary sort on matrix_code ensures deterministic ordering when the
     # primary sort key ties (many rows share the same ultima_actualizare,
     # especially NULL). Without this, identical queries produce different
     # result orders across runs, breaking regression evals downstream.
     sort_map = {
         'updated': 'm.ultima_actualizare DESC NULLS LAST, m.matrix_code ASC',
-        'name': 'm.matrix_name, m.matrix_code ASC',
-        'rows': 'm.row_count DESC NULLS LAST, m.matrix_code ASC',
+        'name':    'm.matrix_name, m.matrix_code ASC',
+        'rows':    'm.row_count DESC NULLS LAST, m.matrix_code ASC',
+        'dims':    'm.mat_max_dim DESC NULLS LAST, m.matrix_code ASC',
+        'options': 'opt_totals.total_options DESC NULLS LAST, m.matrix_code ASC',
     }
     order_by = sort_map.get(sort, sort_map['updated'])
 
@@ -177,15 +196,21 @@ def search_datasets(
             p.time_granularity,
             m.is_split,
             m.parent_matrix_code,
-            COUNT(ds.sub_matrix_code) as split_count
+            COUNT(ds.sub_matrix_code) as split_count,
+            opt_totals.total_options
         FROM matrices m
         LEFT JOIN matrix_profiles p ON m.matrix_code = p.matrix_code
         LEFT JOIN dataset_splits ds ON ds.parent_matrix_code = m.matrix_code
+        LEFT JOIN (
+            SELECT matrix_code, SUM(option_count) AS total_options
+            FROM dimensions GROUP BY matrix_code
+        ) opt_totals ON m.matrix_code = opt_totals.matrix_code
         WHERE {where_sql}
         GROUP BY m.matrix_code, m.matrix_name, m.matrix_name_en, m.context_code,
                  m.ultima_actualizare, m.row_count, m.mat_max_dim, p.archetype,
                  p.has_time, p.has_geo, p.time_year_min, p.time_year_max,
-                 p.primary_unit_type, p.time_granularity, m.is_split, m.parent_matrix_code
+                 p.primary_unit_type, p.time_granularity, m.is_split, m.parent_matrix_code,
+                 opt_totals.total_options
         ORDER BY {order_by}
         LIMIT ? OFFSET ?
     """
@@ -212,6 +237,7 @@ def search_datasets(
             'is_split': bool(r[13]),
             'parent_matrix_code': r[14],
             'split_count': r[15] or 0,
+            'option_count': r[16] or 0,
         })
 
     return {'total': total, 'datasets': datasets}

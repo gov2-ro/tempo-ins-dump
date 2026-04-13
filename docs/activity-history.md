@@ -1,5 +1,23 @@
 # Activity History
 
+## 2026-04-13 — Enhanced sort + faceted filter bar
+
+Added sort options and filter chips to the dataset list panel shown when drilling into a category.
+
+**Backend** (`dataset_search.py`, `datasets.py`):
+- New sort options: `dims` (by dimension count) and `options` (by total option count, via subquery on `dimensions` table)
+- New filter params: `granularity` (annual/monthly/quarterly), `has_gender`, `has_age`, `has_residence`
+- `option_count` added to returned dataset cards
+
+**Frontend** (`explore-app.js`):
+- `this.drillSort` and `this.drillFilters` state in constructor
+- `renderFacetBar()` renders sort pills (Updated/Name/Records/Dims/Options) and filter chips (Period: All/Annual/Monthly/Quarterly; Has: Geo/Gender/Age)
+- `_syncDrillUrl()` writes `?sort=`, `?gran=`, `?has_geo=` etc. via `history.replaceState`
+- URL params restored on page load; "× Clear" button resets to defaults
+- `drillCategory()` spreads `this.drillFilters` into the API call
+
+**CSS** (`explore.css`): `.facet-bar`, `.sort-pill`, `.facet-chip`, `.facet-label`, `.facet-sep`, `.facet-clear` styles added.
+
 ## 2026-04-13 — Language-aware meta/OG tags
 
 `_updatePageMeta()` now respects `this.lang` in all three cases:
