@@ -4,6 +4,23 @@
 
 Compared MarianNecula/TEMPO (R package) against our Python pipeline. Confirmed our endpoint coverage is complete (context, matrices, matrix/{code}, pivot, excel). Identified three gaps worth addressing: (1) `lastUpdate` payload field in `/pivot` — potentially enables conditional/incremental fetches; (2) generic dimension chunking instead of judet-specific splitting — would recover currently-skipped oversized datasets; (3) `ultimaActualizare`-based skip logic for incremental pipeline re-runs. Added all three to BACKLOG.
 
+## 2026-04-14 — VP cleanup + 13 new datasets ingested + pipeline fixes
+
+**View profile cleanup:**
+- Deleted 675 orphan VP JSON files (parent datasets replaced by splits) + cleared 1,150-file `_stale/` directory
+- Diagnosed 197 "missing" VPs: all are `_localitate_judet`/`_localitate_localitate` splits that exist as parquets but aren't registered in `matrix_profiles` (too high-cardinality for the UI). Not a simple re-run issue — documented in backlog.
+
+**13 new datasets ingested** (new on TEMPO Online since last full scrape):
+`FOM105I, FOM106G, FOM107G, FOM108C, FOM108D, FOM109C, FOM109D` (CAEN Rev.3 labor stats),
+`PMI115C, PMI117B` (environmental goods/services), `SAR102G, SAR107B` (poverty/Gini),
+`IAPC102` (harmonized price indices), `IPPR101` (residential property price indices).
+All have: parquet → DB registration → dimensions → matrix_profiles → view profiles.
+
+**Pipeline fixes (new datasets not in `matrices.csv`):**
+- `10-import-metadata.py`: removed `lang` column from all INSERTs/conflicts; added `matrices-list.csv` as supplementary source for codes not yet in full API scrape; added dimension-skip guard; enrichment now targets only matrices with missing `context_code` or zero dimensions.
+- `10-classify-dimensions.py`: `--matrix` mode now uses `CREATE TABLE IF NOT EXISTS` + `INSERT OR REPLACE` instead of DROP+recreate, so single-matrix runs don't wipe existing data.
+- Sequence drift fix: after partial failed run, `seq_dimension_id` and `seq_option_id` were reset via DROP+recreate at correct starting values.
+
 ## 2026-04-13 — Enhanced sort + faceted filter bar
 
 Added sort options and filter chips to the dataset list panel shown when drilling into a category.

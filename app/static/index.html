@@ -97,7 +97,13 @@
     </aside>
 
     <!-- Main content -->
-    <main id="app">
+    <main id="app" style="min-height:100vh">
+        <!-- Loading state (hidden after first render) -->
+        <div id="page-loader">
+            <div class="page-loader-spinner"></div>
+            <p class="page-loader-text">Se încarcă datele…</p>
+        </div>
+
         <!-- Browse view -->
         <section id="browse-view" class="browse-view">
             <div class="browse-header">
@@ -206,6 +212,28 @@
     <script src="/js/chart-demographic.js?v=25"></script>
     <script src="/js/explore-app.js?v=61"></script>
 <style>
+    #page-loader {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 60vh;
+        gap: 16px;
+        color: var(--text-3);
+        font-size: 0.85rem;
+        letter-spacing: 0.02em;
+    }
+    #page-loader.hidden { display: none; }
+    .page-loader-spinner {
+        width: 28px;
+        height: 28px;
+        border: 2px solid var(--bg-3);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     #zelogo:after { opacity: .5;
 content: "α WIP"; font-weight: normal; font-size: 11px; color: #FFF; background-color: #C99; line-height: 1; padding: 1px 3px;
 position: absolute; margin: 3em 0 0 1.4em; border-radius: 1px;

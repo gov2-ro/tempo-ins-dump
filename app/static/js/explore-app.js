@@ -551,6 +551,7 @@ class LensApp {
 
     // --- About view ---------------------------------------------------------
     showAbout() {
+        document.getElementById('page-loader')?.classList.add('hidden');
         this.navigate(null, 'about');
         this.disposeCharts();
         document.getElementById('browse-view').classList.add('hidden');
@@ -598,6 +599,7 @@ class LensApp {
         const catLabel = document.getElementById('categories-label');
         if (catLabel) catLabel.textContent = this.ui.categoriesLabel;
 
+        document.getElementById('page-loader')?.classList.add('hidden');
         this.showCategoryGrid();
         if (this._urlCat) {
             const target = this._urlCat;
@@ -1265,6 +1267,7 @@ class LensApp {
 
     // --- Dashboard view -----------------------------------------------------
     async showDashboard(code) {
+        document.getElementById('page-loader')?.classList.add('hidden');
         this.navigate(code);
         this.disposeCharts();
         this.stopPlay();

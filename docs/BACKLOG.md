@@ -120,8 +120,8 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
 
 
 ### View profiles — follow-ups surfaced by `tempo_check_view_profiles`
-- [ ] 197 parquets without view profiles — regenerate VPs via `python generate_view_profiles.py` and add a pipeline-tail step that fails if the audit reports missing VPs.
-- [ ] 675 orphan VPs — cleanup pass to delete VPs for datasets no longer in `data/corpus/parquet/`.
+- [ ] 197 parquets without view profiles — **root cause: all are `_localitate_judet`/`_localitate_localitate` splits that exist as parquets but are NOT registered in `matrix_profiles` DB table.** `generate_view_profiles.py` only processes DB-registered datasets so re-running it has no effect. Fix requires either: (a) register locality splits in DB (complex, high-cardinality ~3,172 localities), or (b) exclude them from audit as intentionally unregistered. Likely (b) — these datasets are too large for the UI anyway.
+- [x] 675 orphan VPs — deleted (2026-04-14). Parent dataset VPs left behind after splits.
 - [ ] 49 archetype mismatches on `PNS101D_*` splits (VP says `geo_time`, DB says `geo_only`). Investigate whether the VP generator or the classifier is authoritative.
 - [ ] Frontend probing (Playwright): `tempo_render_dataset`, `tempo_console_errors`, `tempo_validate_echarts_spec`.
 - [ ] Gated mutations (`TEMPO_DEV_MUTATIONS=true`): `tempo_run_pipeline_script`, `tempo_regen_view_profile`, `tempo_clear_search_index`.
@@ -163,24 +163,15 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
   DB dates match `2-metas`; original symptom was from a stale pipeline run. Now 201 canonical
   datasets have 2026 `ultima_actualizare`. News vs DB date difference (1–5 days) is expected:
   news = INS press release date, DB = actual data file update date.
-- [ ] **13 datasets in `insse_news.csv` not in corpus** — appear in 2026 news but missing from DB:
+- [x] **13 datasets in `insse_news.csv` not in corpus** — ingested 2026-04-14.
   `FOM105I, FOM106G, FOM107G, FOM108C, FOM108D, FOM109C, FOM109D, PMI115C, PMI117B,
-  SAR102G, SAR107B, IAPC102, IPPR101`. Likely new datasets added to TEMPO Online since
-  last full scrape. Fix: run pipeline fetch steps for these codes.
-
-
-- [ ] **Fix `10-import-metadata.py` — schema mismatch on `lang` column**
-  Fails with `Binder Error: Table "contexts" does not have a column with name "lang"`.
-  The script was written for an older schema where `contexts` and `matrices` had a `lang`
-  column to store per-language rows. The current schema uses a single-row-per-entity
-  approach with bilingual columns instead (`context_name_en`, `matrix_name_en`,
-  `definitie_en`, etc.). The script needs to be updated to:
-  1. Remove `lang` from `INSERT INTO contexts` / `INSERT INTO matrices` (and the `ON CONFLICT` key)
-  2. Replace `WHERE lang = ?` filters with no-lang equivalents
-  3. Map English fields to the `_en` columns rather than separate rows
-  This runs in the post-matrix global rebuild step of `update-pipeline.py` (after all
-  per-matrix steps succeed), so it's non-blocking for individual matrix updates but
-  prevents the metadata index from being refreshed after bulk runs.
+  SAR102G, SAR107B, IAPC102, IPPR101`. All have parquet + DB registration + view profiles.
+- [x] **Fix `10-import-metadata.py` — schema mismatch on `lang` column** — fixed 2026-04-14.
+  Removed `lang` from INSERTs/conflicts, added `matrices-list.csv` as supplementary source
+  for new codes not yet in `matrices.csv`, added dimension-skip guard for duplicate IDs,
+  enrichment now targets only matrices with missing `context_code` or zero dimensions.
+  Also fixed `10-classify-dimensions.py`: `--matrix` mode now preserves existing table data
+  (CREATE TABLE IF NOT EXISTS, INSERT OR REPLACE instead of DROP+INSERT).
 
 
 - [ ] **Replicate geo_hierarchy split for English (`eng`) parquet files**
