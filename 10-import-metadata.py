@@ -42,10 +42,9 @@ def import_contexts(conn: duckdb.DuckDBPyConnection) -> int:
 
     # Read and import CSV (note: CSV uses camelCase column names)
     conn.execute(f"""
-        INSERT INTO contexts (context_code, lang, parent_code, level, context_name)
+        INSERT INTO contexts (context_code, parent_code, level, context_name)
         SELECT
             context_code,
-            '{LANG}' as lang,
             "parentCode" as parent_code,
             level,
             context_name
@@ -53,14 +52,11 @@ def import_contexts(conn: duckdb.DuckDBPyConnection) -> int:
                       header=true,
                       delim=',',
                       auto_detect=true)
-        ON CONFLICT (context_code, lang) DO UPDATE SET
-            parent_code = excluded.parent_code,
-            level = excluded.level,
-            context_name = excluded.context_name
+        ON CONFLICT (context_code) DO NOTHING
     """)
 
-    count = conn.execute("SELECT COUNT(*) FROM contexts WHERE lang = ?", [LANG]).fetchone()[0]
-    print(f"✓ Imported {count} contexts [{LANG}]")
+    count = conn.execute("SELECT COUNT(*) FROM contexts").fetchone()[0]
+    print(f"✓ Imported {count} contexts")
 
     return count
 
@@ -76,21 +72,35 @@ def import_matrices_basic(conn: duckdb.DuckDBPyConnection) -> int:
 
     # Read and import CSV (just code and name for now)
     conn.execute(f"""
-        INSERT INTO matrices (matrix_code, lang, matrix_name)
+        INSERT INTO matrices (matrix_code, matrix_name)
         SELECT
             code as matrix_code,
-            '{LANG}' as lang,
             name as matrix_name
         FROM read_csv('{MATRICES_CSV}',
                       header=true,
                       delim=',',
                       auto_detect=true)
-        ON CONFLICT (matrix_code, lang) DO UPDATE SET
-            matrix_name = excluded.matrix_name
+        ON CONFLICT (matrix_code) DO NOTHING
     """)
 
-    count = conn.execute("SELECT COUNT(*) FROM matrices WHERE lang = ?", [LANG]).fetchone()[0]
-    print(f"✓ Imported {count} matrices (basic info) [{LANG}]")
+    # Also pick up new datasets from matrices-list.csv (built from JSON metas,
+    # may contain codes not yet in matrices.csv from the last full API scrape)
+    matrices_list_csv = MATRICES_CSV.parent / "matrices-list.csv"
+    if matrices_list_csv.exists():
+        conn.execute(f"""
+            INSERT INTO matrices (matrix_code, matrix_name)
+            SELECT
+                filename as matrix_code,
+                matrixName as matrix_name
+            FROM read_csv('{matrices_list_csv}',
+                          header=true,
+                          delim=',',
+                          auto_detect=true)
+            ON CONFLICT (matrix_code) DO NOTHING
+        """)
+
+    count = conn.execute("SELECT COUNT(*) FROM matrices").fetchone()[0]
+    print(f"✓ Imported {count} matrices (basic info)")
 
     return count
 
@@ -202,7 +212,7 @@ def enrich_matrix_metadata(conn: duckdb.DuckDBPyConnection, matrix_code: str) ->
                 row_count = ?,
                 file_size_bytes = ?,
                 parquet_path = ?
-            WHERE matrix_code = ? AND lang = ?
+            WHERE matrix_code = ?
         """, [
             context_code,
             ancestor_codes,
@@ -229,8 +239,7 @@ def enrich_matrix_metadata(conn: duckdb.DuckDBPyConnection, matrix_code: str) ->
             row_count,
             file_size_bytes,
             parquet_path,
-            matrix_code,
-            LANG
+            matrix_code
         ])
 
         return True
@@ -256,6 +265,11 @@ def import_dimensions(conn: duckdb.DuckDBPyConnection, matrix_code: str) -> int:
     if not json_file.exists():
         return 0
 
+    # Skip if dimensions already imported for this matrix
+    existing = conn.execute("SELECT COUNT(*) FROM dimensions WHERE matrix_code = ?", [matrix_code]).fetchone()[0]
+    if existing > 0:
+        return existing
+
     try:
         with open(json_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -279,9 +293,9 @@ def import_dimensions(conn: duckdb.DuckDBPyConnection, matrix_code: str) -> int:
             # Insert dimension
             conn.execute("""
                 INSERT INTO dimensions
-                (dimension_id, matrix_code, lang, dim_code, dim_label, dim_column_name, option_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, [dim_id, matrix_code, LANG, dim_idx, dim_label, dim_column_name, option_count])
+                (dimension_id, matrix_code, dim_code, dim_label, dim_column_name, option_count)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, [dim_id, matrix_code, dim_idx, dim_label, dim_column_name, option_count])
 
             # Insert dimension options
             for option in options:
@@ -348,9 +362,20 @@ def main():
             matrices_count = import_matrices_basic(conn)
             log.write(f"Matrices imported (basic): {matrices_count}\n\n")
 
-            # Get list of matrices to enrich (for current lang only)
-            matrices = conn.execute("SELECT matrix_code FROM matrices WHERE lang = ? ORDER BY matrix_code", [LANG]).fetchall()
+            # Only enrich matrices that are missing metadata (new/unregistered datasets):
+            # - context_code IS NULL (never enriched), OR
+            # - no dimensions yet (enrichment partial/incomplete)
+            # Existing fully-enriched matrices are skipped to avoid DuckDB FK issues on UPDATE.
+            matrices = conn.execute("""
+                SELECT m.matrix_code FROM matrices m
+                LEFT JOIN dimensions d ON d.matrix_code = m.matrix_code
+                WHERE m.context_code IS NULL OR d.dimension_id IS NULL
+                GROUP BY m.matrix_code, m.context_code
+                HAVING m.context_code IS NULL OR COUNT(d.dimension_id) = 0
+                ORDER BY m.matrix_code
+            """).fetchall()
             matrices_to_process = [m[0] for m in matrices]
+            print(f"\n📋 {len(matrices_to_process)} matrices need metadata/dimension enrichment")
 
             if TEST_LIMIT:
                 matrices_to_process = matrices_to_process[:TEST_LIMIT]

@@ -475,11 +475,14 @@ def main():
 
     # ── Schema setup ─────────────────────────────────────────────────────────
     print("\n→ Creating tables...")
-    conn.execute("DROP TABLE IF EXISTS dimension_options_parsed")
-    conn.execute("DROP TABLE IF EXISTS matrix_profiles")
+    single_matrix = bool(args.matrix)
+    if not single_matrix:
+        # Full rebuild: drop and recreate both tables
+        conn.execute("DROP TABLE IF EXISTS dimension_options_parsed")
+        conn.execute("DROP TABLE IF EXISTS matrix_profiles")
 
     conn.execute("""
-        CREATE TABLE dimension_options_parsed (
+        CREATE TABLE IF NOT EXISTS dimension_options_parsed (
             nom_item_id      INTEGER PRIMARY KEY,
             dim_type         TEXT,
             -- time fields
@@ -508,7 +511,7 @@ def main():
     """)
 
     conn.execute("""
-        CREATE TABLE matrix_profiles (
+        CREATE TABLE IF NOT EXISTS matrix_profiles (
             matrix_code       TEXT PRIMARY KEY,
             has_time          BOOLEAN,
             time_granularity  TEXT,
@@ -643,7 +646,7 @@ def main():
         ))
 
     conn.executemany(
-        "INSERT INTO dimension_options_parsed VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT OR REPLACE INTO dimension_options_parsed VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         insert_rows
     )
 
@@ -718,7 +721,7 @@ def main():
         ))
 
     conn.executemany(
-        "INSERT INTO matrix_profiles VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT OR REPLACE INTO matrix_profiles VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         profile_rows
     )
 
