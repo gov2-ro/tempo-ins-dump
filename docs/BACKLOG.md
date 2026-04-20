@@ -44,6 +44,15 @@ see also [charting-ideas.md](charting-ideas.md)
 - [ ] older datasets like sustainable development 2020 should be archived?
 
 
+## Data Pipeline — API improvements (from TEMPO R pkg analysis)
+
+- [ ] **`lastUpdate` in `/pivot` payload** — The R package optionally includes `lastUpdate` (from `details.lastUpdate` in matrix metadata) in the POST payload to `/pivot`. We never send this field. If the server honours it as a conditional-fetch, it could return only rows newer than that timestamp — enabling incremental re-downloads without full re-fetch. Worth testing on a dataset with a known `ultimaActualizare` date.
+
+- [ ] **Generic dimension chunking for oversized datasets** — R package splits any dimension with >300 options into chunks of 100, then uses Cartesian products of chunk combinations to stay under the 30k cell limit. We only handle the special-case judet+localitati split. Any other oversized dataset (large time × category combos etc.) currently gets logged and skipped. A generic chunking strategy in `6-fetch-csv.py` would recover those datasets.
+
+- [ ] **`ultimaActualizare`-based skip in incremental re-runs** — R package compares local file mtime against `ultimaActualizare` before downloading and skips if local is newer. `6-fetch-csv.py` currently skips only if file exists (regardless of age). Adding mtime-vs-`ultimaActualizare` comparison would make pipeline re-runs fast and safe for picking up INS updates without `--force`.
+
+
 ## Data intelligence
 - [ ] correlations? 
 - [ ] county profiles, demographics?

@@ -1,5 +1,9 @@
 # Activity History
 
+## 2026-04-20 — TEMPO R package API analysis
+
+Compared MarianNecula/TEMPO (R package) against our Python pipeline. Confirmed our endpoint coverage is complete (context, matrices, matrix/{code}, pivot, excel). Identified three gaps worth addressing: (1) `lastUpdate` payload field in `/pivot` — potentially enables conditional/incremental fetches; (2) generic dimension chunking instead of judet-specific splitting — would recover currently-skipped oversized datasets; (3) `ultimaActualizare`-based skip logic for incremental pipeline re-runs. Added all three to BACKLOG.
+
 ## 2026-04-13 — Enhanced sort + faceted filter bar
 
 Added sort options and filter chips to the dataset list panel shown when drilling into a category.
