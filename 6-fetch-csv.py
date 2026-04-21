@@ -82,6 +82,15 @@ oversized_logger = logging.getLogger('oversized')
 oversized_logger.addHandler(oversized_logger_handler)
 oversized_logger.setLevel(logging.WARNING)
 
+# Set up logging for generic-chunk datasets
+generic_chunk_log_file = os.path.join(log_folder, 'generic-chunk-datasets.log')
+generic_chunk_logger_handler = logging.FileHandler(generic_chunk_log_file, encoding='utf-8')
+generic_chunk_logger_handler.setLevel(logging.INFO)
+generic_chunk_logger_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+generic_chunk_logger = logging.getLogger('generic_chunk')
+generic_chunk_logger.addHandler(generic_chunk_logger_handler)
+generic_chunk_logger.setLevel(logging.INFO)
+
 def load_matrix_definition(file_path: str) -> Dict:
     """Load and parse the matrix definition file."""
     try:
@@ -453,6 +462,124 @@ def fetch_by_judet_split(matrix_code: str, matrix_def: Dict, output_dir: str,
 
     return True
 
+
+def generate_chunks(dims_options: list, cell_limit: int = 25000):
+    """
+    Recursively yield option-subsets per dimension, each combination with ≤cell_limit total cells.
+    dims_options: list of option-lists, one per dimension (non-Total options already filtered).
+    """
+    total = 1
+    for o in dims_options:
+        total *= len(o)
+
+    if total <= cell_limit:
+        yield list(dims_options)
+        return
+
+    # Split the largest dimension to bring cells under limit
+    max_idx = max(range(len(dims_options)), key=lambda i: len(dims_options[i]))
+    max_opts = dims_options[max_idx]
+    other_cells = total // len(max_opts)
+    chunk_size = max(1, cell_limit // other_cells) if other_cells > 0 else 1
+
+    for start in range(0, len(max_opts), chunk_size):
+        subset = list(dims_options)
+        subset[max_idx] = max_opts[start:start + chunk_size]
+        yield from generate_chunks(subset, cell_limit)
+
+
+def fetch_by_generic_chunks(matrix_code: str, matrix_def: Dict, output_dir: str,
+                             cell_limit: int = 25000, max_chunks: int = 5000) -> bool:
+    """
+    Fetch oversized dataset by splitting large dimensions into chunks ≤cell_limit cells each.
+    Returns False if dataset would need more than max_chunks requests (too large to recover).
+    """
+    def get_opts(dim):
+        opts = [o for o in dim['options'] if o['label'].strip().lower() != 'total']
+        return opts if opts else dim['options']
+
+    dims = matrix_def['dimensionsMap']
+    dims_options = [get_opts(d) for d in dims]
+
+    # Pre-collect all chunks to check feasibility before making any requests
+    chunk_list = []
+    for chunk_opts in generate_chunks(dims_options, cell_limit):
+        chunk_list.append(chunk_opts)
+        if len(chunk_list) > max_chunks:
+            tqdm.write(f"GENERIC-CHUNK SKIP: {matrix_code} requires >{max_chunks} chunks, too large")
+            logger.warning(f"{matrix_code} - generic chunking aborted: >{max_chunks} chunks needed")
+            return False
+
+    tqdm.write(f"GENERIC-CHUNK: {matrix_code} — {len(chunk_list)} chunks to fetch")
+    logger.info(f"{matrix_code} - generic chunking: {len(chunk_list)} chunks at {cell_limit:,} cells/chunk")
+
+    url = 'http://statistici.insse.ro:8077/tempo-ins/pivot'
+    headers = {
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-GB,en;q=0.7',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Content-Type': 'application/json',
+        'Origin': 'http://statistici.insse.ro:8077',
+        'Pragma': 'no-cache',
+        'Referer': 'http://statistici.insse.ro:8077/tempo-online/',
+        'Sec-GPC': '1',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+    }
+
+    header_row = None
+    all_data_rows = []
+    skipped_chunks = 0
+
+    for i, chunk_opts in enumerate(tqdm(chunk_list, desc=f"Chunks {matrix_code}", leave=False)):
+        modified = copy.deepcopy(matrix_def)
+        for j, dim in enumerate(modified['dimensionsMap']):
+            dim['options'] = chunk_opts[j]
+
+        payload = convert_to_pivot_payload(modified, matrix_code, include_totals=False)
+
+        try:
+            response = requests.post(url, json=payload, headers=headers, verify=False, timeout=60)
+            response.raise_for_status()
+            text = response.content.decode('utf-8', errors='ignore')
+
+            if ('celule' in text.lower() and '30000' in text) or \
+               ('pragul' in text.lower() and 'celule' in text.lower()):
+                logger.warning(f"{matrix_code} chunk {i} - API cell limit hit, skipping chunk")
+                skipped_chunks += 1
+                continue
+
+            lines = [l for l in text.splitlines(keepends=True) if l.strip()]
+            if not lines:
+                continue
+            if header_row is None:
+                header_row = lines[0]
+            all_data_rows.extend(lines[1:])
+
+        except Exception as e:
+            logger.error(f"{matrix_code} chunk {i} - request error: {e}")
+            continue
+
+    if not all_data_rows:
+        tqdm.write(f"GENERIC-CHUNK FAILED: {matrix_code} - no data collected")
+        return False
+
+    output_file = os.path.join(output_dir, f"{matrix_code}.csv")
+    with open(output_file, 'w', encoding='utf-8') as f:
+        if header_row:
+            f.write(header_row)
+        for row in all_data_rows:
+            f.write(row)
+
+    msg = f"GENERIC-CHUNK SUCCESS: {matrix_code} - {len(all_data_rows)} rows from {len(chunk_list)} chunks"
+    if skipped_chunks:
+        msg += f" ({skipped_chunks} chunks skipped due to API limit)"
+    tqdm.write(msg)
+    generic_chunk_logger.info(f"{matrix_code} - {len(chunk_list)} chunks, {len(all_data_rows)} rows" +
+                               (f", {skipped_chunks} skipped" if skipped_chunks else ""))
+    return True
+
+
 def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, force_overwrite: bool = False) -> None:
     """
     Fetch data from INSSE Pivot API using the matrix definition.
@@ -509,6 +636,21 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
             except Exception as e:
                 tqdm.write(f"JUDET-SPLIT EXCEPTION: {e}")
                 logger.error(f"{matrix_code}.csv - Judet-split failed: {e}")
+
+        # Try generic dimension chunking as fallback
+        tqdm.write(f"Attempting generic dimension chunking for {matrix_code} ({cell_count:,} cells)...")
+        logger.info(f"{matrix_code} - attempting generic dimension chunking ({cell_count:,} cells)")
+        try:
+            success = fetch_by_generic_chunks(matrix_code, matrix_def, output_dir)
+            if success:
+                retry_row_count = count_csv_rows(output_file)
+                if retry_row_count > 0:
+                    tqdm.write(f"GENERIC-CHUNK SUCCESS: {matrix_code} fetched {retry_row_count} rows")
+                    logger.info(f"{matrix_code}.csv - generic chunk succeeded with {retry_row_count} rows")
+                    return
+        except Exception as e:
+            tqdm.write(f"GENERIC-CHUNK EXCEPTION: {e}")
+            logger.error(f"{matrix_code}.csv - generic chunk failed: {e}")
 
         # Cannot handle this oversized dataset - skip it
         warning_msg = f"SKIPPED: {matrix_code} - {cell_count:,} cells exceeds limit. Needs sequential dimension processing."

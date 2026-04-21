@@ -1,5 +1,9 @@
 # Activity History
 
+## 2026-04-22 — Generic dimension chunking for oversized pipeline datasets
+
+Added `generate_chunks()` (recursive generator) and `fetch_by_generic_chunks()` to `6-fetch-csv.py`. The algorithm finds the dimension with the most options and splits it into sub-sets such that each chunk stays ≤25,000 cells (just under the TEMPO API limit). Chunks are pre-counted before fetching; if >5,000 chunks would be needed (SAN101B: 432M cells, INT109C: 520B cells) the dataset is still skipped. The new fallback is wired in after judet-split fails in the oversized handling block. Logs recoveries to `data/logs/generic-chunk-datasets.log`. Verified on INT101T (891k cells → 37 chunks → 414,363 rows). Should recover ~14 datasets that were permanently logged in `oversized-datasets.log`.
+
 ## 2026-04-20 — TEMPO R package API analysis
 
 Compared MarianNecula/TEMPO (R package) against our Python pipeline. Confirmed our endpoint coverage is complete (context, matrices, matrix/{code}, pivot, excel). Identified three gaps worth addressing: (1) `lastUpdate` payload field in `/pivot` — potentially enables conditional/incremental fetches; (2) generic dimension chunking instead of judet-specific splitting — would recover currently-skipped oversized datasets; (3) `ultimaActualizare`-based skip logic for incremental pipeline re-runs. Added all three to BACKLOG.
