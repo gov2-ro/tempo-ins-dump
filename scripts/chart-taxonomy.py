@@ -192,13 +192,20 @@ CLUSTER_CHARTS = {
     1: "line",
     2: "small_multiples / heatmap",
     3: "line",
-    4: "line",
+    # Cluster 4/9 absorb high-dim datasets where gender/residence is just one
+    # dim among several — small_multiples and horizontal_bar are valid primaries
+    # when an extra categorical dim has many options. Line still ideal for
+    # simple binary-gender / urban-rural pairs.
+    4: "line / small_multiples / horizontal_bar",
     5: "heatmap / grouped_bar",
     6: "population_pyramid",
     7: "choropleth",
     8: "choropleth / line",
-    9: "line",
-    10: "grouped_bar",
+    9: "line / small_multiples / horizontal_bar",
+    # Cluster 10 mixes single-cat snapshots (1 product dim) with multi-cat
+    # cross-tabs. h_bar fits the long-list ranking case; bar_vertical the small
+    # case; grouped_bar the cat × cat case.
+    10: "grouped_bar / horizontal_bar / bar_vertical",
     11: "choropleth",
     12: "varies",
 }

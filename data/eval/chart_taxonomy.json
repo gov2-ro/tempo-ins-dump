@@ -94,7 +94,7 @@
     "name": "Gender-Split",
     "desc": "Binary gender breakdown over time",
     "count": 107,
-    "primary_chart": "line",
+    "primary_chart": "line / small_multiples / horizontal_bar",
     "exemplars": [
       {
         "matrix_code": "TLR1111",
@@ -244,7 +244,7 @@
     "name": "Urban/Rural",
     "desc": "Residence (urban/rural) splits over time",
     "count": 84,
-    "primary_chart": "line",
+    "primary_chart": "line / small_multiples / horizontal_bar",
     "exemplars": [
       {
         "matrix_code": "TAV0212",
@@ -274,7 +274,7 @@
     "name": "Categorical Snapshot",
     "desc": "No time, no geo — pure categorical cross-tabs",
     "count": 25,
-    "primary_chart": "grouped_bar",
+    "primary_chart": "grouped_bar / horizontal_bar / bar_vertical",
     "exemplars": [
       {
         "matrix_code": "PPA103A_lunar_lei_buc",

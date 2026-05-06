@@ -10,13 +10,13 @@ Use this to identify chart improvement opportunities per cluster.
 | 1 | Simple Time Series | 162 | 8.2% | line | Single indicator over time, no structural dims |
 | 2 | Categorical Time | 534 | 26.9% | small_multiples / heatmap | Time + medium-cardinality categorical dim (6-50 options) |
 | 3 | Composition (%) | 297 | 15.0% | line | Percentage unit, parts-of-whole over time |
-| 4 | Gender-Split | 107 | 5.4% | line | Binary gender breakdown over time |
+| 4 | Gender-Split | 107 | 5.4% | line / small_multiples / horizontal_bar | Binary gender breakdown over time |
 | 5 | Age Cohort | 89 | 4.5% | heatmap / grouped_bar | Age groups over time (no gender) |
 | 6 | Population Pyramid | 72 | 3.6% | population_pyramid | Age + gender over time |
 | 7 | Cartographic | 454 | 22.9% | choropleth | Geographic (county/region) + time, no demographic dims |
 | 8 | Geo + Demographic | 138 | 6.9% | choropleth / line | Geographic + gender/age/residence |
-| 9 | Urban/Rural | 84 | 4.2% | line | Residence (urban/rural) splits over time |
-| 10 | Categorical Snapshot | 25 | 1.3% | grouped_bar | No time, no geo — pure categorical cross-tabs |
+| 9 | Urban/Rural | 84 | 4.2% | line / small_multiples / horizontal_bar | Residence (urban/rural) splits over time |
+| 10 | Categorical Snapshot | 25 | 1.3% | grouped_bar / horizontal_bar / bar_vertical | No time, no geo — pure categorical cross-tabs |
 | 11 | Geo Snapshot | 24 | 1.2% | choropleth | Geographic, no time dimension |
 | 12 | Edge Cases | 0 | 0.0% | varies | High-dimensional or rare combos |
 
