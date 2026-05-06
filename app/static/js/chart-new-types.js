@@ -1,6 +1,6 @@
 /**
  * New chart renderers: population_pyramid, horizontal_bar, stacked_bar, heatmap,
- *                      bubble, small_multiples, ranking (bump), distribution (box+scatter)
+ *                      bubble, small_multiples, distribution (box+scatter)
  */
 
 // ---------------------------------------------------------------------------
@@ -998,126 +998,6 @@ function createSmallMultiplesChart(container, config, data, metadata) {
         dataZoom: dataZoomArr,
         animationDuration: 300,
     });
-    return chart;
-}
-
-// ---------------------------------------------------------------------------
-// Ranking / Bump chart — rank positions over time (rank 1 = highest value)
-// ---------------------------------------------------------------------------
-
-function createRankingChart(container, config, data, metadata) {
-    const chart = echarts.init(container);
-    const cols = data.columns;
-    const labels = data.column_labels || {};
-    const timeDim = config.time_dim;
-    const seriesDim = config.series_dim;
-    const valIdx = cols.length - 1;
-    const timeIdx = timeDim ? cols.indexOf(timeDim) : -1;
-    const seriesIdx = seriesDim ? cols.indexOf(seriesDim) : -1;
-
-    if (timeIdx === -1 || seriesIdx === -1) {
-        return createTimeSeriesChart(container, config, data, metadata);
-    }
-
-    const timeLabels = labels[timeDim] || {};
-    const seriesLabels = labels[seriesDim] || {};
-
-    const timePts = uniqueValues(data.rows, timeIdx);
-    const allSeries = uniqueValues(data.rows, seriesIdx);
-
-    // Build value map: series → time → value
-    const valueMap = {};
-    for (const row of data.rows) {
-        const s = row[seriesIdx];
-        const t = row[timeIdx];
-        const v = row[valIdx];
-        if (!valueMap[s]) valueMap[s] = {};
-        if (valueMap[s][t] == null && v != null) valueMap[s][t] = v;
-    }
-
-    // Compute rank per time point (1 = highest)
-    const rankMap = {};
-    for (const t of timePts) {
-        const valid = allSeries
-            .filter(s => valueMap[s]?.[t] != null)
-            .sort((a, b) => (valueMap[b][t] || 0) - (valueMap[a][t] || 0));
-        valid.forEach((s, i) => {
-            if (!rankMap[s]) rankMap[s] = {};
-            rankMap[s][t] = i + 1;
-        });
-    }
-
-    // Cap to top 15 by average rank
-    const MAX_SERIES = 15;
-    let displaySeries = allSeries;
-    if (allSeries.length > MAX_SERIES) {
-        displaySeries = allSeries
-            .map(s => {
-                const ranks = timePts.map(t => rankMap[s]?.[t] ?? 999);
-                return { s, avg: ranks.reduce((a, b) => a + b, 0) / ranks.length };
-            })
-            .sort((a, b) => a.avg - b.avg)
-            .slice(0, MAX_SERIES)
-            .map(x => x.s);
-    }
-
-    const maxRank = Math.max(...displaySeries.flatMap(s => timePts.map(t => rankMap[s]?.[t] || 0)));
-    const xData = timePts.map(t => (timeLabels[String(t)] || String(t)).replace(/^Anul\s+/, ''));
-
-    const palette = ['#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#3ba272','#fc8452','#9a60b4','#ea7ccc',
-        '#91cc75','#5470c6','#fac858','#ee6666','#73c0de','#3ba272'];
-
-    const series = displaySeries.map((s, i) => ({
-        name: seriesLabels[String(s)] || String(s),
-        type: 'line',
-        data: timePts.map(t => rankMap[s]?.[t] ?? null),
-        smooth: 0.2,
-        symbol: 'circle',
-        symbolSize: 7,
-        lineStyle: { width: 2, color: palette[i % palette.length] },
-        itemStyle: { color: palette[i % palette.length] },
-        label: {
-            show: true,
-            position: 'right',
-            formatter: p => p.dataIndex === timePts.length - 1 ? (seriesLabels[String(s)] || String(s)) : '',
-            fontSize: 10,
-        },
-        emphasis: { lineStyle: { width: 4 } },
-        connectNulls: false,
-    }));
-
-    chart.setOption({
-        backgroundColor: 'transparent',
-        tooltip: {
-            trigger: 'axis',
-            formatter: params => {
-                const header = `<b>${params[0]?.axisValue}</b><br/>`;
-                return header + params
-                    .filter(p => p.value != null)
-                    .sort((a, b) => a.value - b.value)
-                    .map(p => `${p.marker}${p.seriesName}: <b>#${p.value}</b>`)
-                    .join('<br/>');
-            },
-        },
-        legend: { show: false },
-        grid: { top: 20, right: 140, bottom: 40, left: 50 },
-        xAxis: { type: 'category', data: xData, boundaryGap: false },
-        yAxis: {
-            type: 'value',
-            inverse: true,
-            min: 1,
-            max: maxRank,
-            interval: 1,
-            axisLabel: { formatter: '#{value}' },
-            name: 'Rank',
-            nameLocation: 'middle',
-            nameGap: 35,
-        },
-        series,
-        animationDuration: 400,
-    });
-
-    window.addEventListener('resize', () => { if (!chart.isDisposed()) chart.resize(); });
     return chart;
 }
 

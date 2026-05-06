@@ -83,8 +83,6 @@ async function createChart(container, chartConfig, data, metadata) {
             return createScatterChart(container, cfg, data, metadata);
         case 'small_multiples':
             return createSmallMultiplesChart(container, cfg, data, metadata);
-        case 'ranking':
-            return createRankingChart(container, cfg, data, metadata);
         default:
             return createTimeSeriesChart(container, cfg, data, metadata);
     }

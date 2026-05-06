@@ -62,7 +62,6 @@ const UI = {
         noneDim: 'Niciuna',
         indexMode: 'Index',
         yoyMode: 'Δ%',
-        rankMode: 'Rang',
         indexTooltip: 'Perioadă de bază = 100',
         yoyTooltip: 'Variație anuală %',
         yearlyMode: 'Anual',
@@ -133,7 +132,6 @@ const UI = {
         noneDim: 'None',
         indexMode: 'Index',
         yoyMode: 'Δ%',
-        rankMode: 'Rank',
         indexTooltip: 'Base period = 100',
         yoyTooltip: 'Year-over-year %',
         yearlyMode: 'Yearly',
@@ -1597,7 +1595,7 @@ class LensApp {
         // Time chart types
         const seriesDimMeta = timeSeriesDim ? dims.find(d => d.dim_column_name === timeSeriesDim) : null;
         const seriesCount = seriesDimMeta ? (seriesDimMeta.option_count || 0) : 0;
-        const timeChartTypes = hasTimePanel ? ['line', 'bar', 'area_stacked', 'stacked_bar', ...(seriesCount >= 3 ? ['ranking'] : [])] : [];
+        const timeChartTypes = hasTimePanel ? ['line', 'bar', 'area_stacked', 'stacked_bar'] : [];
 
         // Snapshot chart types
         let snapshotChartTypes = [];
@@ -1677,7 +1675,7 @@ class LensApp {
         pills.innerHTML = '';
 
         const LABELS = {
-            line: 'Line', bar: 'Bar', area_stacked: 'Area', stacked_bar: 'Stacked', ranking: this.ui.rankMode,
+            line: 'Line', bar: 'Bar', area_stacked: 'Area', stacked_bar: 'Stacked',
         };
 
         for (const type of setup.timeChartTypes) {
