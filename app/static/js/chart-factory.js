@@ -13,7 +13,7 @@ function resolveRoles(chartConfig) {
         time_dim:   roles.timeline || chartConfig.time_dim || roles.x_axis || null,
         geo_dim:    chartConfig.geo_dim || null,
         series_dim: roles.series || chartConfig.series_dim || null,
-        facet_dim:  roles.facet || null,
+        facet_dim:  roles.facet || chartConfig.facet_dim || null,
         x_axis_dim: roles.x_axis || chartConfig.x_axis_dim || null,
         // legacy compat
         age_dim:    chartConfig.age_dim || null,

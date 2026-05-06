@@ -1303,19 +1303,44 @@ class LensApp {
             this.buildValueMap();
 
             this.panelSetup = this.determinePanelSetup();
-            // Use chart_selector's recommendation for defaults (instead of always 'line')
-            // Normalize backend names → frontend names (bar_vertical → bar)
+            // Pair-aware default selection. The pair API (chart_config.pair) encodes
+            // the curated complementary recommendation: place pair.primary in its
+            // natural panel and pair.complement in the other. Fall back to per-panel
+            // best-score from ranked_charts when pair is null or doesn't fit.
             const _chartAlias = { 'bar_vertical': 'bar' };
             const _ranked = this.chartConfig?.ranked_charts || [];
-            const _bestTime = _ranked.find(r => {
-                const name = _chartAlias[r.chart_type] || r.chart_type;
-                return this.panelSetup.timeChartTypes.includes(name);
-            });
-            this.timeChartType = _bestTime
-                ? (_chartAlias[_bestTime.chart_type] || _bestTime.chart_type)
-                : (this.panelSetup.timeChartTypes[0] || 'line');
-            const _bestSnap = _ranked.find(r => this.panelSetup.snapshotChartTypes.includes(r.chart_type));
-            this.snapshotChartType = _bestSnap ? _bestSnap.chart_type : (this.panelSetup.snapshotChartTypes[0] || null);
+            const _pair = this.chartConfig?.pair;
+
+            const _findInTime = (ct) => {
+                const n = _chartAlias[ct] || ct;
+                return this.panelSetup.timeChartTypes.includes(n) ? n : null;
+            };
+            const _findInSnap = (ct) =>
+                this.panelSetup.snapshotChartTypes.includes(ct) ? ct : null;
+
+            let _timeDefault = null, _snapDefault = null;
+            if (_pair) {
+                // primary belongs in its natural panel; complement goes to the other
+                const primaryInSnap = _findInSnap(_pair.primary);
+                if (primaryInSnap) {
+                    _snapDefault = primaryInSnap;
+                    _timeDefault = _findInTime(_pair.complement);
+                } else {
+                    _timeDefault = _findInTime(_pair.primary);
+                    _snapDefault = _findInSnap(_pair.complement);
+                }
+            }
+            // Fill any unfilled panel via best-score fallback
+            if (!_timeDefault) {
+                const _bestTime = _ranked.find(r => _findInTime(r.chart_type));
+                _timeDefault = _bestTime ? _findInTime(_bestTime.chart_type) : (this.panelSetup.timeChartTypes[0] || 'line');
+            }
+            if (!_snapDefault) {
+                const _bestSnap = _ranked.find(r => _findInSnap(r.chart_type));
+                _snapDefault = _bestSnap ? _bestSnap.chart_type : (this.panelSetup.snapshotChartTypes[0] || null);
+            }
+            this.timeChartType = _timeDefault;
+            this.snapshotChartType = _snapDefault;
             this.selectedPeriodIdx = -1; // latest
 
             // Yearly aggregation default for monthly/quarterly datasets
@@ -1596,6 +1621,14 @@ class LensApp {
         const seriesDimMeta = timeSeriesDim ? dims.find(d => d.dim_column_name === timeSeriesDim) : null;
         const seriesCount = seriesDimMeta ? (seriesDimMeta.option_count || 0) : 0;
         const timeChartTypes = hasTimePanel ? ['line', 'bar', 'area_stacked', 'stacked_bar'] : [];
+        // small_multiples is the right primary for time + medium-cardinality categorical
+        // (cluster 2). Add it as an option when the selector recommends it OR when a
+        // facet-shaped categorical dim is present.
+        if (hasTimePanel) {
+            const hasFacetDim = categoryDims.some(d => d.option_count > 6 && d.option_count <= 25);
+            const selectorRecommendsSM = (cfg.ranked_charts || []).some(r => r.chart_type === 'small_multiples');
+            if (hasFacetDim || selectorRecommendsSM) timeChartTypes.push('small_multiples');
+        }
 
         // Snapshot chart types
         let snapshotChartTypes = [];
@@ -1676,6 +1709,7 @@ class LensApp {
 
         const LABELS = {
             line: 'Line', bar: 'Bar', area_stacked: 'Area', stacked_bar: 'Stacked',
+            small_multiples: 'Multiples',
         };
 
         for (const type of setup.timeChartTypes) {
@@ -2671,6 +2705,24 @@ class LensApp {
         container.innerHTML = '';
 
         try {
+            // small_multiples needs a higher-cardinality facet (6-25 options).
+            // setup.timeSeriesDim is selected for line (2-6 options) — find a
+            // separate facet candidate from categoryDims.
+            let facetDim = null;
+            if (this.timeChartType === 'small_multiples') {
+                const facetCandidates = (setup.categoryDims || []).filter(
+                    d => d.option_count > 6 && d.option_count <= 25
+                );
+                if (facetCandidates.length > 0) {
+                    // Prefer the one with the most options that still fits (more granularity)
+                    facetCandidates.sort((a, b) => b.option_count - a.option_count);
+                    facetDim = facetCandidates[0].dim_column_name;
+                } else {
+                    // Fall back to the largest categoryDim
+                    const sorted = [...(setup.categoryDims || [])].sort((a, b) => b.option_count - a.option_count);
+                    facetDim = sorted[0]?.dim_column_name || null;
+                }
+            }
             // Build config for time panel — omit ranked_charts so resolveRoles()
             // doesn't override our explicit dim assignments
             const cfg = {
@@ -2678,7 +2730,8 @@ class LensApp {
                 ranked_charts: [],
                 primary_chart: this.timeChartType,
                 time_dim: setup.timeDim,
-                series_dim: setup.timeSeriesDim,
+                series_dim: facetDim || setup.timeSeriesDim,
+                facet_dim: facetDim,
                 x_axis_dim: setup.timeDim,  // time is always on x-axis for this panel
                 _valueFormat: this.timeTransform === 'index' ? 'index' :
                               this.timeTransform === 'yoy'   ? 'pct_change' : null,
