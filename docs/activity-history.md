@@ -1,5 +1,74 @@
 # Activity History
 
+## 2026-05-07 — Docs refresh (CLAUDE.md + readme.md)
+
+Cleaned up CLAUDE.md and readme.md to match current repo state. Removed stale references — `ui/`, `explorer/`, `profiling/` directories no longer exist; `chart_config.py` moved to `app/services/_obsolete/`. Corrected pipeline script tables (paths now point to `corpus/parquet` and `corpus/metadata.duckdb`). Added current `app/services/` entries (`agent.py`, `headlines.py`, `llm_client.py`) and routers (`ask.py`, `sdmx.py`). Consolidated CLAUDE.md's redundant Persona/Coding Principles sections. Pipeline script tables now live primarily in readme.md with a compact summary in CLAUDE.md so Claude can answer "what does script N do" without a Read call.
+
+## 2026-05-07 — Chart paradigm redesign (Phase 0 + Phase 1)
+
+Major rework of the chart-selection engine after diagnosing why ~71% of datasets were rendering suboptimal charts. Guided by the plan at `~/.claude/plans/i-want-to-have-quirky-haven.md` — hybrid pair-when-needed paradigm, full-redesign scope.
+
+**Root cause (Phase 0):** `matrix_profiles` had only 13 rows out of 1,986 expected. A previous full run of `10-classify-dimensions.py` had executed `DROP TABLE` then died before INSERT; the surviving 13 rows were just the datasets ingested 2026-04-14 via single-matrix mode. The chart selector had no signature to score against for 99% of datasets and was falling back to defaults. Re-ran the classifier → matrix_profiles now has 1,986 rows with proper archetype distribution (time_series 50%, geo_time 30%, demographic 13.5%, time_residence 4%, categorical 1.3%, geo_only 1.2%).
+
+Adjacent fix: recreated `v_canonical_datasets` view (schema-stale because the bilingual work on 2026-04-13 added `matrix_name_en`/`definitie_en` columns to `matrices` but didn't drop+recreate the view).
+
+**Selector tweaks** (`app/services/chart_selector.py`):
+- `area_stacked` demoted from 216 primary picks to 0. Audit found ~92% of "percentage" datasets are rates/indices/shares (NOT parts-of-whole), so the +0.2 percentage boost was wrong for the vast majority. Lowered base from 0.4 → 0.35; replaced broad boost with a tiny +0.05 only for 2-4-series percentage shape. Stays as a swappable alternate in `ranked_charts[]`.
+- `line`: added `percentage` to the rate/ratio/index unit-affinity bonus; -0.15 penalty for too-many overlapping series (>8); -0.10 penalty for age-cohort shape (`has_age && has_time && !has_gender`).
+- `small_multiples`: bumped facet bonus and time bonus so it wins for cluster 2 (categorical-time, 534 datasets / 27% of corpus). Primary picks went from 8 → 413 corpus-wide.
+- `heatmap`: +0.30 bonus for age × time when no gender/geo (cluster 5).
+- `population_pyramid`: handle `gender_count=3` (M+F+Total) with +0.15 (vs +0.20 for pure 2-option).
+- `choropleth`: lower eligibility from `geo>=5` to `geo>=4` (covers macroregion datasets); +0.15 when geo + demographic both present.
+- `bar_vertical`: -0.15 when geo present without demographics (defer to choropleth).
+- `horizontal_bar`: -0.15 for "no time, no geo, 2+ small cat dims" (defer to grouped_bar).
+- `grouped_bar`: +0.4 for that same snapshot shape.
+
+**Ranking chart retired** — `createRankingChart` was never auto-selected (not in `CHART_TYPES`, no eligibility/score rule), reachable only via the deprecated v1 toolbar. Deleted 122 lines of dead code from `chart-new-types.js`, dropped the `'ranking'` case from `chart-factory.js`, removed `rankMode` i18n labels and the pill list entry from `explore-app.js`.
+
+**Cluster-correctness baseline** (`scripts/chart-taxonomy.py`): added `data/eval/chart_taxonomy_baseline.json` recording each dataset's cluster + expected primary chart + selector's actual primary + match. Cluster 3 expectation revised from `area_stacked` to `line` (matching the data analysis). Clusters 4, 9, 10 broadened to accept multiple primary picks since they absorb diverse dim shapes (gender/residence + high-cardinality category → small_multiples is genuinely better than line; single-cat snapshots can sensibly be horizontal_bar OR grouped_bar OR bar_vertical depending on cardinality).
+
+**Outcome:** spot-check accuracy on cluster exemplars **42% → 96%**. Corpus-wide cluster-correctness **~29% → 72.7%**. Per-cluster: simple TS 99%, gender-split 100%, urban/rural 95%, cat snapshot 100%, geo+demographic 96%, pop pyramid 93%, geo snapshot 88%, cartographic 75%, composition % 72%, age cohort 56%, categorical time 46% (the remaining lever).
+
+## 2026-05-07 — Pair API + lens panel defaults
+
+Wired the chart-selector's complementary-pair recommendation into the dashboard layout — Phase 2 backend + minimal-lens-frontend.
+
+**Backend** (`chart_selector.py` + `dataset_meta.py`): added `decide_pair()` helper that processes the ranked results and emits `chart_config.pair = {primary, complement, reason}` when (a) primary belongs to a curated complementary pair (`COMPLEMENTARY_PAIRS`) AND (b) its partner is in the top-4 results AND (c) the complement scores ≥ 0.5. Returns null for single-chart layouts.
+
+**Lens** (`app/static/js/explore-app.js`):
+- Pair-aware default selection: when `chart_config.pair` is set, place `pair.primary` in its natural panel and `pair.complement` in the other. Falls back to per-panel best-score from `ranked_charts[]` when pair is null.
+- Added `small_multiples` to `timeChartTypes` when there's a facet candidate (6-25 options) OR when the selector recommends it. Otherwise the selector's small_multiples picks (cluster 2's 534 datasets) had no render path in lens.
+- `renderTimeChart` now picks a separate facet dim (6-25 options) for small_multiples — `setup.timeSeriesDim` is selected for line series (2-6 options) and is too narrow for faceting.
+- LABELS: `small_multiples → "Multiples"` for the pill button.
+
+**Bug fix** (`chart-factory.js`): `resolveRoles` was returning `facet_dim: roles.facet || null` and then spreading over `chartConfig.facet_dim`, wiping out caller-supplied values. Changed to `roles.facet || chartConfig.facet_dim || null`, matching the pattern used for `time_dim`/`series_dim`.
+
+**Verified visually** via Chrome DevTools MCP:
+- `AGR201G` (cluster 2): renders as a 4×3 small_multiples grid, 12 mini line charts per pig weight category — the headline UX fix.
+- `CON107B` (simple TS): single line, no Multiples pill, no second panel.
+- `TFA0494` (pop pyramid): line trend + population pyramid as snapshot default.
+- `TAN0131` (geo+demographic): line trend + choropleth map as snapshot default.
+
+## 2026-05-07 — Data router resilience (time-window + legacy parquet remap)
+
+Two distinct fixes to `/api/datasets/{code}/data`.
+
+**Auto time-window threshold lowered.** `TIME_WINDOW_THRESHOLD` was 500_000 — datasets in the 50k–500k range silently truncated their result without windowing time, so charts saw partial data with no indicator. Lowered to `MAX_DATA_ROWS` (50_000) so windowing fires *before* truncation. Skip when `group_by_cols` is set since group_by already aggregates row count down.
+
+**Legacy-format parquet support.** 67 of 3,706 parquets (1.8%) still use the v2 column convention (`*_nom_id` dim names + `value` value column) instead of SDMX (`REF_AREA`, `TIME_PERIOD`, `OBS_VALUE`). The `/data` endpoint failed with "Binder Error: Referenced column REF_AREA not found" for these, leaving them blank in the UI.
+
+Two patterns underlie the mismatch:
+- *Canonical* legacy datasets (EXP101D, LMV101B, CON108C, ...) — `dimensions` table records SDMX names but the parquet is legacy.
+- *Split* legacy datasets (LOC103B_judet) — `dimensions` has `_nom_id` and the parquet matches.
+
+Fix:
+- New `_detect_parquet_schema()` helper in `dataset_data.py` peeks at the parquet's columns and returns `{is_legacy, value_column}`.
+- Reconcile `dim_column_name` with the actual parquet via `sdmx_column_map`: forward map (legacy→SDMX) for SDMX parquets with legacy dim records; reverse map (SDMX→legacy) for legacy parquets with SDMX dim records.
+- `query_builder.build_data_query` accepts a `value_column` argument and aliases it back to `OBS_VALUE` in the SELECT so downstream code keeps a uniform response shape.
+- Skip the auto-time-windowing block for legacy parquets (no `TIME_PERIOD` column).
+
+Affects clusters 1, 2, 3, 7, 8 — wider than just cluster 7's 28 datasets. Closes the cartographic-blank BACKLOG entry; opens a follow-up to do a pipeline-level migration of these matrices via `12-parquet-to-sdmx.py` so the special-case code path can eventually be removed.
+
 ## 2026-04-22 — Generic dimension chunking for oversized pipeline datasets
 
 Added `generate_chunks()` (recursive generator) and `fetch_by_generic_chunks()` to `6-fetch-csv.py`. The algorithm finds the dimension with the most options and splits it into sub-sets such that each chunk stays ≤25,000 cells (just under the TEMPO API limit). Chunks are pre-counted before fetching; if >5,000 chunks would be needed (SAN101B: 432M cells, INT109C: 520B cells) the dataset is still skipped. The new fallback is wired in after judet-split fails in the oversized handling block. Logs recoveries to `data/logs/generic-chunk-datasets.log`. Verified on INT101T (891k cells → 37 chunks → 414,363 rows). Should recover ~14 datasets that were permanently logged in `oversized-datasets.log`.
