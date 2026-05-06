@@ -175,7 +175,9 @@ def _eligible(chart_type: str, sig: dict) -> bool:
     if chart_type == 'horizontal_bar':
         return any_cat_gte5 or (has_geo and geo >= 5)
     if chart_type == 'choropleth':
-        return has_geo and geo >= 5
+        # geo >= 4 covers macroregion-level datasets (4 macroregions); we have
+        # GeoJSON for county/region/macroregion in app/static/geo/.
+        return has_geo and geo >= 4
     if chart_type == 'population_pyramid':
         # INS "Sexe si medii" dims mix gender+residence (Total+M+F+Urban+Rural = 5)
         return has_age and has_gender and 2 <= gender_count <= 6
@@ -222,6 +224,9 @@ def _score(chart_type: str, sig: dict) -> float:
         elif len(cat_dims) == 0 and has_residence: s += 0.1
         # Penalty: too many overlapping series — line becomes unreadable, prefer small_multiples
         if any(d['count'] > 8 for d in cat_dims): s -= 0.15
+        # Penalty: age cohort over time is buried in a line chart — heatmap shows it better.
+        # (Pop pyramid case has has_gender, so this fires only for cluster-5 age cohort.)
+        if has_age and not has_gender and has_time and sig['age_count'] >= 6: s -= 0.10
         # Seasonality: line is THE chart for seasonal data
         if sig['has_seasonality']: s += 0.15
         if sig['time_granularity'] in ('monthly', 'quarterly'): s += 0.05
@@ -262,6 +267,9 @@ def _score(chart_type: str, sig: dict) -> float:
         if sig['has_seasonality']: s -= 0.10
         # Unit penalty: index numbers as bar heights are misleading (base=100)
         if unit == 'index': s -= 0.10
+        # Defer to choropleth when geo is the natural primary (no demographics).
+        if has_geo and geo >= 4 and not has_age and not has_gender and not has_residence:
+            s -= 0.15
         return min(max(s, 0.0), 1.0)
 
     if chart_type == 'grouped_bar':
@@ -271,6 +279,11 @@ def _score(chart_type: str, sig: dict) -> float:
         elif has_age: s += 0.15
         elif has_residence: s += 0.1
         if has_time and tp <= 5: s += 0.1
+        # Categorical snapshot (no time, no geo, 2+ small cat dims) is the
+        # classic grouped_bar shape — cat × cat values as grouped bars.
+        small_cats = [d for d in cat_dims if d['count'] <= 20]
+        if not has_time and not has_geo and len(small_cats) >= 2:
+            s += 0.4
         return min(s, 1.0)
 
     if chart_type == 'stacked_bar':
@@ -297,6 +310,9 @@ def _score(chart_type: str, sig: dict) -> float:
         if unit in ('currency', 'count'): s += 0.05
         # Cap below choropleth for high geo coverage (explicit, no recursion)
         if has_geo and geo >= 30: s = min(s, 0.80)
+        # Defer to grouped_bar for categorical-snapshot shape (cat × cat).
+        if not has_time and not has_geo and len([d for d in cat_dims if d['count'] <= 20]) >= 2:
+            s -= 0.15
         return min(s, 1.0)
 
     if chart_type == 'choropleth':
@@ -304,6 +320,7 @@ def _score(chart_type: str, sig: dict) -> float:
         if geo >= 30: s += 0.25
         elif geo >= 20: s += 0.15
         elif geo >= 10: s += 0.05
+        elif geo >= 4: s += 0.05  # region/macroregion baseline bump
         if 'county' in geo_levels: s += 0.05
         if has_time: s += 0.05
         # Geo + demographic combo: choropleth is the natural primary,
