@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 from app.db import get_conn
-from app.services.chart_selector import build_signature, select_charts, assign_roles
+from app.services.chart_selector import build_signature, select_charts, assign_roles, decide_pair
 
 
 _EN_METAS_DIR = Path(__file__).parent.parent.parent / "data" / "2-metas" / "en"
@@ -259,9 +259,14 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
     geo_dim = next((d for d in dimensions if d['dim_type'] == 'geo'), None)
     time_dim = next((d for d in dimensions if d['dim_type'] == 'time'), None)
 
+    pair = decide_pair(ranked)
+
     chart_config = {
         'ranked_charts': ranked,
         'primary_chart': primary,
+        # When non-null, frontend should render primary + complement side-by-side.
+        # When null, render the primary chart alone.
+        'pair': pair,
         'supports': [r['chart_type'] for r in ranked],
         'archetype': sig['_archetype'],
         'dataset_signature': {k: v for k, v in sig.items() if not k.startswith('_')},

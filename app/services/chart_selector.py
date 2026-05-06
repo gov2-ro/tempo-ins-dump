@@ -423,6 +423,40 @@ def select_charts(sig: dict, top_n: int = 8) -> list[dict]:
     return results
 
 
+# Minimum complement score required to render a pair side-by-side. Below this
+# threshold the complement is a weak fallback — better to show primary alone.
+PAIR_MIN_COMPLEMENT_SCORE = 0.5
+
+
+def decide_pair(ranked: list[dict]) -> dict | None:
+    """Decide whether to render primary + complement side-by-side.
+
+    Pair fires when:
+    - primary entry's chart belongs to a curated complementary pair
+      (see COMPLEMENTARY_PAIRS) AND its partner is in the top-4 results
+    - the complement's score >= PAIR_MIN_COMPLEMENT_SCORE
+
+    Returns None when single-chart layout is the right call. Otherwise:
+        {primary: str, complement: str, reason: str}
+    """
+    if not ranked:
+        return None
+    primary = ranked[0]
+    complement_type = primary.get('complementary_to')
+    if not complement_type:
+        return None
+
+    complement = next((r for r in ranked if r['chart_type'] == complement_type), None)
+    if not complement or complement.get('score', 0) < PAIR_MIN_COMPLEMENT_SCORE:
+        return None
+
+    return {
+        'primary': primary['chart_type'],
+        'complement': complement_type,
+        'reason': primary.get('complementary_reason', ''),
+    }
+
+
 def assign_roles(chart_type: str, dimensions: list, sig: dict = None) -> dict:
     """Map dimension columns to visual roles for a given chart type.
 
