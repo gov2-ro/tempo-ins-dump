@@ -10,25 +10,35 @@ def _resolve_parquet_path(matrix_code: str):
 def build_data_query(matrix_code: str, dimensions: list, filters: dict,
                      limit: int = MAX_DATA_ROWS,
                      group_by: list[str] | None = None,
-                     agg_func: str = "SUM") -> str:
-    """Build a DuckDB query against a v3 SDMX parquet file.
+                     agg_func: str = "SUM",
+                     value_column: str = "OBS_VALUE") -> str:
+    """Build a DuckDB query against a parquet file for this matrix.
 
-    All parquets use OBS_VALUE column and string dimension values.
+    Most parquets are SDMX-canonical (OBS_VALUE + string dim values), but
+    a small set (~67 of 3,706 as of 2026-05) still use the legacy v2 schema
+    with `value` as the value column and `*_nom_id` dim names. The caller
+    passes value_column accordingly; dim_column_name in `dimensions` must
+    match the parquet's actual column names.
 
     Args:
         matrix_code: Dataset identifier
-        dimensions: List of dimension dicts with dim_column_name
+        dimensions: List of dimension dicts with dim_column_name (must
+                    match the parquet's actual column names)
         filters: Column name → list of string values
         limit: Max rows to return
-        group_by: If provided, SELECT only these dims + SUM(OBS_VALUE),
+        group_by: If provided, SELECT only these dims + agg(value),
                   GROUP BY these dims. Dramatically reduces rows for chart
-                  queries (e.g. 101k → 110 for a time×gender chart).
-                  Filters still apply to all dimensions.
+                  queries. Filters still apply to all dimensions.
+        agg_func: Aggregation function for group_by mode (SUM, AVG, ...)
+        value_column: Name of the parquet's value column. Defaults to
+                      OBS_VALUE; pass "value" for legacy parquets.
 
     Returns:
-        SQL query string
+        SQL query string. The output value column is always aliased to
+        OBS_VALUE for downstream consistency.
     """
     parquet_path = _resolve_parquet_path(matrix_code)
+    vc = value_column
 
     all_dim_cols = [d['dim_column_name'] for d in dimensions]
     valid_cols = set(all_dim_cols)
@@ -39,12 +49,14 @@ def build_data_query(matrix_code: str, dimensions: list, filters: dict,
         if not keep_cols:
             keep_cols = all_dim_cols  # fallback to all
         dim_select = ", ".join(f'"{c}"' for c in keep_cols)
-        select_clause = f'{dim_select}, {agg_func}("OBS_VALUE") AS "OBS_VALUE"'
+        select_clause = f'{dim_select}, {agg_func}("{vc}") AS "OBS_VALUE"'
         group_clause = f'GROUP BY {dim_select}'
         output_cols = keep_cols
     else:
         dim_select = ", ".join(f'"{c}"' for c in all_dim_cols)
-        select_clause = f'{dim_select}, "OBS_VALUE"'
+        # Alias to OBS_VALUE so the response shape is uniform regardless
+        # of the parquet's underlying value-column name.
+        select_clause = f'{dim_select}, "{vc}" AS "OBS_VALUE"' if vc != "OBS_VALUE" else f'{dim_select}, "OBS_VALUE"'
         group_clause = ""
         output_cols = all_dim_cols
 

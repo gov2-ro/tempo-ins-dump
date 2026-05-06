@@ -5,7 +5,8 @@ Future tasks and intentions for the TEMPO INS data explorer.
 see also [charting-ideas.md](charting-ideas.md)
 
 ## Data pipeline
-- [ ] **Cartographic blank issue — legacy parquet column format**: ~452 cluster-7 (cartographic) datasets are flagged in `docs/chart-taxonomy.md` as rendering blank. Investigation: split sub-datasets like `LOC103B_judet` keep the v2-style parquet schema (`judete_nom_id`, `perioade_nom_id`, `value`) instead of SDMX-canonical (`REF_AREA`, `TIME_PERIOD`, `OBS_VALUE`). `dataset_data.py:77-88` rewrites `dim_column_name` in the dimensions list but `query_builder.py` still hardcodes `"OBS_VALUE"` in the SELECT — so SQL fails for these. Either rebuild affected parquets via `12-parquet-to-sdmx.py` for split children, or teach `query_builder` to consult `sdmx_column_map` and rewrite both dim names and the value column.
+- [x] ~~**Cartographic blank issue — legacy parquet column format**~~: Fixed via query-time remap. `dataset_data.py` now detects parquet schema (SDMX vs legacy v2) and reconciles dim names against the actual file via `sdmx_column_map`; `query_builder.py` accepts a `value_column` argument and aliases it to `OBS_VALUE` in the result. 67 legacy parquets (LOC103B_judet, EXP101D, LMV101B et al) — across clusters 1, 2, 3, 7, 8 — are now queryable.
+- [ ] **Pipeline-level migration of legacy parquets**: 67 parquets still ship with v2-style column names (`*_nom_id`, `value`). Query-time remap is the working fix today, but a clean pipeline run via `12-parquet-to-sdmx.py` (or equivalent) on these matrices would let us drop the special-case code path eventually.
 - [ ] **Foreign-country geo classification**: `10-classify-dimensions.py` flags 410 unknown geo labels — the bulk are foreign country names (Franta, Germania, Italia, etc.) used in international comparison datasets. Add a `country` geo level (vs current county/region/macroregion) so these classify correctly.
 
 ## UI / Navigation

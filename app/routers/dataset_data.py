@@ -5,11 +5,34 @@ import json
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import Response
 from app.db import get_conn
-from app.config import MAX_DATA_ROWS, LARGE_DATASET_THRESHOLD
+from app.config import MAX_DATA_ROWS, LARGE_DATASET_THRESHOLD, PARQUET_DIR
 
 from app.services.query_builder import build_data_query
 
 router = APIRouter()
+
+
+def _detect_parquet_schema(conn, matrix_code: str) -> dict:
+    """Peek at the parquet file to determine its column convention.
+
+    Returns: {is_legacy: bool, value_column: str, columns: list[str]}.
+    Most parquets are SDMX (OBS_VALUE + REF_AREA / TIME_PERIOD / ...);
+    ~67 still use legacy v2 schema (value + *_nom_id columns).
+    """
+    parquet_path = PARQUET_DIR / f"{matrix_code}.parquet"
+    try:
+        cols = [r[0] for r in conn.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{parquet_path}') LIMIT 0"
+        ).fetchall()]
+    except Exception:
+        return {"is_legacy": False, "value_column": "OBS_VALUE", "columns": []}
+
+    if "OBS_VALUE" in cols:
+        return {"is_legacy": False, "value_column": "OBS_VALUE", "columns": cols}
+    if "value" in cols and any(c.endswith("_nom_id") for c in cols):
+        return {"is_legacy": True, "value_column": "value", "columns": cols}
+    # Unknown convention — fall back to OBS_VALUE assumption
+    return {"is_legacy": False, "value_column": "OBS_VALUE", "columns": cols}
 
 
 @router.get("/datasets/{matrix_code}/data")
@@ -73,16 +96,38 @@ def get_dataset_data(
         for d in dims
     ]
 
-    # Resolve legacy v2 _nom_id column names to SDMX names for split sub-datasets
-    if any(d['dim_column_name'].endswith('_nom_id') for d in dimensions):
+    # Reconcile dim_column_name with the parquet's actual column names.
+    # The dim_column_name recorded in `dimensions` is sometimes SDMX-canonical
+    # (REF_AREA, TIME_PERIOD, ...), sometimes legacy v2 (*_nom_id), depending
+    # on which pipeline phase last touched the row. The parquet itself can
+    # also be in either format. We use sdmx_column_map (SDMX ↔ legacy) to
+    # rewrite dim names so they match the file.
+    schema = _detect_parquet_schema(conn, matrix_code)
+
+    def _load_col_map(direction: str) -> dict:
         parent_row = conn.execute(
             "SELECT parent_matrix_code FROM matrices WHERE matrix_code = ?", [matrix_code]
         ).fetchone()
         lookup_code = (parent_row[0] or matrix_code) if parent_row else matrix_code
-        col_map = dict(conn.execute("""
-            SELECT old_column_name, sdmx_column_name
-            FROM sdmx_column_map WHERE matrix_code = ?
-        """, [lookup_code]).fetchall())
+        if direction == "legacy_to_sdmx":
+            sql = "SELECT old_column_name, sdmx_column_name FROM sdmx_column_map WHERE matrix_code = ?"
+        else:  # sdmx_to_legacy
+            sql = "SELECT sdmx_column_name, old_column_name FROM sdmx_column_map WHERE matrix_code = ?"
+        return dict(conn.execute(sql, [lookup_code]).fetchall())
+
+    if schema["is_legacy"]:
+        # Parquet is legacy. Any dim names that look SDMX-canonical need to
+        # be rewritten BACK to *_nom_id to match the file.
+        if any(not d['dim_column_name'].endswith('_nom_id') for d in dimensions):
+            rev_map = _load_col_map("sdmx_to_legacy")
+            if rev_map:
+                for d in dimensions:
+                    if not d['dim_column_name'].endswith('_nom_id'):
+                        d['dim_column_name'] = rev_map.get(d['dim_column_name'], d['dim_column_name'])
+    elif any(d['dim_column_name'].endswith('_nom_id') for d in dimensions):
+        # Parquet is SDMX. Any dim names still in *_nom_id form need rewriting
+        # forward to canonical names.
+        col_map = _load_col_map("legacy_to_sdmx")
         for d in dimensions:
             if d['dim_column_name'].endswith('_nom_id'):
                 d['dim_column_name'] = col_map.get(d['dim_column_name'], d['dim_column_name'])
@@ -94,7 +139,9 @@ def get_dataset_data(
     # frontend can still page through earlier periods via the period browser.
     TIME_WINDOW_THRESHOLD = MAX_DATA_ROWS
     time_windowed = False
-    if row_count > TIME_WINDOW_THRESHOLD and not group_by_cols:
+    # Skip auto-windowing for legacy parquets — they don't have TIME_PERIOD
+    # column. Most are small enough not to need it anyway.
+    if row_count > TIME_WINDOW_THRESHOLD and not group_by_cols and not schema["is_legacy"]:
         time_dim = next((d['dim_column_name'] for d in dimensions
                          if d['dim_column_name'] == 'TIME_PERIOD'), None)
         if time_dim and time_dim not in filter_dict:
@@ -141,7 +188,8 @@ def get_dataset_data(
 
     # Build and execute query
     sql = build_data_query(matrix_code, dimensions, filter_dict, limit + 1,
-                           group_by=group_by_cols, agg_func=agg_func)
+                           group_by=group_by_cols, agg_func=agg_func,
+                           value_column=schema["value_column"])
 
     try:
         result = conn.execute(sql).fetchall()
@@ -238,21 +286,32 @@ def download_dataset(
 
     dimensions = [{'dim_code': d[0], 'dim_label': d[1], 'dim_column_name': d[2]} for d in dims]
 
-    # Resolve legacy v2 column names (same as /data endpoint)
-    if any(d['dim_column_name'].endswith('_nom_id') for d in dimensions):
-        parent_row = conn.execute(
-            "SELECT parent_matrix_code FROM matrices WHERE matrix_code = ?", [matrix_code]
-        ).fetchone()
-        lookup_code = (parent_row[0] or matrix_code) if parent_row else matrix_code
-        col_map = dict(conn.execute("""
-            SELECT old_column_name, sdmx_column_name
-            FROM sdmx_column_map WHERE matrix_code = ?
-        """, [lookup_code]).fetchall())
+    # Same parquet-schema reconciliation as /data endpoint
+    schema = _detect_parquet_schema(conn, matrix_code)
+    parent_row = conn.execute(
+        "SELECT parent_matrix_code FROM matrices WHERE matrix_code = ?", [matrix_code]
+    ).fetchone()
+    lookup_code = (parent_row[0] or matrix_code) if parent_row else matrix_code
+    if schema["is_legacy"]:
+        if any(not d['dim_column_name'].endswith('_nom_id') for d in dimensions):
+            rev_map = dict(conn.execute(
+                "SELECT sdmx_column_name, old_column_name FROM sdmx_column_map WHERE matrix_code = ?",
+                [lookup_code]
+            ).fetchall())
+            for d in dimensions:
+                if not d['dim_column_name'].endswith('_nom_id'):
+                    d['dim_column_name'] = rev_map.get(d['dim_column_name'], d['dim_column_name'])
+    elif any(d['dim_column_name'].endswith('_nom_id') for d in dimensions):
+        col_map = dict(conn.execute(
+            "SELECT old_column_name, sdmx_column_name FROM sdmx_column_map WHERE matrix_code = ?",
+            [lookup_code]
+        ).fetchall())
         for d in dimensions:
             if d['dim_column_name'].endswith('_nom_id'):
                 d['dim_column_name'] = col_map.get(d['dim_column_name'], d['dim_column_name'])
 
-    sql = build_data_query(matrix_code, dimensions, filter_dict, MAX_DATA_ROWS)
+    sql = build_data_query(matrix_code, dimensions, filter_dict, MAX_DATA_ROWS,
+                           value_column=schema["value_column"])
 
     try:
         rows = conn.execute(sql).fetchall()
