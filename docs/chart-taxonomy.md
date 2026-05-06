@@ -7,9 +7,9 @@ Use this to identify chart improvement opportunities per cluster.
 
 | # | Cluster | Count | % | Primary Chart | Description |
 |---|---------|-------|---|---------------|-------------|
-| 1 | Simple Time Series | 162 | 8.2% | line | Single indicator over time, no structural dims |
-| 2 | Categorical Time | 534 | 26.9% | small_multiples / heatmap | Time + medium-cardinality categorical dim (6-50 options) |
-| 3 | Composition (%) | 297 | 15.0% | line | Percentage unit, parts-of-whole over time |
+| 1 | Simple Time Series | 247 | 12.4% | line | Single indicator over time, no structural dims |
+| 2 | Categorical Time | 449 | 22.6% | small_multiples / heatmap | Time + medium-cardinality categorical dim (6-50 options) |
+| 3 | Composition (%) | 297 | 15.0% | line / small_multiples / heatmap | Percentage unit, parts-of-whole over time |
 | 4 | Gender-Split | 107 | 5.4% | line / small_multiples / horizontal_bar | Binary gender breakdown over time |
 | 5 | Age Cohort | 89 | 4.5% | heatmap / grouped_bar | Age groups over time (no gender) |
 | 6 | Population Pyramid | 72 | 3.6% | population_pyramid | Age + gender over time |
@@ -22,7 +22,7 @@ Use this to identify chart improvement opportunities per cluster.
 
 ## Exemplars per Cluster
 
-### 1. Simple Time Series (162 datasets)
+### 1. Simple Time Series (247 datasets)
 _Single indicator over time, no structural dims_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |
@@ -31,7 +31,7 @@ _Single indicator over time, no structural dims_
 | `SAN107A` | Asistenta medicala de urgenta, pe elemente specifice | 100.0% | 102 | volatile | ![SAN107A](chart-taxonomy/SAN107A.png) |
 | `TRN120A` | Nave de navigatie interioara, pe categorii de nave, inregist | 100.0% | 102 | volatile | ![TRN120A](chart-taxonomy/TRN120A.png) |
 
-### 2. Categorical Time (534 datasets)
+### 2. Categorical Time (449 datasets)
 _Time + medium-cardinality categorical dim (6-50 options)_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |

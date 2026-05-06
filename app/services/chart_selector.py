@@ -153,7 +153,7 @@ def _eligible(chart_type: str, sig: dict) -> bool:
 
     any_cat_gte5 = any(d['count'] >= 5 for d in cat_dims)
     any_cat_lte20 = any(d['count'] <= 20 for d in cat_dims)
-    any_cat_facetable = any(6 < d['count'] <= 25 for d in cat_dims)
+    any_cat_facetable = any(6 <= d['count'] <= 25 for d in cat_dims)
     # Non-unit, non-time dims for stacked bar threshold
     non_structural_dims = total_dims - (1 if has_time else 0) - 1  # subtract unit dim estimate
 
@@ -184,7 +184,7 @@ def _eligible(chart_type: str, sig: dict) -> bool:
     if chart_type == 'heatmap':
         return total_dims >= 2 and not is_sparse
     if chart_type == 'small_multiples':
-        return has_time and (any_cat_facetable or (has_geo and 6 < geo <= 25))
+        return has_time and (any_cat_facetable or (has_geo and 6 <= geo <= 25))
     if chart_type == 'bubble':
         # Bubble map (geo units as circles) or scatter-bubble over time/categories
         return (has_geo and geo >= 5) or (has_time and len(cat_dims) >= 1 and tp >= 3)
@@ -219,7 +219,10 @@ def _score(chart_type: str, sig: dict) -> float:
         if tp >= 10: s += 0.2
         elif tp >= 5: s += 0.1
         if trend in ('increasing', 'decreasing', 'flat'): s += 0.1
-        small_series = [d for d in cat_dims if d['count'] <= 6]
+        # Narrow small-series bonus: only truly small (≤4) lines stay readable.
+        # Cat dims with 5-6 options were getting line-favored by this bonus,
+        # but small_multiples is at least as readable for that range.
+        small_series = [d for d in cat_dims if d['count'] <= 4]
         if small_series: s += 0.1
         elif len(cat_dims) == 0 and has_residence: s += 0.1
         # Penalty: too many overlapping series — line becomes unreadable, prefer small_multiples
@@ -344,6 +347,11 @@ def _score(chart_type: str, sig: dict) -> float:
         dims_10_30 = [d for d in cat_dims if 10 <= d['count'] <= 30]
         if len(dims_10_30) >= 2: s += 0.3
         elif len(dims_10_30) == 1: s += 0.15
+        # Very-high-cardinality categorical with time: line and small_multiples
+        # both fail (too many series / too many panels). Heatmap (cat × time
+        # matrix, color = value) is the only readable option.
+        very_long = any(d['count'] > 30 for d in cat_dims)
+        if has_time and very_long: s += 0.30
         # Age × Time is a classic heatmap shape (age groups stack badly as lines).
         # Skip when geo is present — choropleth is the better primary in that case.
         if has_age and has_time and sig['age_count'] >= 6 and not has_gender and not has_geo:
@@ -355,11 +363,11 @@ def _score(chart_type: str, sig: dict) -> float:
 
     if chart_type == 'small_multiples':
         s = 0.35
-        facet_dims = [d for d in cat_dims if 6 < d['count'] <= 16]
+        facet_dims = [d for d in cat_dims if 6 <= d['count'] <= 16]
         if facet_dims: s += 0.35
-        elif facet_dims := [d for d in cat_dims if 6 < d['count'] <= 25]:
+        elif facet_dims := [d for d in cat_dims if 6 <= d['count'] <= 25]:
             s += 0.25
-        if has_geo and 6 < geo <= 16: s += 0.2
+        if has_geo and 6 <= geo <= 16: s += 0.2
         # Time series matter most for facets — strong bonus when present
         if has_time and tp >= 5: s += 0.15
         elif has_time and tp >= 3: s += 0.1

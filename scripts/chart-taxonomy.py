@@ -66,11 +66,17 @@ def load_datasets(conn):
 
 
 def get_max_cat_options(conn):
-    """Get max non-time/non-unit dimension option count per dataset."""
+    """Get max non-time/non-unit dimension option count per dataset.
+
+    Excludes TIME_PERIOD/TIME_PERIOD_2 (some datasets carry a secondary
+    time axis), UNIT_MEASURE, and FREQ. Without TIME_PERIOD_2 in the
+    exclusion list, datasets like CNF101F (annual + quarterly time
+    columns) would be misclassified into cluster 2.
+    """
     rows = conn.execute("""
         SELECT matrix_code, MAX(option_count) AS max_cat_options
         FROM dimensions
-        WHERE dim_column_name NOT IN ('TIME_PERIOD', 'UNIT_MEASURE', 'FREQ')
+        WHERE dim_column_name NOT IN ('TIME_PERIOD', 'TIME_PERIOD_2', 'UNIT_MEASURE', 'FREQ')
         GROUP BY matrix_code
     """).fetchall()
     return {r[0]: r[1] for r in rows}
@@ -191,7 +197,11 @@ def generate_markdown(taxonomy, total):
 CLUSTER_CHARTS = {
     1: "line",
     2: "small_multiples / heatmap",
-    3: "line",
+    # Cluster 3 absorbs diverse percentage data (rates, indices, shares,
+    # parts-of-whole). Chart depends on dim shape: simple ≤4 categories →
+    # line; 6-25 → small_multiples; very high → heatmap. area_stacked is a
+    # swappable alternate for true compositions, never auto-primary.
+    3: "line / small_multiples / heatmap",
     # Cluster 4/9 absorb high-dim datasets where gender/residence is just one
     # dim among several — small_multiples and horizontal_bar are valid primaries
     # when an extra categorical dim has many options. Line still ideal for

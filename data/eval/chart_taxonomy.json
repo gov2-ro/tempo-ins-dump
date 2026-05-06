@@ -3,7 +3,7 @@
     "id": 1,
     "name": "Simple Time Series",
     "desc": "Single indicator over time, no structural dims",
-    "count": 162,
+    "count": 247,
     "primary_chart": "line",
     "exemplars": [
       {
@@ -33,7 +33,7 @@
     "id": 2,
     "name": "Categorical Time",
     "desc": "Time + medium-cardinality categorical dim (6-50 options)",
-    "count": 534,
+    "count": 449,
     "primary_chart": "small_multiples / heatmap",
     "exemplars": [
       {
@@ -64,7 +64,7 @@
     "name": "Composition (%)",
     "desc": "Percentage unit, parts-of-whole over time",
     "count": 297,
-    "primary_chart": "line",
+    "primary_chart": "line / small_multiples / heatmap",
     "exemplars": [
       {
         "matrix_code": "COM109B",
