@@ -3,47 +3,36 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
-Romanian National Institute of Statistics (INS) data scraper and explorer. Fetches, processes, and visualizes ~3,600 canonical statistical datasets from TEMPO Online. Three main components: a data pipeline (numbered Python scripts), a FastAPI + DuckDB web application (`app/`), and static HTML explorers (`ui/`).
+Romanian National Institute of Statistics (INS) data scraper and explorer. Fetches, processes, and visualizes ~3,700 canonical statistical datasets from TEMPO Online. Two main components: a data pipeline (numbered Python scripts) and a FastAPI + DuckDB web application (`app/`).
 
 ## Architecture
 
 ### Data Pipeline (Numbered Scripts)
-Sequential scripts process data through stages. All accept `--lang ro|en` (default: `ro`).
+Sequential. All accept `--lang ro|en` (default: `ro`). Output paths + full details in [readme.md](readme.md).
 
-| # | Script | Output | Description |
-|---|---|---|---|
-| 1 | `1-fetch-context.py` | `data/1-indexes/{lang}/context.csv` | Fetches category hierarchy from TEMPO API |
-| 2 | `2-fetch-matrices.py` | `data/1-indexes/{lang}/matrices.csv` | Fetches dataset list |
-| 3 | `3-fetch-metas.py` | `data/2-metas/{lang}/{id}.json` | Downloads metadata per dataset |
-| 4 | `4-build-meta-index.py` | `data/1-indexes/{lang}/matrices-list.csv` | Builds summary index from metadata |
-| 5 | `5-varstats-db.py` | `data/3-db/{lang}/tempo-indexes.db` | Creates SQLite DB from metadata (legacy) |
-| 6 | `6-fetch-csv.py` | `data/4-datasets/{lang}/` | Downloads raw CSV data from TEMPO API |
-| 7 | `7-data-compactor.py` | `data/5-compact-datasets/{lang}/` | Replaces text labels with numeric IDs |
-| 8 | `8-setup-duckdb-schema.py` | `data/corpus/metadata.duckdb` | Creates DuckDB schema (contexts, matrices, dimensions) |
-| 9 | `9-csv-to-parquet.py` | `data/parquet-v2/ro/` | Converts compacted CSVs to Parquet (intermediate) |
-| 10 | `10-import-metadata.py` | DuckDB tables | Imports all metadata into DuckDB |
-| 10 | `10-classify-dimensions.py` | `dimension_options_parsed`, `matrix_profiles` | Parses/classifies dimensions, detects archetypes |
-| 10 | `10-sdmx-export.py` | `data/6-sdmx-csv/ro/` | Converts to SDMX-CSV 2.0 |
-| 11 | `11-build-sdmx-codes.py` | DuckDB code mapping tables | Builds SDMX code mappings |
-| 11 | `11-coverage-profiler.py` | `dataset_coverage` DuckDB table | Analyzes data completeness |
-| 12 | `12-parquet-to-sdmx.py` | `data/corpus/parquet/` | Transforms parquet-v2 to SDMX-native canonical parquet |
-| 12 | `12-split-datasets.py` | `data/corpus/parquet/` | Splits inconsistent datasets into clean sub-datasets |
+| # | Script | Purpose |
+|---|---|---|
+| 1 | `1-fetch-context.py` | Fetch category hierarchy from TEMPO API |
+| 2 | `2-fetch-matrices.py` | Fetch dataset list |
+| 3 | `3-fetch-metas.py` | Download metadata per dataset |
+| 4 | `4-build-meta-index.py` | Build summary index from metadata |
+| 5 | `5-varstats-db.py` | Create SQLite DB from metadata (legacy) |
+| 6 | `6-fetch-csv.py` | Download raw CSV data |
+| 7 | `7-data-compactor.py` | Replace text labels with numeric IDs |
+| 8 | `8-setup-duckdb-schema.py` | Create DuckDB schema (`corpus/metadata.duckdb`) |
+| 9 | `9-csv-to-parquet.py` | Convert compacted CSVs to intermediate Parquet (`parquet-v2/`) |
+| 10 | `10-import-metadata.py` | Import metadata into DuckDB |
+| 10 | `10-classify-dimensions.py` | Parse/classify dimensions, detect archetypes |
+| 10 | `10-sdmx-export.py` | Convert to SDMX-CSV 2.0 |
+| 11 | `11-build-sdmx-codes.py` | Build SDMX code mappings |
+| 11 | `11-coverage-profiler.py` | Analyze data completeness → `dataset_coverage` |
+| 12 | `12-parquet-to-sdmx.py` | Transform parquet-v2 → canonical SDMX parquet (`corpus/parquet/`) |
+| 12 | `12-split-datasets.py` | Split inconsistent datasets into clean sub-datasets |
 
-Note: `{lang}` is `ro` or `en`.
+**Orchestrator**: `update-pipeline.py` — incremental runs from INS news feed (per-matrix: meta → CSV → parquet → SDMX → split → view profile).
 
 ### Other Root Scripts
-
-| Script | Description |
-|---|---|
-| `generate_view_profiles.py` | Generates per-dataset JSON view profiles → `data/corpus/view-profiles/` |
-| `build-geo-regions.py` | Dissolves county GeoJSON into regions/macroregions |
-| `split_rules.py` | Split rules engine — detects datasets needing structural splits |
-| `detect_trends.py` | Detects trends, YoY growth, seasonality per dataset |
-| `duckdb_config.py` | Central config: paths for all DuckDB/Parquet processing |
-| `duckdb-browser.py` | Flask browser for exploring DuckDB + Parquet data |
-| `build-dataset-metadata.py` | Scans CSVs, calculates stats → `ui/data/dataset-metadata.json` |
-| `get-news.py` | Scrapes INS news/press releases |
-| `test_chart_selector.py` | Tests chart selection engine across all datasets |
+`generate_view_profiles.py` (per-dataset JSON view profiles), `generate_sdmx_yaml.py`, `build-geo-regions.py` (county GeoJSON → regions/macroregions), `build-static-site.py`, `split_rules.py`, `detect_trends.py`, `duckdb_config.py` (path config), `duckdb-browser.py`, `get-news.py`, `test_chart_selector.py`. See readme.md for descriptions. Helper scripts (audit, baselines, search index, canonicalize, normalize) are in `scripts/`.
 
 ### FastAPI Application (`app/`)
 Primary web application — FastAPI + DuckDB + Parquet backend, Vanilla JS + ECharts frontend.
@@ -54,16 +43,20 @@ app/
   config.py            — DB_PATH (corpus/metadata.duckdb), PARQUET_DIR (corpus/parquet), MAX_DATA_ROWS=50000
   db.py                — DuckDB cursor-per-request (critical for concurrency)
   routers/
+    ask.py             — /api/ask LLM-backed Q&A
     categories.py      — /api/categories endpoints
     datasets.py        — /api/datasets list + search
     dataset_data.py    — /api/datasets/{id}/data + metadata
+    sdmx.py            — SDMX 2.1 REST endpoints (/sdmx/2.1/data, /datastructure, /dataflow)
   services/
+    agent.py                — LLM agent wiring (search + answer)
     dataset_search.py       — search/list datasets (shared by route, MCP, agent)
     dataset_meta.py         — full dataset metadata + chart config (shared by route, MCP, agent)
-    chart_config.py         — archetype → chart config mapping
     chart_selector.py       — chart type selection engine
     chart_selector_eval.py  — bulk re-score + diff-against-baseline (MCP eval harness)
     agent_eval.py           — search-quality regression harness (MCP eval harness)
+    headlines.py            — KPI/headline extraction (driven by headline_config.json)
+    llm_client.py           — shared LLM client wrapper
     query_builder.py        — DuckDB query construction
   static/
     js/
@@ -112,11 +105,6 @@ uvicorn app.main:app --reload --port 8080
 ```
 
 
-### StatExplorer (alternative)
-```bash
-uvicorn explorer.main:app --reload --port 8081
-```
-
 ### DuckDB Browser
 ```bash
 python duckdb-browser.py
@@ -156,93 +144,49 @@ data/
   # Final output — app reads from here
   corpus/
     metadata.duckdb          Main DuckDB metadata (16 tables)
-    parquet/                 SDMX-native canonical parquets — 3,632 files
-    view-profiles/           Per-dataset JSON view profiles — ~3,800 files
+    search.duckdb            Search index DB
+    parquet/                 SDMX-native canonical parquets — 3,706 files
+    view-profiles/           Per-dataset JSON view profiles — 3,523 files
+  eval/                      Eval baselines (chart_selector, agent_search)
 
   # Archived (not needed for app or pipeline)
-  _obsolete/                 Legacy intermediates: parquet-v1, 5-compact-datasets, 6-sdmx-csv, etc.
+  _obsolete/                 Legacy intermediates: parquet-v3, 5-compact-datasets, 6-sdmx-csv, 3-db, etc.
 ```
 
 ### Data Flow
-1. Scrape contexts and dataset lists from INS TEMPO API
-2. Download metadata for each dataset
-3. Build searchable dimension index + SQLite DB
-4. Download CSV data files (handles 30k-cell API limit)
-5. Compact data (replace labels with IDs)
-6. Create DuckDB schema + import metadata
-7. Convert to Parquet → classify dimensions → detect archetypes
-8. SDMX code mapping → transform to v3 parquet → split datasets
-9. Generate view profiles → serve via FastAPI app
+1. Scrape contexts + dataset lists from INS TEMPO API → download metadata per dataset
+2. Build summary index + (legacy) SQLite DB
+3. Download CSV data (handles 30k-cell API limit) → compact (labels → numeric IDs)
+4. Create DuckDB schema → import metadata → classify dimensions / detect archetypes
+5. Convert intermediates to Parquet → SDMX code mapping → canonical SDMX parquet → split inconsistent datasets
+6. Generate view profiles → serve via FastAPI app
 
 ## Technology Stack
 - **Backend**: FastAPI + DuckDB + Parquet
 - **Frontend**: Vanilla HTML5/CSS3/JS (ES6+), ECharts for visualization
 - **Database**: DuckDB (16 tables in `corpus/metadata.duckdb`)
-- **Data**: Parquet files (SDMX-native, 3,632 canonical files in `corpus/parquet/`)
+- **Data**: Parquet files (SDMX-native, 3,706 canonical files in `corpus/parquet/`)
 - **GeoJSON**: County/region/macroregion polygons for choropleth maps
 - **Deployment**: Docker + Fly.io (also Oracle Cloud, HF Spaces)
 
-## Profiling & Validation
-- `profiling/data_profiler.py` - Main data profiling tool
-- `profiling/validation_rules.py` - Validation rule definitions
-- `profiling/variable_classifier.py` - Variable type classification
-- `profiling/unit_classifier.py` - Unit of measurement classification
-
 ## Development Best Practices
-- Always test locally before committing
-- Use browser dev tools for frontend debugging
-- Check console for JavaScript errors
-- Validate API responses with browser network tab
-- Test with actual INS data samples
 - **DuckDB concurrency**: `get_conn()` returns `_conn.cursor()` not `_conn` — parallel requests need separate cursors
 - **DuckDB write lock**: Only ONE process can write at a time. Stop dev server before running pipeline scripts
+- Test locally before committing; verify via browser dev tools (console + network tab) for frontend changes
+- Use `npx playwright` (already installed) to test/debug final UI results
+- For complex changes, add a debug-mode flag with verbose logging
 
-## Persona
-- Act as a senior full-stack developer with deep knowledge.
-- When possible run the code in your terminal to verify it works as expected. When possible make the tests short (timewise) - for example, limit the number of events or sources processed while testing. 
-- provide relevant output messages and logging.
-- generally create a debug mode with verbose logging for complex changes. Debug mode should be a flag in the configuration file.
-- use `npx playwright` (Playwright already installed) when needed to test or debug the final results.
-
-## General Coding Principles
-- Focus on simplicity, readability, performance, maintainability, testability, and reusability.
-- Less code is better; lines of code = debt.
-- Make minimal code changes and only modify relevant sections.
-- Suggest solutions proactively and treat the user as an expert.
-- Write correct, up-to-date, bug-free, secure, performant, and efficient code.
+## Working Style
+- Act as a senior full-stack developer; suggest improvements/optimizations proactively
+- Keep answers concise; challenge assumptions rather than just agreeing
+- If a request is ambiguous, ask follow-up questions before working
+- For large files (>300 lines) or complex changes, plan BEFORE editing; break refactors into independently functional chunks
+- Less code = less debt — make minimal, targeted changes; do not add files unless necessary
 - If unsure, say so instead of guessing
 
+# Notes
 
-Please keep your answers concise and to the point.
-Don’t just agree with me — feel free to challenge my assumptions or offer a different perspective.
-Act as a senior full-stack developer with deep knowledge. Suggest improvements, optimizations, or best practices where applicable.
-If a question or request is ambiguous or would benefit from clarification, ask follow-up questions before answering or getting to work.
-
-When working with large files (>300 lines) or complex changes always start by creating a detailed plan BEFORE making any edits.
-When refactoring large files break work into logical, independently functional chunks, ensure each intermediate state maintains functionality.
-
-## Bug Handling
-- If you encounter a bug or suboptimal code, add a TODO comment outlining the problem.
-
-## RATE LIMIT AVOIDANCE
-- For very large files, suggest splitting changes across multiple sessions
-- Prioritize changes that are logically complete units
-- Always provide clear stopping points
-
-# important-instruction-reminders
-Generally do what has been asked; nothing more, nothing less, but provide suggestions when you think it would be useful/smart – when it would support the intention of this project. 
-Avoid creating files unless they're absolutely necessary for achieving your goal.
-Prefer editing an existing file to creating a new one.
-
-
-# Other notes
-
-When detecting things that need to be addressed later, add to `docs/BACKLOG.md`. Use a checkbox `- [ ]` entry with a clear title and enough context to act on it later.
-
-After completing any meaningful work, add an entry to `docs/activity-history.md` under a `## YYYY-MM-DD — Short Title` heading. Include what was done, why, and any non-obvious decisions.
-
-When running Python commands, always first activate the following venv `~/devbox/envs/240826/` (/Users/pax/devbox/envs/240826/bin/activate)
-
-See `data/4-datasets-slim-samples/50` and `data/4-datasets-slim-samples/100` first - when samplinga datasets, it contains a smaller number of sample records (50 or 100) for analysis with using less context. 
-
-The git repository is at https://github.com/gov2-ro/tempo-ins-dump/ 
+- **Backlog**: When detecting things to address later, add a `- [ ]` entry with title + enough context to `docs/BACKLOG.md`
+- **Activity log**: After meaningful work, add an entry to `docs/activity-history.md` under `## YYYY-MM-DD — Short Title` (what + why + non-obvious decisions)
+- **Slim samples**: When sampling datasets, prefer `data/4-datasets-slim-samples/50` (or `/100`) for smaller records and lower context use
+- **Repo**: https://github.com/gov2-ro/tempo-ins-dump/

@@ -14,8 +14,6 @@ _INS Tempo Online but make it nice._
 | What | Command | URL |
 |---|---|---|
 | **Main app** (FastAPI + DuckDB) | `uvicorn app.main:app --reload --port 8080` | http://localhost:8080 |
-| Static UI explorers | `python -m http.server 8000` | http://localhost:8000/ui/dataset-navigator.html |
-| StatExplorer (alt) | `uvicorn explorer.main:app --reload --port 8081` | http://localhost:8081 |
 | DuckDB browser | `python duckdb-browser.py` | http://localhost:5000 |
 
 Activate venv first: `source ~/devbox/envs/240826/bin/activate`
@@ -45,8 +43,8 @@ The app exposes a minimal SDMX 2.1 REST API (agency `INS`) compatible with sdmxt
 Example: `/sdmx/2.1/data/INS,ACC102B/..` returns all observations for dataset `ACC102B`.
 
 ```
-  services/           — chart_config, chart_selector, query_builder
-  static/js/          — dataset-page, chart-factory, chart-geo, chart-demographic, filter-panel
+  services/           — dataset_search, dataset_meta, chart_selector, query_builder, agent, headlines, llm_client
+  static/js/          — dataset-page, chart-factory, chart-geo, chart-demographic, filter-panel, ask, dims-explorer
   static/css/         — dataset.css, datasets.css, main.css
   static/geo/         — romania-counties/regions/macroregions.geojson
 ```
@@ -56,24 +54,24 @@ Example: `/sdmx/2.1/data/INS,ACC102B/..` returns all observations for dataset `A
 
 Sequential data pipeline — run in order. All scripts accept `--lang ro|en` (default: `ro`).
 
-| Script | Output | Description |
-|---|---|---|
-| `1-fetch-context.py` | `data/1-indexes/{lang}/context.csv` | Fetches category/context hierarchy from TEMPO API |
-| `2-fetch-matrices.py` | `data/1-indexes/{lang}/matrices.csv` | Fetches dataset list from TEMPO API |
-| `3-fetch-metas.py` | `data/2-metas/{lang}/{id}.json` | Downloads JSON metadata for each dataset |
-| `4-build-meta-index.py` | `data/1-indexes/{lang}/matrices-list.csv` | Builds summary index from metadata JSONs |
-| `5-varstats-db.py` | `data/3-db/{lang}/tempo-indexes.db` | Creates SQLite DB from metadata |
-| `6-fetch-csv.py` | `data/4-datasets/{lang}/` | Downloads raw CSV data files from TEMPO API |
-| `7-data-compactor.py` | `data/5-compact-datasets/{lang}/` | Replaces text labels with numeric IDs in CSVs |
-| `8-setup-duckdb-schema.py` | `data/tempo_metadata.duckdb` | Creates DuckDB schema (contexts, matrices, dimensions) |
-| `9-csv-to-parquet.py` | `data/parquet/ro/` | Converts compacted CSVs to Parquet |
-| `10-import-metadata.py` | DuckDB tables | Imports all metadata into DuckDB |
-| `10-classify-dimensions.py` | `dimension_options_parsed`, `matrix_profiles` | Parses/classifies dimension options, detects archetypes |
-| `10-sdmx-export.py` | `data/6-sdmx-csv/ro/` | Converts compacted CSVs to SDMX-CSV 2.0 |
-| `11-build-sdmx-codes.py` | DuckDB code mapping tables | Builds SDMX code mappings in DuckDB |
-| `11-coverage-profiler.py` | `dataset_coverage` DuckDB table | Analyzes data completeness per dataset |
-| `12-parquet-to-sdmx.py` | `data/parquet-v3/ro/` | Transforms parquet-v2 to SDMX-native parquet-v3 |
-| `12-split-datasets.py` | `data/parquet-v3/ro/` | Splits inconsistent datasets into clean sub-datasets |
+| # | Script | Output | Description |
+|---|---|---|---|
+| 1 | `1-fetch-context.py` | `data/1-indexes/{lang}/context.csv` | Fetches category hierarchy from TEMPO API |
+| 2 | `2-fetch-matrices.py` | `data/1-indexes/{lang}/matrices.csv` | Fetches dataset list |
+| 3 | `3-fetch-metas.py` | `data/2-metas/{lang}/{id}.json` | Downloads metadata per dataset |
+| 4 | `4-build-meta-index.py` | `data/1-indexes/{lang}/matrices-list.csv` | Builds summary index from metadata |
+| 5 | `5-varstats-db.py` | `data/3-db/{lang}/tempo-indexes.db` | Creates SQLite DB from metadata (legacy) |
+| 6 | `6-fetch-csv.py` | `data/4-datasets/{lang}/` | Downloads raw CSV data from TEMPO API |
+| 7 | `7-data-compactor.py` | `data/5-compact-datasets/{lang}/` | Replaces text labels with numeric IDs |
+| 8 | `8-setup-duckdb-schema.py` | `data/corpus/metadata.duckdb` | Creates DuckDB schema (contexts, matrices, dimensions) |
+| 9 | `9-csv-to-parquet.py` | `data/parquet-v2/ro/` | Converts compacted CSVs to Parquet (intermediate) |
+| 10 | `10-import-metadata.py` | DuckDB tables | Imports all metadata into DuckDB |
+| 10 | `10-classify-dimensions.py` | `dimension_options_parsed`, `matrix_profiles` | Parses/classifies dimensions, detects archetypes |
+| 10 | `10-sdmx-export.py` | `data/6-sdmx-csv/ro/` | Converts to SDMX-CSV 2.0 |
+| 11 | `11-build-sdmx-codes.py` | DuckDB code mapping tables | Builds SDMX code mappings |
+| 11 | `11-coverage-profiler.py` | `dataset_coverage` DuckDB table | Analyzes data completeness |
+| 12 | `12-parquet-to-sdmx.py` | `data/corpus/parquet/` | Transforms parquet-v2 to SDMX-native canonical parquet |
+| 12 | `12-split-datasets.py` | `data/corpus/parquet/` | Splits inconsistent datasets into clean sub-datasets |
 
 ### Incremental Update (`update-pipeline.py`)
 
@@ -97,44 +95,41 @@ Per-matrix steps: fetch metadata JSON → download CSV → convert to parquet �
 | Script | Description |
 |---|---|
 | `generate_view_profiles.py` | Generates per-dataset JSON view profiles → `data/corpus/view-profiles/` |
+| `generate_sdmx_yaml.py` | Generates SDMX dashboard YAML configs → `data/sdmx-dashboards/` |
 | `build-geo-regions.py` | Dissolves county GeoJSON into regions + macroregions |
+| `build-static-site.py` | Builds static HTML site from corpus |
 | `split_rules.py` | Split rules engine — classifies datasets needing structural splits |
 | `detect_trends.py` | Detects trends, YoY growth, seasonality → `dataset_trends` DuckDB table |
 | `duckdb_config.py` | Central config: paths for all DuckDB/Parquet processing |
 | `duckdb-browser.py` | Flask browser for exploring DuckDB + Parquet data |
-| `build-dataset-metadata.py` | Scans CSVs, calculates stats → `ui/data/dataset-metadata.json` |
 | `get-news.py` | Scrapes INS news/press releases → `data/insse_news.csv` |
 | `test_chart_selector.py` | Tests chart selection engine across all datasets |
 
-## utils/
+### scripts/
 
 | Script | Description |
 |---|---|
-| `14-parquet-to-ids.py` | Converts Parquet from text labels → numeric IDs → `data/parquet-v2/ro/` |
-| `13-slim-samples-to-markdown.py` | Converts slim-sample CSVs to markdown for LLM analysis |
-| `12-csv-headers-index.py` | Extracts headers from all CSVs → `data/2-metas/csv-headers-index.csv` |
-| `11-slim-samples.py` | Samples up to 100 rows per dataset → `data/4-datasets-slim-samples/` |
-| `build-dimension-index.py` | Builds searchable SQLite index from metadata JSONs |
-| `build-enhanced-navigator-index.py` | Builds optimized SQLite + JSON indexes for the dataset navigator UI |
-| `build-static-index.py` | Generates static JSON indexes for client-side explorer |
-| `query-dimensions.py` | CLI query tool for the dimension index SQLite DB |
-| `query-duckdb.py` | Query helper for DuckDB + Parquet |
-| `explore-data.py` | Exploration script showing DuckDB + Parquet integration patterns |
-| `export-db-to-json.py` | Exports dimension index SQLite → `ui/data/dimension_index.json` |
-| `check-meta-consistency.py` | Validates consistency between metadata directories |
+| `audit-corpus.py` | Audits the canonical corpus (parquet + DuckDB + view-profiles) |
+| `build_chart_selector_baseline.py` | Builds eval baseline → `data/eval/chart_selector_baseline.json` |
+| `build_agent_search_baseline.py` | Builds eval baseline → `data/eval/agent_search_baseline.json` |
+| `build-search-index.py` | Builds search index → `data/corpus/search.duckdb` |
+| `build-i18n-dictionary.py` | Builds bilingual labels dictionary → `labels_i18n` DuckDB table |
+| `canonicalize-corpus.py` | Canonicalizes parquet files in `data/corpus/parquet/` |
+| `chart-taxonomy.py` | Generates chart-taxonomy report |
+| `cleanup-view-profiles.py` | Removes orphan view-profiles |
+| `detect-totals.py` | Detects "Total" rows for stripping |
+| `normalize-labels.py` | Normalizes dimension option labels |
+| `prepare-deploy-data.sh` | Stages corpus + DuckDB + view-profiles into `deploy-data/` |
+| `profile-values.py` | Computes per-dataset value profiles → `dataset_value_profiles` |
+| `strip-totals-from-parquet.py` | Strips precomputed "Total" rows from canonical parquets |
 
-## profiling/
+### scripts/utils/
 
-| Script | Description |
-|---|---|
-| `data_profiler.py` | Main profiler: validates CSV structure, classifies column types, generates reports |
-| `variable_classifier.py` | Classifies variable labels using a CSV ruleset |
-| `unit_classifier.py` | Classifies unit-of-measure labels semantically |
-| `validation_rules.py` | Modular validation framework (column names, data content, file structure) |
-| `build_indexes.py` | Builds keyword/theme indexes from datasets → `data/indexes/` |
-| `tool-list-headers.py` | Extracts CSV headers → `data/2-csv-cols/ro/` |
-| `tool-sample-csvs.py` | Creates sampled CSVs (first/mid/last 5 rows) → `data/datasets-samples/ro/` |
-| `tool-word-frequency.py` | Romanian word frequency analysis of dataset titles |
+Misc one-off + legacy helpers (label conversion, slim samples, dimension index, header inventories, ad-hoc DuckDB queries).
+
+### scripts/utils/profiling/
+
+CSV profiler + validation framework (`data_profiler.py`, `variable_classifier.py`, `unit_classifier.py`, `validation_rules.py`, `build_indexes.py`). See `scripts/utils/profiling/readme.md`.
 
 ## Data
 
@@ -142,21 +137,20 @@ Per-matrix steps: fetch metadata JSON → download CSV → convert to parquet �
 data/
   1-indexes/{lang}/        context.csv, matrices.csv
   2-metas/{lang}/          {dataset-id}.json — metadata per dataset
-  3-db/{lang}/             tempo-indexes.db (SQLite, legacy)
   4-datasets/{lang}/       raw CSVs from TEMPO API
   4-datasets-slim-samples/ 50/ and 100/ row samples for LLM analysis
-  5-compact-datasets/      CSVs with numeric IDs instead of labels
-  6-sdmx-csv/ro/           SDMX-CSV 2.0 output
-  corpus/
-    parquet/             Canonical SDMX parquet files — 3,632 files ← used by app
-    metadata.duckdb      Main DuckDB metadata (16 tables)
-    view-profiles/       Per-dataset JSON view profiles — ~3,800 files
-  parquet-v2/ro/           Parquet v2 (numeric IDs) — legacy fallback
+  parquet-v2/ro/           Parquet v2 (numeric IDs) — pipeline intermediate
+  corpus/                  ← used by app
+    parquet/               Canonical SDMX parquet files — 3,706 files
+    metadata.duckdb        Main DuckDB metadata (16 tables)
+    search.duckdb          Search index DB
+    view-profiles/         Per-dataset JSON view profiles — 3,523 files
+  eval/                    Eval baselines (chart_selector, agent_search)
   meta/                    Reference data (judet CSVs, SIRUTA)
-  logs/                    Pipeline execution logs
+  logs/                    Pipeline execution logs (incl. last-pipeline-run.txt)
+  sdmx-dashboards/         SDMX dashboard YAML configs
+  _obsolete/               Archived legacy intermediates (parquet-v3, 5-compact-datasets, 6-sdmx-csv, 3-db)
 ```
-
-Historical data snapshots in `data-old/`, `data-25-1/`, `data-2026/`.
 
 ## Deployment
 
