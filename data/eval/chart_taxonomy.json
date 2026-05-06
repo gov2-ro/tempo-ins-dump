@@ -3,7 +3,7 @@
     "id": 1,
     "name": "Simple Time Series",
     "desc": "Single indicator over time, no structural dims",
-    "count": 161,
+    "count": 162,
     "primary_chart": "line",
     "exemplars": [
       {
@@ -33,7 +33,7 @@
     "id": 2,
     "name": "Categorical Time",
     "desc": "Time + medium-cardinality categorical dim (6-50 options)",
-    "count": 520,
+    "count": 534,
     "primary_chart": "small_multiples / heatmap",
     "exemplars": [
       {
@@ -63,8 +63,8 @@
     "id": 3,
     "name": "Composition (%)",
     "desc": "Percentage unit, parts-of-whole over time",
-    "count": 295,
-    "primary_chart": "area_stacked",
+    "count": 297,
+    "primary_chart": "line",
     "exemplars": [
       {
         "matrix_code": "COM109B",
@@ -123,7 +123,7 @@
     "id": 5,
     "name": "Age Cohort",
     "desc": "Age groups over time (no gender)",
-    "count": 86,
+    "count": 89,
     "primary_chart": "heatmap / grouped_bar",
     "exemplars": [
       {
@@ -153,7 +153,7 @@
     "id": 6,
     "name": "Population Pyramid",
     "desc": "Age + gender over time",
-    "count": 69,
+    "count": 72,
     "primary_chart": "population_pyramid",
     "exemplars": [
       {
@@ -183,7 +183,7 @@
     "id": 7,
     "name": "Cartographic",
     "desc": "Geographic (county/region) + time, no demographic dims",
-    "count": 452,
+    "count": 454,
     "primary_chart": "choropleth",
     "exemplars": [
       {
@@ -213,7 +213,7 @@
     "id": 8,
     "name": "Geo + Demographic",
     "desc": "Geographic + gender/age/residence",
-    "count": 135,
+    "count": 138,
     "primary_chart": "choropleth / line",
     "exemplars": [
       {

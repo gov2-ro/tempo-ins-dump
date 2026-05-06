@@ -181,11 +181,17 @@ def generate_markdown(taxonomy, total):
     return "\n".join(lines)
 
 
-# Chart type heuristics per cluster (what chart_selector typically picks)
+# Expected primary chart(s) per cluster — used both for documentation and for
+# the cluster-correctness baseline. "/"-separated values are alternatives:
+# any of them is accepted as a correct primary pick.
+#
+# Cluster 3 was previously "area_stacked" but audit showed ~92% of percentage
+# datasets are rates/indices/shares (not parts-of-whole). Default to line;
+# area_stacked stays as a swappable alternate for true compositions.
 CLUSTER_CHARTS = {
     1: "line",
     2: "small_multiples / heatmap",
-    3: "area_stacked",
+    3: "line",
     4: "line",
     5: "heatmap / grouped_bar",
     6: "population_pyramid",
@@ -196,6 +202,12 @@ CLUSTER_CHARTS = {
     11: "choropleth",
     12: "varies",
 }
+
+
+def _expected_set(cluster_id: int) -> set[str]:
+    """Parse CLUSTER_CHARTS[cluster_id] into a set of acceptable primary picks."""
+    raw = CLUSTER_CHARTS.get(cluster_id, "")
+    return {p.strip() for p in raw.split("/") if p.strip() and p.strip() != "varies"}
 
 
 def take_screenshots(taxonomy, base_url="http://localhost:8080"):
@@ -288,6 +300,58 @@ def main():
     OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
     OUT_JSON.write_text(json.dumps(taxonomy, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     print(f"JSON written to {OUT_JSON}")
+
+    # ── Cluster-correctness baseline ────────────────────────────────────────
+    # For every dataset: cluster_id, expected primary chart(s), selector's
+    # actual primary, and match. This is the ground-truth eval file.
+    print("\nBuilding cluster-correctness baseline...")
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from app.services.chart_selector_eval import evaluate_all  # noqa: E402
+
+    eval_rows = evaluate_all(conn)
+    baseline = {"version": 1, "total": len(df), "by_cluster": {}, "datasets": {}}
+    cluster_stats = {c["id"]: {"name": c["name"], "expected": CLUSTER_CHARTS.get(c["id"], "—"),
+                               "total": 0, "matches": 0, "misses": []}
+                     for c in CLUSTERS}
+
+    for _, r in df.iterrows():
+        mc = r["matrix_code"]
+        cid = int(r["cluster"])
+        actual_entry = eval_rows.get(mc) or {}
+        actual = actual_entry.get("primary")
+        expected = _expected_set(cid)
+        match = (not expected) or (actual in expected)
+        baseline["datasets"][mc] = {
+            "cluster": cid,
+            "expected": sorted(expected) if expected else [],
+            "actual": actual,
+            "match": match,
+        }
+        cluster_stats[cid]["total"] += 1
+        if match:
+            cluster_stats[cid]["matches"] += 1
+        elif len(cluster_stats[cid]["misses"]) < 5:
+            cluster_stats[cid]["misses"].append({"matrix_code": mc, "got": actual})
+
+    baseline["by_cluster"] = {
+        str(cid): {**stats,
+                   "match_pct": round(100 * stats["matches"] / stats["total"], 1) if stats["total"] else 0.0}
+        for cid, stats in cluster_stats.items()
+    }
+    overall_matches = sum(s["matches"] for s in cluster_stats.values())
+    baseline["overall_match_pct"] = round(100 * overall_matches / max(len(df), 1), 1)
+
+    BASELINE_PATH = PROJECT_ROOT / "data" / "eval" / "chart_taxonomy_baseline.json"
+    BASELINE_PATH.write_text(json.dumps(baseline, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    print(f"Baseline written to {BASELINE_PATH}")
+    print(f"\nOverall cluster-correctness: {baseline['overall_match_pct']}%")
+    print(f"\n{'#':<3} {'Cluster':<24} {'Match':<14} Expected")
+    for cid in sorted(cluster_stats):
+        s = cluster_stats[cid]
+        if s["total"] == 0:
+            continue
+        m = f"{s['matches']}/{s['total']} ({100*s['matches']/s['total']:.0f}%)"
+        print(f"{cid:<3} {s['name']:<24} {m:<14} {s['expected']}")
 
     if args.screenshot:
         take_screenshots(taxonomy)

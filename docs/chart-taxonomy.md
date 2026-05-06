@@ -1,28 +1,28 @@
 # Dataset Shape Taxonomy
 
-Auto-generated classification of 1958 datasets into 12 chart-relevant clusters.
+Auto-generated classification of 1986 datasets into 12 chart-relevant clusters.
 Use this to identify chart improvement opportunities per cluster.
 
 ## Summary
 
 | # | Cluster | Count | % | Primary Chart | Description |
 |---|---------|-------|---|---------------|-------------|
-| 1 | Simple Time Series | 161 | 8.2% | line | Single indicator over time, no structural dims |
-| 2 | Categorical Time | 520 | 26.6% | small_multiples / heatmap | Time + medium-cardinality categorical dim (6-50 options) |
-| 3 | Composition (%) | 295 | 15.1% | area_stacked | Percentage unit, parts-of-whole over time |
-| 4 | Gender-Split | 107 | 5.5% | line | Binary gender breakdown over time |
-| 5 | Age Cohort | 86 | 4.4% | heatmap / grouped_bar | Age groups over time (no gender) |
-| 6 | Population Pyramid | 69 | 3.5% | population_pyramid | Age + gender over time |
-| 7 | Cartographic | 452 | 23.1% | choropleth | Geographic (county/region) + time, no demographic dims |
-| 8 | Geo + Demographic | 135 | 6.9% | choropleth / line | Geographic + gender/age/residence |
-| 9 | Urban/Rural | 84 | 4.3% | line | Residence (urban/rural) splits over time |
+| 1 | Simple Time Series | 162 | 8.2% | line | Single indicator over time, no structural dims |
+| 2 | Categorical Time | 534 | 26.9% | small_multiples / heatmap | Time + medium-cardinality categorical dim (6-50 options) |
+| 3 | Composition (%) | 297 | 15.0% | line | Percentage unit, parts-of-whole over time |
+| 4 | Gender-Split | 107 | 5.4% | line | Binary gender breakdown over time |
+| 5 | Age Cohort | 89 | 4.5% | heatmap / grouped_bar | Age groups over time (no gender) |
+| 6 | Population Pyramid | 72 | 3.6% | population_pyramid | Age + gender over time |
+| 7 | Cartographic | 454 | 22.9% | choropleth | Geographic (county/region) + time, no demographic dims |
+| 8 | Geo + Demographic | 138 | 6.9% | choropleth / line | Geographic + gender/age/residence |
+| 9 | Urban/Rural | 84 | 4.2% | line | Residence (urban/rural) splits over time |
 | 10 | Categorical Snapshot | 25 | 1.3% | grouped_bar | No time, no geo — pure categorical cross-tabs |
 | 11 | Geo Snapshot | 24 | 1.2% | choropleth | Geographic, no time dimension |
 | 12 | Edge Cases | 0 | 0.0% | varies | High-dimensional or rare combos |
 
 ## Exemplars per Cluster
 
-### 1. Simple Time Series (161 datasets)
+### 1. Simple Time Series (162 datasets)
 _Single indicator over time, no structural dims_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |
@@ -31,7 +31,7 @@ _Single indicator over time, no structural dims_
 | `SAN107A` | Asistenta medicala de urgenta, pe elemente specifice | 100.0% | 102 | volatile | ![SAN107A](chart-taxonomy/SAN107A.png) |
 | `TRN120A` | Nave de navigatie interioara, pe categorii de nave, inregist | 100.0% | 102 | volatile | ![TRN120A](chart-taxonomy/TRN120A.png) |
 
-### 2. Categorical Time (520 datasets)
+### 2. Categorical Time (534 datasets)
 _Time + medium-cardinality categorical dim (6-50 options)_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |
@@ -40,7 +40,7 @@ _Time + medium-cardinality categorical dim (6-50 options)_
 | `BUF101A` | ABF Bunuri de folosinta indelungata la 100 gospodarii | 100.0% | 136 | volatile | ![BUF101A](chart-taxonomy/BUF101A.png) |
 | `CDP102D` | Cercetatori din activitatea cercetare-dezvoltare pe domenii  | 100.0% | 203 | volatile | ![CDP102D](chart-taxonomy/CDP102D.png) |
 
-### 3. Composition (%) (295 datasets)
+### 3. Composition (%) (297 datasets)
 _Percentage unit, parts-of-whole over time_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |
@@ -58,7 +58,7 @@ _Binary gender breakdown over time_
 | `TIC113A` | Ponderea persoanelor de 16-74 ani care au utilizat internetu | 82.5% | 198 | volatile | ![TIC113A](chart-taxonomy/TIC113A.png) |
 | `CAV103A` | Structura persoanelor de 16 ani si peste dupa opinia privind | 66.7% | 102 | volatile | ![CAV103A](chart-taxonomy/CAV103A.png) |
 
-### 5. Age Cohort (86 datasets)
+### 5. Age Cohort (89 datasets)
 _Age groups over time (no gender)_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |
@@ -67,7 +67,7 @@ _Age groups over time (no gender)_
 | `CDP102H` | Cercetatori din activitatea de cercetare-dezvoltare pe grupe | 100.0% | 147 | volatile | ![CDP102H](chart-taxonomy/CDP102H.png) |
 | `POP208F` | Decedati sub 1 an cu resedinta obisnuita in Romania pe grupe | 95.7% | 286 | decreasing | ![POP208F](chart-taxonomy/POP208F.png) |
 
-### 6. Population Pyramid (69 datasets)
+### 6. Population Pyramid (72 datasets)
 _Age + gender over time_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |
@@ -76,7 +76,7 @@ _Age + gender over time_
 | `TLH1019` | Tinta 1 - Social - RATA TINERILOR NEOCUPATI CARE NU URMEAZA  | 80.0% | 408 | volatile | ![TLH1019](chart-taxonomy/TLH1019.png) |
 | `SAR118A` | Raportul dintre chintila superioara si cea inferioara S80/S2 | 66.7% | 102 | volatile | ![SAR118A](chart-taxonomy/SAR118A.png) |
 
-### 7. Cartographic (452 datasets)
+### 7. Cartographic (454 datasets)
 _Geographic (county/region) + time, no demographic dims_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |
@@ -85,7 +85,7 @@ _Geographic (county/region) + time, no demographic dims_
 | `LOC101B_judet` | Locuinte existente la sfarsitul anului pe forme de proprieta | 5156.3% | 131,073 | volatile | ![LOC101B_judet](chart-taxonomy/LOC101B_judet.png) |
 | `LOC104B_judet` | Locuinte terminate in cursul anului pe surse de finantare, j | 1295.7% | 54,188 | volatile | ![LOC104B_judet](chart-taxonomy/LOC104B_judet.png) |
 
-### 8. Geo + Demographic (135 datasets)
+### 8. Geo + Demographic (138 datasets)
 _Geographic + gender/age/residence_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |
@@ -126,45 +126,5 @@ _High-dimensional or rare combos_
 
 _No exemplars found._
 
-## Gap Analysis (Visual Audit)
-
-Findings from reviewing all 33 exemplar screenshots (2026-04-11):
-
-### High Priority
-
-| Cluster | Issue | Impact | Suggested Fix |
-|---------|-------|--------|---------------|
-| **7. Cartographic** (452, 23.1%) | Exemplars hit 50k row limit → blank chart / table fallback | Largest geo cluster renders no map | Auto-filter to latest N years; or pre-aggregate county×year totals |
-| **6. Pop Pyramid** (69, 3.5%) | Renders as line chart, not population_pyramid | Chart selector not scoring pyramid type for age+gender datasets | Fix chart_selector scoring for `has_age && has_gender` archetype |
-| **3. Composition %** (295, 15.1%) | Renders as line, should be area_stacked for percentage data | Parts-of-whole meaning lost without stacking | Boost area_stacked score when `primary_unit_type='percentage'` |
-
-### Medium Priority
-
-| Cluster | Issue | Impact | Suggested Fix |
-|---------|-------|--------|---------------|
-| **2. Categorical Time** (520, 26.6%) | Too many series cluttering line chart (6-50 options) | Largest cluster, currently unreadable with many lines | Add small_multiples or heatmap as default for >8 series |
-| **5. Age Cohort** (86, 4.4%) | Many age-group lines overlap — hard to read | Age progression pattern invisible | Default to heatmap (age × time) or grouped_bar |
-| **10. Cat Snapshot** (25, 1.3%) | Some show as line with spike instead of grouped_bar | Misleading — connects unrelated categories with line | Ensure non-time datasets get bar, not line |
-| **11. Geo Snapshot** (24, 1.2%) | Shows as line chart despite having geo dim + no time | Should be static choropleth or horizontal bar | Add geo_only → choropleth path in chart_selector |
-
-### Low Priority / Working Well
-
-| Cluster | Status | Notes |
-|---------|--------|-------|
-| **1. Simple Time Series** (161) | ✓ Good | Clean line charts, legend readable |
-| **4. Gender-Split** (107) | ✓ Adequate | Line with M/F series works. Could add butterfly bar as option |
-| **8. Geo + Demographic** (135) | ✓ Adequate | Line chart OK for multi-dim. Choropleth + facet would be ideal |
-| **9. Urban/Rural** (84) | ✓ Good | 2-3 series line works well for urban/rural comparison |
-
-### Summary of Priorities
-
-1. **Fix 50k limit for choropleth** — affects 452 datasets (23% of corpus)
-2. **Boost area_stacked for percentage data** — affects 295 datasets (15%)
-3. **Add small_multiples/heatmap for high-cardinality time** — affects 520 datasets (27%)
-4. **Fix population_pyramid selection** — affects 69 datasets (4%)
-5. **Fix snapshot chart types** — affects 49 datasets (2.5%)
-
-Total datasets with suboptimal chart: **~1,386 (71%)**
-
 ---
-_Generated by `scripts/chart-taxonomy.py`, gap analysis added manually_
+_Generated by `scripts/chart-taxonomy.py`_
