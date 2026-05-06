@@ -3,7 +3,7 @@
     "id": 1,
     "name": "Simple Time Series",
     "desc": "Single indicator over time, no structural dims",
-    "count": 247,
+    "count": 249,
     "primary_chart": "line",
     "exemplars": [
       {
@@ -33,7 +33,7 @@
     "id": 2,
     "name": "Categorical Time",
     "desc": "Time + medium-cardinality categorical dim (6-50 options)",
-    "count": 449,
+    "count": 452,
     "primary_chart": "small_multiples / heatmap",
     "exemplars": [
       {
@@ -63,7 +63,7 @@
     "id": 3,
     "name": "Composition (%)",
     "desc": "Percentage unit, parts-of-whole over time",
-    "count": 297,
+    "count": 310,
     "primary_chart": "line / small_multiples / heatmap",
     "exemplars": [
       {
@@ -123,8 +123,8 @@
     "id": 5,
     "name": "Age Cohort",
     "desc": "Age groups over time (no gender)",
-    "count": 89,
-    "primary_chart": "heatmap / grouped_bar",
+    "count": 67,
+    "primary_chart": "heatmap / grouped_bar / small_multiples / horizontal_bar",
     "exemplars": [
       {
         "matrix_code": "AGR201E",
@@ -243,7 +243,7 @@
     "id": 9,
     "name": "Urban/Rural",
     "desc": "Residence (urban/rural) splits over time",
-    "count": 84,
+    "count": 88,
     "primary_chart": "line / small_multiples / horizontal_bar",
     "exemplars": [
       {

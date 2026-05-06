@@ -354,8 +354,10 @@ def _score(chart_type: str, sig: dict) -> float:
         if has_time and very_long: s += 0.30
         # Age × Time is a classic heatmap shape (age groups stack badly as lines).
         # Skip when geo is present — choropleth is the better primary in that case.
+        # Bumped from 0.30 → 0.35 so heatmap strictly beats line (line caps at
+        # ~0.8 for pure age×time after the age-cohort penalty).
         if has_age and has_time and sig['age_count'] >= 6 and not has_gender and not has_geo:
-            s += 0.30
+            s += 0.35
         if not is_sparse: s += 0.1
         if has_time and tp >= 5: s += 0.1
         if cv > 0.5: s += 0.05

@@ -82,11 +82,35 @@ def get_max_cat_options(conn):
     return {r[0]: r[1] for r in rows}
 
 
-def classify(row, max_cat_opts):
+def get_age_options(conn):
+    """Map matrix_code → age dim option_count.
+
+    A dim is "age" when the majority of its parsed options have dim_type='age'.
+    Used to distinguish small-age datasets (3-5 groups, line-friendly) from
+    real cohort analyses (6+ groups, heatmap-friendly).
+    """
+    rows = conn.execute("""
+        WITH dim_age_votes AS (
+            SELECT d.matrix_code, d.dim_column_name, d.option_count,
+                   SUM(CASE WHEN p.dim_type = 'age' THEN 1 ELSE 0 END) AS age_votes,
+                   COUNT(*) AS total_votes
+            FROM dimensions d
+            JOIN dimension_options o ON o.dimension_id = d.dimension_id
+            LEFT JOIN dimension_options_parsed p ON o.nom_item_id = p.nom_item_id
+            GROUP BY d.matrix_code, d.dim_column_name, d.option_count
+            HAVING age_votes > total_votes / 2
+        )
+        SELECT matrix_code, MAX(option_count) FROM dim_age_votes GROUP BY matrix_code
+    """).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
+def classify(row, max_cat_opts, age_opts):
     """Assign a dataset to one of the 12 clusters."""
     arch = row["archetype"]
     mc = row["matrix_code"]
     max_opts = max_cat_opts.get(mc, 0) or 0
+    age_count = age_opts.get(mc, 0) or 0
 
     # Snapshots (no time)
     if arch == "categorical":
@@ -97,7 +121,9 @@ def classify(row, max_cat_opts):
     # Demographic clusters (check before geo since some geo datasets also have demographics)
     if row["has_age"] and row["has_gender"] and not row["has_geo"]:
         return 6  # Population Pyramid
-    if row["has_age"] and not row["has_gender"] and not row["has_geo"]:
+    # Age cohort requires meaningfully many age groups (6+). Datasets with
+    # age=2-5 are simple-time-series-with-a-few-series — line works fine.
+    if row["has_age"] and not row["has_gender"] and not row["has_geo"] and age_count >= 6:
         return 5  # Age Cohort
     if row["has_gender"] and not row["has_age"] and not row["has_geo"]:
         return 4  # Gender-Split
@@ -207,7 +233,11 @@ CLUSTER_CHARTS = {
     # when an extra categorical dim has many options. Line still ideal for
     # simple binary-gender / urban-rural pairs.
     4: "line / small_multiples / horizontal_bar",
-    5: "heatmap / grouped_bar",
+    # Cluster 5 absorbs age-cohort datasets, sometimes with extra category
+    # dimensions. Pure age × time → heatmap (matrix view); age + 6-25 cat →
+    # small_multiples is genuinely cleaner than heatmap of 3 dims; age +
+    # high-cardinality cat → horizontal_bar (ranking) is fine snapshot.
+    5: "heatmap / grouped_bar / small_multiples / horizontal_bar",
     6: "population_pyramid",
     7: "choropleth",
     8: "choropleth / line",
@@ -280,9 +310,10 @@ def main():
     print("Loading datasets...")
     df = load_datasets(conn)
     max_cat_opts = get_max_cat_options(conn)
+    age_opts = get_age_options(conn)
 
     print(f"Classifying {len(df)} datasets into 12 clusters...")
-    df["cluster"] = df.apply(lambda r: classify(r, max_cat_opts), axis=1)
+    df["cluster"] = df.apply(lambda r: classify(r, max_cat_opts, age_opts), axis=1)
 
     # Build taxonomy
     taxonomy = []

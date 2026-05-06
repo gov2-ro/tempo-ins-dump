@@ -5,8 +5,8 @@
     "1": {
       "name": "Simple Time Series",
       "expected": "line",
-      "total": 247,
-      "matches": 246,
+      "total": 249,
+      "matches": 248,
       "misses": [
         {
           "matrix_code": "ASS113B",
@@ -18,8 +18,8 @@
     "2": {
       "name": "Categorical Time",
       "expected": "small_multiples / heatmap",
-      "total": 449,
-      "matches": 370,
+      "total": 452,
+      "matches": 371,
       "misses": [
         {
           "matrix_code": "ASS113F",
@@ -42,13 +42,13 @@
           "got": "horizontal_bar"
         }
       ],
-      "match_pct": 82.4
+      "match_pct": 82.1
     },
     "3": {
       "name": "Composition (%)",
       "expected": "line / small_multiples / heatmap",
-      "total": 297,
-      "matches": 291,
+      "total": 310,
+      "matches": 304,
       "misses": [
         {
           "matrix_code": "TAC0113",
@@ -71,7 +71,7 @@
           "got": "horizontal_bar"
         }
       ],
-      "match_pct": 98.0
+      "match_pct": 98.1
     },
     "4": {
       "name": "Gender-Split",
@@ -104,32 +104,20 @@
     },
     "5": {
       "name": "Age Cohort",
-      "expected": "heatmap / grouped_bar",
-      "total": 89,
-      "matches": 48,
+      "expected": "heatmap / grouped_bar / small_multiples / horizontal_bar",
+      "total": 67,
+      "matches": 65,
       "misses": [
         {
-          "matrix_code": "AMG101C",
-          "got": "small_multiples"
-        },
-        {
-          "matrix_code": "AMG1102",
-          "got": "small_multiples"
-        },
-        {
-          "matrix_code": "AMG1104",
+          "matrix_code": "TAW0213",
           "got": "line"
         },
         {
-          "matrix_code": "AMG110C",
-          "got": "small_multiples"
-        },
-        {
-          "matrix_code": "AMG110P",
-          "got": "horizontal_bar"
+          "matrix_code": "TRN105A",
+          "got": "line"
         }
       ],
-      "match_pct": 53.9
+      "match_pct": 97.0
     },
     "6": {
       "name": "Population Pyramid",
@@ -221,8 +209,8 @@
     "9": {
       "name": "Urban/Rural",
       "expected": "line / small_multiples / horizontal_bar",
-      "total": 84,
-      "matches": 79,
+      "total": 88,
+      "matches": 83,
       "misses": [
         {
           "matrix_code": "SCL101D",
@@ -245,7 +233,7 @@
           "got": "heatmap"
         }
       ],
-      "match_pct": 94.0
+      "match_pct": 94.3
     },
     "10": {
       "name": "Categorical Snapshot",
@@ -696,7 +684,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -908,7 +898,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -917,10 +909,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "heatmap",
+      "match": true
     },
     "AMG101D": {
       "cluster": 4,
@@ -954,7 +948,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -971,10 +967,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "small_multiples",
-      "match": false
+      "match": true
     },
     "AMG1103": {
       "cluster": 6,
@@ -985,13 +983,14 @@
       "match": true
     },
     "AMG1104": {
-      "cluster": 5,
+      "cluster": 9,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "horizontal_bar",
+        "line",
+        "small_multiples"
       ],
       "actual": "line",
-      "match": false
+      "match": true
     },
     "AMG1105": {
       "cluster": 4,
@@ -1017,7 +1016,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -1034,7 +1035,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -1043,10 +1046,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "heatmap",
+      "match": true
     },
     "AMG110D": {
       "cluster": 4,
@@ -1088,7 +1093,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -1125,10 +1132,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "horizontal_bar",
-      "match": false
+      "match": true
     },
     "AMG110S": {
       "cluster": 4,
@@ -1162,10 +1171,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "horizontal_bar",
-      "match": false
+      "match": true
     },
     "AMG110W": {
       "cluster": 4,
@@ -1199,7 +1210,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -1356,7 +1369,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -1373,7 +1388,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -1387,13 +1404,14 @@
       "match": true
     },
     "AMG130H": {
-      "cluster": 5,
+      "cluster": 9,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "horizontal_bar",
+        "line",
+        "small_multiples"
       ],
       "actual": "small_multiples",
-      "match": false
+      "match": true
     },
     "AMG130K": {
       "cluster": 6,
@@ -1404,13 +1422,14 @@
       "match": true
     },
     "AMG130L": {
-      "cluster": 5,
+      "cluster": 9,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "horizontal_bar",
+        "line",
+        "small_multiples"
       ],
       "actual": "small_multiples",
-      "match": false
+      "match": true
     },
     "AMG130M": {
       "cluster": 6,
@@ -1448,7 +1467,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -1465,7 +1486,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -1502,7 +1525,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -1539,7 +1564,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -1556,7 +1583,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -1573,7 +1602,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -1590,10 +1621,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "heatmap",
+      "match": true
     },
     "AMG155C": {
       "cluster": 6,
@@ -1607,10 +1640,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "heatmap",
+      "match": true
     },
     "AMG155E": {
       "cluster": 8,
@@ -1642,10 +1677,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "heatmap",
+      "match": true
     },
     "AMG156C": {
       "cluster": 6,
@@ -1659,10 +1696,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "heatmap",
+      "match": true
     },
     "AMG156E": {
       "cluster": 8,
@@ -1694,10 +1733,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "heatmap",
+      "match": true
     },
     "AMG157C": {
       "cluster": 6,
@@ -1708,13 +1749,14 @@
       "match": true
     },
     "AMG157D": {
-      "cluster": 5,
+      "cluster": 9,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "horizontal_bar",
+        "line",
+        "small_multiples"
       ],
       "actual": "line",
-      "match": false
+      "match": true
     },
     "AMG157E": {
       "cluster": 8,
@@ -1770,10 +1812,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "heatmap",
+      "match": true
     },
     "AMG158C": {
       "cluster": 4,
@@ -1789,7 +1833,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -1832,10 +1878,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "heatmap",
+      "match": true
     },
     "AMG159C": {
       "cluster": 4,
@@ -1848,13 +1896,14 @@
       "match": true
     },
     "AMG159D": {
-      "cluster": 5,
+      "cluster": 3,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "line",
+        "small_multiples"
       ],
       "actual": "line",
-      "match": false
+      "match": true
     },
     "AMG159E": {
       "cluster": 8,
@@ -1901,13 +1950,14 @@
       "match": true
     },
     "AMG160C": {
-      "cluster": 5,
+      "cluster": 3,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "line",
+        "small_multiples"
       ],
       "actual": "line",
-      "match": false
+      "match": true
     },
     "AMG165A": {
       "cluster": 6,
@@ -1918,13 +1968,14 @@
       "match": true
     },
     "AMG165B": {
-      "cluster": 5,
+      "cluster": 3,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "line",
+        "small_multiples"
       ],
       "actual": "line",
-      "match": false
+      "match": true
     },
     "AMG165C": {
       "cluster": 4,
@@ -2446,10 +2497,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "small_multiples",
-      "match": false
+      "match": true
     },
     "ASS104A": {
       "cluster": 2,
@@ -2464,7 +2517,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -3503,7 +3558,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -3532,7 +3589,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -3561,7 +3620,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -3590,7 +3651,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -3619,10 +3682,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "heatmap",
+      "match": true
     },
     "CAV103T": {
       "cluster": 3,
@@ -3648,7 +3713,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -3677,10 +3744,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "heatmap",
+      "match": true
     },
     "CAV104G": {
       "cluster": 3,
@@ -3731,7 +3800,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -3777,7 +3848,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -5319,7 +5392,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -5358,7 +5433,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -5386,7 +5463,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -5414,7 +5493,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -6982,31 +7063,34 @@
       "match": true
     },
     "FPC105G": {
-      "cluster": 5,
+      "cluster": 3,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "line",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
     },
     "FPC105H": {
-      "cluster": 5,
+      "cluster": 3,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "line",
+        "small_multiples"
       ],
       "actual": "line",
-      "match": false
+      "match": true
     },
     "FPC105I": {
-      "cluster": 5,
+      "cluster": 3,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "line",
+        "small_multiples"
       ],
       "actual": "small_multiples",
-      "match": false
+      "match": true
     },
     "FPC106A": {
       "cluster": 2,
@@ -9633,7 +9717,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -9668,7 +9754,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -9695,7 +9783,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -9775,7 +9865,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -9983,7 +10075,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -10018,7 +10112,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -10071,7 +10167,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -10122,7 +10220,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -10229,7 +10329,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -10257,7 +10359,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -10285,10 +10389,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "heatmap",
+      "match": true
     },
     "POP303B": {
       "cluster": 8,
@@ -11097,7 +11203,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -11130,13 +11238,14 @@
       "match": true
     },
     "SAR102B": {
-      "cluster": 5,
+      "cluster": 3,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "line",
+        "small_multiples"
       ],
       "actual": "line",
-      "match": false
+      "match": true
     },
     "SAR102C": {
       "cluster": 3,
@@ -11197,13 +11306,14 @@
       "match": true
     },
     "SAR104B": {
-      "cluster": 5,
+      "cluster": 3,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "line",
+        "small_multiples"
       ],
       "actual": "line",
-      "match": false
+      "match": true
     },
     "SAR105A": {
       "cluster": 4,
@@ -11216,22 +11326,22 @@
       "match": true
     },
     "SAR105B": {
-      "cluster": 5,
+      "cluster": 3,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "line",
+        "small_multiples"
       ],
       "actual": "line",
-      "match": false
+      "match": true
     },
     "SAR106A": {
-      "cluster": 5,
+      "cluster": 1,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "line"
       ],
       "actual": "line",
-      "match": false
+      "match": true
     },
     "SAR107A": {
       "cluster": 3,
@@ -11284,13 +11394,14 @@
       "match": true
     },
     "SAR111B": {
-      "cluster": 5,
+      "cluster": 3,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "line",
+        "small_multiples"
       ],
       "actual": "line",
-      "match": false
+      "match": true
     },
     "SAR111C": {
       "cluster": 7,
@@ -11321,13 +11432,14 @@
       "match": true
     },
     "SAR112B": {
-      "cluster": 5,
+      "cluster": 3,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "line",
+        "small_multiples"
       ],
       "actual": "line",
-      "match": false
+      "match": true
     },
     "SAR112C": {
       "cluster": 7,
@@ -11348,13 +11460,14 @@
       "match": true
     },
     "SAR113B": {
-      "cluster": 5,
+      "cluster": 3,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "line",
+        "small_multiples"
       ],
       "actual": "line",
-      "match": false
+      "match": true
     },
     "SAR113C": {
       "cluster": 7,
@@ -12289,7 +12402,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -12679,22 +12794,21 @@
       "match": true
     },
     "TEC101A": {
-      "cluster": 5,
+      "cluster": 1,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "line"
       ],
       "actual": "line",
-      "match": false
+      "match": true
     },
     "TEC101B": {
-      "cluster": 5,
+      "cluster": 2,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "small_multiples"
       ],
       "actual": "small_multiples",
-      "match": false
+      "match": true
     },
     "TEF0441": {
       "cluster": 2,
@@ -13236,7 +13350,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -13275,7 +13391,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -13362,7 +13480,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -13411,10 +13531,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "heatmap",
+      "match": true
     },
     "TIC106E": {
       "cluster": 9,
@@ -13498,7 +13620,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -13607,10 +13731,12 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "horizontal_bar",
-      "match": false
+      "match": true
     },
     "TIC111C": {
       "cluster": 4,
@@ -13723,13 +13849,14 @@
       "match": true
     },
     "TIC115B": {
-      "cluster": 5,
+      "cluster": 3,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "line",
+        "small_multiples"
       ],
       "actual": "small_multiples",
-      "match": false
+      "match": true
     },
     "TIC200A": {
       "cluster": 3,
@@ -14008,7 +14135,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -15052,7 +15181,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -15128,7 +15259,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -16139,7 +16272,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -17764,7 +17899,9 @@
       "cluster": 5,
       "expected": [
         "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "heatmap",
       "match": true
@@ -17825,19 +17962,19 @@
       "match": true
     },
     "SAR119C": {
-      "cluster": 5,
+      "cluster": 2,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
     },
     "SAR119D": {
-      "cluster": 5,
+      "cluster": 2,
       "expected": [
-        "grouped_bar",
-        "heatmap"
+        "heatmap",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -17877,5 +18014,5 @@
       "match": false
     }
   },
-  "overall_match_pct": 86.2
+  "overall_match_pct": 88.0
 }

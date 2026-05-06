@@ -7,22 +7,22 @@ Use this to identify chart improvement opportunities per cluster.
 
 | # | Cluster | Count | % | Primary Chart | Description |
 |---|---------|-------|---|---------------|-------------|
-| 1 | Simple Time Series | 247 | 12.4% | line | Single indicator over time, no structural dims |
-| 2 | Categorical Time | 449 | 22.6% | small_multiples / heatmap | Time + medium-cardinality categorical dim (6-50 options) |
-| 3 | Composition (%) | 297 | 15.0% | line / small_multiples / heatmap | Percentage unit, parts-of-whole over time |
+| 1 | Simple Time Series | 249 | 12.5% | line | Single indicator over time, no structural dims |
+| 2 | Categorical Time | 452 | 22.8% | small_multiples / heatmap | Time + medium-cardinality categorical dim (6-50 options) |
+| 3 | Composition (%) | 310 | 15.6% | line / small_multiples / heatmap | Percentage unit, parts-of-whole over time |
 | 4 | Gender-Split | 107 | 5.4% | line / small_multiples / horizontal_bar | Binary gender breakdown over time |
-| 5 | Age Cohort | 89 | 4.5% | heatmap / grouped_bar | Age groups over time (no gender) |
+| 5 | Age Cohort | 67 | 3.4% | heatmap / grouped_bar / small_multiples / horizontal_bar | Age groups over time (no gender) |
 | 6 | Population Pyramid | 72 | 3.6% | population_pyramid | Age + gender over time |
 | 7 | Cartographic | 454 | 22.9% | choropleth | Geographic (county/region) + time, no demographic dims |
 | 8 | Geo + Demographic | 138 | 6.9% | choropleth / line | Geographic + gender/age/residence |
-| 9 | Urban/Rural | 84 | 4.2% | line / small_multiples / horizontal_bar | Residence (urban/rural) splits over time |
+| 9 | Urban/Rural | 88 | 4.4% | line / small_multiples / horizontal_bar | Residence (urban/rural) splits over time |
 | 10 | Categorical Snapshot | 25 | 1.3% | grouped_bar / horizontal_bar / bar_vertical | No time, no geo — pure categorical cross-tabs |
 | 11 | Geo Snapshot | 24 | 1.2% | choropleth | Geographic, no time dimension |
 | 12 | Edge Cases | 0 | 0.0% | varies | High-dimensional or rare combos |
 
 ## Exemplars per Cluster
 
-### 1. Simple Time Series (247 datasets)
+### 1. Simple Time Series (249 datasets)
 _Single indicator over time, no structural dims_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |
@@ -31,7 +31,7 @@ _Single indicator over time, no structural dims_
 | `SAN107A` | Asistenta medicala de urgenta, pe elemente specifice | 100.0% | 102 | volatile | ![SAN107A](chart-taxonomy/SAN107A.png) |
 | `TRN120A` | Nave de navigatie interioara, pe categorii de nave, inregist | 100.0% | 102 | volatile | ![TRN120A](chart-taxonomy/TRN120A.png) |
 
-### 2. Categorical Time (449 datasets)
+### 2. Categorical Time (452 datasets)
 _Time + medium-cardinality categorical dim (6-50 options)_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |
@@ -40,7 +40,7 @@ _Time + medium-cardinality categorical dim (6-50 options)_
 | `BUF101A` | ABF Bunuri de folosinta indelungata la 100 gospodarii | 100.0% | 136 | volatile | ![BUF101A](chart-taxonomy/BUF101A.png) |
 | `CDP102D` | Cercetatori din activitatea cercetare-dezvoltare pe domenii  | 100.0% | 203 | volatile | ![CDP102D](chart-taxonomy/CDP102D.png) |
 
-### 3. Composition (%) (297 datasets)
+### 3. Composition (%) (310 datasets)
 _Percentage unit, parts-of-whole over time_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |
@@ -58,7 +58,7 @@ _Binary gender breakdown over time_
 | `TIC113A` | Ponderea persoanelor de 16-74 ani care au utilizat internetu | 82.5% | 198 | volatile | ![TIC113A](chart-taxonomy/TIC113A.png) |
 | `CAV103A` | Structura persoanelor de 16 ani si peste dupa opinia privind | 66.7% | 102 | volatile | ![CAV103A](chart-taxonomy/CAV103A.png) |
 
-### 5. Age Cohort (89 datasets)
+### 5. Age Cohort (67 datasets)
 _Age groups over time (no gender)_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |
@@ -94,7 +94,7 @@ _Geographic + gender/age/residence_
 | `POP203C` | Rata de fertilitate pentru nascutii-vii cu resedinta obisnui | 86.4% | 3,640 | volatile | ![POP203C](chart-taxonomy/POP203C.png) |
 | `TAN0131` | Tinta 3 - Mediu - Numarul de interventii ale Inspectoratului | 81.3% | 3,485 | increasing | ![TAN0131](chart-taxonomy/TAN0131.png) |
 
-### 9. Urban/Rural (84 datasets)
+### 9. Urban/Rural (88 datasets)
 _Residence (urban/rural) splits over time_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |
