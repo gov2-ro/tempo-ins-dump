@@ -220,23 +220,30 @@ def _score(chart_type: str, sig: dict) -> float:
         small_series = [d for d in cat_dims if d['count'] <= 6]
         if small_series: s += 0.1
         elif len(cat_dims) == 0 and has_residence: s += 0.1
+        # Penalty: too many overlapping series — line becomes unreadable, prefer small_multiples
+        if any(d['count'] > 8 for d in cat_dims): s -= 0.15
         # Seasonality: line is THE chart for seasonal data
         if sig['has_seasonality']: s += 0.15
         if sig['time_granularity'] in ('monthly', 'quarterly'): s += 0.05
-        # Unit affinity: rates/indices are best shown as lines
-        if unit in ('rate', 'ratio', 'index'): s += 0.1
-        return min(s, 1.0)
+        # Unit affinity: rates/indices/percentages are best shown as lines.
+        # Most "percentage" data is rates/shares/indices, not parts-of-whole.
+        if unit in ('rate', 'ratio', 'index', 'percentage'): s += 0.1
+        return min(max(s, 0.0), 1.0)
 
     if chart_type == 'area_stacked':
-        s = 0.4  # raised base — area_stacked was chronically underscored
+        # Default-low: area_stacked is good ONLY for true parts-of-whole.
+        # Most "percentage" data (rates, indices, shares of independent
+        # populations) is NOT parts-of-whole — line is better. Audit found
+        # ~92% of percentage datasets in this corpus are not compositions.
+        s = 0.35
         series = [d for d in cat_dims if d['count'] <= 8]
-        if series: s += 0.15
+        if series: s += 0.1
         if 3 <= (series[0]['count'] if series else 0) <= 6: s += 0.1
         if tp >= 8: s += 0.1
-        # Unit affinity: percentage data = parts-of-whole → area_stacked is ideal
-        if unit == 'percentage' and series:
-            s += 0.2
-            if 2 <= series[0]['count'] <= 6: s += 0.1  # perfect 100% stacking
+        # Tiny boost only when shape strongly suggests parts-of-whole:
+        # percentage unit AND a small categorical series (2-4 options).
+        if unit == 'percentage' and series and 2 <= series[0]['count'] <= 4:
+            s += 0.05
         # Sparse data makes stacked charts misleading (gaps look like zero)
         if is_sparse: s -= 0.15
         return min(max(s, 0.0), 1.0)
@@ -299,6 +306,9 @@ def _score(chart_type: str, sig: dict) -> float:
         elif geo >= 10: s += 0.05
         if 'county' in geo_levels: s += 0.05
         if has_time: s += 0.05
+        # Geo + demographic combo: choropleth is the natural primary,
+        # demographic dim becomes a filter rather than a series.
+        if has_age or has_gender or has_residence: s += 0.15
         if is_sparse: s -= 0.10
         return min(max(s, 0.0), 1.0)
 
@@ -306,7 +316,9 @@ def _score(chart_type: str, sig: dict) -> float:
         s = 0.0
         if has_age and has_gender:
             s = 0.7
+            # 2 = M+F (ideal); 3 = M+F+Total (still pyramid-friendly, Total filtered at render)
             if gender_count == 2: s += 0.2
+            elif gender_count == 3: s += 0.15
             if sig['age_count'] >= 5: s += 0.1
         return min(s, 1.0)
 
@@ -315,19 +327,25 @@ def _score(chart_type: str, sig: dict) -> float:
         dims_10_30 = [d for d in cat_dims if 10 <= d['count'] <= 30]
         if len(dims_10_30) >= 2: s += 0.3
         elif len(dims_10_30) == 1: s += 0.15
+        # Age × Time is a classic heatmap shape (age groups stack badly as lines).
+        # Skip when geo is present — choropleth is the better primary in that case.
+        if has_age and has_time and sig['age_count'] >= 6 and not has_gender and not has_geo:
+            s += 0.30
         if not is_sparse: s += 0.1
         if has_time and tp >= 5: s += 0.1
         if cv > 0.5: s += 0.05
         return min(s, 1.0)
 
     if chart_type == 'small_multiples':
-        s = 0.3
+        s = 0.35
         facet_dims = [d for d in cat_dims if 6 < d['count'] <= 16]
-        if facet_dims: s += 0.25
+        if facet_dims: s += 0.35
         elif facet_dims := [d for d in cat_dims if 6 < d['count'] <= 25]:
-            s += 0.15
+            s += 0.25
         if has_geo and 6 < geo <= 16: s += 0.2
-        if tp >= 5: s += 0.1
+        # Time series matter most for facets — strong bonus when present
+        if has_time and tp >= 5: s += 0.15
+        elif has_time and tp >= 3: s += 0.1
         # Sparse data: many facets will be mostly empty
         if is_sparse: s -= 0.10
         return min(max(s, 0.0), 1.0)
