@@ -87,11 +87,14 @@ def get_dataset_data(
             if d['dim_column_name'].endswith('_nom_id'):
                 d['dim_column_name'] = col_map.get(d['dim_column_name'], d['dim_column_name'])
 
-    # Auto time-window for very large datasets to prevent OOM during parquet scan.
-    # Even with GROUP BY, DuckDB must read the full file without a filter pushdown.
-    TIME_WINDOW_THRESHOLD = 500_000
+    # Auto time-window when projected result would exceed MAX_DATA_ROWS and
+    # the user hasn't already constrained time. Skip when group_by is set —
+    # that already aggregates row count down. Threshold matches the row cap
+    # so we limit periods *before* the result gets silently truncated; the
+    # frontend can still page through earlier periods via the period browser.
+    TIME_WINDOW_THRESHOLD = MAX_DATA_ROWS
     time_windowed = False
-    if row_count > TIME_WINDOW_THRESHOLD:
+    if row_count > TIME_WINDOW_THRESHOLD and not group_by_cols:
         time_dim = next((d['dim_column_name'] for d in dimensions
                          if d['dim_column_name'] == 'TIME_PERIOD'), None)
         if time_dim and time_dim not in filter_dict:

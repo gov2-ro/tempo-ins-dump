@@ -4,6 +4,10 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Data pipeline
+- [ ] **Cartographic blank issue — legacy parquet column format**: ~452 cluster-7 (cartographic) datasets are flagged in `docs/chart-taxonomy.md` as rendering blank. Investigation: split sub-datasets like `LOC103B_judet` keep the v2-style parquet schema (`judete_nom_id`, `perioade_nom_id`, `value`) instead of SDMX-canonical (`REF_AREA`, `TIME_PERIOD`, `OBS_VALUE`). `dataset_data.py:77-88` rewrites `dim_column_name` in the dimensions list but `query_builder.py` still hardcodes `"OBS_VALUE"` in the SELECT — so SQL fails for these. Either rebuild affected parquets via `12-parquet-to-sdmx.py` for split children, or teach `query_builder` to consult `sdmx_column_map` and rewrite both dim names and the value column.
+- [ ] **Foreign-country geo classification**: `10-classify-dimensions.py` flags 410 unknown geo labels — the bulk are foreign country names (Franta, Germania, Italia, etc.) used in international comparison datasets. Add a `country` geo level (vs current county/region/macroregion) so these classify correctly.
+
 ## UI / Navigation
 - [ ] **Dimension Browser — language support** — dimension labels in the `dimensions` table are Romanian-only (no `lang` column in the actual DB). For EN lang, either: (a) add an `en` row per dim by translating labels during pipeline, or (b) fall back to Romanian labels with a note. The `dims-explorer.js` already passes `lang` to `getDatasets` for dataset names but dimension labels stay in Romanian regardless.
 - [x] add static pages - how do we treat translations?
