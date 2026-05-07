@@ -8,17 +8,41 @@ function alignToYears(seriesData, years) {
     return years.map(y => map[y] ?? null);
 }
 
+const THEMES = [
+  { id: 'demografie',   label: 'Demografie',      icon: '👥',
+    kpi_labels: ['Populație rezidentă', 'Rata natalității', 'Rata mortalității'],
+    categories: ['Populație', 'Demografie', 'Natalitate', 'Mortalitate', 'Decese', 'Fertilitate'] },
+  { id: 'munca',        label: 'Forță de muncă',  icon: '💼',
+    kpi_labels: ['Rata șomajului BIM', 'Câștig salarial net mediu lunar'],
+    categories: ['Forța de muncă', 'Muncă', 'Salarii', 'Șomaj', 'Ocupare'] },
+  { id: 'economie',     label: 'Economie',        icon: '📈',
+    kpi_labels: [],
+    categories: ['Economie', 'Conturi naționale', 'Prețuri', 'Finanțe', 'Comerț'] },
+  { id: 'educatie',     label: 'Educație',        icon: '🎓',
+    kpi_labels: [],
+    categories: ['Educație', 'Învățământ', 'Școli', 'Elevi'] },
+  { id: 'sanatate',     label: 'Sănătate',        icon: '🏥',
+    kpi_labels: [],
+    categories: ['Sănătate', 'Asistență medicală', 'Spitale'] },
+  { id: 'agricultura',  label: 'Agricultură',     icon: '🌾',
+    kpi_labels: [],
+    categories: ['Agricultură', 'Silvicultură', 'Fond funciar'] },
+  { id: 'industrie',    label: 'Industrie',       icon: '🏭',
+    kpi_labels: [],
+    categories: ['Industrie', 'Producție industrială', 'Construcții'] },
+  { id: 'turism',       label: 'Turism',          icon: '🏨',
+    kpi_labels: [],
+    categories: ['Turism', 'Cazare', 'Hoteluri'] },
+];
+
 class PlaceProfileApp {
     constructor() {
         this.data = null;
         this.activeKpiIndex = 0;
         this.activePeers = new Set();
-        this.activeCategory = 'all';
         this.comparisonChart = null;
         this.comparisonData = {};  // kpi_label → {series_name: [{year, value}]}
         this.sparklines = [];
-        this.itemsPerPage = 25;
-        this.currentPage = 1;
     }
 
     async init() {
@@ -47,6 +71,11 @@ class PlaceProfileApp {
 
         document.getElementById('place-loading').style.display = 'none';
         document.getElementById('place-content').style.display = 'block';
+
+        // Fix ECharts width: container was display:none during init, needs resize now that it's visible
+        if (this.comparisonChart) {
+            setTimeout(() => this.comparisonChart.resize(), 0);
+        }
 
         document.title = `${this.data.place.name} — INS+`;
     }
@@ -129,82 +158,109 @@ class PlaceProfileApp {
     }
 
     _renderIndicatorGrid() {
+        // Legacy - replaced by _renderThemes. Keep name for now, delegate to new method.
+        this._renderThemes();
+    }
+
+    _renderThemes() {
         const { datasets } = this.data;
-        const categories = ['all', ...new Set(datasets.map(d => d.category))].sort((a, b) =>
-            a === 'all' ? -1 : b === 'all' ? 1 : a.localeCompare(b, 'ro')
+        const grid = document.getElementById('indicator-grid');
+        let html = '';
+
+        for (const theme of THEMES) {
+            const themeDatasets = datasets.filter(d =>
+                theme.categories.some(cat => d.category.toLowerCase().includes(cat.toLowerCase()))
+            );
+            const themeKpis = theme.kpi_labels
+                .map(label => this.data.kpis.find(k => k.label === label))
+                .filter(Boolean);
+
+            if (themeDatasets.length === 0 && themeKpis.length === 0) continue;
+
+            const chartsHtml = themeKpis.slice(0, 3).map((kpi, i) => `
+                <div class="mini-chart-cell">
+                    <div class="mini-chart-title">${_esc(kpi.label)}</div>
+                    <div class="mini-chart-canvas" id="mini-${theme.id}-${i}"></div>
+                    <div class="mini-chart-stat">${kpi.value != null ? kpi.value.toLocaleString('ro-RO') : '—'} ${_esc(kpi.unit)}</div>
+                </div>
+            `).join('');
+
+            const accordionItems = themeDatasets.map(d => `
+                <a class="accordion-item" href="/dataset/${d.code}?place=${encodeURIComponent(this.placeSlug)}">
+                    <span class="acc-title">${_esc(d.title)}</span>
+                    <span class="acc-code">${_esc(d.code)}</span>
+                </a>
+            `).join('');
+
+            html += `
+                <div class="theme-section" id="theme-${theme.id}">
+                    <div class="theme-header" onclick="app._toggleThemeAccordion('${theme.id}')">
+                        <span class="theme-icon">${theme.icon}</span>
+                        <span class="theme-label">${theme.label}</span>
+                        <span class="theme-count">${themeDatasets.length}</span>
+                        <span class="theme-chevron">▼</span>
+                    </div>
+                    ${chartsHtml ? `<div class="theme-charts">${chartsHtml}</div>` : ''}
+                    <div class="theme-accordion hidden" id="accordion-${theme.id}">
+                        ${accordionItems}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Catch-all for datasets not in any theme
+        const unmatchedDatasets = datasets.filter(d =>
+            !THEMES.some(theme =>
+                theme.categories.some(cat => d.category.toLowerCase().includes(cat.toLowerCase()))
+            )
         );
 
-        const chips = document.getElementById('category-chips');
-        chips.innerHTML = categories.map(cat => {
-            const label = cat === 'all' ? 'Toate' : cat;
-            return `<div class="cat-chip ${cat === 'all' ? 'active' : ''}"
-                        data-cat="${_esc(cat)}"
-                        onclick="app._filterCategory('${_esc(cat)}')">${_esc(label)}</div>`;
-        }).join('');
+        if (unmatchedDatasets.length > 0) {
+            const items = unmatchedDatasets.map(d => `
+                <a class="accordion-item" href="/dataset/${d.code}?place=${encodeURIComponent(this.placeSlug)}">
+                    <span class="acc-title">${_esc(d.title)}</span>
+                    <span class="acc-code">${_esc(d.code)}</span>
+                </a>
+            `).join('');
 
-        this._renderDatasetCards(datasets);
-    }
-
-    _filterCategory(cat) {
-        this.activeCategory = cat;
-        this.currentPage = 1;
-        document.querySelectorAll('.cat-chip').forEach(el => {
-            el.classList.toggle('active', el.dataset.cat === cat);
-        });
-        const filtered = cat === 'all'
-            ? this.data.datasets
-            : this.data.datasets.filter(d => d.category === cat);
-        this._renderDatasetCards(filtered);
-        setTimeout(() => {
-            document.getElementById('indicator-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 100);
-    }
-
-    _renderDatasetCards(datasets) {
-        const grid = document.getElementById('indicator-grid');
-        const totalPages = Math.ceil(datasets.length / this.itemsPerPage);
-        const start = (this.currentPage - 1) * this.itemsPerPage;
-        const end = start + this.itemsPerPage;
-        const pageDatasets = datasets.slice(start, end);
-
-        let html = pageDatasets.map(d => {
-            if (!d.has_data) {
-                return `<div class="ind-card no-data">
-                    <div class="ind-title">${_esc(d.title)}</div>
-                    <div class="no-data-label">fără date</div>
-                </div>`;
-            }
-            return `<a class="ind-card"
-                       href="/dataset/${d.code}?place=${encodeURIComponent(this.placeSlug)}"
-                       title="${_esc(d.title)}">
-                <div class="ind-title">${_esc(d.title)}</div>
-            </a>`;
-        }).join('');
-
-        if (datasets.length > this.itemsPerPage) {
-            const pageButtons = [];
-            for (let i = 1; i <= totalPages; i++) {
-                pageButtons.push(`<button class="pagination-btn ${i === this.currentPage ? 'active' : ''}"
-                    onclick="window.app._goToPage(${i}, ${datasets.length})">${i}</button>`);
-            }
-            html += `<div class="pagination">${pageButtons.join('')}</div>`;
+            html += `
+                <div class="theme-section" id="theme-altele">
+                    <div class="theme-header" onclick="app._toggleThemeAccordion('altele')">
+                        <span class="theme-icon">📋</span>
+                        <span class="theme-label">Alte seturi de date</span>
+                        <span class="theme-count">${unmatchedDatasets.length}</span>
+                        <span class="theme-chevron">▼</span>
+                    </div>
+                    <div class="theme-accordion hidden" id="accordion-altele">
+                        ${items}
+                    </div>
+                </div>
+            `;
         }
 
         grid.innerHTML = html;
+
+        // Render mini charts
+        requestAnimationFrame(() => {
+            for (const theme of THEMES) {
+                const themeKpis = theme.kpi_labels
+                    .map(label => this.data.kpis.find(k => k.label === label))
+                    .filter(Boolean)
+                    .slice(0, 3);
+                themeKpis.forEach((kpi, i) => {
+                    this._renderSparkline(`mini-${theme.id}-${i}`, kpi.sparkline);
+                });
+            }
+        });
     }
 
-    _goToPage(page, totalDatasets) {
-        const totalPages = Math.ceil(totalDatasets / this.itemsPerPage);
-        if (page >= 1 && page <= totalPages) {
-            this.currentPage = page;
-            const filtered = this.activeCategory === 'all'
-                ? this.data.datasets
-                : this.data.datasets.filter(d => d.category === this.activeCategory);
-            this._renderDatasetCards(filtered);
-            setTimeout(() => {
-                document.getElementById('indicator-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 100);
-        }
+    _toggleThemeAccordion(id) {
+        const accordion = document.getElementById(`accordion-${id}`);
+        const chevron = document.querySelector(`#theme-${id} .theme-chevron`);
+        if (!accordion) return;
+        const isOpen = !accordion.classList.contains('hidden');
+        accordion.classList.toggle('hidden', isOpen);
+        chevron.textContent = isOpen ? '▼' : '▲';
     }
 
     _renderComparison() {

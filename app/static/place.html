@@ -36,39 +36,32 @@
         .kpi-delta.down { color:#f87171; }
         .kpi-sparkline { height:32px; margin-top:0.4rem; }
 
-        /* Indicator Grid */
+        /* Theme Sections */
         .section-title {
             font-size:0.875rem; font-weight:600; text-transform:uppercase;
             letter-spacing:0.05em; color:var(--text-muted); margin:1.5rem 0 0.75rem;
         }
-        .category-chips { display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:1rem; }
-        .cat-chip {
-            padding:0.3rem 0.75rem; border-radius:12px; font-size:0.8rem; cursor:pointer;
-            background:var(--card-bg); border:1px solid var(--border); color:var(--text-muted);
-            transition:all 0.15s; max-width:300px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-        }
-        .cat-chip.active { background:var(--accent,#3b82f6); color:#fff; border-color:var(--accent); }
-        .indicator-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:0.6rem; }
-        .ind-card {
-            background:var(--card-bg); border:1px solid var(--border);
-            border-radius:6px; padding:0.6rem 0.75rem; cursor:pointer;
-            text-decoration:none; transition:border-color 0.15s;
-        }
-        .ind-card:hover { border-color:var(--accent); }
-        .ind-card.no-data { opacity:0.45; cursor:default; pointer-events:none; }
-        .ind-title { font-size:0.78rem; color:var(--text-primary); line-height:1.3; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-        .ind-sparkline { height:24px; margin-top:0.4rem; }
-        .no-data-label { font-size:0.72rem; color:var(--text-muted); margin-top:0.4rem; }
-
-        /* Pagination */
-        .pagination { display:flex; justify-content:center; gap:0.4rem; margin-top:1.5rem; flex-wrap:wrap; }
-        .pagination-btn {
-            padding:0.4rem 0.7rem; border-radius:4px; border:1px solid var(--border);
-            background:var(--card-bg); color:var(--text-primary); cursor:pointer;
-            font-size:0.8rem; transition:all 0.15s;
-        }
-        .pagination-btn:hover { border-color:var(--accent,#3b82f6); }
-        .pagination-btn.active { background:var(--accent,#3b82f6); color:#fff; border-color:var(--accent); }
+        .indicator-grid { display:flex; flex-direction:column; gap:0.75rem; }
+        .theme-section { border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+        .theme-header { display:flex; align-items:center; gap:0.6rem; padding:0.75rem 1rem; cursor:pointer; background:var(--card-bg); transition:background 0.1s; }
+        .theme-header:hover { background:rgba(255,255,255,0.03); }
+        .theme-icon { font-size:1.1rem; }
+        .theme-label { font-weight:600; font-size:0.9rem; color:var(--text-primary); flex:1; }
+        .theme-count { font-size:0.75rem; color:var(--text-muted); background:var(--border); padding:0.1rem 0.5rem; border-radius:10px; }
+        .theme-chevron { font-size:0.7rem; color:var(--text-muted); transition:transform 0.15s; }
+        .theme-charts { display:grid; grid-template-columns:repeat(3,1fr); gap:0; border-top:1px solid var(--border); }
+        .mini-chart-cell { padding:0.75rem; border-right:1px solid var(--border); }
+        .mini-chart-cell:last-child { border-right:none; }
+        .mini-chart-title { font-size:0.7rem; color:var(--text-muted); margin-bottom:0.25rem; }
+        .mini-chart-canvas { height:60px; }
+        .mini-chart-stat { font-size:0.9rem; font-weight:600; color:var(--text-primary); margin-top:0.2rem; }
+        .theme-accordion { border-top:1px solid var(--border); }
+        .theme-accordion.hidden { display:none; }
+        .accordion-item { display:flex; align-items:center; gap:0.75rem; padding:0.5rem 1rem; text-decoration:none; border-bottom:1px solid var(--border); color:var(--text-primary); transition:background 0.1s; }
+        .accordion-item:hover { background:rgba(255,255,255,0.03); }
+        .accordion-item:last-child { border-bottom:none; }
+        .acc-title { flex:1; font-size:0.8rem; line-height:1.3; }
+        .acc-code { font-size:0.7rem; color:var(--text-muted); font-family:monospace; white-space:nowrap; }
 
         /* Comparison */
         .comparison-section { margin-top:2rem; }
@@ -117,9 +110,8 @@
             </div>
             <div class="kpi-grid" id="kpi-grid"></div>
 
-            <!-- Section B: Indicator Grid -->
-            <div class="section-title">Indicatori disponibili</div>
-            <div class="category-chips" id="category-chips"></div>
+            <!-- Section B: Themed Sections -->
+            <div class="section-title">Seturi de date pe teme</div>
             <div class="indicator-grid" id="indicator-grid"></div>
 
             <!-- Section C: Comparison -->
