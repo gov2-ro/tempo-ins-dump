@@ -24,6 +24,11 @@ see also [charting-ideas.md](charting-ideas.md)
 - [ ] create a release log. how? backwards? 
 - [ ] cleanup, refactor folders, move most scripts in a folder (`scripts`?) - and current scripts into `utils`?
 
+## Geographic profiles
+- [ ] **Place profiles: norm by population toggle** — On any absolute-count KPI/indicator chart in place profiles, add a "per 1,000 population" toggle. Requires population lookup for place + year from `POP105A_judete_grupe.parquet` (or equivalent). Affects `place-page.js` KPI cards and indicator grid sparklines. Spec: `docs/superpowers/specs/2026-05-07-place-profiles-design.md`.
+- [ ] **Place profiles: choropleth click-through** — Clicking a county on any choropleth map should open `/place/county/{slug}` in addition to (or instead of) the current filter behaviour. Add click handler in `app/static/js/chart-geo.js`.
+- [ ] **Place profiles: dataset page cross-link** — When a dataset is filtered to a single county via `?place={slug}`, show a "Profil {name}" link in the dataset page header. Modify `app/static/js/dataset-page.js`.
+
 ## Misc
 - [x] research data dissemination, where could we expose the data. Kaggle, Hugging Face, torrent, Jupyter notebooks or similar? Could we set an automatic pipeline to update data when it updates?
 - [ ] check if all the datasets are in Tempo Online or also other sources from INS

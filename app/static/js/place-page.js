@@ -17,6 +17,8 @@ class PlaceProfileApp {
         this.comparisonChart = null;
         this.comparisonData = {};  // kpi_label → {series_name: [{year, value}]}
         this.sparklines = [];
+        this.itemsPerPage = 25;
+        this.currentPage = 1;
     }
 
     async init() {
@@ -87,8 +89,10 @@ class PlaceProfileApp {
                 </div>`;
         }).join('');
 
-        this.data.kpis.forEach((kpi, i) => {
-            this._renderSparkline(`kpi-spark-${i}`, kpi.sparkline);
+        requestAnimationFrame(() => {
+            this.data.kpis.forEach((kpi, i) => {
+                this._renderSparkline(`kpi-spark-${i}`, kpi.sparkline);
+            });
         });
     }
 
@@ -111,6 +115,7 @@ class PlaceProfileApp {
                 areaStyle: { color: 'rgba(59,130,246,0.1)' },
             }],
         });
+        setTimeout(() => chart.resize(), 0);
     }
 
     _selectKpi(index) {
@@ -142,6 +147,7 @@ class PlaceProfileApp {
 
     _filterCategory(cat) {
         this.activeCategory = cat;
+        this.currentPage = 1;
         document.querySelectorAll('.cat-chip').forEach(el => {
             el.classList.toggle('active', el.dataset.cat === cat);
         });
@@ -149,11 +155,19 @@ class PlaceProfileApp {
             ? this.data.datasets
             : this.data.datasets.filter(d => d.category === cat);
         this._renderDatasetCards(filtered);
+        setTimeout(() => {
+            document.getElementById('indicator-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
     }
 
     _renderDatasetCards(datasets) {
         const grid = document.getElementById('indicator-grid');
-        grid.innerHTML = datasets.map(d => {
+        const totalPages = Math.ceil(datasets.length / this.itemsPerPage);
+        const start = (this.currentPage - 1) * this.itemsPerPage;
+        const end = start + this.itemsPerPage;
+        const pageDatasets = datasets.slice(start, end);
+
+        let html = pageDatasets.map(d => {
             if (!d.has_data) {
                 return `<div class="ind-card no-data">
                     <div class="ind-title">${_esc(d.title)}</div>
@@ -166,6 +180,31 @@ class PlaceProfileApp {
                 <div class="ind-title">${_esc(d.title)}</div>
             </a>`;
         }).join('');
+
+        if (datasets.length > this.itemsPerPage) {
+            const pageButtons = [];
+            for (let i = 1; i <= totalPages; i++) {
+                pageButtons.push(`<button class="pagination-btn ${i === this.currentPage ? 'active' : ''}"
+                    onclick="window.app._goToPage(${i}, ${datasets.length})">${i}</button>`);
+            }
+            html += `<div class="pagination">${pageButtons.join('')}</div>`;
+        }
+
+        grid.innerHTML = html;
+    }
+
+    _goToPage(page, totalDatasets) {
+        const totalPages = Math.ceil(totalDatasets / this.itemsPerPage);
+        if (page >= 1 && page <= totalPages) {
+            this.currentPage = page;
+            const filtered = this.activeCategory === 'all'
+                ? this.data.datasets
+                : this.data.datasets.filter(d => d.category === this.activeCategory);
+            this._renderDatasetCards(filtered);
+            setTimeout(() => {
+                document.getElementById('indicator-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+        }
     }
 
     _renderComparison() {
@@ -321,5 +360,5 @@ class PlaceProfileApp {
     }
 }
 
-const app = new PlaceProfileApp();
-document.addEventListener('DOMContentLoaded', () => app.init());
+window.app = new PlaceProfileApp();
+document.addEventListener('DOMContentLoaded', () => window.app.init());
