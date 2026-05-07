@@ -346,12 +346,12 @@ class PlaceProfileApp {
         this.comparisonChart.setOption({
             animation: false,
             tooltip: { trigger: 'axis', confine: true },
-            legend: { bottom: 0, textStyle: { color: '#94a3b8', fontSize: 11 }, orient: 'horizontal' },
-            grid: { top: 12, right: 16, bottom: 48, left: 32 },
-            xAxis: { type: 'category', data: xYears, axisLabel: { color: '#64748b', fontSize: 11, rotate: 45 } },
+            legend: { bottom: 0, textStyle: { color: '#94a3b8', fontSize: 10 }, orient: 'horizontal' },
+            grid: { top: 8, right: 12, bottom: 40, left: 12 },
+            xAxis: { type: 'category', data: xYears, axisLabel: { color: '#64748b', fontSize: 9, rotate: 45 } },
             yAxis: {
                 type: 'value',
-                axisLabel: { color: '#64748b', fontSize: 10,
+                axisLabel: { color: '#64748b', fontSize: 8,
                     formatter: v => {
                         if (v >= 1e6) return (v/1e6).toFixed(0) + 'M';
                         if (v >= 1e3) return (v/1e3).toFixed(0) + 'K';
