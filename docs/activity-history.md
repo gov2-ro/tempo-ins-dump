@@ -1,5 +1,31 @@
 # Activity History
 
+## 2026-05-07 — Cluster 4 + cluster 2 deep-dives (selector → 96.8%)
+
+Two more passes on the cluster-correctness baseline pushed overall match rate from 92.1% → 96.8%.
+
+**Cluster 4 (Gender-Split): 87% → 100%.** Reclassifier fix in `scripts/chart-taxonomy.py` — datasets with gender + a CAEN/ISCO/Activitati cat dim ≥30 options were landing in cluster 4 (expects line/sm/hbar) but the selector correctly picks heatmap (cat × time matrix is the only readable view at that cardinality). Threshold 30 reroutes them to cluster 2, whose expected set already includes heatmap. Same pattern applied later for cluster 9.
+
+**Cluster 2 (Categorical Time): 82% → 95%.** Mix of selector and classifier fixes:
+- Heatmap eligibility: allow on sparse data when a cat dim >20 options is present (was: blanket `not is_sparse` exclusion). Line/sm both fail at that cardinality and a partly-empty heatmap still reveals where the data clusters.
+- Heatmap defer: -0.15 when has_geo (cluster 7) or has_residence (cluster 9) without demographic overlay, so the very_long-cat bonus doesn't poach choropleth/line wins. Mirror of the line/bubble/sm defer added during cluster 7 work.
+- Line small-series bonus: gate on *total* cat₁×cat₂×… ≤ 6 (was: any single dim ≤4). A small dim alongside a 5-25 dim still yields hundreds of series. Also suppress when has_geo so cluster-7 datasets defer to choropleth.
+- Horizontal_bar: -0.10 when has_time≥5 and any cat dim ≥10. Snapshot ranking shouldn't beat heatmap/line for time-rich, long-cat datasets.
+- Residence + max_opts ≥30 → cluster 2 (mirrors cluster 4 reclass). SCL/TLC datasets with 50+ education categories belong in Categorical Time, not Urban/Rural.
+
+Cluster 3 went 98% → 100% as a side-effect; cluster 9 went 94% → 100%. Cluster 7 stayed at 95%. Final state: cluster 1 100%, 2 95%, 3 100%, 4 100%, 5 97%, 6 93%, 7 95%, 8 96%, 9 100%, 10 100%, 11 88%. Diminishing returns past this point — clusters 6/11 each have <5 misses.
+
+## 2026-05-07 — Visual smoke test (Phase 5)
+
+Loaded 13 cluster exemplars in lens via Chrome DevTools MCP, captured full-page screenshots, inspected ECharts series types, checked console. Report at `data/eval/smoke-test-report.md`. Console: zero errors/warnings across the sweep.
+
+**11/13 visual passes.** 2 frontend dispatch gaps surfaced — both routed to BACKLOG:
+
+1. **Cartographic falls back to line when archetype is null** (LOC103B_judet, cluster 7). API returns choropleth as primary + curated pair, but `explore-app.js:1642` only adds choropleth to the snapshot tab list when `archetype === 'geo_time' || archetype === 'geo_only'`. Split datasets carry `archetype: null` so the choropleth tab is dropped.
+2. **Heatmap timeline never dispatched** (AGR201E, cluster 5). Selector picks heatmap with high confidence; the lens timeline panel only offers Line/Bar/Area/Stacked/Index/Δ%. Heatmap is a snapshot-only chart type in the current static recipe.
+
+Both gaps point at the same fix: drop the static archetype-keyed dispatch in lens and read from the selector's `chart_config.ranked_charts` instead.
+
 ## 2026-05-07 — Docs refresh (CLAUDE.md + readme.md)
 
 Cleaned up CLAUDE.md and readme.md to match current repo state. Removed stale references — `ui/`, `explorer/`, `profiling/` directories no longer exist; `chart_config.py` moved to `app/services/_obsolete/`. Corrected pipeline script tables (paths now point to `corpus/parquet` and `corpus/metadata.duckdb`). Added current `app/services/` entries (`agent.py`, `headlines.py`, `llm_client.py`) and routers (`ask.py`, `sdmx.py`). Consolidated CLAUDE.md's redundant Persona/Coding Principles sections. Pipeline script tables now live primarily in readme.md with a compact summary in CLAUDE.md so Claude can answer "what does script N do" without a Read call.
