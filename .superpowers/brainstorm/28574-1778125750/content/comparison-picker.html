@@ -1,0 +1,101 @@
+<h2>How do you add comparison places?</h2>
+<p class="subtitle">The comparison section always shows national + region averages. This is about adding <em>additional</em> places.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-size:12px;padding:8px;background:#111;border-radius:4px">
+        <div style="color:#94a3b8;font-size:10px;margin-bottom:4px">COMPARING WITH</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">
+          <div style="background:#1d4ed8;color:#bfdbfe;padding:2px 8px;border-radius:10px;font-size:11px">🇷🇴 National avg</div>
+          <div style="background:#1e293b;color:#94a3b8;padding:2px 8px;border-radius:10px;font-size:11px">Nord-Vest avg</div>
+          <div style="background:#1e293b;color:#94a3b8;padding:2px 8px;border-radius:10px;font-size:11px">Cluj ✕</div>
+        </div>
+        <div style="background:#0f172a;border:1px solid #334155;border-radius:4px;padding:4px 8px;display:flex;align-items:center;gap:4px">
+          <span style="color:#64748b">🔍</span>
+          <span style="color:#64748b;font-size:11px">Search county, region…</span>
+        </div>
+        <div style="margin-top:4px;background:#1e293b;border-radius:3px;padding:2px">
+          <div style="padding:3px 6px;color:#e2e8f0;font-size:11px;border-radius:2px">Timiș</div>
+          <div style="padding:3px 6px;color:#e2e8f0;font-size:11px;border-radius:2px;background:#1d4ed830">Timișoara ✓</div>
+          <div style="padding:3px 6px;color:#e2e8f0;font-size:11px;border-radius:2px">Suceava</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Search + chips</h3>
+      <p>Type to search, results appear in a dropdown, selected places become chips above the charts. Simple, keyboard-friendly.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-size:12px;padding:8px;background:#111;border-radius:4px">
+        <div style="color:#94a3b8;font-size:10px;margin-bottom:4px">PICK ON MAP</div>
+        <div style="background:#1e293b;border-radius:4px;height:70px;position:relative;overflow:hidden">
+          <!-- Simplified Romania map representation -->
+          <svg viewBox="0 0 120 80" style="width:100%;height:100%">
+            <rect x="10" y="10" width="100" height="60" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+            <!-- Simplified county-like shapes -->
+            <rect x="15" y="15" width="18" height="14" rx="2" fill="#1e3a5f" stroke="#3b82f6" stroke-width="0.5"/>
+            <rect x="34" y="15" width="16" height="14" rx="2" fill="#4ade8030" stroke="#4ade80" stroke-width="1.5"/>
+            <rect x="51" y="15" width="19" height="14" rx="2" fill="#1e3a5f" stroke="#3b82f6" stroke-width="0.5"/>
+            <rect x="71" y="15" width="17" height="14" rx="2" fill="#7c3aed30" stroke="#a78bfa" stroke-width="1.5"/>
+            <rect x="15" y="30" width="20" height="14" rx="2" fill="#1e3a5f" stroke="#3b82f6" stroke-width="0.5"/>
+            <rect x="36" y="30" width="18" height="14" rx="2" fill="#1d4ed830" stroke="#60a5fa" stroke-width="1.5"/>
+            <rect x="55" y="30" width="16" height="14" rx="2" fill="#1e3a5f" stroke="#3b82f6" stroke-width="0.5"/>
+            <rect x="72" y="30" width="18" height="14" rx="2" fill="#1e3a5f" stroke="#3b82f6" stroke-width="0.5"/>
+            <rect x="15" y="45" width="22" height="14" rx="2" fill="#1e3a5f" stroke="#3b82f6" stroke-width="0.5"/>
+            <rect x="38" y="45" width="17" height="14" rx="2" fill="#1e3a5f" stroke="#3b82f6" stroke-width="0.5"/>
+            <rect x="56" y="45" width="19" height="14" rx="2" fill="#1e3a5f" stroke="#3b82f6" stroke-width="0.5"/>
+            <rect x="76" y="45" width="15" height="14" rx="2" fill="#1e3a5f" stroke="#3b82f6" stroke-width="0.5"/>
+            <text x="42" y="24" font-size="5" fill="#4ade80" text-anchor="middle">BIHOR★</text>
+            <text x="80" y="24" font-size="5" fill="#a78bfa" text-anchor="middle">CLUJ</text>
+            <text x="45" y="39" font-size="5" fill="#60a5fa" text-anchor="middle">TIMIȘ</text>
+          </svg>
+        </div>
+        <div style="color:#64748b;font-size:10px;margin-top:3px">Click counties to add to comparison (max 4)</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Mini map picker</h3>
+      <p>A small Romania map in the comparison panel. Click counties to add/remove them. Visual and satisfying, but only works for county level.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-size:12px;padding:8px;background:#111;border-radius:4px">
+        <div style="color:#94a3b8;font-size:10px;margin-bottom:4px">SUGGESTED COMPARISONS</div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <div style="background:#1e293b;border-radius:3px;padding:4px 6px;display:flex;align-items:center;gap:6px">
+            <span style="color:#64748b;font-size:10px">SIMILAR SIZE</span>
+            <div style="display:flex;gap:3px;margin-left:auto">
+              <div style="background:#1d4ed840;color:#93c5fd;padding:1px 6px;border-radius:8px;font-size:10px">Timiș</div>
+              <div style="background:#1d4ed840;color:#93c5fd;padding:1px 6px;border-radius:8px;font-size:10px">Prahova</div>
+            </div>
+          </div>
+          <div style="background:#1e293b;border-radius:3px;padding:4px 6px;display:flex;align-items:center;gap:6px">
+            <span style="color:#64748b;font-size:10px">SAME REGION</span>
+            <div style="display:flex;gap:3px;margin-left:auto">
+              <div style="background:#7c3aed30;color:#c4b5fd;padding:1px 6px;border-radius:8px;font-size:10px">Cluj</div>
+              <div style="background:#7c3aed30;color:#c4b5fd;padding:1px 6px;border-radius:8px;font-size:10px">Satu Mare</div>
+            </div>
+          </div>
+          <div style="background:#1e293b;border-radius:3px;padding:4px 6px;display:flex;align-items:center;gap:6px">
+            <span style="color:#64748b;font-size:10px">TRENDING TOPIC</span>
+            <div style="display:flex;gap:3px;margin-left:auto">
+              <div style="background:#15803d30;color:#86efac;padding:1px 6px;border-radius:8px;font-size:10px">Ilfov</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Smart suggestions</h3>
+      <p>Pre-computed peer groups: same region, similar population size, similar economic profile. One-click to add a suggested peer. No typing required.</p>
+    </div>
+  </div>
+
+</div>

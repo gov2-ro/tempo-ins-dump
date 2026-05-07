@@ -1,0 +1,114 @@
+<h2>Place profile — page structure</h2>
+<p class="subtitle">Proposed layout for <code>/place/county/bihor</code></p>
+
+<div class="mockup">
+  <div class="mockup-header">place.html — full page scroll</div>
+  <div class="mockup-body" style="font-size:12px;display:flex;flex-direction:column;gap:6px">
+
+    <!-- Breadcrumb + title -->
+    <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:4px;padding:8px 10px">
+      <div style="color:#64748b;font-size:10px;margin-bottom:3px">🇷🇴 Romania › Nord-Vest Region › <span style="color:#94a3b8">Bihor County</span></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="font-size:16px;font-weight:bold;color:#f1f5f9">Bihor</div>
+        <div style="background:#1d4ed830;color:#93c5fd;padding:2px 7px;border-radius:10px;font-size:10px">County</div>
+        <div style="margin-left:auto;color:#64748b;font-size:10px">42 datasets available</div>
+      </div>
+    </div>
+
+    <!-- SECTION A: KPI heroes -->
+    <div style="border-left:2px solid #3b82f6;padding-left:8px">
+      <div style="color:#3b82f6;font-size:10px;font-weight:bold;margin-bottom:4px">A — KPI HEROES</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px">
+        <div style="background:#1e293b;border-radius:4px;padding:6px">
+          <div style="color:#64748b;font-size:9px">Population</div>
+          <div style="color:#f1f5f9;font-size:13px;font-weight:bold">576k</div>
+          <div style="color:#f87171;font-size:9px">▼ −1.2%</div>
+          <div style="height:18px;background:linear-gradient(90deg,#3b82f640,#3b82f6);border-radius:2px;margin-top:3px"></div>
+        </div>
+        <div style="background:#1e293b;border-radius:4px;padding:6px">
+          <div style="color:#64748b;font-size:9px">Unemployment</div>
+          <div style="color:#f1f5f9;font-size:13px;font-weight:bold">3.1%</div>
+          <div style="color:#4ade80;font-size:9px">▼ −0.4pp</div>
+          <div style="height:18px;background:linear-gradient(90deg,#f59e0b40,#f59e0b);border-radius:2px;margin-top:3px"></div>
+        </div>
+        <div style="background:#1e293b;border-radius:4px;padding:6px">
+          <div style="color:#64748b;font-size:9px">Avg. net wage</div>
+          <div style="color:#f1f5f9;font-size:13px;font-weight:bold">4,820 lei</div>
+          <div style="color:#4ade80;font-size:9px">▲ +8.3%</div>
+          <div style="height:18px;background:linear-gradient(90deg,#4ade8040,#4ade80);border-radius:2px;margin-top:3px"></div>
+        </div>
+        <div style="background:#1e293b;border-radius:4px;padding:6px">
+          <div style="color:#64748b;font-size:9px">Birth rate</div>
+          <div style="color:#f1f5f9;font-size:13px;font-weight:bold">9.2‰</div>
+          <div style="color:#f87171;font-size:9px">▼ −0.3‰</div>
+          <div style="height:18px;background:linear-gradient(90deg,#a78bfa40,#a78bfa);border-radius:2px;margin-top:3px"></div>
+        </div>
+      </div>
+      <div style="color:#475569;font-size:9px;margin-top:3px">+ 3 more indicators…</div>
+    </div>
+
+    <!-- SECTION B: Indicator grid -->
+    <div style="border-left:2px solid #8b5cf6;padding-left:8px">
+      <div style="color:#8b5cf6;font-size:10px;font-weight:bold;margin-bottom:4px">B — INDICATOR GRID</div>
+      <div style="display:flex;gap:4px;margin-bottom:4px">
+        <div style="background:#1d4ed830;color:#93c5fd;padding:2px 7px;border-radius:10px;font-size:10px">All</div>
+        <div style="background:#1e293b;color:#64748b;padding:2px 7px;border-radius:10px;font-size:10px">Population</div>
+        <div style="background:#1e293b;color:#64748b;padding:2px 7px;border-radius:10px;font-size:10px">Economy</div>
+        <div style="background:#1e293b;color:#64748b;padding:2px 7px;border-radius:10px;font-size:10px">Health</div>
+        <div style="background:#1e293b;color:#64748b;padding:2px 7px;border-radius:10px;font-size:10px">Education</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">
+        <div style="background:#1e293b;border-radius:4px;padding:5px">
+          <div style="color:#94a3b8;font-size:9px">Live births</div>
+          <div style="height:24px;background:linear-gradient(90deg,#a78bfa20,#a78bfa40);border-radius:2px;margin-top:2px"></div>
+        </div>
+        <div style="background:#1e293b;border-radius:4px;padding:5px">
+          <div style="color:#94a3b8;font-size:9px">Deaths</div>
+          <div style="height:24px;background:linear-gradient(90deg,#f8717120,#f87171);border-radius:2px;margin-top:2px"></div>
+        </div>
+        <div style="background:#1e293b;border-radius:4px;padding:5px">
+          <div style="color:#94a3b8;font-size:9px">Net migration</div>
+          <div style="height:24px;background:linear-gradient(90deg,#3b82f620,#3b82f6);border-radius:2px;margin-top:2px"></div>
+        </div>
+        <div style="background:#1e293b;border-radius:4px;padding:5px">
+          <div style="color:#94a3b8;font-size:9px">Employed</div>
+          <div style="height:24px;background:linear-gradient(90deg,#4ade8020,#4ade80);border-radius:2px;margin-top:2px"></div>
+        </div>
+        <div style="background:#1e293b;border-radius:4px;padding:5px">
+          <div style="color:#94a3b8;font-size:9px">Industrial output</div>
+          <div style="height:24px;background:linear-gradient(90deg,#f59e0b20,#f59e0b);border-radius:2px;margin-top:2px"></div>
+        </div>
+        <div style="background:#1e293b;border-radius:4px;padding:5px;border:1px dashed #334155;opacity:0.5">
+          <div style="color:#64748b;font-size:9px">Housing starts</div>
+          <div style="height:24px;background:#0f172a;border-radius:2px;margin-top:2px;display:flex;align-items:center;justify-content:center"><span style="color:#475569;font-size:9px">no data</span></div>
+        </div>
+      </div>
+      <div style="color:#475569;font-size:9px;margin-top:3px">Click any chart → opens full dataset view</div>
+    </div>
+
+    <!-- SECTION C: Comparison -->
+    <div style="border-left:2px solid #f59e0b;padding-left:8px">
+      <div style="color:#f59e0b;font-size:10px;font-weight:bold;margin-bottom:4px">C — COMPARISON</div>
+      <div style="background:#1e293b;border-radius:4px;padding:6px;margin-bottom:4px">
+        <div style="color:#94a3b8;font-size:9px;margin-bottom:3px">Always shown</div>
+        <div style="display:flex;gap:3px">
+          <div style="background:#1d4ed840;color:#93c5fd;padding:2px 8px;border-radius:10px;font-size:10px">🇷🇴 National avg</div>
+          <div style="background:#7c3aed30;color:#c4b5fd;padding:2px 8px;border-radius:10px;font-size:10px">Nord-Vest avg</div>
+        </div>
+      </div>
+      <div style="background:#1e293b;border-radius:4px;padding:6px">
+        <div style="color:#94a3b8;font-size:9px;margin-bottom:3px">Add peers</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <div style="background:#0f172a;border:1px solid #334155;border-radius:3px;padding:3px 6px;font-size:10px;color:#64748b">
+            <span style="color:#94a3b8">Same region:</span> Cluj · Satu Mare · Maramureș
+          </div>
+          <div style="background:#0f172a;border:1px solid #334155;border-radius:3px;padding:3px 6px;font-size:10px;color:#64748b">
+            <span style="color:#94a3b8">Similar size:</span> Timiș · Prahova · Iași
+          </div>
+        </div>
+      </div>
+      <div style="color:#475569;font-size:9px;margin-top:3px">Selected indicator overlaid as multi-line chart</div>
+    </div>
+
+  </div>
+</div>

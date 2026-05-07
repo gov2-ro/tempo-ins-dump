@@ -1,0 +1,121 @@
+<h2>What should a place profile show?</h2>
+<p class="subtitle">Pick the layout that best matches your vision for a county/region page</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-size:12px;padding:8px;background:#111;border-radius:4px;line-height:1.7">
+        <div style="color:#4ade80;font-weight:bold;margin-bottom:4px">📍 Bihor County</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px">
+          <div style="background:#1e293b;padding:4px;border-radius:3px;text-align:center"><div style="color:#94a3b8;font-size:10px">Population</div><div style="color:#f1f5f9;font-size:13px">576k</div></div>
+          <div style="background:#1e293b;padding:4px;border-radius:3px;text-align:center"><div style="color:#94a3b8;font-size:10px">GDP/cap</div><div style="color:#f1f5f9;font-size:13px">↑ 8.2%</div></div>
+          <div style="background:#1e293b;padding:4px;border-radius:3px;text-align:center"><div style="color:#94a3b8;font-size:10px">Unemployment</div><div style="color:#f1f5f9;font-size:13px">3.1%</div></div>
+        </div>
+        <div style="background:#1e293b;padding:4px;border-radius:3px;margin-bottom:6px">
+          <div style="color:#94a3b8;font-size:10px;margin-bottom:2px">Population trend (2000–2023)</div>
+          <div style="height:30px;background:linear-gradient(90deg,#3b82f6 0%,#60a5fa 60%,#93c5fd 100%);border-radius:2px;opacity:0.7"></div>
+        </div>
+        <div style="color:#94a3b8;font-size:10px">📊 42 datasets available · Economy, Population, Health…</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — KPI Dashboard</h3>
+      <p>Hero stats at the top, one or two key trend sparklines, then a list of available datasets. Clean, scannable, data-forward.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-size:12px;padding:8px;background:#111;border-radius:4px;line-height:1.7">
+        <div style="color:#4ade80;font-weight:bold;margin-bottom:4px">📍 Bihor County</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div>
+            <div style="color:#94a3b8;font-size:10px;margin-bottom:2px">POPULATION</div>
+            <div style="background:#1e293b;padding:4px;border-radius:3px">
+              <div style="height:40px;display:flex;align-items:flex-end;gap:2px">
+                <div style="flex:1;background:#3b82f620;height:70%"></div>
+                <div style="flex:1;background:#3b82f640;height:80%"></div>
+                <div style="flex:1;background:#3b82f660;height:75%"></div>
+                <div style="flex:1;background:#3b82f680;height:68%"></div>
+                <div style="flex:1;background:#3b82f6;height:65%"></div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div style="color:#94a3b8;font-size:10px;margin-bottom:2px">UNEMPLOYMENT</div>
+            <div style="background:#1e293b;padding:4px;border-radius:3px">
+              <div style="height:40px;display:flex;align-items:flex-end;gap:2px">
+                <div style="flex:1;background:#f59e0b20;height:60%"></div>
+                <div style="flex:1;background:#f59e0b40;height:55%"></div>
+                <div style="flex:1;background:#f59e0b60;height:45%"></div>
+                <div style="flex:1;background:#f59e0b80;height:35%"></div>
+                <div style="flex:1;background:#f59e0b;height:30%"></div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div style="color:#94a3b8;font-size:10px;margin-bottom:2px">BIRTH RATE</div>
+            <div style="background:#1e293b;padding:4px;border-radius:3px">
+              <div style="height:40px;display:flex;align-items:flex-end;gap:2px">
+                <div style="flex:1;background:#a78bfa20;height:50%"></div>
+                <div style="flex:1;background:#a78bfa40;height:55%"></div>
+                <div style="flex:1;background:#a78bfa60;height:48%"></div>
+                <div style="flex:1;background:#a78bfa80;height:42%"></div>
+                <div style="flex:1;background:#a78bfa;height:38%"></div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div style="color:#94a3b8;font-size:10px;margin-bottom:2px">GDP/CAPITA</div>
+            <div style="background:#1e293b;padding:4px;border-radius:3px">
+              <div style="height:40px;display:flex;align-items:flex-end;gap:2px">
+                <div style="flex:1;background:#4ade8020;height:40%"></div>
+                <div style="flex:1;background:#4ade8040;height:50%"></div>
+                <div style="flex:1;background:#4ade8060;height:60%"></div>
+                <div style="flex:1;background:#4ade8080;height:72%"></div>
+                <div style="flex:1;background:#4ade80;height:85%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="color:#64748b;font-size:10px;margin-top:4px">▼ More indicators below…</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Indicator Grid</h3>
+      <p>A grid of small trend charts, one per indicator. User browses by topic. Focus is on the shape of each trend. Comparison comes later via a dedicated tab.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-size:12px;padding:8px;background:#111;border-radius:4px;line-height:1.7">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          <div style="color:#4ade80;font-weight:bold">📍 Bihor</div>
+          <div style="margin-left:auto;display:flex;gap:4px">
+            <div style="background:#3b82f6;color:#fff;padding:2px 6px;border-radius:10px;font-size:10px">vs Cluj</div>
+            <div style="background:#374151;color:#9ca3af;padding:2px 6px;border-radius:10px;font-size:10px">+ Add</div>
+          </div>
+        </div>
+        <div style="background:#1e293b;padding:4px;border-radius:3px;margin-bottom:4px">
+          <div style="color:#94a3b8;font-size:10px;margin-bottom:2px">Population 2000–2023</div>
+          <div style="height:35px;position:relative">
+            <div style="position:absolute;bottom:0;left:0;right:0;height:60%;background:linear-gradient(90deg,#3b82f620,#3b82f640);border-radius:2px"></div>
+            <div style="position:absolute;bottom:0;left:0;right:0;height:80%;background:none;border-top:2px dashed #f59e0b80;border-radius:2px"></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:2px">
+            <div style="display:flex;align-items:center;gap:3px"><div style="width:8px;height:2px;background:#3b82f6"></div><span style="color:#94a3b8;font-size:10px">Bihor</span></div>
+            <div style="display:flex;align-items:center;gap:3px"><div style="width:8px;height:2px;background:#f59e0b;border-top:2px dashed #f59e0b"></div><span style="color:#94a3b8;font-size:10px">Cluj</span></div>
+          </div>
+        </div>
+        <div style="color:#64748b;font-size:10px">Select another county to compare ▼</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Comparison-first</h3>
+      <p>The profile is always shown alongside other places. Primary place + "compare with…" picker. Charts show multiple lines. Best for analysts.</p>
+    </div>
+  </div>
+
+</div>
