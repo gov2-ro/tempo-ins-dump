@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Locuri — INS+</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/explore.css?v=37">
+</head>
+<body>
+    <nav class="topbar">
+        <div class="topbar-left">
+            <a href="/" class="logo"><span class="logo-dot"></span>INS<span style="margin: -1ex 0 0 -1ex;">+</span></a>
+        </div>
+        <div class="topbar-right">
+            <a href="/" class="toggle-btn" style="text-decoration:none;font-size:0.8rem;padding:0 10px;">Date</a>
+        </div>
+    </nav>
+
+    <div class="main-content" style="max-width:900px;margin:0 auto;padding:2rem 1rem;">
+        <h1 style="font-size:1.6rem;font-weight:700;margin-bottom:0.25rem;">Profiluri de locuri</h1>
+        <p style="color:var(--text-muted);margin-bottom:2rem;">Județe, regiuni de dezvoltare și macroregiuni România</p>
+
+        <div id="places-loading" style="color:var(--text-muted);">Se încarcă...</div>
+        <div id="places-content" style="display:none;">
+            <section id="section-county">
+                <h2 style="font-size:1rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:1.5rem 0 0.75rem;">Județe</h2>
+                <div id="grid-county" class="places-grid"></div>
+            </section>
+            <section id="section-region">
+                <h2 style="font-size:1rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:1.5rem 0 0.75rem;">Regiuni de dezvoltare</h2>
+                <div id="grid-region" class="places-grid"></div>
+            </section>
+            <section id="section-macroregion">
+                <h2 style="font-size:1rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:1.5rem 0 0.75rem;">Macroregiuni</h2>
+                <div id="grid-macroregion" class="places-grid"></div>
+            </section>
+        </div>
+    </div>
+
+    <style>
+        .places-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .place-chip {
+            display: inline-block;
+            padding: 0.4rem 0.9rem;
+            background: var(--card-bg, #1e293b);
+            border: 1px solid var(--border, #334155);
+            border-radius: 6px;
+            text-decoration: none;
+            color: var(--text-primary, #f1f5f9);
+            font-size: 0.875rem;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .place-chip:hover {
+            border-color: var(--accent, #3b82f6);
+            background: var(--card-hover, #1e3a5f);
+        }
+    </style>
+    <script src="/js/places-page.js?v=1"></script>
+</body>
+</html>
