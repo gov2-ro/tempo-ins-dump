@@ -142,6 +142,11 @@ def classify(row, max_cat_opts, age_opts):
 
     # Urban/Rural
     if arch == "time_residence" or (row["has_residence"] and not row["has_geo"]):
+        # Same pattern as cluster 4: residence + high-cardinality cat (≥30
+        # options) is really Categorical Time where residence is a filter.
+        # Heatmap is the readable chart and is in cluster 2's expected set.
+        if max_opts >= 30:
+            return 2  # Categorical Time
         return 9
 
     # Time series variants

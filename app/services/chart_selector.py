@@ -182,7 +182,11 @@ def _eligible(chart_type: str, sig: dict) -> bool:
         # INS "Sexe si medii" dims mix gender+residence (Total+M+F+Urban+Rural = 5)
         return has_age and has_gender and 2 <= gender_count <= 6
     if chart_type == 'heatmap':
-        return total_dims >= 2 and not is_sparse
+        # Allow heatmap even on sparse data when a very-long cat dim is
+        # present — line/small_multiples both fail at that cardinality, and a
+        # mostly-empty grid still reveals where the data clusters.
+        very_long_cat = any(d.get('count', 0) > 20 for d in cat_dims)
+        return total_dims >= 2 and (not is_sparse or very_long_cat)
     if chart_type == 'small_multiples':
         return has_time and (any_cat_facetable or (has_geo and 6 <= geo <= 25))
     if chart_type == 'bubble':
@@ -219,11 +223,18 @@ def _score(chart_type: str, sig: dict) -> float:
         if tp >= 10: s += 0.2
         elif tp >= 5: s += 0.1
         if trend in ('increasing', 'decreasing', 'flat'): s += 0.1
-        # Narrow small-series bonus: only truly small (≤4) lines stay readable.
-        # Cat dims with 5-6 options were getting line-favored by this bonus,
-        # but small_multiples is at least as readable for that range.
-        small_series = [d for d in cat_dims if d['count'] <= 4]
-        if small_series: s += 0.1
+        # Narrow small-series bonus: line stays readable only when the *total*
+        # series count is small (cat₁ × cat₂ × …). Cluster-2 datasets with
+        # one small dim alongside a 5-25 dim have hundreds of series in the
+        # default render — small_multiples is the right call there.
+        total_series = 1
+        for d in cat_dims:
+            total_series *= max(d.get('count', 1), 1)
+        # Suppress when geo would carry the chart (cluster 7) — line of region
+        # values buries the spatial pattern even when there are few series.
+        line_eligible_geo_present = has_geo and geo >= 4
+        if cat_dims and total_series <= 6 and not line_eligible_geo_present:
+            s += 0.1
         elif len(cat_dims) == 0 and has_residence: s += 0.1
         # Penalty: too many overlapping series — line becomes unreadable, prefer small_multiples
         if any(d['count'] > 8 for d in cat_dims): s -= 0.15
@@ -321,6 +332,11 @@ def _score(chart_type: str, sig: dict) -> float:
         # Defer to grouped_bar for categorical-snapshot shape (cat × cat).
         if not has_time and not has_geo and len([d for d in cat_dims if d['count'] <= 20]) >= 2:
             s -= 0.15
+        # Defer to time-aware charts when there's substantial time AND a long
+        # cat dim — heatmap/line/small_multiples reveal the trend, where
+        # horizontal_bar collapses everything to a snapshot ranking.
+        if has_time and tp >= 5 and any(d['count'] >= 10 for d in cat_dims):
+            s -= 0.10
         return min(s, 1.0)
 
     if chart_type == 'choropleth':
@@ -366,7 +382,16 @@ def _score(chart_type: str, sig: dict) -> float:
         if not is_sparse: s += 0.1
         if has_time and tp >= 5: s += 0.1
         if cv > 0.5: s += 0.05
-        return min(s, 1.0)
+        # Defer to choropleth when geo is the natural primary (cluster 7).
+        # The very_long-cat bonus was making heatmap beat choropleth on
+        # geo + long-cat datasets like ABF/BUF.
+        if has_geo and geo >= 4 and not has_age and not has_gender and not has_residence:
+            s -= 0.15
+        # Defer to line/small_multiples on urban/rural splits (cluster 9):
+        # residence-as-splitter datasets read better as line per residence type.
+        if has_residence and not has_geo and not has_age and not has_gender:
+            s -= 0.15
+        return min(max(s, 0.0), 1.0)
 
     if chart_type == 'small_multiples':
         s = 0.35

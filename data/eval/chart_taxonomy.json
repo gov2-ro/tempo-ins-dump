@@ -33,7 +33,7 @@
     "id": 2,
     "name": "Categorical Time",
     "desc": "Time + medium-cardinality categorical dim (6-50 options)",
-    "count": 472,
+    "count": 492,
     "primary_chart": "small_multiples / heatmap",
     "exemplars": [
       {
@@ -243,7 +243,7 @@
     "id": 9,
     "name": "Urban/Rural",
     "desc": "Residence (urban/rural) splits over time",
-    "count": 88,
+    "count": 68,
     "primary_chart": "line / small_multiples / horizontal_bar",
     "exemplars": [
       {
