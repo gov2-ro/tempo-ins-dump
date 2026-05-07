@@ -8,9 +8,9 @@ Use this to identify chart improvement opportunities per cluster.
 | # | Cluster | Count | % | Primary Chart | Description |
 |---|---------|-------|---|---------------|-------------|
 | 1 | Simple Time Series | 249 | 12.5% | line | Single indicator over time, no structural dims |
-| 2 | Categorical Time | 452 | 22.8% | small_multiples / heatmap | Time + medium-cardinality categorical dim (6-50 options) |
+| 2 | Categorical Time | 472 | 23.8% | small_multiples / heatmap | Time + medium-cardinality categorical dim (6-50 options) |
 | 3 | Composition (%) | 310 | 15.6% | line / small_multiples / heatmap | Percentage unit, parts-of-whole over time |
-| 4 | Gender-Split | 107 | 5.4% | line / small_multiples / horizontal_bar | Binary gender breakdown over time |
+| 4 | Gender-Split | 87 | 4.4% | line / small_multiples / horizontal_bar | Binary gender breakdown over time |
 | 5 | Age Cohort | 67 | 3.4% | heatmap / grouped_bar / small_multiples / horizontal_bar | Age groups over time (no gender) |
 | 6 | Population Pyramid | 72 | 3.6% | population_pyramid | Age + gender over time |
 | 7 | Cartographic | 454 | 22.9% | choropleth / small_multiples / horizontal_bar | Geographic (county/region) + time, no demographic dims |
@@ -31,7 +31,7 @@ _Single indicator over time, no structural dims_
 | `SAN107A` | Asistenta medicala de urgenta, pe elemente specifice | 100.0% | 102 | volatile | ![SAN107A](chart-taxonomy/SAN107A.png) |
 | `TRN120A` | Nave de navigatie interioara, pe categorii de nave, inregist | 100.0% | 102 | volatile | ![TRN120A](chart-taxonomy/TRN120A.png) |
 
-### 2. Categorical Time (452 datasets)
+### 2. Categorical Time (472 datasets)
 _Time + medium-cardinality categorical dim (6-50 options)_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |
@@ -49,7 +49,7 @@ _Percentage unit, parts-of-whole over time_
 | `CON104R` | Produsul intern brut trimestrial - serie ajustata sezonier C | 100.0% | 3,509 | volatile | ![CON104R](chart-taxonomy/CON104R.png) |
 | `CON104S` | Produsul intern brut trimestrial - serie ajustata sezonier C | 100.0% | 3,509 | volatile | ![CON104S](chart-taxonomy/CON104S.png) |
 
-### 4. Gender-Split (107 datasets)
+### 4. Gender-Split (87 datasets)
 _Binary gender breakdown over time_
 
 | Code | Name | Fill Rate | Rows | Trend | Screenshot |

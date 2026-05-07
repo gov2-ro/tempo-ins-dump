@@ -33,7 +33,7 @@
     "id": 2,
     "name": "Categorical Time",
     "desc": "Time + medium-cardinality categorical dim (6-50 options)",
-    "count": 452,
+    "count": 472,
     "primary_chart": "small_multiples / heatmap",
     "exemplars": [
       {
@@ -93,7 +93,7 @@
     "id": 4,
     "name": "Gender-Split",
     "desc": "Binary gender breakdown over time",
-    "count": 107,
+    "count": 87,
     "primary_chart": "line / small_multiples / horizontal_bar",
     "exemplars": [
       {

@@ -126,6 +126,12 @@ def classify(row, max_cat_opts, age_opts):
     if row["has_age"] and not row["has_gender"] and not row["has_geo"] and age_count >= 6:
         return 5  # Age Cohort
     if row["has_gender"] and not row["has_age"] and not row["has_geo"]:
+        # Gender + high-cardinality cat (CAEN/ISCO/Activitati ≥30) is really a
+        # Categorical Time dataset where gender is a side filter, not the
+        # primary splitter. Heatmap (cat × time) is the readable chart and is
+        # already in cluster 2's expected set.
+        if max_opts >= 30:
+            return 2  # Categorical Time
         return 4  # Gender-Split
 
     # Geographic clusters
