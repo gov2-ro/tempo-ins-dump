@@ -1,5 +1,17 @@
 # Activity History
 
+## 2026-05-07 — Place Profiles feature (counties, regions, macroregions)
+
+Full place profile pages at `/place/{type}/{slug}` showing KPI heroes, indicator grid with category filtering, and cross-place comparison chart. Directory listing at `/places`.
+
+**Backend** (`app/services/place_service.py`, `app/routers/places.py`): `slugify()` strips "Regiunea" prefix before normalizing so the 24 DB variants for 8 regions all resolve to clean slugs. County→region mapping is a hardcoded dict (no DB table). `_query_kpi_series` opens a fresh DuckDB connection per call and closes it in `finally`. Baselines route registered before profile route in FastAPI to avoid path capture conflict.
+
+**KPI config** (`app/static/data/place_kpi_config.json`): 7 KPIs per geo level, parquet filenames verified against actual corpus files. County uses POP202A for birth/death rates (1990–2024); region/macroregion use POP202B (2012–2024). FOM106E (not FOM106A) used for wages — FOM106A only covers 1993–2007.
+
+**Frontend** (`place-page.js`): `PlaceProfileApp` class; XSS escaping via `_esc()` throughout innerHTML; ECharts sparklines tracked for disposal on re-render; comparison chart uses `type:'category'` xAxis with `alignToYears()` to handle series with different year ranges.
+
+**Deferred to backlog**: norm-by-population toggle, choropleth click-through, dataset page cross-link.
+
 ## 2026-05-07 — Cluster 4 + cluster 2 deep-dives (selector → 96.8%)
 
 Two more passes on the cluster-correctness baseline pushed overall match rate from 92.1% → 96.8%.
