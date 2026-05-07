@@ -139,3 +139,50 @@ def test_get_place_peers_region_returns_siblings():
     assert len(peers["same_region"]) > 0
     # similar_size is empty for non-county
     assert peers["similar_size"] == []
+
+
+# --- Route tests ---
+
+from fastapi.testclient import TestClient
+from app.main import app
+
+_client = TestClient(app)
+
+
+def test_api_places_list():
+    resp = _client.get("/api/places")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "places" in data
+    county_slugs = [p["slug"] for p in data["places"] if p["type"] == "county"]
+    assert "bihor" in county_slugs
+    assert "cluj" in county_slugs
+
+
+def test_api_place_profile_county():
+    resp = _client.get("/api/places/county/bihor")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["place"]["name"] == "Bihor"
+    assert data["place"]["type"] == "county"
+    assert isinstance(data["kpis"], list)
+    assert isinstance(data["datasets"], list)
+    assert "same_region" in data["peers"]
+
+
+def test_api_place_profile_not_found():
+    resp = _client.get("/api/places/county/notaplace")
+    assert resp.status_code == 404
+
+
+def test_api_place_baselines():
+    # Get the first KPI label for county
+    import json
+    config = json.load(open("app/static/data/place_kpi_config.json"))
+    label = config["county"][0]["label"]
+    from urllib.parse import quote
+    resp = _client.get(f"/api/places/county/bihor/baselines/{quote(label)}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "national" in data
+    assert "region" in data
