@@ -26,8 +26,6 @@ def places_directory_html():
 
 @router.get("/place/{place_type}/{slug}", include_in_schema=False)
 def place_profile_html(place_type: str, slug: str):
-    if place_type not in GEO_LEVELS:
-        raise HTTPException(404, "Unknown place type")
     path = _STATIC / "place.html"
     if not path.exists():
         raise HTTPException(404, "place.html not yet created")
