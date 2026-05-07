@@ -136,6 +136,8 @@ def _query_kpi_series(parquet_path: Path, ref_area_values: list[str],
         rows = con.execute(query).fetchall()
     except Exception:
         return []
+    finally:
+        con.close()
 
     return [{"year": r[0], "value": r[1]} for r in rows if r[1] is not None]
 
@@ -194,6 +196,152 @@ def get_place_kpis(place_type: str, slug: str, *, conn=None) -> list[dict]:
         })
 
     return results
+
+
+def _get_county_population(county_name: str) -> float | None:
+    """Get latest total population for a county from POP105A_judete_grupe parquet."""
+    parquet_path = PARQUET_DIR / "POP105A_judete_grupe.parquet"
+    if not parquet_path.exists():
+        return None
+    con = _duckdb.connect()
+    try:
+        rows = con.execute("""
+            SELECT SUM(OBS_VALUE) as pop
+            FROM read_parquet(?)
+            WHERE REF_AREA = ?
+            GROUP BY TIME_PERIOD
+            ORDER BY TIME_PERIOD DESC
+            LIMIT 1
+        """, [str(parquet_path), county_name]).fetchall()
+    finally:
+        con.close()
+    return rows[0][0] if rows else None
+
+
+def get_place_peers(place_type: str, slug: str, *, conn=None) -> dict:
+    """Return peer groups for comparison.
+
+    Returns:
+        {
+          same_region: [{slug, name, type}, ...],
+          similar_size: [{slug, name, type}, ...]
+        }
+    """
+    if conn is None:
+        conn = get_conn()
+
+    place = resolve_place(place_type, slug, conn=conn)
+    if not place:
+        return {"same_region": [], "similar_size": []}
+
+    if place_type != "county":
+        all_places = conn.execute("""
+            SELECT DISTINCT geo_name_clean FROM dimension_options_parsed
+            WHERE dim_type = 'geo' AND geo_level = ?
+        """, [place_type]).fetchall()
+        siblings = [
+            {"slug": slugify(r[0]), "name": r[0], "type": place_type}
+            for (r[0],) in all_places
+            if r[0] and slugify(r[0]) != slug
+        ][:5]
+        return {"same_region": siblings, "similar_size": []}
+
+    region_slug = place["parent_slug"]
+    same_region = []
+    if region_slug:
+        region_counties = [
+            name for name, reg in COUNTY_REGION.items() if reg == region_slug
+        ]
+        same_region = [
+            {"slug": slugify(name), "name": name, "type": "county"}
+            for name in region_counties
+            if slugify(name) != slug
+        ][:5]
+
+    canonical = place["name"]
+    this_pop = _get_county_population(canonical)
+    similar_size = []
+    if this_pop:
+        all_counties = conn.execute("""
+            SELECT DISTINCT geo_name_clean FROM dimension_options_parsed
+            WHERE dim_type = 'geo' AND geo_level = 'county'
+        """).fetchall()
+        pop_list = []
+        for (name,) in all_counties:
+            if not name or name == canonical:
+                continue
+            p = _get_county_population(name)
+            if p:
+                pop_list.append((abs(p - this_pop), name))
+        pop_list.sort()
+        similar_size = [
+            {"slug": slugify(name), "name": name, "type": "county"}
+            for _, name in pop_list[:3]
+        ]
+
+    return {"same_region": same_region, "similar_size": similar_size}
+
+
+def get_kpi_baselines(place_type: str, slug: str, kpi_label: str) -> dict:
+    """Get national and region baseline series for a named KPI.
+
+    Returns:
+        {national: [{year, value}, ...], region: [{year, value}, ...]}
+    """
+    config = _load_kpi_config()
+    specs = config.get(place_type, [])
+    spec = next((s for s in specs if isinstance(s, dict) and s.get("label") == kpi_label), None)
+    if not spec:
+        return {"national": [], "region": []}
+
+    parquet_path = PARQUET_DIR / spec["parquet"]
+    agg_func = spec.get("agg_func", "AVG")
+    extra = {k: v for k, v in spec.get("extra_filters", {}).items()}
+
+    # National: aggregate all REF_AREA values in the parquet
+    national: list = []
+    if parquet_path.exists():
+        con = _duckdb.connect()
+        where_parts = []
+        for col, val in extra.items():
+            if val is None:
+                where_parts.append(f"{col} IS NULL")
+            else:
+                safe_val = str(val).replace("'", "''")
+                where_parts.append(f"{col} = '{safe_val}'")
+
+        time_filter = "TRY_CAST(LEFT(CAST(TIME_PERIOD AS VARCHAR), 4) AS INTEGER) IS NOT NULL"
+        if where_parts:
+            full_where = f"WHERE {' AND '.join(where_parts)} AND {time_filter}"
+        else:
+            full_where = f"WHERE {time_filter}"
+
+        try:
+            rows = con.execute(f"""
+                SELECT LEFT(CAST(TIME_PERIOD AS VARCHAR), 4) AS year,
+                       {agg_func}(OBS_VALUE) AS value
+                FROM read_parquet('{parquet_path}')
+                {full_where}
+                GROUP BY 1 ORDER BY 1 ASC LIMIT 30
+            """).fetchall()
+            national = [{"year": r[0], "value": r[1]} for r in rows if r[1] is not None]
+        except Exception:
+            national = []
+        finally:
+            con.close()
+
+    # Region: counties in same region only
+    region_series: list = []
+    if place_type == "county":
+        place = resolve_place(place_type, slug)
+        if place and place["parent_slug"]:
+            region_counties = [
+                name for name, reg in COUNTY_REGION.items()
+                if reg == place["parent_slug"]
+            ]
+            region_series = _query_kpi_series(parquet_path, region_counties, extra, agg_func)
+
+    return {"national": national, "region": region_series}
 
 
 def get_place_datasets(place_type: str, slug: str, *, conn=None) -> list[dict]:

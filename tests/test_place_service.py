@@ -2,7 +2,7 @@
 import sys
 sys.path.insert(0, '.')
 import pytest
-from app.services.place_service import slugify, resolve_place, get_place_datasets, get_place_kpis
+from app.services.place_service import slugify, resolve_place, get_place_datasets, get_place_kpis, get_place_peers, get_kpi_baselines
 
 
 def test_slugify_county():
@@ -93,3 +93,39 @@ def test_get_place_kpis_missing_locality_returns_empty():
     # Localities have no KPI config — must return empty list, not error
     kpis = get_place_kpis("locality", "oradea")
     assert isinstance(kpis, list)  # empty list OK
+
+
+def test_get_place_peers_county_has_same_region():
+    peers = get_place_peers("county", "bihor")
+    assert "same_region" in peers
+    assert isinstance(peers["same_region"], list)
+    slugs = [p["slug"] for p in peers["same_region"]]
+    assert "cluj" in slugs  # Cluj is also Nord-Vest
+
+
+def test_get_place_peers_county_has_similar_size():
+    peers = get_place_peers("county", "bihor")
+    assert "similar_size" in peers
+    assert len(peers["similar_size"]) <= 3
+
+
+def test_get_place_peers_self_excluded():
+    peers = get_place_peers("county", "bihor")
+    all_peer_slugs = (
+        [p["slug"] for p in peers.get("same_region", [])] +
+        [p["slug"] for p in peers.get("similar_size", [])]
+    )
+    assert "bihor" not in all_peer_slugs
+
+
+def test_get_kpi_baselines_returns_national():
+    baselines = get_kpi_baselines("county", "bihor", "Rata șomajului BIM")
+    assert "national" in baselines
+    assert isinstance(baselines["national"], list)
+    assert len(baselines["national"]) > 0
+
+
+def test_get_kpi_baselines_returns_region():
+    baselines = get_kpi_baselines("county", "bihor", "Rata șomajului BIM")
+    assert "region" in baselines
+    assert isinstance(baselines["region"], list)
