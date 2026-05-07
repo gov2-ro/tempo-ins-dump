@@ -99,6 +99,103 @@ def resolve_place(place_type: str, slug: str, *, conn=None) -> dict | None:
     }
 
 
+def _query_kpi_series(parquet_path: Path, ref_area_values: list[str],
+                      extra_filters: dict, agg_func: str) -> list[dict]:
+    """Query a parquet for a place's annual time series.
+
+    Returns list of {year: str, value: float} sorted ascending by year.
+    Averages/sums over any non-REF_AREA, non-TIME_PERIOD dims.
+    Extra filter values of None mean IS NULL.
+    """
+    if not parquet_path.exists():
+        return []
+
+    con = _duckdb.connect()
+    where_parts = [
+        "REF_AREA IN ({})".format(",".join(f"'{v}'" for v in ref_area_values))
+    ]
+    for col, val in extra_filters.items():
+        if val is None:
+            where_parts.append(f"{col} IS NULL")
+        else:
+            safe_val = str(val).replace("'", "''")
+            where_parts.append(f"{col} = '{safe_val}'")
+
+    query = f"""
+        SELECT
+            LEFT(CAST(TIME_PERIOD AS VARCHAR), 4) AS year,
+            {agg_func}(OBS_VALUE) AS value
+        FROM read_parquet('{parquet_path}')
+        WHERE {" AND ".join(where_parts)}
+          AND TRY_CAST(LEFT(CAST(TIME_PERIOD AS VARCHAR), 4) AS INTEGER) IS NOT NULL
+        GROUP BY 1
+        ORDER BY 1 ASC
+        LIMIT 30
+    """
+    try:
+        rows = con.execute(query).fetchall()
+    except Exception:
+        return []
+
+    return [{"year": r[0], "value": r[1]} for r in rows if r[1] is not None]
+
+
+def get_place_kpis(place_type: str, slug: str, *, conn=None) -> list[dict]:
+    """Return curated KPI series for a place.
+
+    Each entry:
+      {label, unit, category, value: float|None, change_yoy: float|None,
+       sparkline: [{year, value}, ...]}
+
+    For localities (empty config), returns [].
+    Missing data for a KPI is omitted from the list.
+    """
+    config = _load_kpi_config()
+    kpi_specs = config.get(place_type, [])
+    if not kpi_specs:
+        return []
+
+    place = resolve_place(place_type, slug, conn=conn)
+    if not place:
+        return []
+
+    results = []
+    for spec in kpi_specs:
+        # Skip _notes key if present
+        if not isinstance(spec, dict) or "parquet" not in spec:
+            continue
+        parquet_path = PARQUET_DIR / spec["parquet"]
+        series = _query_kpi_series(
+            parquet_path,
+            place["ref_area_values"],
+            spec.get("extra_filters", {}),
+            spec.get("agg_func", "AVG"),
+        )
+        if not series:
+            continue
+
+        latest = series[-1]["value"] if series else None
+        yoy = None
+        if len(series) >= 2 and series[-2]["value"] and series[-1]["value"]:
+            prev = series[-2]["value"]
+            curr = series[-1]["value"]
+            if spec["unit"] in ("%", "‰"):
+                yoy = round(curr - prev, 2)
+            else:
+                yoy = round((curr - prev) / prev * 100, 1) if prev else None
+
+        results.append({
+            "label": spec["label"],
+            "unit": spec["unit"],
+            "category": spec.get("category", ""),
+            "value": round(latest, 1) if latest is not None else None,
+            "change_yoy": yoy,
+            "sparkline": series,
+        })
+
+    return results
+
+
 def get_place_datasets(place_type: str, slug: str, *, conn=None) -> list[dict]:
     """Return all datasets that have data for this place."""
     if conn is None:

@@ -2,7 +2,7 @@
 import sys
 sys.path.insert(0, '.')
 import pytest
-from app.services.place_service import slugify, resolve_place, get_place_datasets
+from app.services.place_service import slugify, resolve_place, get_place_datasets, get_place_kpis
 
 
 def test_slugify_county():
@@ -62,3 +62,34 @@ def test_get_place_datasets_returns_list():
 def test_get_place_datasets_unknown_returns_empty():
     datasets = get_place_datasets("county", "notaplace99")
     assert datasets == []
+
+
+def test_get_place_kpis_county_returns_list():
+    kpis = get_place_kpis("county", "bihor")
+    assert isinstance(kpis, list)
+    assert len(kpis) > 0
+    kpi = kpis[0]
+    assert "label" in kpi
+    assert "unit" in kpi
+    # value may be None if data missing, but sparkline must be a list
+    assert isinstance(kpi["sparkline"], list)
+
+
+def test_get_place_kpis_has_unemployment():
+    kpis = get_place_kpis("county", "bihor")
+    labels = [k["label"] for k in kpis]
+    assert any("șomaj" in l.lower() or "somaj" in l.lower() for l in labels)
+
+
+def test_get_place_kpis_sparkline_ordered():
+    kpis = get_place_kpis("county", "bihor")
+    pop_kpi = next((k for k in kpis if "opulat" in k["label"]), None)
+    if pop_kpi and len(pop_kpi["sparkline"]) >= 2:
+        years = [entry["year"] for entry in pop_kpi["sparkline"]]
+        assert years == sorted(years)  # ascending
+
+
+def test_get_place_kpis_missing_locality_returns_empty():
+    # Localities have no KPI config — must return empty list, not error
+    kpis = get_place_kpis("locality", "oradea")
+    assert isinstance(kpis, list)  # empty list OK
