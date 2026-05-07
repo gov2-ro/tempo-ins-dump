@@ -204,6 +204,7 @@ def _get_county_population(county_name: str) -> float | None:
     if not parquet_path.exists():
         return None
     con = _duckdb.connect()
+    rows: list = []
     try:
         rows = con.execute("""
             SELECT SUM(OBS_VALUE) as pop
@@ -240,9 +241,9 @@ def get_place_peers(place_type: str, slug: str, *, conn=None) -> dict:
             WHERE dim_type = 'geo' AND geo_level = ?
         """, [place_type]).fetchall()
         siblings = [
-            {"slug": slugify(r[0]), "name": r[0], "type": place_type}
-            for (r[0],) in all_places
-            if r[0] and slugify(r[0]) != slug
+            {"slug": slugify(name), "name": name, "type": place_type}
+            for (name,) in all_places
+            if name and slugify(name) != slug
         ][:5]
         return {"same_region": siblings, "similar_size": []}
 

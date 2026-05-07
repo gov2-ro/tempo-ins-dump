@@ -129,3 +129,13 @@ def test_get_kpi_baselines_returns_region():
     baselines = get_kpi_baselines("county", "bihor", "Rata șomajului BIM")
     assert "region" in baselines
     assert isinstance(baselines["region"], list)
+
+
+def test_get_place_peers_region_returns_siblings():
+    peers = get_place_peers("region", "nord-vest")
+    assert "same_region" in peers
+    assert isinstance(peers["same_region"], list)
+    # Should have other regions as siblings
+    assert len(peers["same_region"]) > 0
+    # similar_size is empty for non-county
+    assert peers["similar_size"] == []
