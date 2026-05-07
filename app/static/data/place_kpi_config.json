@@ -1,0 +1,226 @@
+{
+  "_notes": {
+    "population_agg": "POP105A has AGE+SEX+RESIDENCE split with no Total rows. (AGE,SEX,RESIDENCE,REF_AREA,TIME_PERIOD) is unique, so SUM gives correct resident population.",
+    "unemployment_agg": "SOM103A has SEX split (Masculin/Feminin), no Total row. AVG of both sexes is an acceptable approximation for display.",
+    "net_wage_agg": "FOM106E has ECON_ACTIVITY+SEX split, no Total row. Rows with NULL ECON_ACTIVITY represent all-sectors totals. AVG across NULL-EA rows (both sexes) gives blended cross-sector avg net monthly wage (Lei). Covers 2008-2024.",
+    "live_births_agg": "POP201A has SEX+RESIDENCE split, no Total row. SUM of all rows gives total live births.",
+    "birth_death_rate_note": "POP202A/POP207A rate datasets only have Urban/Rural split. AVG of both is used as an approximation; absolute counts (POP201A/POP206B) are preferred where available."
+  },
+  "county": [
+    {
+      "label": "Populație rezidentă",
+      "parquet": "POP105A_judete_grupe.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "SUM",
+      "unit": "pers.",
+      "category": "Populație",
+      "source_code": "POP105A",
+      "time_range": ["2012", "2025"]
+    },
+    {
+      "label": "Rata șomajului BIM",
+      "parquet": "SOM103A_judete.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "AVG",
+      "unit": "%",
+      "category": "Muncă",
+      "source_code": "SOM103A",
+      "time_range": ["1991", "2024"],
+      "_agg_note": "AVG of Masculin+Feminin rows"
+    },
+    {
+      "label": "Câștig salarial net mediu lunar",
+      "parquet": "FOM106E_judete.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {"ECON_ACTIVITY": null},
+      "agg_func": "AVG",
+      "unit": "lei",
+      "category": "Muncă",
+      "source_code": "FOM106E",
+      "time_range": ["2008", "2024"],
+      "_agg_note": "AVG across all sectors (ECON_ACTIVITY IS NULL) and both sexes"
+    },
+    {
+      "label": "Născuți vii",
+      "parquet": "POP201A_judete.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "SUM",
+      "unit": "pers.",
+      "category": "Populație",
+      "source_code": "POP201A",
+      "time_range": ["1990", "2024"]
+    },
+    {
+      "label": "Rata natalității",
+      "parquet": "POP202A_judete.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "AVG",
+      "unit": "‰",
+      "category": "Populație",
+      "source_code": "POP202A",
+      "time_range": ["1990", "2024"],
+      "_agg_note": "AVG of Urban+Rural rows (approximation)"
+    },
+    {
+      "label": "Rata mortalității",
+      "parquet": "POP207A_judete.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "AVG",
+      "unit": "‰",
+      "category": "Populație",
+      "source_code": "POP207A",
+      "time_range": ["1990", "2024"],
+      "_agg_note": "AVG of Urban+Rural rows (approximation)"
+    },
+    {
+      "label": "Decedați",
+      "parquet": "POP206B_judete.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "SUM",
+      "unit": "pers.",
+      "category": "Populație",
+      "source_code": "POP206B",
+      "time_range": ["1990", "2024"]
+    }
+  ],
+  "region": [
+    {
+      "label": "Populație rezidentă",
+      "parquet": "POP105A_regiuni_grupe.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "SUM",
+      "unit": "pers.",
+      "category": "Populație",
+      "source_code": "POP105A",
+      "time_range": ["2012", "2025"]
+    },
+    {
+      "label": "Rata șomajului BIM",
+      "parquet": "SOM103A_regiuni.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "AVG",
+      "unit": "%",
+      "category": "Muncă",
+      "source_code": "SOM103A",
+      "time_range": ["1991", "2024"],
+      "_agg_note": "AVG of Masculin+Feminin rows"
+    },
+    {
+      "label": "Câștig salarial net mediu lunar",
+      "parquet": "FOM106E_regiuni.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {"ECON_ACTIVITY": null},
+      "agg_func": "AVG",
+      "unit": "lei",
+      "category": "Muncă",
+      "source_code": "FOM106E",
+      "time_range": ["2008", "2024"],
+      "_agg_note": "AVG across all sectors (ECON_ACTIVITY IS NULL) and both sexes"
+    },
+    {
+      "label": "Născuți vii",
+      "parquet": "POP201A_regiuni.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "SUM",
+      "unit": "pers.",
+      "category": "Populație",
+      "source_code": "POP201A",
+      "time_range": ["1990", "2024"]
+    },
+    {
+      "label": "Rata natalității",
+      "parquet": "POP202B_regiuni.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "AVG",
+      "unit": "‰",
+      "category": "Populație",
+      "source_code": "POP202B",
+      "time_range": ["2012", "2024"],
+      "_agg_note": "AVG of Urban+Rural rows (approximation)"
+    },
+    {
+      "label": "Rata mortalității",
+      "parquet": "POP207A_regiuni.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "AVG",
+      "unit": "‰",
+      "category": "Populație",
+      "source_code": "POP207A",
+      "time_range": ["1990", "2024"],
+      "_agg_note": "AVG of Urban+Rural rows (approximation)"
+    }
+  ],
+  "macroregion": [
+    {
+      "label": "Populație rezidentă",
+      "parquet": "POP105A_macroregiuni_grupe.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "SUM",
+      "unit": "pers.",
+      "category": "Populație",
+      "source_code": "POP105A",
+      "time_range": ["2012", "2025"]
+    },
+    {
+      "label": "Rata șomajului BIM",
+      "parquet": "SOM103A_macroregiuni.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "AVG",
+      "unit": "%",
+      "category": "Muncă",
+      "source_code": "SOM103A",
+      "time_range": ["1991", "2024"],
+      "_agg_note": "AVG of Masculin+Feminin rows"
+    },
+    {
+      "label": "Câștig salarial net mediu lunar",
+      "parquet": "FOM106E_macroregiuni.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {"ECON_ACTIVITY": null},
+      "agg_func": "AVG",
+      "unit": "lei",
+      "category": "Muncă",
+      "source_code": "FOM106E",
+      "time_range": ["2008", "2024"],
+      "_agg_note": "AVG across all sectors (ECON_ACTIVITY IS NULL) and both sexes"
+    },
+    {
+      "label": "Rata natalității",
+      "parquet": "POP202B_macroregiuni.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "AVG",
+      "unit": "‰",
+      "category": "Populație",
+      "source_code": "POP202B",
+      "time_range": ["2012", "2024"],
+      "_agg_note": "AVG of Urban+Rural rows (approximation)"
+    },
+    {
+      "label": "Rata mortalității",
+      "parquet": "POP207A_macroregiuni.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "AVG",
+      "unit": "‰",
+      "category": "Populație",
+      "source_code": "POP207A",
+      "time_range": ["1990", "2024"],
+      "_agg_note": "AVG of Urban+Rural rows (approximation)"
+    }
+  ],
+  "locality": []
+}
