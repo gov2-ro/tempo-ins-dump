@@ -184,7 +184,7 @@
     "name": "Cartographic",
     "desc": "Geographic (county/region) + time, no demographic dims",
     "count": 454,
-    "primary_chart": "choropleth",
+    "primary_chart": "choropleth / small_multiples / horizontal_bar",
     "exemplars": [
       {
         "matrix_code": "LOC103B_judet",

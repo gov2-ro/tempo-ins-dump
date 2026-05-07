@@ -239,7 +239,11 @@ CLUSTER_CHARTS = {
     # high-cardinality cat → horizontal_bar (ranking) is fine snapshot.
     5: "heatmap / grouped_bar / small_multiples / horizontal_bar",
     6: "population_pyramid",
-    7: "choropleth",
+    # Cluster 7 is dominantly choropleth, but high-cardinality category × geo
+    # snapshots (e.g. ASS113E with 14 unit measures × 28 counties × single
+    # year) are reasonable as horizontal_bar (county ranking) too. Geo + cat
+    # 6-25 facet is also legitimately small_multiples (panel per region).
+    7: "choropleth / small_multiples / horizontal_bar",
     8: "choropleth / line",
     9: "line / small_multiples / horizontal_bar",
     # Cluster 10 mixes single-cat snapshots (1 product dim) with multi-cat

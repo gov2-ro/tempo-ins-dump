@@ -13,7 +13,7 @@ Use this to identify chart improvement opportunities per cluster.
 | 4 | Gender-Split | 107 | 5.4% | line / small_multiples / horizontal_bar | Binary gender breakdown over time |
 | 5 | Age Cohort | 67 | 3.4% | heatmap / grouped_bar / small_multiples / horizontal_bar | Age groups over time (no gender) |
 | 6 | Population Pyramid | 72 | 3.6% | population_pyramid | Age + gender over time |
-| 7 | Cartographic | 454 | 22.9% | choropleth | Geographic (county/region) + time, no demographic dims |
+| 7 | Cartographic | 454 | 22.9% | choropleth / small_multiples / horizontal_bar | Geographic (county/region) + time, no demographic dims |
 | 8 | Geo + Demographic | 138 | 6.9% | choropleth / line | Geographic + gender/age/residence |
 | 9 | Urban/Rural | 88 | 4.4% | line / small_multiples / horizontal_bar | Residence (urban/rural) splits over time |
 | 10 | Categorical Snapshot | 25 | 1.3% | grouped_bar / horizontal_bar / bar_vertical | No time, no geo — pure categorical cross-tabs |

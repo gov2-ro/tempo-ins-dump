@@ -150,32 +150,32 @@
     },
     "7": {
       "name": "Cartographic",
-      "expected": "choropleth",
+      "expected": "choropleth / small_multiples / horizontal_bar",
       "total": 454,
-      "matches": 339,
+      "matches": 420,
       "misses": [
         {
-          "matrix_code": "AGR205A",
-          "got": "line"
+          "matrix_code": "BUF103K",
+          "got": "bubble"
         },
         {
-          "matrix_code": "AMG158F",
-          "got": "line"
+          "matrix_code": "BUF105J",
+          "got": "bubble"
         },
         {
-          "matrix_code": "AMG159G",
-          "got": "line"
+          "matrix_code": "BUF107K",
+          "got": "bubble"
         },
         {
-          "matrix_code": "ART102D",
-          "got": "line"
+          "matrix_code": "BUF110J",
+          "got": "bubble"
         },
         {
-          "matrix_code": "ART109C",
-          "got": "line"
+          "matrix_code": "BUF113J",
+          "got": "bubble"
         }
       ],
-      "match_pct": 74.7
+      "match_pct": 92.5
     },
     "8": {
       "name": "Geo + Demographic",
@@ -277,7 +277,9 @@
     "ACC101B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -303,7 +305,9 @@
     "ACC102B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -320,7 +324,9 @@
     "ADM101A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -457,7 +463,9 @@
     "AGR101A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -465,7 +473,9 @@
     "AGR101B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -473,7 +483,9 @@
     "AGR102A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -481,7 +493,9 @@
     "AGR102B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -489,7 +503,9 @@
     "AGR102C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -497,7 +513,9 @@
     "AGR103A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -505,7 +523,9 @@
     "AGR104A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -513,7 +533,9 @@
     "AGR105A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -521,7 +543,9 @@
     "AGR106A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -529,7 +553,9 @@
     "AGR107A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -537,7 +563,9 @@
     "AGR108A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -545,7 +573,9 @@
     "AGR108B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -553,7 +583,9 @@
     "AGR109A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -561,7 +593,9 @@
     "AGR109B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -569,7 +603,9 @@
     "AGR110A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -577,7 +613,9 @@
     "AGR111A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -585,7 +623,9 @@
     "AGR112A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -593,7 +633,9 @@
     "AGR112B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -601,7 +643,9 @@
     "AGR113A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -609,7 +653,9 @@
     "AGR114A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -617,7 +663,9 @@
     "AGR115A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -625,7 +673,9 @@
     "AGR115B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -633,7 +683,9 @@
     "AGR116A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -650,7 +702,9 @@
     "AGR201A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -658,7 +712,9 @@
     "AGR201B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -666,7 +722,9 @@
     "AGR201C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -712,7 +770,9 @@
     "AGR202A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -720,7 +780,9 @@
     "AGR202B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -728,7 +790,9 @@
     "AGR203A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -736,7 +800,9 @@
     "AGR204A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -744,15 +810,19 @@
     "AGR205A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "AGR206A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -760,7 +830,9 @@
     "AGR207A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -821,7 +893,9 @@
     "AGR301A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -829,7 +903,9 @@
     "AGR304A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -846,7 +922,9 @@
     "AGR306A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -854,7 +932,9 @@
     "AGR307A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -1852,10 +1932,12 @@
     "AMG158F": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "AMG158G": {
       "cluster": 8,
@@ -1926,10 +2008,12 @@
     "AMG159G": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "AMG160A": {
       "cluster": 6,
@@ -2006,7 +2090,9 @@
     "ART101B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2014,7 +2100,9 @@
     "ART101C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2031,7 +2119,9 @@
     "ART102B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2039,15 +2129,19 @@
     "ART102D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "ART103B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2055,7 +2149,9 @@
     "ART103C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2063,7 +2159,9 @@
     "ART103D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2071,7 +2169,9 @@
     "ART103E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2079,7 +2179,9 @@
     "ART104A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2087,7 +2189,9 @@
     "ART104B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2095,7 +2199,9 @@
     "ART104C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2103,7 +2209,9 @@
     "ART104D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2111,7 +2219,9 @@
     "ART105A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2119,7 +2229,9 @@
     "ART105B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2127,7 +2239,9 @@
     "ART106A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2135,7 +2249,9 @@
     "ART106B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2143,7 +2259,9 @@
     "ART107A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2151,7 +2269,9 @@
     "ART107B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2159,7 +2279,9 @@
     "ART108A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2167,7 +2289,9 @@
     "ART108B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2183,7 +2307,9 @@
     "ART109B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2191,10 +2317,12 @@
     "ART109C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "ART110A": {
       "cluster": 1,
@@ -2207,7 +2335,9 @@
     "ART110B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2215,15 +2345,19 @@
     "ART110C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "ART111B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2231,7 +2365,9 @@
     "ART112A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2239,7 +2375,9 @@
     "ART112B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2247,7 +2385,9 @@
     "ART113A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2255,7 +2395,9 @@
     "ART113B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2263,7 +2405,9 @@
     "ART114A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2271,7 +2415,9 @@
     "ART114B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2422,7 +2568,9 @@
     "ART121A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2430,7 +2578,9 @@
     "ART121B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2438,7 +2588,9 @@
     "ART122A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2446,7 +2598,9 @@
     "ART122B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2454,7 +2608,9 @@
     "ART123A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2462,7 +2618,9 @@
     "ART123B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2553,7 +2711,9 @@
     "ASS113C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2561,7 +2721,9 @@
     "ASS113D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2569,10 +2731,12 @@
     "ASS113E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "horizontal_bar",
-      "match": false
+      "match": true
     },
     "ASS113F": {
       "cluster": 2,
@@ -2629,7 +2793,9 @@
     "ASS117B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2637,7 +2803,9 @@
     "ASS117C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2654,7 +2822,9 @@
     "ASS118B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2662,7 +2832,9 @@
     "ASS118C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2670,7 +2842,9 @@
     "ASS118D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2678,7 +2852,9 @@
     "ASS118E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2686,7 +2862,9 @@
     "ASS118F": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2694,7 +2872,9 @@
     "ASS119A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2702,7 +2882,9 @@
     "ASS119B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -2782,9 +2964,11 @@
     "BUF103K": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
+      "actual": "bubble",
       "match": false
     },
     "BUF104G": {
@@ -2810,10 +2994,12 @@
     "BUF104J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "BUF105G": {
       "cluster": 9,
@@ -2838,7 +3024,9 @@
     "BUF105J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "bubble",
       "match": false
@@ -2885,10 +3073,12 @@
     "BUF106J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "BUF107G": {
       "cluster": 9,
@@ -2922,7 +3112,9 @@
     "BUF107K": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "bubble",
       "match": false
@@ -2950,10 +3142,12 @@
     "BUF108J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "BUF109G": {
       "cluster": 9,
@@ -3008,9 +3202,11 @@
     "BUF110J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
+      "actual": "bubble",
       "match": false
     },
     "BUF111G": {
@@ -3035,10 +3231,12 @@
     "BUF111J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "BUF112G": {
       "cluster": 9,
@@ -3063,10 +3261,12 @@
     "BUF112J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "BUF113G": {
       "cluster": 2,
@@ -3090,9 +3290,11 @@
     "BUF113J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
+      "actual": "bubble",
       "match": false
     },
     "BUF114F": {
@@ -3117,9 +3319,11 @@
     "BUF114J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
+      "actual": "bubble",
       "match": false
     },
     "BUF115A": {
@@ -3144,10 +3348,12 @@
     "BUF115J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "CAV101A": {
       "cluster": 3,
@@ -3452,15 +3658,19 @@
     "CAV102M": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "small_multiples",
-      "match": false
+      "match": true
     },
     "CAV102N": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -3819,7 +4029,9 @@
     "CDP102E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -3903,7 +4115,9 @@
     "CDP103E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -3937,7 +4151,9 @@
     "CDP104B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -4043,7 +4259,9 @@
     "CNF101B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -4121,7 +4339,9 @@
     "CNF102E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -4622,23 +4842,29 @@
     "CON103A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "CON103B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "CON103C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -4646,15 +4872,19 @@
     "CON103G": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "CON103H": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -4662,7 +4892,9 @@
     "CON103I": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -5102,23 +5334,29 @@
     "CON116A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "CON117A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "CON118A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -5126,17 +5364,21 @@
     "CON119A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "CON120A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
+      "actual": "bubble",
       "match": false
     },
     "COV101M": {
@@ -5201,10 +5443,12 @@
     "COV101U": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "COV102A": {
       "cluster": 1,
@@ -5537,7 +5781,9 @@
     "CSP101B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -5554,7 +5800,9 @@
     "CSP102B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -5571,7 +5819,9 @@
     "CSP103B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -5588,7 +5838,9 @@
     "CSP104B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -5605,7 +5857,9 @@
     "CSP105B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -5807,7 +6061,9 @@
     "ECC118A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -5902,7 +6158,9 @@
     "EXP101B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -5919,10 +6177,12 @@
     "EXP101D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "horizontal_bar",
-      "match": false
+      "match": true
     },
     "EXP101E": {
       "cluster": 2,
@@ -5963,7 +6223,9 @@
     "EXP101J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -6040,10 +6302,12 @@
     "EXP102C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "horizontal_bar",
-      "match": false
+      "match": true
     },
     "EXP102D": {
       "cluster": 2,
@@ -6057,7 +6321,9 @@
     "EXP102E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -6074,7 +6340,9 @@
     "EXP102G": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -6100,7 +6368,9 @@
     "EXP102J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -6223,7 +6493,9 @@
     "FIN102B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -6348,7 +6620,9 @@
     "FOM104A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -6356,7 +6630,9 @@
     "FOM104B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -6364,7 +6640,9 @@
     "FOM104D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -6400,7 +6678,9 @@
     "FOM105A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -6454,7 +6734,9 @@
     "FOM106A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -6508,7 +6790,9 @@
     "FOM107A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7149,7 +7433,9 @@
     "GOS102A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7157,7 +7443,9 @@
     "GOS102B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7165,7 +7453,9 @@
     "GOS103A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7173,7 +7463,9 @@
     "GOS103B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7181,7 +7473,9 @@
     "GOS104A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7189,7 +7483,9 @@
     "GOS104B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7197,7 +7493,9 @@
     "GOS105A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7205,7 +7503,9 @@
     "GOS105B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7222,7 +7522,9 @@
     "GOS106B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7239,7 +7541,9 @@
     "GOS107A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7247,7 +7551,9 @@
     "GOS107B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7264,7 +7570,9 @@
     "GOS108A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7272,7 +7580,9 @@
     "GOS108B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7289,7 +7599,9 @@
     "GOS109A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7297,7 +7609,9 @@
     "GOS109B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7323,7 +7637,9 @@
     "GOS110A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7331,7 +7647,9 @@
     "GOS110B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7357,7 +7675,9 @@
     "GOS111A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7365,7 +7685,9 @@
     "GOS111B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7373,7 +7695,9 @@
     "GOS111C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7381,7 +7705,9 @@
     "GOS112B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7389,7 +7715,9 @@
     "GOS112C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7397,7 +7725,9 @@
     "GOS114B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7405,7 +7735,9 @@
     "GOS115B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7413,7 +7745,9 @@
     "GOS116A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7421,7 +7755,9 @@
     "GOS116B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7447,7 +7783,9 @@
     "GOS118A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7455,7 +7793,9 @@
     "GOS118B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -7807,9 +8147,11 @@
     "INO101C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
+      "actual": "bubble",
       "match": false
     },
     "INO101D": {
@@ -7853,9 +8195,11 @@
     "INO102A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
+      "actual": "bubble",
       "match": false
     },
     "INO102B": {
@@ -7920,7 +8264,9 @@
     "INO102H": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -7958,7 +8304,9 @@
     "INT101A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8011,7 +8359,9 @@
     "INT101G": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8019,7 +8369,9 @@
     "INT101H": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8027,7 +8379,9 @@
     "INT101I": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8035,7 +8389,9 @@
     "INT101J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8070,7 +8426,9 @@
     "INT101N": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8078,7 +8436,9 @@
     "INT101O": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8095,7 +8455,9 @@
     "INT101R": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8103,7 +8465,9 @@
     "INT101S": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8111,7 +8475,9 @@
     "INT101T": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8119,7 +8485,9 @@
     "INT101U": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8154,7 +8522,9 @@
     "INT101Y": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8162,7 +8532,9 @@
     "INT102C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8170,7 +8542,9 @@
     "INT102D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8187,7 +8561,9 @@
     "INT104C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8195,7 +8571,9 @@
     "INT104D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8221,7 +8599,9 @@
     "INT105B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8229,7 +8609,9 @@
     "INT105C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8237,7 +8619,9 @@
     "INT105D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8245,7 +8629,9 @@
     "INT105E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8415,7 +8801,9 @@
     "INT111C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -8423,7 +8811,9 @@
     "INT111D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -8431,7 +8821,9 @@
     "INT111E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -8439,7 +8831,9 @@
     "INT111F": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -8447,7 +8841,9 @@
     "INT111G": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -8455,7 +8851,9 @@
     "INT111H": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -8463,7 +8861,9 @@
     "INT111I": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -8471,7 +8871,9 @@
     "INT111J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -8479,7 +8881,9 @@
     "INT111K": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -8496,7 +8900,9 @@
     "INT111M": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -8504,15 +8910,19 @@
     "INT111N": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "INT111O": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -8520,15 +8930,19 @@
     "INT111P": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "INT111Q": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -8536,18 +8950,22 @@
     "INT111R": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "INT111S": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "INT111T": {
       "cluster": 8,
@@ -8570,7 +8988,9 @@
     "INT111V": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -8578,7 +8998,9 @@
     "INT111W": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -8586,15 +9008,19 @@
     "INT111X": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "INT111Y": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -8860,7 +9286,9 @@
     "JUS104C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8923,7 +9351,9 @@
     "JUS105C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8939,7 +9369,9 @@
     "JUS107A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8947,7 +9379,9 @@
     "JUS107B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -8964,7 +9398,9 @@
     "JUS109A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9080,66 +9516,82 @@
     "LMV101A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "LMV101B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "LMV101C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "LMV101D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "LMV102A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "LMV102B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "LMV102C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "LMV102D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "small_multiples",
-      "match": false
+      "actual": "horizontal_bar",
+      "match": true
     },
     "LOC101A": {
       "cluster": 8,
@@ -9153,7 +9605,9 @@
     "LOC101B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9179,7 +9633,9 @@
     "LOC103B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9196,7 +9652,9 @@
     "LOC104B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9204,7 +9662,9 @@
     "LOC104C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9258,7 +9718,9 @@
     "LOC108B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9365,7 +9827,9 @@
     "PMI109A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9373,7 +9837,9 @@
     "PMI109B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9513,7 +9979,9 @@
     "PNS101D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9539,7 +10007,9 @@
     "PNS102D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9638,7 +10108,9 @@
     "POP108C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9727,7 +10199,9 @@
     "POP201D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9793,7 +10267,9 @@
     "POP201K": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9884,7 +10360,9 @@
     "POP204C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9901,7 +10379,9 @@
     "POP204F": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9944,7 +10424,9 @@
     "POP206C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9952,7 +10434,9 @@
     "POP206D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -9996,7 +10480,9 @@
     "POP206I": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10004,7 +10490,9 @@
     "POP206J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10085,7 +10573,9 @@
     "POP208C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10122,7 +10612,9 @@
     "POP208G": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10185,7 +10677,9 @@
     "POP210D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10211,7 +10705,9 @@
     "POP212B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10239,7 +10735,9 @@
     "POP212E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10417,7 +10915,9 @@
     "POP304B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10434,7 +10934,9 @@
     "POP305B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10451,7 +10953,9 @@
     "POP307A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10459,7 +10963,9 @@
     "POP307B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10467,7 +10973,9 @@
     "POP308A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10475,7 +10983,9 @@
     "POP308B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10510,7 +11020,9 @@
     "POP309D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10518,7 +11030,9 @@
     "POP309E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10553,15 +11067,19 @@
     "POP310D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "POP310E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10611,7 +11129,9 @@
     "PPA101A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10619,7 +11139,9 @@
     "PPA102B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10627,7 +11149,9 @@
     "PPA102C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10908,7 +11432,9 @@
     "PTT101B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10916,7 +11442,9 @@
     "PTT102A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10924,7 +11452,9 @@
     "PTT102B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10932,7 +11462,9 @@
     "PTT103A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10940,7 +11472,9 @@
     "PTT104A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10957,7 +11491,9 @@
     "PTT105A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10965,7 +11501,9 @@
     "PTT106A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10973,7 +11511,9 @@
     "PTT107A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10981,7 +11521,9 @@
     "PTT108A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10989,7 +11531,9 @@
     "PTT109A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -10997,7 +11541,9 @@
     "PTT110A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11005,7 +11551,9 @@
     "PTT111A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11013,7 +11561,9 @@
     "PTT112A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11075,7 +11625,9 @@
     "SAN101A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11083,7 +11635,9 @@
     "SAN101B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11100,7 +11654,9 @@
     "SAN102B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11108,7 +11664,9 @@
     "SAN102C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11116,7 +11674,9 @@
     "SAN103A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11124,7 +11684,9 @@
     "SAN103B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11141,7 +11703,9 @@
     "SAN104B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11260,10 +11824,12 @@
     "SAR102D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "SAR102E": {
       "cluster": 3,
@@ -11406,10 +11972,12 @@
     "SAR111C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "SAR111D": {
       "cluster": 3,
@@ -11444,10 +12012,12 @@
     "SAR112C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "SAR113A": {
       "cluster": 4,
@@ -11472,10 +12042,12 @@
     "SAR113C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "SAR114A": {
       "cluster": 6,
@@ -11488,10 +12060,12 @@
     "SAR114B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "SAR114C": {
       "cluster": 3,
@@ -11544,10 +12118,12 @@
     "SAR115B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "SAR115C": {
       "cluster": 3,
@@ -11620,10 +12196,12 @@
     "SAR116F": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "SAR117A": {
       "cluster": 3,
@@ -11668,10 +12246,12 @@
     "SAR117E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "SAR118A": {
       "cluster": 6,
@@ -11684,15 +12264,19 @@
     "SAR118B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "SCL101A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11709,7 +12293,9 @@
     "SCL101C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11727,7 +12313,9 @@
     "SCL101E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11751,7 +12339,9 @@
     "SCL103B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11759,7 +12349,9 @@
     "SCL103D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11785,7 +12377,9 @@
     "SCL103G": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11793,7 +12387,9 @@
     "SCL103H": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11847,7 +12443,9 @@
     "SCL104B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11855,7 +12453,9 @@
     "SCL104C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11863,7 +12463,9 @@
     "SCL104D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11900,7 +12502,9 @@
     "SCL105B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11908,7 +12512,9 @@
     "SCL105C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11926,7 +12532,9 @@
     "SCL106B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11934,7 +12542,9 @@
     "SCL106C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11952,7 +12562,9 @@
     "SCL107B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11960,7 +12572,9 @@
     "SCL107C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11978,7 +12592,9 @@
     "SCL108B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -11986,7 +12602,9 @@
     "SCL108C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12003,7 +12621,9 @@
     "SCL109B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12021,7 +12641,9 @@
     "SCL109D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12047,7 +12669,9 @@
     "SCL109H": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12065,7 +12689,9 @@
     "SCL110B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12073,7 +12699,9 @@
     "SCL110C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12091,7 +12719,9 @@
     "SCL111B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12099,7 +12729,9 @@
     "SCL111C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12117,7 +12749,9 @@
     "SCL112B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12125,7 +12759,9 @@
     "SCL112C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12133,7 +12769,9 @@
     "SCL113A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12193,7 +12831,9 @@
     "SOM102A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12244,7 +12884,9 @@
     "TAA0101": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12252,7 +12894,9 @@
     "TAA0111": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12420,7 +13064,9 @@
     "TAZ0221": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12436,15 +13082,19 @@
     "TBD0232": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TBE0233": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12452,7 +13102,9 @@
     "TBF0234": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12495,7 +13147,9 @@
     "TBO0251": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12539,7 +13193,9 @@
     "TBX0271": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12547,7 +13203,9 @@
     "TBY0272": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12563,10 +13221,12 @@
     "TCF0311": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TCI0321": {
       "cluster": 8,
@@ -12599,7 +13259,9 @@
     "TCL0333": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12607,7 +13269,9 @@
     "TCM0334": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12624,7 +13288,9 @@
     "TCQ0342": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12640,15 +13306,19 @@
     "TCS0344": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
+      "actual": "bubble",
       "match": false
     },
     "TCT0345": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12673,7 +13343,9 @@
     "TDA0361": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12700,7 +13372,9 @@
     "TDF0382": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12708,7 +13382,9 @@
     "TDG0383": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12716,7 +13392,9 @@
     "TDH0384": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12732,7 +13410,9 @@
     "TDL0391": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12822,7 +13502,9 @@
     "TEI0451": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12830,7 +13512,9 @@
     "TEK0461": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12911,10 +13595,12 @@
     "TFJ4111": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TFO0511": {
       "cluster": 3,
@@ -12938,7 +13624,9 @@
     "TFQ0529": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -12946,7 +13634,9 @@
     "TFS0521": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -13035,7 +13725,9 @@
     "TGC0528": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -13092,7 +13784,9 @@
     "TGM0631": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -13119,7 +13813,9 @@
     "TGR0641": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -13175,18 +13871,22 @@
     "THB0661": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "THC0662": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "THD0663": {
       "cluster": 1,
@@ -13258,7 +13958,9 @@
     "THV0741": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -13303,7 +14005,9 @@
     "TIB0751": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -13871,9 +14575,11 @@
     "TID0753": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
+      "actual": "bubble",
       "match": false
     },
     "TIG0761": {
@@ -13912,10 +14618,12 @@
     "TIN0813": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TIP0821": {
       "cluster": 3,
@@ -14018,10 +14726,12 @@
     "TJC0831": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TJD0832": {
       "cluster": 1,
@@ -14052,7 +14762,9 @@
     "TJI0842": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -14094,7 +14806,9 @@
     "TJS0911": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -14102,15 +14816,19 @@
     "TJT0912": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
+      "actual": "bubble",
       "match": false
     },
     "TJU0913": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -14189,7 +14907,9 @@
     "TKF0936": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -14197,7 +14917,9 @@
     "TKI0941": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -14205,17 +14927,21 @@
     "TKJ0942": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TKM0951": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
+      "actual": "bubble",
       "match": false
     },
     "TKN0952": {
@@ -14231,7 +14957,9 @@
     "TKO0953": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -14239,7 +14967,9 @@
     "TKP0961": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -14347,7 +15077,9 @@
     "TLI1017": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -14430,7 +15162,9 @@
     "TLZ1132": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -14448,7 +15182,9 @@
     "TME1151": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -14491,7 +15227,9 @@
     "TMJ1164": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -14499,7 +15237,9 @@
     "TMK1165": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -14515,10 +15255,12 @@
     "TMP1173": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TMS1181": {
       "cluster": 1,
@@ -14742,7 +15484,9 @@
     "TOE1271": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -14750,7 +15494,9 @@
     "TOF1272": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -14793,10 +15539,12 @@
     "TOR1321": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TOS1322": {
       "cluster": 8,
@@ -14826,15 +15574,19 @@
     "TOX1332": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TOY1333": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "line",
       "match": false
@@ -14842,15 +15594,19 @@
     "TOZ1334": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TPB1341": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -14951,15 +15707,19 @@
     "TPV1441": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "small_multiples",
-      "match": false
+      "match": true
     },
     "TQB1511": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15041,7 +15801,9 @@
     "TQO1531": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15081,7 +15843,9 @@
     "TQX1551": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15089,7 +15853,9 @@
     "TQY1552": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15106,7 +15872,9 @@
     "TRC1561": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15132,7 +15900,9 @@
     "TRH1571": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15140,7 +15910,9 @@
     "TRI1572": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15148,7 +15920,9 @@
     "TRJ1573": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15156,7 +15930,9 @@
     "TRN102A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15164,7 +15940,9 @@
     "TRN102B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15172,7 +15950,9 @@
     "TRN103B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15250,7 +16030,9 @@
     "TRN104F": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15269,7 +16051,9 @@
     "TRN105B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15478,7 +16262,9 @@
     "TRN139A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15504,7 +16290,9 @@
     "TRN143A": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15521,7 +16309,9 @@
     "TRN144B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15571,7 +16361,9 @@
     "TRW1632": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15588,7 +16380,9 @@
     "TRY1634": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15639,7 +16433,9 @@
     "TSG1646": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15647,7 +16443,9 @@
     "TSH1647": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15672,7 +16470,9 @@
     "TSN1654": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15680,7 +16480,9 @@
     "TSP1656": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15708,18 +16510,22 @@
     "TSW1672": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TSX1673": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TSY1681": {
       "cluster": 1,
@@ -15740,26 +16546,32 @@
     "TTB1684": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TTC1685": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TTE1711": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TTF1712": {
       "cluster": 3,
@@ -15820,10 +16632,12 @@
     "TTP1733": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TTQ1734": {
       "cluster": 1,
@@ -15878,7 +16692,9 @@
     "TUR101C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15886,7 +16702,9 @@
     "TUR101D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15912,7 +16730,9 @@
     "TUR102C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15920,7 +16740,9 @@
     "TUR102D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15937,7 +16759,9 @@
     "TUR103B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15954,7 +16778,9 @@
     "TUR103D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15962,7 +16788,9 @@
     "TUR103E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15970,7 +16798,9 @@
     "TUR103F": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -15987,7 +16817,9 @@
     "TUR104B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -16013,7 +16845,9 @@
     "TUR104E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -16021,7 +16855,9 @@
     "TUR104F": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -16038,7 +16874,9 @@
     "TUR104H": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -16073,7 +16911,9 @@
     "TUR105D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -16081,7 +16921,9 @@
     "TUR105E": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -16098,7 +16940,9 @@
     "TUR105G": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -16106,7 +16950,9 @@
     "TUR105H": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -16144,7 +16990,9 @@
     "TUR106D": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -16160,7 +17008,9 @@
     "TUR107C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -16193,7 +17043,9 @@
     "TUR109C": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -16247,10 +17099,12 @@
     "ZAE0122": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "ZAF0123": {
       "cluster": 6,
@@ -16759,10 +17613,12 @@
     "ZCL0911": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "ZCM0921": {
       "cluster": 3,
@@ -16823,7 +17679,9 @@
     "ZCS1013": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -16934,7 +17792,9 @@
     "ZDF1123": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -16942,7 +17802,9 @@
     "ZDG1124": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -17152,7 +18014,9 @@
     "ACC102B_judete_numar_persoane": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -17160,7 +18024,9 @@
     "ACC102B_judete_promile": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -17168,15 +18034,19 @@
     "ACC102B_regiuni_numar_persoane": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "LOC101B_judet": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -17184,7 +18054,9 @@
     "LOC101B_localitate": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -17192,7 +18064,9 @@
     "LOC103B_judet": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -17200,7 +18074,9 @@
     "LOC103B_localitate": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -17208,7 +18084,9 @@
     "LOC104B_judet": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -17216,7 +18094,9 @@
     "LOC104B_localitate": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -17224,98 +18104,122 @@
     "TCF0311_judete_locuri": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TCF0311_judete_numar": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TCF0311_regiuni_locuri": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TCF0311_regiuni_numar": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TCF0311_macroregiuni_locuri": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TCF0311_macroregiuni_numar": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TTP1733_judete_locuri": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TTP1733_judete_numar": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TTP1733_regiuni_locuri": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TTP1733_regiuni_numar": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TTP1733_macroregiuni_locuri": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "TTP1733_macroregiuni_numar": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "PNS101D_judete_anual": {
       "cluster": 11,
@@ -17789,7 +18693,9 @@
     "CON103J": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
       "actual": "choropleth",
       "match": true
@@ -17919,10 +18825,12 @@
     "SAR107B": {
       "cluster": 7,
       "expected": [
-        "choropleth"
+        "choropleth",
+        "horizontal_bar",
+        "small_multiples"
       ],
-      "actual": "line",
-      "match": false
+      "actual": "choropleth",
+      "match": true
     },
     "SAR115D": {
       "cluster": 3,
@@ -18014,5 +18922,5 @@
       "match": false
     }
   },
-  "overall_match_pct": 88.0
+  "overall_match_pct": 92.1
 }

@@ -230,6 +230,11 @@ def _score(chart_type: str, sig: dict) -> float:
         # Penalty: age cohort over time is buried in a line chart — heatmap shows it better.
         # (Pop pyramid case has has_gender, so this fires only for cluster-5 age cohort.)
         if has_age and not has_gender and has_time and sig['age_count'] >= 6: s -= 0.10
+        # Penalty: cartographic data (geo present, no demographic overlay) is
+        # better as a choropleth — line of values per region buries the spatial
+        # pattern. Keeps line viable when demographics convert it to cluster 8.
+        if has_geo and geo >= 4 and not has_age and not has_gender and not has_residence:
+            s -= 0.15
         # Seasonality: line is THE chart for seasonal data
         if sig['has_seasonality']: s += 0.15
         if sig['time_granularity'] in ('monthly', 'quarterly'): s += 0.05
@@ -366,15 +371,26 @@ def _score(chart_type: str, sig: dict) -> float:
     if chart_type == 'small_multiples':
         s = 0.35
         facet_dims = [d for d in cat_dims if 6 <= d['count'] <= 16]
+        cat_facet = bool(facet_dims)
         if facet_dims: s += 0.35
         elif facet_dims := [d for d in cat_dims if 6 <= d['count'] <= 25]:
             s += 0.25
-        if has_geo and 6 <= geo <= 16: s += 0.2
+            cat_facet = True
+        # Geo-facet bonus only when there's no cat-facet (otherwise we'd be
+        # claiming credit for two competing facet directions in a single
+        # render — small_multiples picks ONE facet axis).
+        if has_geo and 6 <= geo <= 16 and not cat_facet: s += 0.2
         # Time series matter most for facets — strong bonus when present
         if has_time and tp >= 5: s += 0.15
         elif has_time and tp >= 3: s += 0.1
         # Sparse data: many facets will be mostly empty
         if is_sparse: s -= 0.10
+        # Defer to choropleth when geo is the natural primary (no demographic
+        # overlay). Small_multiples can still win when scored with a strong
+        # cat-facet bonus, but the gap closes enough for choropleth to grab
+        # the tiebreak.
+        if has_geo and geo >= 4 and not has_age and not has_gender and not has_residence:
+            s -= 0.15
         return min(max(s, 0.0), 1.0)
 
     if chart_type == 'bubble':
@@ -388,6 +404,10 @@ def _score(chart_type: str, sig: dict) -> float:
         if unit in ('count', 'currency'): s += 0.05
         # Cap below choropleth for high geo coverage (explicit, no recursion)
         if has_geo and geo >= 20: s = min(s, 0.80)
+        # Defer to choropleth when geo is the natural primary (no demographic
+        # overlay). Bubble was beating choropleth for region-level + cat datasets.
+        if has_geo and geo >= 4 and not has_age and not has_gender and not has_residence:
+            s -= 0.15
         return min(max(s, 0.0), 1.0)
 
     if chart_type == 'table':
