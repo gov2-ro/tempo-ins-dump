@@ -4,7 +4,7 @@
     "unemployment_agg": "SOM103A has SEX split (Masculin/Feminin), no Total row. AVG of both sexes is an acceptable approximation for display.",
     "net_wage_agg": "FOM106E has ECON_ACTIVITY+SEX split, no Total row. Rows with NULL ECON_ACTIVITY represent all-sectors totals. AVG across NULL-EA rows (both sexes) gives blended cross-sector avg net monthly wage (Lei). Covers 2008-2024.",
     "live_births_agg": "POP201A has SEX+RESIDENCE split, no Total row. SUM of all rows gives total live births.",
-    "birth_death_rate_note": "POP202A/POP207A rate datasets only have Urban/Rural split. AVG of both is used as an approximation; absolute counts (POP201A/POP206B) are preferred where available."
+    "birth_death_rate_note": "Birth/mortality rate datasets only have Urban/Rural split; AVG of both is used as an approximation. County uses POP202A (1990–2024); region and macroregion use POP202B (2012–2024). Absolute counts (POP201A/POP206B) are preferred where available."
   },
   "county": [
     {
@@ -159,6 +159,17 @@
       "source_code": "POP207A",
       "time_range": ["1990", "2024"],
       "_agg_note": "AVG of Urban+Rural rows (approximation)"
+    },
+    {
+      "label": "Decedați",
+      "parquet": "POP206B_regiuni.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "SUM",
+      "unit": "pers.",
+      "category": "Populație",
+      "source_code": "POP206B",
+      "time_range": ["1990", "2024"]
     }
   ],
   "macroregion": [
@@ -220,6 +231,28 @@
       "source_code": "POP207A",
       "time_range": ["1990", "2024"],
       "_agg_note": "AVG of Urban+Rural rows (approximation)"
+    },
+    {
+      "label": "Născuți vii",
+      "parquet": "POP201A_macroregiuni.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "SUM",
+      "unit": "pers.",
+      "category": "Populație",
+      "source_code": "POP201A",
+      "time_range": ["1990", "2024"]
+    },
+    {
+      "label": "Decedați",
+      "parquet": "POP206B_macroregiuni.parquet",
+      "ref_area_col": "REF_AREA",
+      "extra_filters": {},
+      "agg_func": "SUM",
+      "unit": "pers.",
+      "category": "Populație",
+      "source_code": "POP206B",
+      "time_range": ["1990", "2024"]
     }
   ],
   "locality": []
