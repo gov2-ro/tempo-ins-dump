@@ -1,5 +1,7 @@
 [ins.gov2.ro](https://ins.gov2.ro/) — descarcă, normalizează + UI/navigator pentru datele oferite de Institutul național de statistică, via _TEMPO-Online_ ([statistici.insse.ro](http://statistici.insse.ro:8077/tempo-online))
 
+Folosit și de [geo-spatial.org Data Hub](https://services.geo-spatial.org/datahub)
+
 _INS Tempo Online but make it nice._
 
 ![prima pagină](docs/misc/screenshots/landing.png)
@@ -266,3 +268,7 @@ Moved to [docs/misc-ideas/explorer](/docs/misc-ideas/explorer/)
 ### Static site exploration
 
 see [docs/misc-ideas/static-site](/docs/misc-ideas/static-site/), [STATIC-CONVERSION-SUMMARY.md](docs/STATIC-CONVERSION-SUMMARY.md), [STATIC-VS-PYTHON-COMPARISON.md](docs/STATIC-VS-PYTHON-COMPARISON.md)
+
+---
+
+[![License: OGL v3.0](https://img.shields.io/badge/license-OGL%20v3.0-blue.svg)](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/)
