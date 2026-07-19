@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INS+ — Comparație</title>
+    <meta name="robots" content="noindex">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/explore.css?v=38">
+    <link rel="stylesheet" href="/css/dashboard-v2.css?v=6">
+    <script>
+        // Apply saved theme before first paint to avoid flash
+        (function() {
+            const t = localStorage.getItem('lens_theme')
+                || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.dataset.theme = t;
+        })();
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+</head>
+<body class="dbv2-body">
+    <!-- Top bar (site chrome — mirrors index.html, wired by site-chrome.js) -->
+    <nav class="topbar" id="topbar">
+        <div class="topbar-left">
+            <button class="sidebar-toggle" id="sidebar-toggle" title="Quick navigate">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <a id="zelogo" href="/" class="logo"><span class="logo-dot"></span>INS<span style="margin: -1ex 0 0 -1ex;">+</span></a>
+        </div>
+        <button class="search-trigger" id="search-trigger">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span>Caută seturi de date...</span>
+            <kbd>&hairsp;/&hairsp;</kbd>
+        </button>
+        <div class="topbar-right">
+            <a href="/places" class="toggle-btn" style="text-decoration:none;font-size:0.8rem;padding:0 10px;display:flex;align-items:center;gap:5px;">Locuri</a>
+            <a href="/ask.html" class="toggle-btn" title="Ask AI – NL2SQL" style="text-decoration:none;font-size:0.8rem;padding:0 10px;display:flex;align-items:center;gap:5px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                Ask
+            </a>
+            <button class="toggle-btn" id="theme-toggle" title="Toggle light/dark theme">
+                <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                <svg id="theme-icon-moon" class="hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </button>
+            <button class="toggle-btn lang-toggle" id="lang-toggle" title="Switch language">
+                <span id="lang-label">EN</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Search overlay -->
+    <div class="search-overlay hidden" id="search-overlay">
+        <div class="search-backdrop" id="search-backdrop"></div>
+        <div class="search-modal">
+            <div class="search-input-row">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="search-input" placeholder="Caută seturi de date, indicatori, coduri..." spellcheck="false">
+                <kbd>esc</kbd>
+            </div>
+            <div id="search-results" class="search-results"></div>
+            <div class="search-footer">
+                <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> navigate</span>
+                <span><kbd>&crarr;</kbd> open</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="lens-sidebar hidden" id="lens-sidebar">
+        <div class="sidebar-header">
+            <span class="sidebar-title" id="sidebar-title">Navighează</span>
+            <button class="sidebar-close" id="sidebar-close">&times;</button>
+        </div>
+        <div class="sidebar-search">
+            <input type="text" id="sidebar-search-input" placeholder="Filtrează seturile..." spellcheck="false" autocomplete="off">
+        </div>
+        <div id="sidebar-tree" class="sidebar-tree"></div>
+    </aside>
+
+    <main class="dbv2-main">
+        <div id="cmp-loader" class="dbv2-loader">Se încarcă…</div>
+        <div id="cmp-error" class="dbv2-error hidden"></div>
+        <header class="dash-header" id="cmp-header"></header>
+        <section class="dbv2-tile cmp-section hidden" id="cmp-line">
+            <div class="dbv2-tile-bar">
+                <span class="dbv2-tile-title" id="cmp-line-title"></span>
+            </div>
+            <div class="dbv2-tile-chart cmp-chart" id="cmp-line-chart"></div>
+        </section>
+        <div class="dbv2-notice hidden" id="cmp-notice"></div>
+        <section class="dbv2-tile cmp-section hidden" id="cmp-scatter">
+            <div class="dbv2-tile-bar">
+                <span class="dbv2-tile-title" id="cmp-scatter-title"></span>
+                <span class="dbv2-chip" id="cmp-scatter-sub"></span>
+            </div>
+            <div class="dbv2-tile-chart cmp-chart" id="cmp-scatter-chart"></div>
+        </section>
+    </main>
+
+    <script src="/js/utils.js?v=24"></script>
+    <script src="/js/api.js?v=27"></script>
+    <script src="/js/site-chrome.js?v=1"></script>
+    <script src="/js/echarts-theme.js?v=1"></script>
+    <script src="/js/compare.js?v=2"></script>
+</body>
+</html>

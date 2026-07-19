@@ -246,3 +246,131 @@ def search_datasets(
         })
 
     return {'total': total, 'datasets': datasets}
+
+
+# ------------------------------------------------------------------ related
+
+# Tokenized tag soup contains structural/geo words that make useless search
+# chips — filter them out, keep topic words.
+_TAG_STOPLIST = {
+    'date', 'data', 'anul', 'anii', 'grupe', 'grupa', 'groups', 'group',
+    'regiuni', 'regions', 'regiunea', 'judete', 'judetul', 'counties',
+    'county', 'localitati', 'macroregiuni', 'macroregions', 'dezvoltare',
+    'development', 'total', 'nivel', 'level', 'numar', 'number', 'pentru',
+    'dupa', 'statistica', 'statistici', 'statistics', 'comparabile',
+    'comparable', 'rezidenta', 'residence', 'medii', 'tempo', 'sfarsitul',
+    'categorii', 'categories', 'forme', 'tipuri', 'types', 'existente',
+    'baza', 'cifrei', 'nivelul', 'sectiunii', 'anului', 'cursul', 'rata',
+    'indicii', 'indicele',
+}
+
+
+def get_related(matrix_code: str, lang: str = 'ro', limit: int = 5,
+                conn=None) -> dict:
+    """Related datasets + tag chips for one dataset.
+
+    `dataset_relationships` is symmetric-ish (rows in both directions) and
+    was computed before dataset splits — split children fall back to their
+    parent's rows, with sibling splits prepended as the strongest links.
+    Tags likewise live under the parent code.
+    """
+    import json as _json
+    if conn is None:
+        conn = get_conn()
+
+    row = conn.execute(
+        "SELECT parent_matrix_code FROM dataset_splits WHERE sub_matrix_code = ?",
+        [matrix_code]).fetchone()
+    parent_code = row[0] if row else None
+
+    related: list[dict] = []
+    seen = {matrix_code}
+    if parent_code:
+        seen.add(parent_code)
+        for code, label, name in conn.execute("""
+            SELECT sub_matrix_code, suffix_label, display_name
+            FROM dataset_splits
+            WHERE parent_matrix_code = ? AND sub_matrix_code != ?
+            ORDER BY sub_matrix_code
+        """, [parent_code, matrix_code]).fetchall():
+            seen.add(code)
+            related.append({
+                'matrix_code': code,
+                'name': name or code,
+                'similarity': 1.0,
+                'relationship_type': 'sibling',
+                'shared_dims': [],
+                'time_range': None,
+                'archetype': None,
+                'can_compare': True,
+            })
+
+    lookup = parent_code or matrix_code
+    name_col = "COALESCE(m.matrix_name_en, m.matrix_name)" \
+        if lang == 'en' else "m.matrix_name"
+    rows = conn.execute(f"""
+        WITH rel AS (
+            SELECT matrix_b AS other, similarity_score, relationship_type,
+                   shared_dim_types
+            FROM dataset_relationships WHERE matrix_a = ?
+            UNION ALL
+            SELECT matrix_a, similarity_score, relationship_type,
+                   shared_dim_types
+            FROM dataset_relationships WHERE matrix_b = ?
+        ), best AS (
+            SELECT other,
+                   MAX(similarity_score) AS sim,
+                   arg_max(relationship_type, similarity_score) AS rtype,
+                   arg_max(shared_dim_types, similarity_score) AS sdims
+            FROM rel GROUP BY other
+        )
+        SELECT b.other, {name_col}, b.sim, b.rtype, b.sdims,
+               p.time_year_min, p.time_year_max, p.archetype
+        FROM best b
+        JOIN matrices m ON m.matrix_code = b.other
+        LEFT JOIN matrix_profiles p ON p.matrix_code = b.other
+        ORDER BY b.sim DESC, b.other
+        LIMIT ?
+    """, [lookup, lookup, limit + len(seen)]).fetchall()
+
+    for code, name, sim, rtype, sdims, ymin, ymax, archetype in rows:
+        if code in seen or len(related) >= limit:
+            continue
+        seen.add(code)
+        try:
+            shared = _json.loads(sdims) if sdims else []
+        except (ValueError, TypeError):
+            shared = []
+        related.append({
+            'matrix_code': code,
+            'name': name,
+            'similarity': round(sim, 2) if sim is not None else None,
+            'relationship_type': rtype,
+            'shared_dims': shared,
+            'time_range': f"{ymin}–{ymax}" if ymin and ymax else None,
+            'archetype': archetype,
+            'can_compare': 'time' in shared,
+        })
+
+    # Romanian tags are complete; English is partial — only en falls back.
+    tag_col = "COALESCE(tag_en, tag_ro)" if lang == 'en' else "tag_ro"
+    tag_rows = conn.execute(f"""
+        SELECT {tag_col} AS tag, MAX(weight) AS w
+        FROM dataset_tags
+        WHERE matrix_code = ? AND source IN ('context', 'matrix_name')
+          AND {tag_col} IS NOT NULL AND length({tag_col}) >= 4
+        GROUP BY tag ORDER BY w DESC, tag
+        LIMIT 30
+    """, [lookup]).fetchall()
+    cleaned = []
+    for t, _w in tag_rows:
+        t = t.strip(' ;,.-')
+        if len(t) >= 4 and t.lower() not in _TAG_STOPLIST \
+                and not t[0].isdigit() and t not in cleaned:
+            cleaned.append(t)
+    # Drop tokens subsumed by a longer kept phrase ("munca" ⊂ "forta de munca")
+    tags = [t for t in cleaned
+            if not any(o != t and t.lower() in o.lower() for o in cleaned)][:8]
+
+    return {'matrix_code': matrix_code, 'related': related[:limit],
+            'tags': tags}

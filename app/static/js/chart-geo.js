@@ -132,14 +132,18 @@ function createChoroplethChart(container, config, data, metadata) {
         if (info.geo_level === geoLevel) geoIds.add(Number(id));
     }
 
-    // v3 SDMX: string name set for detected level
-    const geoStringNames = new Set();
+    // String geo values (v3 SDMX names, or legacy label strings with
+    // indentation/diacritics): map every known spelling — trimmed label,
+    // sdmx value, clean name — onto the GeoJSON-matching clean name.
+    const geoNameByString = {};
     if (geoDimMeta) {
         for (const opt of geoDimMeta.options) {
-            if (opt.parsed?.geo_level === geoLevel) {
-                const name = opt.parsed.geo_name_clean || opt.label;
-                if (name) geoStringNames.add(name);
-            }
+            if (opt.parsed?.geo_level !== geoLevel) continue;
+            const clean = opt.parsed.geo_name_clean || (opt.label || '').trim();
+            if (!clean) continue;
+            geoNameByString[clean] = clean;
+            if (opt.label) geoNameByString[opt.label.trim()] = clean;
+            if (opt.sdmx_value) geoNameByString[String(opt.sdmx_value).trim()] = clean;
         }
     }
 
@@ -161,9 +165,9 @@ function createChoroplethChart(container, config, data, metadata) {
         let countyName;
         const isStringGeo = typeof geoId === 'string' && isNaN(Number(geoId));
         if (isStringGeo) {
-            // v3 SDMX: geoId is already the geo name string
-            if (!geoStringNames.has(geoId)) continue;
-            countyName = geoId;
+            // Geo name string — normalize through the known-spellings map
+            countyName = geoNameByString[geoId.trim()] || null;
+            if (!countyName) continue;
         } else {
             // v2: geoId is a nom_item_id integer
             const numId = Number(geoId);
@@ -255,6 +259,41 @@ function createChoroplethChart(container, config, data, metadata) {
             top: 10,
             textStyle: { fontSize: 22, fontWeight: 300, color: '#9ca3af' },
         };
+    }
+
+    // Time slider with play control when the data spans multiple periods —
+    // same timeline pattern as chart-demographic.js. The visualMap keeps the
+    // global min/max so colors stay comparable across years.
+    if (timeIds.length > 1) {
+        option.baseOption = {
+            timeline: {
+                axisType: 'category',
+                data: timeLabelsClean,
+                autoPlay: false,
+                playInterval: 1200,
+                currentIndex: defaultTimeIdx,
+                bottom: 6,
+                left: 80,
+                right: 80,
+                height: 36,
+                label: { fontSize: 11 },
+                controlStyle: { itemSize: 18 },
+            },
+            title: option.title,
+            tooltip: option.tooltip,
+            visualMap: option.visualMap,
+            series: option.series,
+            animationDurationUpdate: option.animationDurationUpdate,
+        };
+        option.options = timeIds.map((tid, i) => ({
+            title: { text: timeLabelsClean[i] || '' },
+            series: [{ data: frames[tid] || [] }],
+        }));
+        delete option.title;
+        delete option.tooltip;
+        delete option.visualMap;
+        delete option.series;
+        delete option.animationDurationUpdate;
     }
 
     chart.setOption(option);

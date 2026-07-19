@@ -7,11 +7,120 @@ server, and the LLM agent (Step 2 of the LLM tooling plan).
 import json
 from pathlib import Path
 
+from app.config import PARQUET_DIR
 from app.db import get_conn
-from app.services.chart_selector import build_signature, select_charts, assign_roles, decide_pair
+from app.services.chart_selector import (
+    build_signature, select_charts, assign_roles, decide_pair, TOTAL_RE)
+from app.services.dashboard_composer import (
+    compose_dashboard, retune_ranked_series, primary_time_dim,
+    _build_slice, _non_total_options, NON_ADDITIVE_UNIT_TYPES)
+from app.services.query_builder import build_data_query
 
 
 _EN_METAS_DIR = Path(__file__).parent.parent.parent / "data" / "2-metas" / "en"
+
+
+def _parquet_dim_values(conn, matrix_code: str, dimensions: list) -> dict:
+    """Values per dimension column as stored in the parquet, with row counts:
+    {dim_column: {value: row_count}}.
+
+    Metadata routinely lists options the data lacks (Total rows, whole
+    categories) — the dashboard composer needs data reality to build slices
+    that aren't empty; row counts let forced pins prefer the densest option.
+    Consumers only rely on key membership, so the mapping is drop-in for the
+    previous set shape. Columns that fail (legacy v2 schema, missing file)
+    are simply absent; the composer falls back to metadata for those.
+    """
+    path = PARQUET_DIR / f"{matrix_code}.parquet"
+    if not path.exists():
+        return {}
+
+    def _read(col):
+        rows = conn.execute(
+            f'SELECT "{col}", COUNT(*) FROM read_parquet(?) '
+            f'GROUP BY "{col}"', [str(path)]
+        ).fetchall()
+        return {str(r[0]): r[1] for r in rows if r[0] is not None}
+
+    out = {}
+    rev_map = None  # SDMX → legacy *_nom_id, loaded on first miss
+    for d in dimensions:
+        col = d['dim_column_name']
+        try:
+            out[col] = _read(col)
+            continue
+        except Exception:
+            pass
+        # Legacy parquet: the file's columns are *_nom_id names — resolve
+        # via sdmx_column_map so slices stay data-grounded there too (the
+        # values are label strings with indentation metadata lacks).
+        if rev_map is None:
+            parent = conn.execute(
+                "SELECT parent_matrix_code FROM matrices WHERE matrix_code = ?",
+                [matrix_code]).fetchone()
+            lookup = (parent[0] or matrix_code) if parent else matrix_code
+            rev_map = dict(conn.execute(
+                "SELECT sdmx_column_name, old_column_name "
+                "FROM sdmx_column_map WHERE matrix_code = ?", [lookup]).fetchall())
+        legacy_col = rev_map.get(col)
+        if legacy_col:
+            try:
+                out[col] = _read(legacy_col)
+            except Exception:
+                pass
+    return out
+
+
+def _detect_composition(conn, matrix_code: str, dimensions: list,
+                        actual_values: dict, unit_type: str) -> bool | None:
+    """Data-grounded parts-of-whole check for the stackable series dim.
+
+    Picks the dim a stacked chart would use as its series (small
+    categorical, else gender/residence), pins everything else exactly like
+    a dashboard tile slice, and checks on the latest period whether the
+    non-Total options sum to the dim's Total value (±2%) — or, for
+    percentage data without a Total, to ~100. Feeds the selector's
+    `is_composition` signal; None = could not verify (≠ not-composition).
+    """
+    candidates = []
+    for d in dimensions:
+        if d.get('dim_type') in ('time', 'unit', 'geo'):
+            continue
+        n = len(_non_total_options(d, actual_values))
+        if 2 <= n <= 8:
+            order = 0 if d.get('dim_type') == 'indicator' else 1
+            candidates.append((order, n, d))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda t: (t[0], t[1]))
+    dim = candidates[0][2]
+    col = dim['dim_column_name']
+
+    non_additive = unit_type in NON_ADDITIVE_UNIT_TYPES
+    time_dim = primary_time_dim(dimensions)
+    spec = _build_slice({'x_axis': col}, dimensions, time_dim,
+                        'horizontal_bar', actual_values, non_additive)
+    try:
+        sql = build_data_query(matrix_code, dimensions, spec['filters'],
+                               1000, group_by=[col], agg_func='SUM')
+        rows = conn.execute(sql).fetchall()
+    except Exception:
+        return None
+    by_val = {str(r[0]): r[1] for r in rows
+              if r[0] is not None and r[1] is not None}
+    if not by_val:
+        return None
+
+    total_v = sum(v for k, v in by_val.items() if TOTAL_RE.match(k.strip()))
+    parts = [v for k, v in by_val.items() if not TOTAL_RE.match(k.strip())]
+    if len(parts) < 2:
+        return None
+    s = sum(parts)
+    if total_v:
+        return abs(s - total_v) <= abs(total_v) * 0.02
+    if unit_type == 'percentage':
+        return 98.0 <= s <= 102.0
+    return None
 
 
 def _load_en_meta(matrix_code: str) -> dict:
@@ -209,6 +318,8 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
     is_split = bool(m[10])
     parent_matrix_code = m[11]
 
+    has_parquet = (PARQUET_DIR / f"{matrix_code}.parquet").exists()
+
     splits = []
     try:
         split_rows = conn.execute("""
@@ -223,6 +334,16 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
         ]
     except Exception:
         pass
+    if not splits and not has_parquet:
+        # Some split children exist only as parquet files, never registered
+        # in dataset_splits (e.g. AMG101A_anual) — derive them from the
+        # corpus so split parents can still route somewhere useful.
+        splits = [
+            {"matrix_code": p.stem,
+             "label": p.stem[len(matrix_code) + 1:].replace("_", " "),
+             "row_count": None, "split_dimensions": None}
+            for p in sorted(PARQUET_DIR.glob(f"{matrix_code}_*.parquet"))
+        ]
 
     parent_info = None
     if is_split and parent_matrix_code:
@@ -245,13 +366,23 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
     value_profile = fetch_row('dataset_value_profiles')
     trend = fetch_row('dataset_trends')
 
-    # Build chart config via scoring engine
-    sig = build_signature(profile, dimensions, coverage, value_profile, trend)
+    # Build chart config via scoring engine. Parquet reality comes first:
+    # value presence grounds role defaults and slices, and the composition
+    # probe feeds the selector's is_composition signal.
+    actual_values = _parquet_dim_values(conn, matrix_code, dimensions)
+    unit_type = profile.get('primary_unit_type', 'count') or 'count'
+    data_signals = {'is_composition': _detect_composition(
+        conn, matrix_code, dimensions, actual_values, unit_type)}
+    sig = build_signature(profile, dimensions, coverage, value_profile, trend,
+                          data_signals)
     ranked = select_charts(sig)
 
-    # Roles for each ranked chart
+    # Roles for each ranked chart, then align evolution-series defaults with
+    # the composer so both surfaces present the same default split.
     for entry in ranked:
-        entry['roles'] = assign_roles(entry['chart_type'], dimensions)
+        entry['roles'] = assign_roles(entry['chart_type'], dimensions, sig,
+                                      actual_values)
+    retune_ranked_series(ranked, dimensions, sig, actual_values)
 
     primary = ranked[0]['chart_type'] if ranked else 'table'
 
@@ -260,9 +391,16 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
     time_dim = next((d for d in dimensions if d['dim_type'] == 'time'), None)
 
     pair = decide_pair(ranked)
+    # No parquet → no data to slice: split parents (data lives in the
+    # children) must not get a composition, or every tile 500s. The v2
+    # frontend shows the sub-dataset pills instead.
+    composition = compose_dashboard(sig, ranked, dimensions, trend,
+                                    actual_values) if has_parquet else None
 
     chart_config = {
         'ranked_charts': ranked,
+        # v2 dashboard recipe: 1-4 charts with layout slots + data slice specs
+        'composition': composition,
         'primary_chart': primary,
         # When non-null, frontend should render primary + complement side-by-side.
         # When null, render the primary chart alone.

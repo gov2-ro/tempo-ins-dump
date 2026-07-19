@@ -9,6 +9,13 @@ Unit-type awareness: percentage data prefers area_stacked, index/rate data prefe
 currency/count data is neutral. Confidence scoring tells the frontend how certain we are.
 """
 import json
+import re
+
+
+# Total/aggregate option detection — single source of truth for the backend
+# (dashboard_composer and insights import this; mirrors filter-panel.js).
+TOTAL_RE = re.compile(
+    r'^(total|toate|ambele sexe|ambele|urban\s*\+\s*rural|m\s*\+\s*f)\b', re.I)
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +45,8 @@ COMPLEMENTARY_PAIRS = {
 def build_signature(profile: dict, dimensions: list,
                     coverage: dict | None = None,
                     value_profile: dict | None = None,
-                    trend: dict | None = None) -> dict:
+                    trend: dict | None = None,
+                    data_signals: dict | None = None) -> dict:
     """Build a dataset signature from all available metadata.
 
     Args:
@@ -47,6 +55,11 @@ def build_signature(profile: dict, dimensions: list,
         coverage:      Row from dataset_coverage (optional)
         value_profile: Row from dataset_value_profiles (optional)
         trend:         Row from dataset_trends (optional)
+        data_signals:  Optional parquet-derived signals (runtime only — the
+                       eval harness scores without parquet access, so any key
+                       here defaults to None/unknown and scoring must treat
+                       unknown as "keep legacy behaviour").
+                       Supported: is_composition (bool | None).
     """
     cov = coverage or {}
     vp = value_profile or {}
@@ -77,7 +90,10 @@ def build_signature(profile: dict, dimensions: list,
         else:
             geo_count = _dim_count(dimensions, 'geo') or 0
 
-    time_points = cov.get('time_year_count') or profile.get('time_year_max', 0) or 0
+    # Without a coverage row, derive the period count from the year range —
+    # never from time_year_max alone (a literal year like 2024 would make
+    # every `tp >= N` rule silently true).
+    time_points = cov.get('time_year_count') or 0
     if time_points == 0 and profile.get('time_year_min') and profile.get('time_year_max'):
         time_points = profile['time_year_max'] - profile['time_year_min'] + 1
 
@@ -104,6 +120,9 @@ def build_signature(profile: dict, dimensions: list,
         'geo_levels': geo_levels,
         'has_gender': bool(profile.get('has_gender')),
         'gender_count': _dim_count(dimensions, 'gender'),
+        # How many options of the gender dim are actual male/female values
+        # (INS "Sexe si medii" dims mix in Urban/Rural). None = unknown.
+        'gender_mf_count': _gender_mf_count(dimensions),
         'has_age': bool(profile.get('has_age')),
         'age_count': _dim_count(dimensions, 'age'),
         'has_residence': bool(profile.get('has_residence')),
@@ -120,9 +139,29 @@ def build_signature(profile: dict, dimensions: list,
         # Trend characteristics
         'trend_direction': tr.get('trend_direction', 'unknown'),
         'has_seasonality': bool(tr.get('has_seasonality')),
+        # Normalized slope (slope / |mean|, from detect_trends.py) — corpus
+        # median |slope| ≈ 0.026, p75 ≈ 0.062.
+        'trend_slope': tr.get('trend_slope'),
+        # geo_variance is raw (scale-dependent) — outlier presence is the
+        # scale-free signal that the map has spatial structure worth showing.
+        'has_geo_outliers': _has_geo_outliers(tr),
+        # Parquet-derived: True/False when the small categorical dim was
+        # verified as parts-of-whole (options sum ≈ total), None = unchecked.
+        'is_composition': (data_signals or {}).get('is_composition'),
         # Original archetype for comparison
         '_archetype': profile.get('archetype', 'time_series'),
     }
+
+
+def _has_geo_outliers(tr: dict) -> bool:
+    raw = tr.get('geo_outlier_counties')
+    if not raw:
+        return False
+    try:
+        vals = json.loads(raw) if isinstance(raw, str) else raw
+        return bool(vals)
+    except (json.JSONDecodeError, TypeError):
+        return False
 
 
 def _dim_count(dimensions: list, dim_type: str) -> int:
@@ -130,6 +169,26 @@ def _dim_count(dimensions: list, dim_type: str) -> int:
         if d.get('dim_type') == dim_type:
             return d.get('option_count') or 0
     return 0
+
+
+def _gender_mf_count(dimensions: list) -> int | None:
+    """Male/female option count of the gender dim, or None when unknown.
+
+    Runtime dims carry full options with parsed gender ('male'/'female'/
+    'total'/'other'); the eval harness supplies a precomputed
+    'gender_mf_count' key instead. Both paths must yield the same value.
+    """
+    for d in dimensions:
+        if d.get('dim_type') != 'gender':
+            continue
+        if 'gender_mf_count' in d:
+            return d['gender_mf_count']
+        opts = d.get('options')
+        if opts is not None:
+            return sum(1 for o in opts
+                       if ((o.get('parsed') or {}).get('gender')) in ('male', 'female'))
+        return None
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +219,9 @@ def _eligible(chart_type: str, sig: dict) -> bool:
     if chart_type == 'line':
         return has_time and tp >= 3
     if chart_type == 'area_stacked':
-        return has_time and tp >= 3 and not has_neg and len(cat_dims) >= 1
+        # Index values (base=100) never stack meaningfully.
+        return (has_time and tp >= 3 and not has_neg and len(cat_dims) >= 1
+                and sig.get('primary_unit_type') != 'index')
     if chart_type == 'bar_vertical':
         return True
     if chart_type == 'grouped_bar':
@@ -171,15 +232,24 @@ def _eligible(chart_type: str, sig: dict) -> bool:
             any(d['count'] <= 4 for d in cat_dims)
             or has_gender or has_residence
         )
-        return not has_neg and total_dims >= 2 and has_small_series
+        # Index values (base=100) never stack meaningfully.
+        return (not has_neg and total_dims >= 2 and has_small_series
+                and sig.get('primary_unit_type') != 'index')
     if chart_type == 'horizontal_bar':
         return any_cat_gte5 or (has_geo and geo >= 5)
     if chart_type == 'choropleth':
-        # geo >= 4 covers macroregion-level datasets (4 macroregions); we have
-        # GeoJSON for county/region/macroregion in app/static/geo/.
-        return has_geo and geo >= 4
+        # Region-level (8) and up. 4-macroregion "maps" are near-useless —
+        # four shapes bury the time story; those datasets read better as
+        # bars/lines. GeoJSON exists for county/region/macroregion.
+        return has_geo and geo >= 8
     if chart_type == 'population_pyramid':
-        # INS "Sexe si medii" dims mix gender+residence (Total+M+F+Urban+Rural = 5)
+        # INS "Sexe si medii" dims mix gender+residence (Total+M+F+Urban+Rural = 5).
+        # The mirrored sides must be actual male/female values — when the
+        # parsed count is known and says otherwise (e.g. Urban/Rural only),
+        # a pyramid would be structurally wrong.
+        mf = sig.get('gender_mf_count')
+        if mf is not None and mf < 2:
+            return False
         return has_age and has_gender and 2 <= gender_count <= 6
     if chart_type == 'heatmap':
         # Allow heatmap even on sparse data when a very-long cat dim is
@@ -232,7 +302,7 @@ def _score(chart_type: str, sig: dict) -> float:
             total_series *= max(d.get('count', 1), 1)
         # Suppress when geo would carry the chart (cluster 7) — line of region
         # values buries the spatial pattern even when there are few series.
-        line_eligible_geo_present = has_geo and geo >= 4
+        line_eligible_geo_present = has_geo and geo >= 8
         if cat_dims and total_series <= 6 and not line_eligible_geo_present:
             s += 0.1
         elif len(cat_dims) == 0 and has_residence: s += 0.1
@@ -244,11 +314,18 @@ def _score(chart_type: str, sig: dict) -> float:
         # Penalty: cartographic data (geo present, no demographic overlay) is
         # better as a choropleth — line of values per region buries the spatial
         # pattern. Keeps line viable when demographics convert it to cluster 8.
-        if has_geo and geo >= 4 and not has_age and not has_gender and not has_residence:
+        if has_geo and geo >= 8 and not has_age and not has_gender and not has_residence:
             s -= 0.15
         # Seasonality: line is THE chart for seasonal data
         if sig['has_seasonality']: s += 0.15
         if sig['time_granularity'] in ('monthly', 'quarterly'): s += 0.05
+        # Strong normalized slope (≥ p70 of corpus) — the temporal story is
+        # the dataset's main signal. Gated on the same readability condition
+        # as the small-series bonus so it can't poach small_multiples/heatmap
+        # wins on facet-sized cat dims.
+        if (abs(sig.get('trend_slope') or 0) >= 0.05
+                and total_series <= 6 and not line_eligible_geo_present):
+            s += 0.05
         # Unit affinity: rates/indices/percentages are best shown as lines.
         # Most "percentage" data is rates/shares/indices, not parts-of-whole.
         if unit in ('rate', 'ratio', 'index', 'percentage'): s += 0.1
@@ -264,9 +341,16 @@ def _score(chart_type: str, sig: dict) -> float:
         if series: s += 0.1
         if 3 <= (series[0]['count'] if series else 0) <= 6: s += 0.1
         if tp >= 8: s += 0.1
-        # Tiny boost only when shape strongly suggests parts-of-whole:
-        # percentage unit AND a small categorical series (2-4 options).
-        if unit == 'percentage' and series and 2 <= series[0]['count'] <= 4:
+        # Data-verified parts-of-whole (options sum ≈ total in the parquet)
+        # is the one shape where stacking is THE right chart; a verified
+        # non-composition should almost never stack.
+        if sig.get('is_composition') is True:
+            s += 0.30
+        elif sig.get('is_composition') is False:
+            s -= 0.15
+        # Shape-only fallback when unverified: percentage unit AND a small
+        # categorical series (2-4 options) weakly suggests parts-of-whole.
+        elif unit == 'percentage' and series and 2 <= series[0]['count'] <= 4:
             s += 0.05
         # Sparse data makes stacked charts misleading (gaps look like zero)
         if is_sparse: s -= 0.15
@@ -287,7 +371,7 @@ def _score(chart_type: str, sig: dict) -> float:
         # Unit penalty: index numbers as bar heights are misleading (base=100)
         if unit == 'index': s -= 0.10
         # Defer to choropleth when geo is the natural primary (no demographics).
-        if has_geo and geo >= 4 and not has_age and not has_gender and not has_residence:
+        if has_geo and geo >= 8 and not has_age and not has_gender and not has_residence:
             s -= 0.15
         return min(max(s, 0.0), 1.0)
 
@@ -314,6 +398,9 @@ def _score(chart_type: str, sig: dict) -> float:
         if has_time and tp >= 5: s += 0.05
         # Unit affinity: percentage data stacks meaningfully
         if unit == 'percentage' and small_series: s += 0.1
+        # Data-verified composition status (see area_stacked)
+        if sig.get('is_composition') is True: s += 0.15
+        elif sig.get('is_composition') is False: s -= 0.10
         # Sparse data creates misleading gaps in stacks
         if is_sparse: s -= 0.10
         return min(max(s, 0.0), 1.0)
@@ -327,6 +414,9 @@ def _score(chart_type: str, sig: dict) -> float:
         if has_geo and 10 <= geo <= 50: s += 0.1
         # Unit affinity: currency/count are natural for comparison bars
         if unit in ('currency', 'count'): s += 0.05
+        # Skewed values: a sorted ranking is the clearest way to show a few
+        # dominant categories (heatmap color scales wash out instead).
+        if sig.get('distribution') == 'right_skewed': s += 0.05
         # Cap below choropleth for high geo coverage (explicit, no recursion)
         if has_geo and geo >= 30: s = min(s, 0.80)
         # Defer to grouped_bar for categorical-snapshot shape (cat × cat).
@@ -344,12 +434,14 @@ def _score(chart_type: str, sig: dict) -> float:
         if geo >= 30: s += 0.25
         elif geo >= 20: s += 0.15
         elif geo >= 10: s += 0.05
-        elif geo >= 4: s += 0.05  # region/macroregion baseline bump
+        elif geo >= 8: s += 0.05  # region-level baseline bump
         if 'county' in geo_levels: s += 0.05
         if has_time: s += 0.05
         # Geo + demographic combo: choropleth is the natural primary,
         # demographic dim becomes a filter rather than a series.
         if has_age or has_gender or has_residence: s += 0.15
+        # Detected county outliers → the map has visible spatial structure
+        if sig.get('has_geo_outliers'): s += 0.05
         if is_sparse: s -= 0.10
         return min(max(s, 0.0), 1.0)
 
@@ -385,7 +477,7 @@ def _score(chart_type: str, sig: dict) -> float:
         # Defer to choropleth when geo is the natural primary (cluster 7).
         # The very_long-cat bonus was making heatmap beat choropleth on
         # geo + long-cat datasets like ABF/BUF.
-        if has_geo and geo >= 4 and not has_age and not has_gender and not has_residence:
+        if has_geo and geo >= 8 and not has_age and not has_gender and not has_residence:
             s -= 0.15
         # Defer to line/small_multiples on urban/rural splits (cluster 9):
         # residence-as-splitter datasets read better as line per residence type.
@@ -414,7 +506,7 @@ def _score(chart_type: str, sig: dict) -> float:
         # overlay). Small_multiples can still win when scored with a strong
         # cat-facet bonus, but the gap closes enough for choropleth to grab
         # the tiebreak.
-        if has_geo and geo >= 4 and not has_age and not has_gender and not has_residence:
+        if has_geo and geo >= 8 and not has_age and not has_gender and not has_residence:
             s -= 0.15
         return min(max(s, 0.0), 1.0)
 
@@ -431,7 +523,7 @@ def _score(chart_type: str, sig: dict) -> float:
         if has_geo and geo >= 20: s = min(s, 0.80)
         # Defer to choropleth when geo is the natural primary (no demographic
         # overlay). Bubble was beating choropleth for region-level + cat datasets.
-        if has_geo and geo >= 4 and not has_age and not has_gender and not has_residence:
+        if has_geo and geo >= 8 and not has_age and not has_gender and not has_residence:
             s -= 0.15
         return min(max(s, 0.0), 1.0)
 
@@ -469,17 +561,25 @@ def select_charts(sig: dict, top_n: int = 8) -> list[dict]:
     results.sort(key=lambda x: (-x['score'], TIEBREAK_PRIORITY.get(x['chart_type'], 99)))
     results = results[:top_n]
 
-    # Confidence: how sure are we about the primary recommendation?
+    # Confidence semantics differ by rank:
+    # - primary: how clearly it beats the runner-up (gap #1 vs #2)
+    # - alternatives: how strong a substitute they are (distance from #1) —
+    #   a #5 chart at half the primary's score must not inherit "high".
     if len(results) >= 2:
         gap = results[0]['score'] - results[1]['score']
-        confidence = 'high' if gap > 0.15 else 'medium' if gap > 0.05 else 'low'
+        primary_conf = 'high' if gap > 0.15 else 'medium' if gap > 0.05 else 'low'
     elif len(results) == 1:
-        confidence = 'high'
+        primary_conf = 'high'
     else:
-        confidence = 'low'
+        primary_conf = 'low'
 
-    for entry in results:
-        entry['confidence'] = confidence
+    for i, entry in enumerate(results):
+        if i == 0:
+            entry['confidence'] = primary_conf
+        else:
+            dist = results[0]['score'] - entry['score']
+            entry['confidence'] = ('high' if dist <= 0.05
+                                   else 'medium' if dist <= 0.15 else 'low')
 
     # Mark complementary pairs among top results
     top_types = {r['chart_type'] for r in results[:4]}
@@ -529,13 +629,16 @@ def decide_pair(ranked: list[dict]) -> dict | None:
     }
 
 
-def assign_roles(chart_type: str, dimensions: list, sig: dict = None) -> dict:
+def assign_roles(chart_type: str, dimensions: list, sig: dict = None,
+                 actual_values: dict | None = None) -> dict:
     """Map dimension columns to visual roles for a given chart type.
 
     Args:
         chart_type: The selected chart type
         dimensions: List of dimension dicts
         sig: Optional signature dict — enables context-aware assignment
+        actual_values: Optional {dim_column → values present in the parquet}
+                       — grounds default hints (exclude_total) in data reality
 
     Returns dict with keys: x_axis, series, facet, timeline, filter (list),
     filter_hints (dict), defaults (dict)
@@ -556,7 +659,11 @@ def assign_roles(chart_type: str, dimensions: list, sig: dict = None) -> dict:
     def col(d):
         return d['dim_column_name'] if d else None
 
-    time_d = pop_type('time')
+    # Some datasets carry two time dims (e.g. reference year + base year for
+    # indices) — the real time axis is the one with the most periods.
+    time_dims = sorted(by_type.get('time', []),
+                       key=lambda d: d.get('option_count') or 0, reverse=True)
+    time_d = time_dims[0] if time_dims else None
     geo_d = pop_type('geo')
     gender_d = pop_type('gender')
     age_d = pop_type('age')
@@ -678,6 +785,36 @@ def assign_roles(chart_type: str, dimensions: list, sig: dict = None) -> dict:
     if chart_type in ('choropleth', 'horizontal_bar', 'heatmap'):
         roles['defaults']['time'] = 'latest'
     if chart_type != 'population_pyramid':
-        roles['defaults']['exclude_total'] = True
+        # Excluding Total rows only makes sense when the charted dims still
+        # have non-Total values afterwards — some parquets carry ONLY the
+        # aggregate, and excluding it would empty the chart.
+        roles['defaults']['exclude_total'] = _non_totals_survive(
+            roles, dimensions, actual_values)
 
     return roles
+
+
+def _non_totals_survive(roles: dict, dimensions: list,
+                        actual_values: dict | None) -> bool:
+    """True unless some axis-role dim would be emptied by dropping Totals.
+
+    Checks the values actually present in the parquet when known, falling
+    back to metadata option labels. Unknown dims are assumed fine.
+    """
+    axis_cols = {roles.get(r) for r in ('x_axis', 'series', 'facet')} - {None}
+    if not axis_cols:
+        return True
+    by_col = {d.get('dim_column_name'): d for d in dimensions}
+    for col in axis_cols:
+        d = by_col.get(col)
+        if d is None:
+            continue
+        vals = (actual_values or {}).get(col)
+        if vals is None:
+            opts = d.get('options')
+            if opts is None:
+                continue
+            vals = [(o.get('label') or '') for o in opts]
+        if vals and all(TOTAL_RE.match(str(v).strip()) for v in vals):
+            return False
+    return True

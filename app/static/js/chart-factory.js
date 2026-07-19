@@ -62,8 +62,11 @@ async function createChart(container, chartConfig, data, metadata) {
                     const lvl = opt.parsed?.geo_level;
                     if (lvl) lvlCounts[lvl] = (lvlCounts[lvl] || 0) + 1;
                 }
-                if (lvlCounts['macroregion'] > 0 && !lvlCounts['county']) geoLevel = 'macroregion';
-                else if (lvlCounts['region'] > 0 && !lvlCounts['county']) geoLevel = 'region';
+                // Same priority as createChoroplethChart (county > region >
+                // macroregion) — a mismatch loads the wrong GeoJSON and
+                // crashes ECharts on the unregistered map.
+                if (lvlCounts['region'] > 0 && !lvlCounts['county']) geoLevel = 'region';
+                else if (lvlCounts['macroregion'] > 0 && !lvlCounts['county']) geoLevel = 'macroregion';
             }
             if (typeof loadRomaniaGeoJSON === 'function') {
                 const loaded = await loadRomaniaGeoJSON(geoLevel);
@@ -132,6 +135,7 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
     });
 
     let series = [];
+    let truncatedFrom = null;  // set when the series list is capped
     const chartType = config.primary_chart;
     const isArea = chartType === 'area' || chartType === 'area_stacked';
     const isStacked = chartType === 'area_stacked';
@@ -141,10 +145,12 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
         const groups = groupBy(rows, seriesIdx);
         const seriesLabelsMap = labels[seriesDim] || {};
 
-        // Cap high-cardinality series — keep top N by sum
+        // Cap high-cardinality series — keep top N by sum, and SAY so:
+        // silent truncation makes the chart lie about what the data holds.
         let entries = Object.entries(groups);
         const MAX_SERIES = config.max_series || 12;
         if (entries.length > MAX_SERIES) {
+            truncatedFrom = entries.length;
             entries.sort((a, b) => {
                 const sumA = a[1].reduce((s, r) => s + (r[valueIdx] || 0), 0);
                 const sumB = b[1].reduce((s, r) => s + (r[valueIdx] || 0), 0);
@@ -247,7 +253,10 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
             axisLabel: { fontSize: 11, rotate: xData.length > 20 ? 45 : 0 },
         },
         yAxis: {
-            type: 'value',
+            // log scale only when requested AND representable (all values > 0)
+            type: (config._logScale && !vfmt
+                   && series.every(s => s.data.every(v => v == null || v > 0)))
+                ? 'log' : 'value',
             axisLabel: {
                 fontSize: 11,
                 formatter: yAxisLabel,
@@ -260,6 +269,22 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
         series,
         animationDuration: 300,
     };
+
+    // Truncation disclosure — "top 12 / 42" so the viewer knows the chart
+    // shows a selection, not the whole dimension
+    if (truncatedFrom) {
+        option.graphic = [{
+            type: 'text',
+            right: 8,
+            top: 2,
+            silent: true,
+            style: {
+                text: `top ${series.length} / ${truncatedFrom}`,
+                fontSize: 10,
+                fill: '#9ca3af',
+            },
+        }];
+    }
 
     chart.setOption(option);
     return chart;

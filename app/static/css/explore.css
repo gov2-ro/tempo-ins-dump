@@ -1085,6 +1085,27 @@ kbd {
     background: var(--bg-2);
 }
 
+.dl-btn.v2-badge {
+    border-color: var(--accent-dim);
+    color: var(--accent);
+    background: var(--accent-dim);
+}
+.dl-btn.v2-badge:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+.dl-btn.v1-badge {
+    border-color: var(--border);
+    color: var(--text-2);
+    background: transparent;
+}
+.dl-btn.v1-badge:hover {
+    border-color: var(--border-hover);
+    color: var(--text-1);
+    background: var(--bg-2);
+}
+
 .dash-title {
     font-size: 22px;
     font-weight: 700;

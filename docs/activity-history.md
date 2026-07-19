@@ -1,5 +1,135 @@
 # Activity History
 
+## 2026-07-20 — dashboard-v2 becomes the main dataset page
+
+Switchover after the perspectives roadmap landed. Verified via Playwright (browse card → v2, search → v2, sidebar tree, theme toggle, ← v1 round-trip, compare chrome) — zero console errors.
+
+- **All dataset navigation lands on `/dataset-v2.html`**: `explore-app.showDashboard()` is now a redirect (single choke point — covers browse cards, recent/headline cards, drill lists, sidebar, search); the old renderer lives on as `showDashboardV1()`, reachable only via `/?code=` deep links (init/popstate/lang-toggle) — which is exactly what the v2 toolbar's "← v1" button targets for comparison. `place-page.js` accordion links updated too.
+- **v2 (and compare) adopted the site chrome**: new `js/site-chrome.js` renders the explore topbar (logo, search overlay with keyboard nav, Locuri/Ask, theme, lang) and the quick-nav sidebar (lazy category tree → datasets, filter, active-dataset highlight, `lensNavOpen` continuity) against the same markup ids/CSS as index.html, so the two look identical. Chrome dataset links go to v2. Theme flips dispatch a `themechange` window event; dashboard-v2 re-renders its charts on it (its own toolbar lang/theme buttons removed as now redundant), compare reloads.
+- Deliberate duplication: site-chrome reimplements ~250 lines of explore-app chrome behavior rather than refactoring the 3,300-line SPA monolith; extraction noted in BACKLOG.
+
+## 2026-07-20 — Perspectives Phase 3: correspondences
+
+The "what does this connect to?" layer — last phase of the 2026-07 dashboard audit roadmap. Verified via Playwright (AMG158G rail/tags, LOC101B_judet place chip, both compare modes, ?q= deep link) — zero console errors.
+
+- **Related-datasets rail** (`/api/datasets/{code}/related`, `get_related()` in dataset_search.py): top-5 from `dataset_relationships` (union of both directions, `arg_max` dedup) joined with names + year ranges. The table predates splits, so split children fall back to their parent's rows and get their sibling splits prepended as the strongest links. Cards show similarity %, shared-dim badges, and a "Compară" link when time is shared. Gotcha fixed: the compare link inside a card `<a>` nested anchors — the HTML parser's adoption-agency step cloned every card (10 rendered from 5); cards are now `<div>`s with a click handler.
+- **Topic tags** under the title (same endpoint, `dataset_tags` context+matrix_name sources): the tag soup is tokenized words, so display goes through a structural-word stoplist, punctuation strip, and subsumed-token dedup ("munca" ⊂ "forta de munca"). Chips link to `/?q=tag` — explore-app now opens its search overlay prefilled from `?q=`.
+- **Compare view** (`compare.html` + `js/compare.js`): overlays each dataset's composer temporal slice on a shared period axis (Total series when one exists, otherwise the most complete series, disclosed in the legend), dual y-axis when unit types differ; when both datasets are county-level it adds a per-county scatter at the latest period with Pearson r (LOC101B vs LOC103B: r = 0.95 across 41 counties). Aggregate areas (Total/regiuni/macroregiuni) are excluded from the scatter join.
+- **Place cross-link**: clicking a county/region on the map or ranking bars now also remembers the pick (`_geoPick`) even when no other tile can be filtered by it, and spatial tiles grow a "↗ profil: {name}" chip → `/place/{level}/{slug}` (client-side slugify mirroring `place_service.slugify`; slugs verified against `/api/places`).
+- Deferred to backlog: mixed-granularity compare axes, region-colored scatter, post-split relationships recompute.
+
+## 2026-07-20 — Perspectives Phase 2: slices & controls
+
+Interactivity layer on dashboard-v2. Verified via Playwright (AMG158G cross-filter, COM109B seasonal, LOC101B_judet per-capita) — zero console errors, all state URL-restorable.
+
+- **Notables as slices** (`insights.py` + `dashboard-v2.js`): insights now returns structured `notables` (top/bottom entity with exact data-string value); rendered as ▲/▼ chips in the sentence strip — clicking one cross-filters the whole dashboard to that slice.
+- **Chart-click cross-filtering**: clicking a map county / ranking bar / series point sets that value on every tile *not* charting the column (via pin selects or tile filters) and puts a highlight chip on tiles that do; second click clears (toggle). If the column has a global filter widget, it drives that instead.
+- **Tile transform/perspective chips**: transpose ⇄ (swaps x↔series on grouped/stacked/heatmap/bubble), per-capita ‰ (count-unit × geo; population from new `/api/reference/population` endpoint reading POP105A county/region/macroregion parquets, nearest-year fallback, clean-name matching), log-scale (when `distribution == right_skewed`, only if all values > 0), seasonal overlay (monthly/quarterly → sub-period on x, one line per year via `seasonalOverlay()` in utils.js).
+- **Filter widgets upgraded**: global row now renders pill groups (≤6 options), selects, or datalist typeaheads (>25) instead of bare selects; row is rebuildable so cross-filters reflect into it.
+- **URL state**: tile transforms/swaps/norms/logs persist as compact `?t=` JSON alongside `?f=` filters; restored on load.
+- **B7 fixed** (`insights.py`): monthly/quarterly datasets get a true seasonal YoY KPI (same sub-period, previous year) labeled "Față de anul anterior", with MoM kept as the separate "previous period" card.
+- Fill-rate KPI suppressed when > 100% (splits inherit parent coverage — LOC101B_judet showed "5156%").
+- Deferred to backlog: seasonal overlay should prefer most-recent years over top-by-sum; line-chart y-axis clipping on 8-digit values.
+
+## 2026-07-19 — Perspectives Phase 1: guaranteed dispatch + v2 parity
+
+Frontend follow-through of the audit (same day as Phase 0). Verified per-dataset via Playwright screenshots (`scripts/dbv2-screenshot.mjs`), zero console errors across CON107B/AGR201E/AMG158G/LOC103B_judet/COM109B/TFA0494/PPA103A.
+
+- **Dispatch is now selector-driven, not archetype-driven.** v1 (`explore-app.js`): choropleth snapshot gate, new Heatmap time-panel pill, and population_pyramid all keyed off `ranked_charts` (archetype kept as fallback badge). Kills the silent line-fallback for ~735 datasets whose primary the panels couldn't render; AGR201E now opens on its cat×time heatmap, LOC103B_judet (archetype null) gets its Map tab.
+- **Choropleth time slider**: `chart-geo.js` already computed per-year frames but rendered only the latest — wired them to an ECharts timeline with play control (same pattern as chart-demographic). Both surfaces.
+- **Composer honesty upgrades** (`dashboard_composer.py`): small_multiples without a facet renders as line (AMG101E); a heatmap without a second categorical gets time as its x axis (or is skipped); split parents with no parquet get NO composition — v2 shows sub-dataset pills instead of 500-ing tiles, with children derived from the parquet corpus when `dataset_splits` has no rows (AMG101A_anual/_trimestrial).
+- **Hierarchical-dim double-counting fixed** (`_hierarchy_root_pin`): dims that encode a tree in label indentation + "- total" suffixes (no parent_id data) were summed whole — AGR201E's headline read 10.3M "bovines" (2011 collapse = artifact) vs the real 1.85M. Slices/insights/global-filter defaults now pin the top-level aggregate and disclose it.
+- **Legacy parquet path unbroken** (`dataset_data.py`): requests arrive with SDMX names but 67 legacy files have `*_nom_id` columns — `group_by` silently fell back to *unaggregated all-dims* (the audit's B10) and filters never matched. Both are now remapped to the file's names, and responses translate back to SDMX-canonical columns. Plus `_parquet_dim_values` resolves legacy columns via `sdmx_column_map` and `_effective` gained a collision-guarded whitespace-tolerant match (legacy values carry indentation metadata lacks — but hierarchy dims use indentation to distinguish options, hence the guard). Net: LOC103B_judet v2 = choropleth + slider + ranking + evolution, all data-grounded.
+- **v2 parity** (`dashboard-v2.js` +~250 lines): sortable raw-data table (cap 1000), CSV/XLSX/INS links, RO/EN strings + lang toggle, theme toggle, Index/Δ% transform chips on temporal tiles (shared `applyTimeTransform` extracted to utils.js; annotations skipped under transforms — peak/trough pins describe raw values), unified empty-tile behavior (composer-time holes drop the tile; user-caused emptiness keeps it with a message), visible notice when insights fail.
+- **Shared ECharts themes**: v2 charts rendered in default ECharts theme (registration lived only in explore-app) — extracted to `js/echarts-theme.js`, loaded by both pages; added timeline styling.
+- **Truncation disclosure**: series-capped time charts show "top 12 / 42" instead of silently dropping series (`chart-factory.js`).
+- Moved dead controllers `dataset-page.js`, `dataset-page-v2.js` to `app/static/_obsolete/js/`.
+
+## 2026-07-19 — Dashboard audit + Phase 0: truthful chart-selection signals
+
+Full audit of chart/filter selection (rules, data shape, frontend dispatch) — report in `docs/dashboard-audit-2026-07.md`, phased roadmap in BACKLOG ("Perspectives roadmap"). Phase 0 (backend correctness) implemented and verified:
+
+- **B1 time_points**: the `time_year_max` fallback returned the literal year (2024) corpus-wide, not just ECC109A — every `tp >= N` rule was silently true. Now `max − min + 1`. This alone moved 17 short-series datasets off small_multiples/heatmap onto ranked bars in the eval.
+- **B2 aggregation**: new shared `query_builder.AVG_UNIT_TYPES` (`percentage/time_unit/index/rate/ratio`) replaces three divergent copies in dataset_data/insights/agent — index datasets were being SUMmed (base-100 indices summed across dims). `index`/`ratio` added to composer `NON_ADDITIVE_UNIT_TYPES`; area_stacked/stacked_bar ineligible for `index` unit.
+- **B4 choropleth**: eligibility geo≥4 → geo≥8 and the five copy-pasted "geo-primary" −0.15 penalties follow — 4-macroregion datasets (30 in eval) no longer get a four-shape map burying the time story.
+- **B5 pyramid**: new `gender_mf_count` signature signal (parsed male/female options); mixed "Sexe si medii" dims can no longer mirror Urban/Rural as pyramid sides (SOM101C had mf=1). Eval harness supplies the same count from DB for lock-step parity.
+- **B6 confidence**: was dataset-level stamped on all ranked entries; now primary = gap to runner-up, alternatives = distance from primary.
+- **B7 insights YoY**: monthly/quarterly data now compares the same sub-period last year ("2025-08 vs 2024-08"), with MoM/QoQ as a secondary `prev` card — previously MoM was labelled as the headline change.
+- **B8 series alignment**: `retune_ranked_series()` (composer) applies `_best_temporal_series` to `ranked_charts` roles so v1 (raw roles) and v2 (composer tiles) present the same default split.
+- **B9 forced pins**: `_parquet_dim_values` now returns per-value row counts; arbitrary non-additive pins prefer the densest option (`_widest_pin`) instead of first-listed.
+- **B3 exclude_total**: only defaulted True when the charted dims keep non-Total values in the parquet (`_non_totals_survive`).
+- **Parts-of-whole probe**: `dataset_meta._detect_composition` verifies on the latest period whether non-Total options sum to Total (±2%) or to ~100 for percentages → `sig.is_composition` drives area_stacked/stacked_bar (±0.30/−0.15). Runtime-only by design; eval scores it as None (documented divergence in `chart_selector_eval.py`).
+- Consolidated three copies of the Total-detection regex into `chart_selector.TOTAL_RE`.
+
+Eval reviewed before re-baselining: 64/1,986 primary changes, all in intended directions (choropleth demotions geo 4–7 + one mixed-level LMV101A; short-series facet charts → bars; pyramid corrections both ways). Baseline rebuilt via `scripts/build_chart_selector_baseline.py`.
+
+## 2026-07-15 — Knowledge graph of the repo via `/graphify`
+
+Built a graphify knowledge graph over the whole repo (289 files, ~573K words): AST-extracted 1,682 nodes/3,495 edges from 179 code files structurally (free, no LLM), then dispatched 21 parallel subagents for semantic extraction of 93 docs + 17 images (no `GEMINI_API_KEY` set, so the host session did the semantic pass via subagents instead of the Gemini backend).
+
+The 4 doc-chunk subagents (each reading 21-24 markdown/HTML files) ran far longer than the 17 image chunks — one finished in ~8 min after being written off as stalled, the other three never finished in-session. Per user decision, the final graph (`graphify-out/graph.json`, 1,722 nodes/2,980 edges/143 communities) was built from AST + the 17 completed image chunks only; the 93 document-category files were deliberately excluded from `manifest.json`'s semantic_hash stamping (rather than the skill's default kind='both' write) so a future `/graphify --update` retries them instead of silently skipping already-"seen" files that were never actually extracted.
+
+Two real UI issues surfaced incidentally from vision analysis of eval smoke-screenshots (added to `docs/BACKLOG.md` under Dashboard v2): LOC103B_judet's Map tab rendering a line chart instead of a choropleth, and AMG158G's v2 choropleth legend (28-91) rendering every county the same color for 2024 — both worth a manual look.
+
+## 2026-06-12 — Dashboard v2: data-grounded slices (no more empty tiles / ghost filters)
+
+FOM106F exposed three composer failures: an empty heatmap hero ("Fără date"), only 2 tiles for a 4-dim dataset, and a "Categorii de salariati" filter whose selectable option (Muncitori) doesn't exist in the data. Root cause for all: the composer trusted *metadata* options, but parquets routinely lack rows metadata promises (FOM106F has no `SEX='Total'` and no `CATEGORY='Muncitori'` rows at all).
+
+**Composer grounded in parquet reality** (`dashboard_composer.py`, `dataset_meta.py`): `get_dataset_meta` now reads distinct values per dim column from the parquet (`_parquet_dim_values`, ms-cheap) and passes them in. Slices only pin values that exist; dims that are singletons *in the data* are skipped entirely (no pin, no filter control). The `fallback_filters` retry machinery is gone — it papered over the mismatch and produced wrong sums (it would SUM salaries across all CAEN activities).
+
+**Non-additive pinning**: when a dim has no Total in the data, additive units still go unfiltered (SUM = total), but non-additive ones (`currency`/`percentage`/`rate`/`time_unit` — means can't be summed) pin the first real option; the tile chip discloses it (FOM106F heatmap shows "Masculin"). The data router only AVGs percentage/time_unit, so summed currency means were silently wrong before.
+
+**More tiles for rich data**: structural/temporal heroes now also request a ranking companion, and ranking synthesis generalizes beyond geo to the widest categorical dim (≥6 real options) — FOM106F gets heatmap + line + top-30 CAEN bar (3 tiles); 40-dataset sampling: 2–4 tiles, mostly 3, exactly 1 empty slice (CDP104H cross-dim coverage hole).
+
+**NULL group buckets** (`query_builder.py`): parquets carry NULL dim values where SDMX mapping is missing; GROUP BY lumped them into one bogus summed bar (100k "salary" on FOM106F ranking). Aggregations now exclude rows whose group column is NULL.
+
+**Frontend** (`dashboard-v2.js?v=4`): tiles whose slice comes back empty are *dropped* and survivors re-slotted client-side (GRID_LAYOUTS/SLOTS mirror the composer) instead of rendering a "Fără date" placeholder; zero-alive shows one message (split parents like AGR101A now degrade cleanly). Filter row renders composer-provided data-grounded options (`options`/`default`/`allow_all`) instead of raw metadata options; "Toate" only offered when values are additive and total-less.
+
+`insights.py` updated to the new slice API (same grounding). Backlog: NULL-mapping pipeline backfill, overlapping AGE bands double-count (POP107D 38.8M), compose-time joint-coverage probe if empty slices recur.
+
+**Follow-up 2 (same day): per-tile controls — pins become defaults, not verdicts.** User feedback: v2 had *fewer* choices than v1 (for FOM106F: zero controls — you couldn't view a CAEN sector's evolution), "Ultima valoare" was men-only salary presented as the dataset headline, and the tendință badge duplicated schimbare totală. Changes:
+- Composer emits `controls` per tile (`_tile_controls`): one select per pinned dim with ≥2 real options, data-grounded (FOM106F's CAEN select has the 50 values that exist, not metadata's 68), default = the pin. Dims covered by the global filter row are excluded (no duplicates).
+- `dashboard-v2.js?v=6`: selects render in the tile bar (chip-styled, replacing the static chips), per-tile state in `tileFilters`, fetch keyed per chart.id with identical-request dedupe. A tile emptied by its *own* control shows "Fără date pentru această selecție" (not dropped — user must be able to switch back).
+- `insights.py`: "Ultima valoare" carries `context` labels for non-total pins (renders "Lei RON · 2024 · Masculin"); tendință badge only shown when it adds signal (volatile/flat or contradicting the overall %) — increasing+up is suppressed as noise.
+- Still not ported from v1 (deliberate, follow-ups): multi-select series compare (up to 8 CAEN lines), chart-type toggles per tile, view-profile snapshot variants.
+
+**Follow-up (same day): heatmaps demoted from hero + smarter timeline series.** User feedback: heatmaps are hard to read as the lead chart, and FOM106F's evolution line only showed M/F. Two global rules in the composer:
+- `NON_HERO_CHARTS`/`WIDE_CHARTS = {'heatmap'}`: hero = first non-heatmap candidate; a picked heatmap is ordered last and gets a full-width row via new layouts `hero_full` ("hero"/"full") and `hero_side_full` ("hero side1"/"full full") — mirrored in `dashboard-v2.js slotCharts()` for client re-slotting and added to `dashboard-v2.css`. FOM106F: line hero, CAEN ranking side, heatmap full bottom; 40-dataset sample has zero heatmap heroes.
+- `_best_temporal_series()`: evolution charts (line/area/stacked/bar) swap the selector's gender-first series for the most informative real split — ranked by **fewest forced arbitrary pins** (a candidate that forces other no-total non-additive dims onto a pinned single option loses), then substantive-over-demographic (gender/residence/age), then series count (2–8 band). Composer-only (roles copied) so `ranked_charts`/v1/eval stay untouched. FOM106F deliberately *keeps* M/F: INS published no SEX totals there, so any other split would pin the whole chart to one sex — honesty beats richness. TIV0827/AGR205A/TRN102B (3/40 sampled) switch to substantive splits (occupational status, agri branches) with pins disclosed as chips.
+
+## 2026-06-11 — Dashboard v2 Phase 1: shape-driven composition engine + page skeleton
+
+New side-by-side dataset page (`/dataset-v2.html?code=X`) that composes 1-4 complementary charts at once instead of the fixed two-panel layout, so most datasets are understandable with zero clicks.
+
+**Composer** (`app/services/dashboard_composer.py`, new): consumes `select_charts()` ranked output + roles and picks charts by *information-axis diversity* (temporal/spatial/ranking/structural, max 1 per axis, max 4 charts), synthesizing a trend line or top-N geo ranking when the hero's natural companion didn't rank. Emitted as `chart_config.composition` (3-line hook in `dataset_meta.py`). Each chart carries a declarative data-slice spec (`group_by` from its roles + filters) and zero-cost annotations from `dataset_trends` (breakpoints/peak/trough/geo outliers — rendering deferred to Phase 3).
+
+**Non-obvious slice rules** (each found by a real failing dataset):
+- Dims not on an axis are pinned to their Total option to avoid double-count SUMs; a `fallback_filters` variant with totals *excluded* ships alongside because some parquets lack the Total rows metadata lists (AMG1103).
+- Filter values include trimmed variants — metadata labels carry hierarchy-indentation whitespace ("   Din total : salariati") that parquet values don't. Trimmed variant skipped if it collides with another option of the same dim.
+- Time pins must use the option's `sdmx_value` ("2023"), not the RO label ("Anul 2023") — SDMX parquets store normalized TIME_PERIOD.
+- Secondary time dims (index base years, CNS106A) are left unpinned when a time dim is already on an axis — pinning the latest base truncates the series to one point; coverage windows don't overlap so aggregation is safe.
+- `horizontal_bar` is not timeline-capable (its renderer sums all rows per category), so its `timeline` role is dropped from the slice and time pinned latest instead.
+
+**Selector fix** (`chart_selector.py assign_roles`): with two time dims, the time axis is now the one with the most periods (base-year dims are small). Eval clean — roles aren't scored.
+
+**Frontend** (`dataset-v2.html`, `js/dashboard-v2.js`, `css/dashboard-v2.css`, new): slices deduped by `slice_id` and fetched in parallel as small aggregated `group_by` queries (sidesteps the 50k cap); CSS `grid-template-areas` per layout (`single_full`/`hero_side`/`hero_2side`/`hero_2side_full`); tiles reuse `createChart()` unchanged. Gotcha: per-tile compat fields `time_dim`/`geo_dim` must be re-derived from the tile's own slice columns — inheriting the dataset-level ones routes chart-factory to the wrong renderer when the slice pinned that dim away.
+
+**Eval baseline refreshed**: `chart_selector_baseline.json` was stale (predates the 05-07 selector rework, 476 phantom primary changes); regenerated, now 0-drift. Verified via Playwright screenshots (`scripts/dbv2-screenshot.mjs`, new dev helper) on all four layouts; no console errors.
+
+Next: Phase 2 (KPI strip + insight sentences), Phase 3 (annotations + compact filters), Phase 4 (selector signal tuning).
+
+## 2026-06-11 — Dashboard v2 Phases 2-4: insights, annotations, filters, selector signal tuning
+
+**Phase 2 — insights** (`app/services/insights.py`, new + `GET /api/datasets/{id}/insights`): KPI cards (latest value + SVG sparkline, YoY, overall change, trend badge, coverage) and ≤3 template sentences (RO/EN), computed from the same composer slice rules as the tiles (totals pinning, whitespace variants, sdmx_value time pins) so numbers always match the charts. Sentence priority: YoY → top/bottom geo (or top category) → breakpoints; overall change stays KPI-only to not waste a slot. Geo rankings drop coarser levels (counties never mix with their region aggregates). TTL cache (1h) like headlines.py.
+
+**Phase 3 — annotations + filters**: `js/chart-annotations.js` merges markLine (breakpoint years, dashed) + markPoint (peak/trough pins, single-series only) onto rendered tiles via series-index merge; spatial outliers render as a ⚠ chip in the tile bar. Compact filter row from `composition.filter_dims` — one select per unconsumed dim, defaults mirror the composer's Total pin, synthetic "Toate" (= sum) for dims without a Total option (suppressed for unit dims), state in `?f=` URL param, charts disposed + refetched on change.
+
+**Phase 4 — selector tuning** (eval-gated, 3 iterations): final nudges are (1) line +0.05 on |trend_slope| ≥ 0.05 *gated on the small-series readability condition* — ungated it poached 37 deliberate small_multiples/heatmap wins from the May cluster tuning; (2) choropleth +0.05 when `geo_outlier_counties` non-empty (scale-free; raw `geo_variance` spans 1e6–1e14 and is unusable as a threshold); (3) horizontal_bar +0.05 on right_skewed distribution. The heatmap −0.05 skew penalty from the plan was dropped — it created 3-way ties resolved to line-spaghetti (ECC109A, 28 series × 3 periods). Net result: exactly 7 primary changes, all geo datasets upgrading to choropleth (e.g. CON103G regional GDP), reviewed and re-baselined.
+
+**Latent bug exposed + fixed** (`chart-factory.js`): geo-level detection was macroregion-first while `createChoroplethChart` is region-first — region+macroregion datasets loaded the wrong GeoJSON and crashed ECharts on the unregistered map. Never seen before because those datasets only now rank choropleth as primary. Aligned to county > region > macroregion.
+
+Verified: Playwright on 8 datasets (all layouts + both new choropleth flips) + v1 spot-check, zero console errors; selector eval 0-drift after re-baseline.
+
 ## 2026-05-07 — Place Profiles feature (counties, regions, macroregions)
 
 Full place profile pages at `/place/{type}/{slug}` showing KPI heroes, indicator grid with category filtering, and cross-place comparison chart. Directory listing at `/places`.

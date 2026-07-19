@@ -1,6 +1,12 @@
 """Dynamic SQL builder for parquet queries with filter pushdown."""
 from app.config import PARQUET_DIR, MAX_DATA_ROWS
 
+# Unit types whose values are levels/shares, not additive quantities —
+# grouped queries must AVG them. SUMming percentages, base-100 indices or
+# rates across a dimension produces meaningless numbers. Single source of
+# truth for dataset_data.py, insights.py and agent.py.
+AVG_UNIT_TYPES = {'percentage', 'time_unit', 'index', 'rate', 'ratio'}
+
 
 def _resolve_parquet_path(matrix_code: str):
     """Find the v3 parquet file for a matrix code."""
@@ -61,6 +67,10 @@ def build_data_query(matrix_code: str, dimensions: list, filters: dict,
         output_cols = all_dim_cols
 
     where_parts = []
+    if group_by:
+        # Some parquets carry NULL dim values (unmapped SDMX codes); grouping
+        # them produces a meaningless summed "null" bucket in charts.
+        where_parts = [f'"{c}" IS NOT NULL' for c in keep_cols]
     for col_name, values in filters.items():
         if col_name not in valid_cols or not values:
             continue

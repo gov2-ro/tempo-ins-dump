@@ -7,9 +7,58 @@ from fastapi.responses import Response
 from app.db import get_conn
 from app.config import MAX_DATA_ROWS, LARGE_DATASET_THRESHOLD, PARQUET_DIR
 
-from app.services.query_builder import build_data_query
+from app.services.query_builder import build_data_query, AVG_UNIT_TYPES
 
 router = APIRouter()
+
+
+@router.get("/datasets/{matrix_code}/insights")
+def get_dataset_insights(
+    matrix_code: str,
+    lang: str = Query("ro", pattern="^(ro|en)$"),
+):
+    """KPI headline values + template-based insight sentences (cached)."""
+    from app.services.insights import compute_insights
+    result = compute_insights(matrix_code, lang=lang)
+    if result is None:
+        raise HTTPException(404, f"Dataset {matrix_code} not found")
+    return result
+
+
+_POP_REFERENCE_CACHE: dict = {}
+_POP_REFERENCE_FILES = {
+    "county": "POP105A_judete_grupe",
+    "region": "POP105A_regiuni_grupe",
+    "macroregion": "POP105A_macroregiuni_grupe",
+}
+
+
+@router.get("/reference/population")
+def get_population_reference(level: str = Query("county", pattern="^(county|region|macroregion)$")):
+    """Resident population per geo area per year — reference matrix for
+    per-capita normalization (clients divide count values by pop/1000).
+
+    Source: POP105A_* parquets — flat age partition with no Total rows, so
+    SUM over all dims per (REF_AREA, TIME_PERIOD) is the true population.
+    Cached in-process; the underlying data changes once a year.
+    """
+    if level in _POP_REFERENCE_CACHE:
+        return _POP_REFERENCE_CACHE[level]
+    path = PARQUET_DIR / f"{_POP_REFERENCE_FILES[level]}.parquet"
+    if not path.exists():
+        raise HTTPException(404, "Population reference unavailable")
+    conn = get_conn()
+    rows = conn.execute(
+        'SELECT "REF_AREA", "TIME_PERIOD", SUM("OBS_VALUE") '
+        "FROM read_parquet(?) GROUP BY 1, 2", [str(path)]
+    ).fetchall()
+    pop: dict = {}
+    for area, period, v in rows:
+        if area is None or period is None or v is None:
+            continue
+        pop.setdefault(str(area).strip(), {})[str(period)] = v
+    _POP_REFERENCE_CACHE[level] = {"level": level, "population": pop}
+    return _POP_REFERENCE_CACHE[level]
 
 
 def _detect_parquet_schema(conn, matrix_code: str) -> dict:
@@ -115,15 +164,23 @@ def get_dataset_data(
             sql = "SELECT sdmx_column_name, old_column_name FROM sdmx_column_map WHERE matrix_code = ?"
         return dict(conn.execute(sql, [lookup_code]).fetchall())
 
+    legacy_to_sdmx = {}
     if schema["is_legacy"]:
         # Parquet is legacy. Any dim names that look SDMX-canonical need to
-        # be rewritten BACK to *_nom_id to match the file.
-        if any(not d['dim_column_name'].endswith('_nom_id') for d in dimensions):
-            rev_map = _load_col_map("sdmx_to_legacy")
-            if rev_map:
-                for d in dimensions:
-                    if not d['dim_column_name'].endswith('_nom_id'):
-                        d['dim_column_name'] = rev_map.get(d['dim_column_name'], d['dim_column_name'])
+        # be rewritten BACK to *_nom_id to match the file — and the same goes
+        # for the caller's group_by / filter keys (charts always send SDMX
+        # names). Without this, group_by silently falls back to "all dims"
+        # (unaggregated) and filters never match. Responses are translated
+        # back to SDMX names below so clients see one canonical schema.
+        rev_map = _load_col_map("sdmx_to_legacy")
+        if rev_map:
+            legacy_to_sdmx = {v: k for k, v in rev_map.items()}
+            for d in dimensions:
+                if not d['dim_column_name'].endswith('_nom_id'):
+                    d['dim_column_name'] = rev_map.get(d['dim_column_name'], d['dim_column_name'])
+            if group_by_cols:
+                group_by_cols = [rev_map.get(c, c) for c in group_by_cols]
+            filter_dict = {rev_map.get(k, k): v for k, v in filter_dict.items()}
     elif any(d['dim_column_name'].endswith('_nom_id') for d in dimensions):
         # Parquet is SDMX. Any dim names still in *_nom_id form need rewriting
         # forward to canonical names.
@@ -183,7 +240,7 @@ def get_dataset_data(
             "SELECT primary_unit_type FROM matrix_profiles WHERE matrix_code = ?",
             [matrix_code]
         ).fetchone()
-        if unit_row and unit_row[0] in ('percentage', 'time_unit'):
+        if unit_row and unit_row[0] in AVG_UNIT_TYPES:
             agg_func = "AVG"
 
     # Build and execute query
@@ -239,8 +296,13 @@ def get_dataset_data(
                 """).fetchall()
                 column_labels[col] = {str(nom_id): label for nom_id, label in labels}
 
-    # Format column names
-    columns = [d['dim_column_name'] for d in result_dims] + ['OBS_VALUE']
+    # Format column names — legacy parquet columns are translated back to
+    # SDMX-canonical names so every client sees one schema.
+    def _out_col(c):
+        return legacy_to_sdmx.get(c, c)
+    columns = [_out_col(d['dim_column_name']) for d in result_dims] + ['OBS_VALUE']
+    if legacy_to_sdmx:
+        column_labels = {_out_col(c): v for c, v in column_labels.items()}
 
     # Convert rows to plain lists
     data_rows = [list(r) for r in rows]

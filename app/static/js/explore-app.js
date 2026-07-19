@@ -185,81 +185,8 @@ const CATEGORY_IMGS = {
     '8': '7 sustainable development.png',      // H. DEZVOLTARE DURABILA 2030
 };
 
-// ---------------------------------------------------------------------------
-// ECharts themes — dark and light variants
-// ---------------------------------------------------------------------------
-(function registerThemes() {
-    const COLORS = ['#818cf8','#f472b6','#34d399','#fbbf24','#60a5fa','#a78bfa','#fb923c','#94a3b8',
-                    '#e879f9','#22d3ee','#f87171','#84cc16'];
-
-    const sharedStyle = {
-        color: COLORS,
-        line: { smooth: true, symbolSize: 4, lineStyle: { width: 2.5 } },
-        bar: { barMaxWidth: 40, itemStyle: { borderRadius: [3, 3, 0, 0] } },
-        scatter: { symbolSize: 10 },
-    };
-
-    echarts.registerTheme('lens-dark', {
-        ...sharedStyle,
-        backgroundColor: 'transparent',
-        textStyle: { color: '#a1a1aa', fontFamily: "'Inter', system-ui, sans-serif" },
-        title: { textStyle: { color: '#fafafa', fontWeight: 600 }, subtextStyle: { color: '#71717a' } },
-        legend: { textStyle: { color: '#a1a1aa' }, pageTextStyle: { color: '#a1a1aa' } },
-        tooltip: {
-            backgroundColor: 'rgba(24,24,28,0.95)',
-            borderColor: 'rgba(255,255,255,0.08)',
-            textStyle: { color: '#fafafa', fontSize: 12 },
-            extraCssText: 'border-radius:8px; backdrop-filter:blur(8px); box-shadow:0 4px 20px rgba(0,0,0,0.5);',
-        },
-        categoryAxis: {
-            axisLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
-            axisTick: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
-            axisLabel: { color: '#71717a', fontSize: 11 },
-            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
-        },
-        valueAxis: {
-            axisLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
-            axisTick: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
-            axisLabel: { color: '#71717a', fontSize: 11 },
-            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
-        },
-        visualMap: { textStyle: { color: '#71717a' } },
-    });
-
-    echarts.registerTheme('lens-light', {
-        ...sharedStyle,
-        backgroundColor: 'transparent',
-        textStyle: { color: '#4a4a55', fontFamily: "'Inter', system-ui, sans-serif" },
-        title: { textStyle: { color: '#111118', fontWeight: 600 }, subtextStyle: { color: '#8a8a99' } },
-        legend: { textStyle: { color: '#4a4a55' }, pageTextStyle: { color: '#4a4a55' } },
-        tooltip: {
-            backgroundColor: 'rgba(255,255,255,0.96)',
-            borderColor: 'rgba(0,0,0,0.08)',
-            textStyle: { color: '#111118', fontSize: 12 },
-            extraCssText: 'border-radius:8px; backdrop-filter:blur(8px); box-shadow:0 4px 20px rgba(0,0,0,0.12);',
-        },
-        categoryAxis: {
-            axisLine: { lineStyle: { color: 'rgba(0,0,0,0.1)' } },
-            axisTick: { lineStyle: { color: 'rgba(0,0,0,0.06)' } },
-            axisLabel: { color: '#8a8a99', fontSize: 11 },
-            splitLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } },
-        },
-        valueAxis: {
-            axisLine: { lineStyle: { color: 'rgba(0,0,0,0.1)' } },
-            axisTick: { lineStyle: { color: 'rgba(0,0,0,0.06)' } },
-            axisLabel: { color: '#8a8a99', fontSize: 11 },
-            splitLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } },
-        },
-        visualMap: { textStyle: { color: '#8a8a99' } },
-    });
-
-    // Monkey-patch echarts.init to use the current theme
-    const _origInit = echarts.init.bind(echarts);
-    echarts.init = (dom, _theme, opts) => {
-        const themeName = document.body.dataset.theme === 'light' ? 'lens-light' : 'lens-dark';
-        return _origInit(dom, themeName, opts);
-    };
-})();
+// ECharts lens themes + init patch moved to the shared js/echarts-theme.js
+// (loaded by index.html and dataset-v2.html before the chart modules).
 
 
 // ---------------------------------------------------------------------------
@@ -360,9 +287,12 @@ class LensApp {
         if (page === 'about') {
             this.showAbout();
         } else if (code) {
-            this.showDashboard(code);
+            this.showDashboardV1(code);
         } else {
             this.showBrowse();
+            // Deep-linked search (?q=tag from dashboard-v2 tag chips)
+            const q = params.get('q');
+            if (q) this.openSearch(q);
         }
     }
 
@@ -479,7 +409,7 @@ class LensApp {
             // Re-render current view
             const code = new URLSearchParams(location.search).get('code');
             if (code) {
-                this.showDashboard(code);
+                this.showDashboardV1(code);
             } else {
                 this.showBrowse();
             }
@@ -1264,7 +1194,16 @@ class LensApp {
     }
 
     // --- Dashboard view -----------------------------------------------------
-    async showDashboard(code) {
+
+    /** Dataset navigation lands on dashboard-v2, the canonical dataset page.
+     *  The v1 renderer below stays reachable at /?code= — linked from the
+     *  v2 toolbar ("← v1") for comparison. */
+    showDashboard(code) {
+        const langQ = this.lang !== 'ro' ? `&lang=${this.lang}` : '';
+        window.location.href = `/dataset-v2.html?code=${code}${langQ}`;
+    }
+
+    async showDashboardV1(code) {
         document.getElementById('page-loader')?.classList.add('hidden');
         this.navigate(code);
         this.disposeCharts();
@@ -1410,6 +1349,7 @@ class LensApp {
                     <span class="dash-code">${m.matrix_code}</span>
                 </div>
                 <div class="dash-download">
+                    <a class="dl-btn v2-badge" href="/dataset-v2.html?code=${m.matrix_code}" title="${this.lang === 'en' ? 'Open shape-driven dashboard (v2)' : 'Deschide dashboard-ul adaptiv (v2)'}">v2 ↗</a>
                     <a class="dl-btn" href="http://statistici.insse.ro/tempoins/index.jsp?page=tempo3&lang=${this.lang === 'en' ? 'en' : 'ro'}&ind=${m.parent_matrix_code || m.matrix_code}" target="_blank" rel="noopener" title="${this.lang === 'en' ? 'View on INS TEMPO Online' : 'Vezi pe INS TEMPO Online'}">INS ↗</a>
                     <a class="dl-btn" href="/sdmx/2.1/data/INS,${m.matrix_code}/" target="_blank" rel="noopener" title="SDMX-ML 2.1 data feed">SDMX ↗</a>
                     <button class="dl-btn" id="dl-csv-btn">↓ CSV</button>
@@ -1628,6 +1568,13 @@ class LensApp {
             const hasFacetDim = categoryDims.some(d => d.option_count > 6 && d.option_count <= 25);
             const selectorRecommendsSM = (cfg.ranked_charts || []).some(r => r.chart_type === 'small_multiples');
             if (hasFacetDim || selectorRecommendsSM) timeChartTypes.push('small_multiples');
+            // Heatmap (category × time matrix) — the only readable render for
+            // age-cohort / long-categorical time data. Offered whenever the
+            // selector ranks it; createHeatmapChart uses time as the second
+            // axis when only one categorical dim exists.
+            if ((cfg.ranked_charts || []).some(r => r.chart_type === 'heatmap')) {
+                timeChartTypes.push('heatmap');
+            }
         }
 
         // Snapshot chart types
@@ -1638,8 +1585,12 @@ class LensApp {
             } else {
                 snapshotChartTypes = ['bar_vertical', 'horizontal_bar'];
             }
-            // For geo datasets, prepend choropleth
-            if ((archetype === 'geo_time' || archetype === 'geo_only') && geoDimObj) {
+            // For geo datasets, prepend choropleth. Selector-driven (split
+            // children like LOC103B_judet have archetype null but a valid
+            // choropleth recommendation); archetype kept as fallback for
+            // datasets scored before the selector existed.
+            const _mapRanked = (cfg.ranked_charts || []).some(r => r.chart_type === 'choropleth');
+            if ((_mapRanked || archetype === 'geo_time' || archetype === 'geo_only') && geoDimObj) {
                 snapshotChartTypes.unshift('choropleth');
                 // Detect geo level from dimension options to load correct GeoJSON
                 let geoLevel = 'county';
@@ -1654,10 +1605,11 @@ class LensApp {
                 }
                 if (typeof loadRomaniaGeoJSON === 'function') loadRomaniaGeoJSON(geoLevel);
             }
-            // For age+gender datasets, add population pyramid
-            const hasAgeDim = dims.some(d => d.dim_type === 'age' && d.option_count > 1);
-            const hasGenderDim = dims.some(d => d.dim_type === 'gender' && d.option_count > 1);
-            if (hasAgeDim && hasGenderDim && !snapshotChartTypes.includes('population_pyramid')) {
+            // Population pyramid: selector-driven — it validates that the
+            // gender dim has real male/female sides (mixed "Sexe si medii"
+            // dims would mirror Urban/Rural as a fake pyramid).
+            if ((cfg.ranked_charts || []).some(r => r.chart_type === 'population_pyramid')
+                    && !snapshotChartTypes.includes('population_pyramid')) {
                 snapshotChartTypes.push('population_pyramid');
             }
         }
@@ -1709,7 +1661,7 @@ class LensApp {
 
         const LABELS = {
             line: 'Line', bar: 'Bar', area_stacked: 'Area', stacked_bar: 'Stacked',
-            small_multiples: 'Multiples',
+            small_multiples: 'Multiples', heatmap: 'Heatmap',
         };
 
         for (const type of setup.timeChartTypes) {
@@ -2506,44 +2458,8 @@ class LensApp {
      * Returns a new data object with transformed OBS_VALUE column.
      */
     _applyTimeTransform(data, timeDim, seriesDim) {
-        if (!this.timeTransform || !data || !data.rows.length) return data;
-        const cols = data.columns;
-        const timeIdx = cols.indexOf(timeDim);
-        if (timeIdx === -1) return data;
-        const seriesIdx = seriesDim ? cols.indexOf(seriesDim) : -1;
-        const valIdx = cols.length - 1;
-
-        // Group rows by series key
-        const groups = new Map();
-        for (const row of data.rows) {
-            const key = seriesIdx >= 0 ? String(row[seriesIdx]) : '__all__';
-            if (!groups.has(key)) groups.set(key, []);
-            groups.get(key).push(row);
-        }
-
-        const newRows = [];
-        for (const rows of groups.values()) {
-            const sorted = [...rows].sort((a, b) => String(a[timeIdx]).localeCompare(String(b[timeIdx])));
-            if (this.timeTransform === 'index') {
-                const base = sorted[0]?.[valIdx];
-                if (base == null || base === 0) continue;
-                for (const row of sorted) {
-                    const nr = [...row];
-                    nr[valIdx] = row[valIdx] != null ? (row[valIdx] / base) * 100 : null;
-                    newRows.push(nr);
-                }
-            } else if (this.timeTransform === 'yoy') {
-                for (let i = 1; i < sorted.length; i++) {
-                    const prev = sorted[i - 1][valIdx];
-                    const curr = sorted[i][valIdx];
-                    if (prev == null || prev === 0 || curr == null) continue;
-                    const nr = [...sorted[i]];
-                    nr[valIdx] = ((curr - prev) / Math.abs(prev)) * 100;
-                    newRows.push(nr);
-                }
-            }
-        }
-        return { ...data, rows: newRows };
+        // Shared implementation lives in utils.js (also used by dashboard-v2)
+        return applyTimeTransform(data, timeDim, seriesDim, this.timeTransform);
     }
 
     /**
@@ -3334,15 +3250,16 @@ class LensApp {
     }
 
     // --- Search -------------------------------------------------------------
-    openSearch() {
+    openSearch(prefill = '') {
         const overlay = document.getElementById('search-overlay');
         overlay.classList.remove('hidden');
         const input = document.getElementById('search-input');
-        input.value = '';
+        input.value = prefill;
         input.focus();
         this.searchIdx = -1;
         document.getElementById('search-results').innerHTML =
             `<div class="search-empty">${this.ui.searchEmpty}</div>`;
+        if (prefill) this.onSearchInput(prefill);
     }
 
     closeSearch() {
@@ -3430,7 +3347,7 @@ window.addEventListener('popstate', () => {
     if (page === 'about') {
         window.app.showAbout();
     } else if (code) {
-        window.app.showDashboard(code);
+        window.app.showDashboardV1(code);
     } else if (cat) {
         window.app._urlCat = cat;
         window.app.showBrowse();

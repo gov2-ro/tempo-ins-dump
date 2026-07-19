@@ -5,7 +5,7 @@ app/services/dataset_meta.py — all logic lives in the service layer.
 """
 from fastapi import APIRouter, Query, HTTPException
 from app.config import DEFAULT_PAGE_SIZE
-from app.services.dataset_search import search_datasets
+from app.services.dataset_search import search_datasets, get_related
 from app.services.dataset_meta import get_dataset_meta
 
 router = APIRouter()
@@ -35,6 +35,16 @@ def list_datasets(
         has_age=has_age, has_residence=has_residence, dim=dim,
         lang=lang, sort=sort, limit=limit, offset=offset,
     )
+
+
+@router.get("/datasets/{matrix_code}/related")
+def related_datasets(
+    matrix_code: str,
+    lang: str = Query("ro", description="Language: ro|en"),
+    limit: int = Query(5, le=12),
+):
+    """Related datasets (dataset_relationships + split siblings) and tag chips."""
+    return get_related(matrix_code, lang=lang, limit=limit)
 
 
 @router.get("/datasets/{matrix_code}")

@@ -35,14 +35,126 @@ const THEMES = [
     categories: ['Turism', 'Cazare', 'Hoteluri'] },
 ];
 
+const PLACE_UI = {
+    ro: { loading: 'Se încarcă...', notFound: 'Locul nu a fost găsit.', error: 'Eroare la încărcare.',
+          datasets: 'seturi de date disponibile', themes: 'Seturi de date pe teme',
+          comparison: 'Comparație', national: 'Medie națională', sameRegion: 'Aceeași regiune:',
+          similarSize: 'Mărime similară:', typeLabels: { county:'Județ', region:'Regiune', macroregion:'Macroregiune', locality:'Localitate' },
+          searchPlaceholder: 'Caută un loc...' },
+    en: { loading: 'Loading...', notFound: 'Place not found.', error: 'Loading error.',
+          datasets: 'datasets available', themes: 'Datasets by theme',
+          comparison: 'Comparison', national: 'National average', sameRegion: 'Same region:',
+          similarSize: 'Similar size:', typeLabels: { county:'County', region:'Region', macroregion:'Macroregion', locality:'Locality' },
+          searchPlaceholder: 'Search a place...' },
+};
+
 class PlaceProfileApp {
     constructor() {
         this.data = null;
         this.activeKpiIndex = 0;
         this.activePeers = new Set();
         this.comparisonChart = null;
-        this.comparisonData = {};  // kpi_label → {series_name: [{year, value}]}
+        this.comparisonData = {};
         this.sparklines = [];
+        this.allPlaces = null;
+        this.lang = localStorage.getItem('lens_lang') || 'ro';
+        this.theme = document.documentElement.getAttribute('data-theme') || 'dark';
+    }
+
+    get ui() { return PLACE_UI[this.lang] || PLACE_UI.ro; }
+
+    _chartColors() {
+        const isLight = this.theme === 'light';
+        return {
+            axisLabel: isLight ? '#6b7280' : '#64748b',
+            splitLine: isLight ? '#e5e7eb' : '#1e293b',
+            legendText: isLight ? '#374151' : '#94a3b8',
+        };
+    }
+
+    _initNav() {
+        // Theme toggle
+        const applyThemeIcons = (t) => {
+            document.getElementById('theme-icon-sun').style.display = t === 'light' ? 'none' : '';
+            document.getElementById('theme-icon-moon').style.display = t === 'light' ? '' : 'none';
+        };
+        applyThemeIcons(this.theme);
+        document.getElementById('lang-label').textContent = this.lang === 'ro' ? 'EN' : 'RO';
+
+        document.getElementById('theme-toggle').addEventListener('click', () => {
+            this.theme = this.theme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', this.theme);
+            localStorage.setItem('lens_theme', this.theme);
+            applyThemeIcons(this.theme);
+            if (this.comparisonChart) this._refreshComparisonChart();
+        });
+
+        document.getElementById('lang-toggle').addEventListener('click', () => {
+            this.lang = document.getElementById('lang-label').textContent.toLowerCase();
+            localStorage.setItem('lens_lang', this.lang);
+            document.getElementById('lang-label').textContent = this.lang === 'ro' ? 'EN' : 'RO';
+            document.documentElement.setAttribute('lang', this.lang);
+            this._applyLangStrings();
+        });
+
+        // Place search in topbar
+        this._initPlaceSearch();
+    }
+
+    _applyLangStrings() {
+        const t = this.ui;
+        const themesTitle = document.getElementById('section-title-themes');
+        if (themesTitle) themesTitle.textContent = t.themes;
+        const navInput = document.getElementById('place-nav-input');
+        if (navInput) navInput.placeholder = t.searchPlaceholder;
+        if (this.data) {
+            document.getElementById('dataset-count').textContent =
+                `${this.data.dataset_count} ${t.datasets}`;
+            const typeLabel = t.typeLabels[this.data.place.type] || this.data.place.type;
+            document.getElementById('geo-badge').textContent = typeLabel;
+        }
+    }
+
+    async _initPlaceSearch() {
+        const input = document.getElementById('place-nav-input');
+        const dropdown = document.getElementById('place-nav-dropdown');
+        if (!input || !dropdown) return;
+
+        // Lazy-load places list
+        let places = null;
+        const getPlaces = async () => {
+            if (places) return places;
+            try {
+                const r = await fetch('/api/places');
+                if (r.ok) { const d = await r.json(); places = d.places; }
+            } catch (_) {}
+            return places || [];
+        };
+
+        input.addEventListener('input', async () => {
+            const q = input.value.trim().toLowerCase();
+            if (!q) { dropdown.classList.add('hidden'); dropdown.innerHTML = ''; return; }
+            const list = await getPlaces();
+            const matches = list.filter(p => p.name.toLowerCase().includes(q)).slice(0, 8);
+            if (!matches.length) { dropdown.classList.add('hidden'); return; }
+            const typeLabels = this.ui.typeLabels;
+            dropdown.innerHTML = matches.map(p => `
+                <a class="topbar-place-item" href="/place/${p.type}/${p.slug}">
+                    <span style="flex:1">${_esc(p.name)}</span>
+                    <span class="topbar-place-item-type">${_esc(typeLabels[p.type] || p.type)}</span>
+                </a>`).join('');
+            dropdown.classList.remove('hidden');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!document.getElementById('place-nav-wrap').contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { dropdown.classList.add('hidden'); input.blur(); }
+        });
     }
 
     async init() {
@@ -52,15 +164,17 @@ class PlaceProfileApp {
         this.placeType = parts[1];
         this.placeSlug = parts[2];
 
+        this._initNav();
+
         try {
             const resp = await fetch(`/api/places/${this.placeType}/${this.placeSlug}`);
             if (!resp.ok) {
-                document.getElementById('place-loading').textContent = 'Locul nu a fost găsit.';
+                document.getElementById('place-loading').textContent = this.ui.notFound;
                 return;
             }
             this.data = await resp.json();
         } catch (e) {
-            document.getElementById('place-loading').textContent = 'Eroare la încărcare.';
+            document.getElementById('place-loading').textContent = this.ui.error;
             return;
         }
 
@@ -71,6 +185,7 @@ class PlaceProfileApp {
 
         document.getElementById('place-loading').style.display = 'none';
         document.getElementById('place-content').style.display = 'block';
+        this._applyLangStrings();
 
         // Fix ECharts width: container was display:none during init, needs resize now that it's visible
         if (this.comparisonChart) {
@@ -89,9 +204,8 @@ class PlaceProfileApp {
         crumbs.push(place.name);
         document.getElementById('breadcrumb').innerHTML = crumbs.join(' › ');
         document.getElementById('place-name').textContent = place.name;
-        const typeLabels = { county: 'Județ', region: 'Regiune', macroregion: 'Macroregiune', locality: 'Localitate' };
-        document.getElementById('geo-badge').textContent = typeLabels[place.type] || place.type;
-        document.getElementById('dataset-count').textContent = `${dataset_count} seturi de date disponibile`;
+        document.getElementById('geo-badge').textContent = this.ui.typeLabels[place.type] || place.type;
+        document.getElementById('dataset-count').textContent = `${dataset_count} ${this.ui.datasets}`;
     }
 
     _renderKPIs() {
@@ -186,7 +300,7 @@ class PlaceProfileApp {
             `).join('');
 
             const accordionItems = themeDatasets.map(d => `
-                <a class="accordion-item" href="/dataset/${d.code}?place=${encodeURIComponent(this.placeSlug)}">
+                <a class="accordion-item" href="/dataset-v2.html?code=${d.code}">
                     <span class="acc-title">${_esc(d.title)}</span>
                     <span class="acc-code">${_esc(d.code)}</span>
                 </a>
@@ -217,7 +331,7 @@ class PlaceProfileApp {
 
         if (unmatchedDatasets.length > 0) {
             const items = unmatchedDatasets.map(d => `
-                <a class="accordion-item" href="/dataset/${d.code}?place=${encodeURIComponent(this.placeSlug)}">
+                <a class="accordion-item" href="/dataset-v2.html?code=${d.code}">
                     <span class="acc-title">${_esc(d.title)}</span>
                     <span class="acc-code">${_esc(d.code)}</span>
                 </a>
@@ -284,7 +398,7 @@ class PlaceProfileApp {
                       onclick="app._togglePeer(this)">${_esc(p.name)}</div>`
             ).join('');
             groups.push(`<div class="peer-group">
-                <span class="peer-group-label">Aceeași regiune:</span>${chips}
+                <span class="peer-group-label">${this.ui.sameRegion}</span>${chips}
             </div>`);
         }
         if (peers.similar_size?.length) {
@@ -293,7 +407,7 @@ class PlaceProfileApp {
                       onclick="app._togglePeer(this)">${_esc(p.name)}</div>`
             ).join('');
             groups.push(`<div class="peer-group">
-                <span class="peer-group-label">Mărime similară:</span>${chips}
+                <span class="peer-group-label">${this.ui.similarSize}</span>${chips}
             </div>`);
         }
         peerGroupsEl.innerHTML = groups.join('');
@@ -354,20 +468,23 @@ class PlaceProfileApp {
 
         const xYears = kpi.sparkline.map(r => r.year);
         const series = [];
+        const primaryValues = []; // place + peers only — used for y-axis range
         const colors = ['#3b82f6', '#94a3b8', '#64748b', '#f59e0b', '#a78bfa', '#4ade80'];
         let colorIdx = 0;
 
+        const placeData = alignToYears(kpi.sparkline, xYears);
+        primaryValues.push(...placeData.filter(v => v != null));
         series.push({
             name: this.data.place.name,
             type: 'line',
-            data: alignToYears(kpi.sparkline, xYears),
+            data: placeData,
             lineStyle: { width: 2.5, color: colors[colorIdx++] },
             showSymbol: false, smooth: true,
         });
 
         if (this.comparisonData['__national__']?.length) {
             series.push({
-                name: 'Medie națională',
+                name: this.ui.national,
                 type: 'line',
                 data: alignToYears(this.comparisonData['__national__'], xYears),
                 lineStyle: { width: 1.5, color: colors[colorIdx++], type: 'dashed' },
@@ -389,34 +506,63 @@ class PlaceProfileApp {
             if (this.comparisonData[slug]?.length) {
                 const peerName = [...document.querySelectorAll('.peer-chip')]
                     .find(el => el.dataset.slug === slug)?.dataset.name || slug;
+                const peerData = alignToYears(this.comparisonData[slug], xYears);
+                primaryValues.push(...peerData.filter(v => v != null));
                 series.push({
                     name: peerName,
                     type: 'line',
-                    data: alignToYears(this.comparisonData[slug], xYears),
+                    data: peerData,
                     lineStyle: { width: 1.5, color: colors[colorIdx++ % colors.length] },
                     showSymbol: false, smooth: true,
                 });
             }
         }
 
+        // Compute y-axis range from place + peer data only.
+        // Baselines (national, region) can have incomparable scales (e.g. national SUM vs county),
+        // so we don't let them dictate the axis range.
+        let yMin, yMax;
+        if (primaryValues.length > 0) {
+            const lo = Math.min(...primaryValues);
+            const hi = Math.max(...primaryValues);
+            const pad = (hi - lo) * 0.12 || hi * 0.1 || 1;
+            yMin = Math.max(0, lo - pad);
+            yMax = hi + pad;
+        }
+
+        // Filter out baseline series whose values are all outside the primary range —
+        // they'd only distort the legend without adding visible information.
+        const visibleSeries = series.filter(s => {
+            if (yMin == null || yMax == null) return true;
+            const vals = (s.data || []).filter(v => v != null);
+            if (!vals.length) return false;
+            const sMax = Math.max(...vals);
+            const sMin = Math.min(...vals);
+            // Keep if values actually overlap the visible y range (with 20% headroom)
+            return sMax >= yMin * 0.8 && sMin <= yMax * 1.2;
+        });
+
+        const cc = this._chartColors();
         this.comparisonChart.setOption({
             animation: false,
             tooltip: { trigger: 'axis', confine: true },
-            legend: { bottom: 0, textStyle: { color: '#94a3b8', fontSize: 10 }, orient: 'horizontal' },
-            grid: { top: 8, right: 12, bottom: 40, left: 12 },
-            xAxis: { type: 'category', data: xYears, axisLabel: { color: '#64748b', fontSize: 9, rotate: 45 } },
+            legend: { bottom: 0, textStyle: { color: cc.legendText, fontSize: 10 }, orient: 'horizontal' },
+            grid: { top: 8, right: 12, bottom: 40, left: 52 },
+            xAxis: { type: 'category', data: xYears, axisLabel: { color: cc.axisLabel, fontSize: 9, rotate: 45 } },
             yAxis: {
                 type: 'value',
-                axisLabel: { color: '#64748b', fontSize: 8,
+                min: yMin,
+                max: yMax,
+                axisLabel: { color: cc.axisLabel, fontSize: 8,
                     formatter: v => {
-                        if (v >= 1e6) return (v/1e6).toFixed(0) + 'M';
-                        if (v >= 1e3) return (v/1e3).toFixed(0) + 'K';
+                        if (Math.abs(v) >= 1e6) return (v/1e6).toFixed(1) + 'M';
+                        if (Math.abs(v) >= 1e3) return (v/1e3).toFixed(0) + 'K';
                         return v;
                     }
                 },
-                splitLine: { lineStyle: { color: '#1e293b' } },
+                splitLine: { lineStyle: { color: cc.splitLine } },
             },
-            series,
+            series: visibleSeries,
         }, true);
     }
 }

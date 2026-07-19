@@ -215,7 +215,7 @@ def _handle_get_dataset_schema(inp: dict, conn) -> dict:
 
 
 def _handle_query_dataset_data(inp: dict, conn) -> dict:
-    from app.services.query_builder import build_data_query
+    from app.services.query_builder import build_data_query, AVG_UNIT_TYPES
     from app.config import LARGE_DATASET_THRESHOLD
 
     matrix_code = inp.get("matrix_code", "").strip()
@@ -268,7 +268,7 @@ def _handle_query_dataset_data(inp: dict, conn) -> dict:
         unit_row = conn.execute(
             "SELECT primary_unit_type FROM matrix_profiles WHERE matrix_code = ?", [matrix_code]
         ).fetchone()
-        if unit_row and unit_row[0] in ("percentage", "time_unit"):
+        if unit_row and unit_row[0] in AVG_UNIT_TYPES:
             agg_func = "AVG"
 
     warnings = []

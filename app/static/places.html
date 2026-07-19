@@ -8,38 +8,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/explore.css?v=37">
-</head>
-<body>
-    <nav class="topbar">
-        <div class="topbar-left">
-            <a href="/" class="logo"><span class="logo-dot"></span>INS<span style="margin: -1ex 0 0 -1ex;">+</span></a>
-        </div>
-        <div class="topbar-right">
-            <a href="/" class="toggle-btn" style="text-decoration:none;font-size:0.8rem;padding:0 10px;">Date</a>
-        </div>
-    </nav>
-
-    <div class="main-content" style="max-width:900px;margin:0 auto;padding:2rem 1rem;">
-        <h1 style="font-size:1.6rem;font-weight:700;margin-bottom:0.25rem;">Profiluri de locuri</h1>
-        <p style="color:var(--text-muted);margin-bottom:2rem;">Județe, regiuni de dezvoltare și macroregiuni România</p>
-
-        <div id="places-loading" style="color:var(--text-muted);">Se încarcă...</div>
-        <div id="places-content" style="display:none;">
-            <section id="section-county">
-                <h2 style="font-size:1rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:1.5rem 0 0.75rem;">Județe</h2>
-                <div id="grid-county" class="places-grid"></div>
-            </section>
-            <section id="section-region">
-                <h2 style="font-size:1rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:1.5rem 0 0.75rem;">Regiuni de dezvoltare</h2>
-                <div id="grid-region" class="places-grid"></div>
-            </section>
-            <section id="section-macroregion">
-                <h2 style="font-size:1rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:1.5rem 0 0.75rem;">Macroregiuni</h2>
-                <div id="grid-macroregion" class="places-grid"></div>
-            </section>
-        </div>
-    </div>
-
+    <script>
+        (function(){
+            var t=localStorage.getItem('lens_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');
+            document.documentElement.setAttribute('data-theme',t);
+        })();
+    </script>
     <style>
         .places-grid {
             display: flex;
@@ -49,19 +23,105 @@
         .place-chip {
             display: inline-block;
             padding: 0.4rem 0.9rem;
-            background: var(--card-bg, #1e293b);
-            border: 1px solid var(--border, #334155);
+            background: var(--bg-3);
+            border: 1px solid var(--border);
             border-radius: 6px;
             text-decoration: none;
-            color: var(--text-primary, #f1f5f9);
+            color: var(--text-primary);
             font-size: 0.875rem;
             transition: border-color 0.15s, background 0.15s;
         }
         .place-chip:hover {
-            border-color: var(--accent, #3b82f6);
-            background: var(--card-hover, #1e3a5f);
+            border-color: var(--accent);
+            background: var(--bg-hover);
+            color: var(--text-0);
         }
+        .place-chip.hidden { display: none; }
+
+        /* Inline search bar */
+        .places-search-wrap {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+        .places-search-input {
+            width: 100%;
+            max-width: 420px;
+            height: 40px;
+            padding: 0 12px 0 38px;
+            border-radius: var(--radius, 10px);
+            border: 1px solid var(--border);
+            background: var(--bg-2);
+            color: var(--text-0);
+            font-family: var(--font, Inter, sans-serif);
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .places-search-input:focus { border-color: var(--accent); }
+        .places-search-input::placeholder { color: var(--text-2); }
+        .places-search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            color: var(--text-2);
+        }
+
+        .section-header {
+            font-size: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin: 1.5rem 0 0.75rem;
+        }
+        .section-header.hidden { display: none; }
     </style>
-    <script src="/js/places-page.js?v=1"></script>
+</head>
+<body>
+    <nav class="topbar">
+        <div class="topbar-left">
+            <a href="/" class="logo"><span class="logo-dot"></span>INS<span style="margin: -1ex 0 0 -1ex;">+</span></a>
+        </div>
+        <div class="topbar-right">
+            <a href="/" class="toggle-btn" style="text-decoration:none;font-size:0.8rem;padding:0 10px;">Date</a>
+            <button class="toggle-btn" id="theme-toggle" title="Schimbă tema">
+                <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </button>
+            <button class="toggle-btn lang-toggle" id="lang-toggle" title="Schimbă limba">
+                <span id="lang-label">EN</span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="main-content" style="max-width:900px;margin:0 auto;padding:2rem 1rem;">
+        <h1 id="page-title" style="font-size:1.6rem;font-weight:700;margin-bottom:0.25rem;">Profiluri de locuri</h1>
+        <p id="page-subtitle" style="color:var(--text-muted);margin-bottom:1.5rem;">Județe, regiuni de dezvoltare și macroregiuni România</p>
+
+        <div class="places-search-wrap">
+            <svg class="places-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="places-search" class="places-search-input" placeholder="Caută județ sau regiune..." autocomplete="off">
+        </div>
+
+        <div id="places-loading" style="color:var(--text-muted);">Se încarcă...</div>
+        <div id="places-content" style="display:none;">
+            <section id="section-county">
+                <h2 id="label-county" class="section-header">Județe</h2>
+                <div id="grid-county" class="places-grid"></div>
+            </section>
+            <section id="section-region">
+                <h2 id="label-region" class="section-header">Regiuni de dezvoltare</h2>
+                <div id="grid-region" class="places-grid"></div>
+            </section>
+            <section id="section-macroregion">
+                <h2 id="label-macroregion" class="section-header">Macroregiuni</h2>
+                <div id="grid-macroregion" class="places-grid"></div>
+            </section>
+        </div>
+    </div>
+
+    <script src="/js/places-page.js?v=2"></script>
 </body>
 </html>
