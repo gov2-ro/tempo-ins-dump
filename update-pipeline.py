@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import random
+import re
 import subprocess
 import sys
 import time
@@ -38,6 +39,12 @@ NEWS_URL = "http://statistici.insse.ro:8077/tempo-ins/news/"
 META_BASE_URL = "http://statistici.insse.ro:8077/tempo-ins/matrix/"
 LOG_DIR = BASE_DIR / "data" / "logs"
 LAST_RUN_FILE = LOG_DIR / "last-pipeline-run.txt"
+
+# INS matrix codes are short alphanumeric tokens (e.g. INT113D, PPI1035).
+# The news page occasionally emits a summary/footer row (e.g. "113 Matrice" —
+# Romanian for "113 matrices") in the "Cod matrice" cell instead of a real code;
+# that garbage then permanently corrupts data/2-metas via fetch_meta(). Filter it out.
+MATRIX_CODE_RE = re.compile(r"^[A-Z0-9]{4,10}$")
 
 META_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
@@ -229,7 +236,11 @@ def parse_news(since: str | None) -> list[str]:
             log.error(f"Invalid --since date format: {since}. Use DD.MM.YYYY")
             sys.exit(1)
 
-    codes = df["Cod matrice"].str.strip().unique().tolist()
+    raw_codes = df["Cod matrice"].str.strip().unique().tolist()
+    codes = [c for c in raw_codes if MATRIX_CODE_RE.match(c)]
+    skipped = [c for c in raw_codes if c not in codes]
+    if skipped:
+        log.warning(f"Skipped {len(skipped)} non-matrix-code rows from news: {skipped}")
     log.info(f"Found {len(codes)} unique matrix codes in news")
     return codes
 
@@ -248,6 +259,7 @@ def fetch_meta(code: str, lang: str, force: bool) -> bool:
     try:
         resp = requests.get(url, headers=META_HEADERS, timeout=30)
         resp.raise_for_status()
+        json.loads(resp.text)  # validate before writing — a bad code can 200 with an empty/non-JSON body
         output_path.write_text(resp.text, encoding="utf-8")
         time.sleep(random.uniform(0.4, 1.2))
         return True

@@ -1,5 +1,20 @@
 # Activity History
 
+## 2026-08-05 — fix recurring bogus news-feed matrix code (root cause, not just cleanup)
+
+The `86 Matrice` issue from 2026-07-20 recurred as `113  Matrice` in today's `update-pipeline.py --refetch-news` run — same failure mode, same root cause, previously only patched by deleting the cached file. Fixed properly this time:
+
+- `parse_news()` (`update-pipeline.py`) now filters `Cod matrice` values through `MATRIX_CODE_RE = ^[A-Z0-9]{4,10}$`, logging and dropping non-conforming rows before they ever reach `fetch_meta()`. Confirmed via `--dry-run` that it catches both `113  Matrice` and `86  Matrice` (both apparently persist in the news feed's row history).
+- `fetch_meta()` now runs `json.loads()` on the response body before writing it to `data/2-metas/{lang}/{code}.json` — a bad/garbage code that still 200s with an empty body can no longer leave a permanent corrupt file (the `output_path.exists()` skip-guard was why the old `86 Matrice.json` never self-healed).
+- Deleted the stray `data/2-metas/ro/113  Matrice.json` and reran `4-build-meta-index.py --lang ro`: `data/1-indexes/ro/matrices-list.csv` had been silently truncated to 975 rows (crashed mid-`os.listdir` on the corrupt file) — now regenerated at 1996 rows.
+- Also clarified for future reference: running `update-pipeline.py` without `--refetch-news` right after a `--refetch-news` run correctly reports "No matrices to process" — it re-reads the same news snapshot filtered to `--since` (auto-set to today after any run), and INS news entries are rarely dated same-day.
+
+## 2026-07-20 — update-pipeline.py run: stale dev-server lock + bogus news-feed matrix code
+
+`update-pipeline.py` was failing at the DuckDB rebuild step with `Could not set lock on file ".../metadata.duckdb"`. Root cause: a `uvicorn` dev server (PID 92672, port 8088) had been running for ~49 min with the DB file open — DuckDB only allows one writer. Killed the stale process and reran; pipeline completed (358 matrices processed, 357 OK).
+
+- The one failure was legitimate but not a real dataset: the INS news feed had a row where "Cod matrice" was literally `86 Matrice` (a bulk-update summary, not an individual code) instead of an actual matrix ID. `6-fetch-csv.py` failed on it as expected, but `fetch_meta()`'s skip-if-exists guard had left behind a permanent 0-byte `data/2-metas/ro/86 Matrice.json`, which also crashed `4-build-meta-index.py` (non-fatal — its result is unchecked in `update-pipeline.py`, and `10-import-metadata.py` ran fine afterward). Deleted the bad cached file; root-cause fix (validate codes in `parse_news()`) noted in BACKLOG under Data pipeline.
+
 ## 2026-07-20 — dashboard-v2 becomes the main dataset page
 
 Switchover after the perspectives roadmap landed. Verified via Playwright (browse card → v2, search → v2, sidebar tree, theme toggle, ← v1 round-trip, compare chrome) — zero console errors.
