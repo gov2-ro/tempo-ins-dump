@@ -77,16 +77,16 @@ Sequential data pipeline — run in order. All scripts accept `--lang ro|en` (de
 
 ### Incremental Update (`update-pipeline.py`)
 
-Orchestrates incremental updates from the INS news feed — processes only datasets updated since the last run.
+Orchestrates incremental updates from the INS news feed — processes only datasets updated since the last run. Every matrix it touches was either named explicitly or flagged by INS as changed, so it force-refreshes (re-fetches metadata, CSV, parquet, SDMX) by default — a locally-cached file is never a reason to skip a matrix INS says is stale.
 
 ```bash
-python update-pipeline.py                        # auto-incremental (since last run)
+python update-pipeline.py                        # auto-incremental (since last run), force-refreshed
 python update-pipeline.py --refetch-news         # re-fetch news CSV first
 python update-pipeline.py --since 01.03.2026     # explicit date filter
-python update-pipeline.py --all                  # ignore last run, process all news
+python update-pipeline.py --all                  # ignore last run, process all news currently in insse_news.csv
 python update-pipeline.py --matrix ACC101B       # single dataset
-python update-pipeline.py --force                # re-download CSVs + parquets
-python update-pipeline.py --force-meta           # re-fetch metadata only (date sync, no CSV re-download)
+python update-pipeline.py --skip-existing        # resume/debug: skip matrices whose local files already exist
+python update-pipeline.py --force-meta           # with --skip-existing, still re-sync metadata dates
 python update-pipeline.py --dry-run              # preview without executing
 ```
 

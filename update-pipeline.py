@@ -3,15 +3,19 @@
 Incremental dataset update orchestrator.
 
 Reads the INS TEMPO news page (data/insse_news.csv) to get updated matrix codes,
-then runs the full pipeline for only those matrices.
+then runs the full pipeline for only those matrices. Every matrix processed here
+was either named explicitly (--matrix) or flagged by INS as changed (news feed),
+so the default is to always force-refresh it end to end — a locally-cached file
+is never a reason to skip a matrix INS says is stale.
 
 Usage:
-    python update-pipeline.py                          # process all news entries
+    python update-pipeline.py                          # process all news entries (force-refreshed)
     python update-pipeline.py --since 06.04.2026       # only entries from this date
     python update-pipeline.py --matrix TMI1163         # specific matrix, bypass news
     python update-pipeline.py --matrix A,B --dry-run   # preview without running
     python update-pipeline.py --refetch-news --since 06.04.2026  # re-fetch news first
     python update-pipeline.py --fetch-context          # also refresh context + matrices index
+    python update-pipeline.py --skip-existing          # resume/debug: skip matrices already fetched
 """
 
 import argparse
@@ -283,10 +287,10 @@ def main():
                         help="Bypass news, process specific matrix codes (comma-separated)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print steps without executing")
-    parser.add_argument("--force", action="store_true",
-                        help="Pass --force to downstream scripts")
+    parser.add_argument("--skip-existing", action="store_true",
+                        help="Resume/debug mode: skip a matrix's fetch/convert steps if local files already exist, instead of the default force-refresh. Rarely what you want for a real update.")
     parser.add_argument("--force-meta", action="store_true",
-                        help="Re-fetch metadata JSONs even if they already exist (without re-downloading CSVs/parquets — useful only for syncing dates, not actual data updates)")
+                        help="With --skip-existing, still re-fetch metadata JSONs (to sync ultima_actualizare) even though CSV/parquet steps are skipped")
     parser.add_argument("--lang", default="ro", choices=["ro", "en"],
                         help="Language (default: ro)")
     parser.add_argument("--no-split", action="store_true",
@@ -304,7 +308,11 @@ def main():
     args = parser.parse_args()
 
     lang = args.lang
-    force_flag = ["--force"] if args.force else []
+    # Every matrix reaching the per-matrix loop was either named explicitly (--matrix)
+    # or flagged by INS as changed (news feed) — a locally-cached file is never a
+    # reason to skip it, so force-refresh unless the caller opted into --skip-existing.
+    force_flag = [] if args.skip_existing else ["--force"]
+    meta_force = args.force_meta or not args.skip_existing
 
     # ---- Setup log file ----
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -362,7 +370,7 @@ def main():
         if args.dry_run:
             log.info(f"[DRY-RUN] fetch_meta({code})")
         else:
-            if not fetch_meta(code, lang, force=args.force or args.force_meta):
+            if not fetch_meta(code, lang, force=meta_force):
                 log.warning(f"{code}: meta fetch failed, continuing anyway")
 
         # b. Fetch CSV

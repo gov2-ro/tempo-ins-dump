@@ -1,5 +1,17 @@
 # Activity History
 
+## 2026-08-05 — update-pipeline.py was silently a no-op for existing matrices
+
+Investigated why the homepage "Actualizate recent" widget showed `TMI1163 · 2026-04-02` as the newest dataset despite two `update-pipeline.py` runs earlier today. Root cause: `6-fetch-csv.py`, `9-csv-to-parquet.py`, `12-parquet-to-sdmx.py`, and `fetch_meta()` all skip a matrix if its output file already exists — and `update-pipeline.py` only passed `--force` through when the user explicitly asked for it. Since virtually every matrix already has local files from earlier bulk fetches, running `python update-pipeline.py --refetch-news` (the documented/recommended incremental-update command) correctly identified the ~225 matrices INS flagged as changed, but then silently skipped every download/convert step for all of them — confirmed via file mtimes (`data/2-metas/ro/INT113A.json` and `data/4-datasets/ro/INT113A.csv` both untouched since Nov 2025) and the pipeline's own log (`12-parquet-to-sdmx.py --matrix INT113D` → `Success: 0 / Skipped: 1`).
+
+This defeats the entire point of the news-driven incremental updater: every matrix it processes was either named explicitly (`--matrix`) or flagged by INS as stale (news feed) — a locally-cached file is never a legitimate reason to skip it. Fixed by flipping the default: `update-pipeline.py` now force-refreshes every matrix it touches. The old skip-if-exists behavior is preserved only as an opt-in `--skip-existing` flag (resume/debug use — e.g. retrying after a partial network failure without re-hitting the API for matrices that already succeeded). `--force-meta` still works standalone with `--skip-existing` to resync just `ultima_actualizare` without a full re-pull. The removed `--force` flag is gone (redundant now that it's the default); `readme.md`'s Incremental Update section updated to match.
+
+User ran `python update-pipeline.py --all` (34 min): **225/225 succeeded**, `Synced ultima_actualizare for 225/225 matrices`, corpus max canonical date moved `2026-04-02` → `2026-08-04` as expected. One pre-existing, non-fatal, unrelated hiccup: `ART124A`'s `generate_view_profiles.py` step failed (`No profile generated` — no `matrix_profiles` row, i.e. dimension classification never ran for it); its CSV/parquet/SDMX all fetched fine, left as-is.
+
+### Follow-up: `fly deploy` didn't reflect the update — deploy-data staging is manual and was stale
+
+After confirming the fix worked locally, `fly deploy` to production (`ins.gov2.ro`) showed no change. Cause: `Dockerfile` bakes in `deploy-data/`, not `data/corpus/` directly — `deploy-data/` is a staged snapshot produced by `scripts/prepare-deploy-data.sh`, and `fly deploy` has no pre-deploy hook that regenerates it (checked `fly.toml`, no `release_command`/hooks). `deploy-data/metadata.duckdb` was dated 6 Apr, completely unrelated to today's refresh. Fix is procedural, not code: always run `bash scripts/prepare-deploy-data.sh` before `fly deploy` when `data/corpus/` has changed. Noted in BACKLOG as a candidate for automation (e.g. a `release_command` or a wrapper script) since it's an easy step to forget.
+
 ## 2026-08-05 — fix recurring bogus news-feed matrix code (root cause, not just cleanup)
 
 The `86 Matrice` issue from 2026-07-20 recurred as `113  Matrice` in today's `update-pipeline.py --refetch-news` run — same failure mode, same root cause, previously only patched by deleting the cached file. Fixed properly this time:
