@@ -28,8 +28,9 @@ Sequential. All accept `--lang ro|en` (default: `ro`). Output paths + full detai
 | 11 | `11-coverage-profiler.py` | Analyze data completeness → `dataset_coverage` |
 | 12 | `12-parquet-to-sdmx.py` | Transform parquet-v2 → canonical SDMX parquet (`corpus/parquet/`) |
 | 12 | `12-split-datasets.py` | Split inconsistent datasets into clean sub-datasets |
+| 13 | `13-dimension-structure.py` | Verify each dimension's internal structure → `dimension_structure` (levels, real aggregates, additivity, nesting) |
 
-**Orchestrator**: `update-pipeline.py` — incremental runs from INS news feed (per-matrix: meta → CSV → parquet → SDMX → split → view profile).
+**Orchestrator**: `update-pipeline.py` — incremental runs from INS news feed (per-matrix: meta → CSV → parquet → SDMX → split → dim structure → view profile).
 
 ### Other Root Scripts
 `generate_view_profiles.py` (per-dataset JSON view profiles), `generate_sdmx_yaml.py`, `build-geo-regions.py` (county GeoJSON → regions/macroregions), `build-static-site.py`, `split_rules.py`, `detect_trends.py`, `duckdb_config.py` (path config), `duckdb-browser.py`, `get-news.py`, `test_chart_selector.py`. See readme.md for descriptions. Helper scripts (audit, baselines, search index, canonicalize, normalize) are in `scripts/`.
@@ -53,6 +54,8 @@ app/
     dataset_search.py       — search/list datasets (shared by route, MCP, agent)
     dataset_meta.py         — full dataset metadata + chart config (shared by route, MCP, agent)
     chart_selector.py       — chart type selection engine
+    dimension_structure.py  — access layer for the `dimension_structure` table
+                              (verified levels, aggregates, nesting, additivity)
     chart_selector_eval.py  — bulk re-score + diff-against-baseline (MCP eval harness)
     agent_eval.py           — search-quality regression harness (MCP eval harness)
     headlines.py            — KPI/headline extraction (driven by headline_config.json)
@@ -143,7 +146,7 @@ data/
 
   # Final output — app reads from here
   corpus/
-    metadata.duckdb          Main DuckDB metadata (16 tables)
+    metadata.duckdb          Main DuckDB metadata (17 tables)
     search.duckdb            Search index DB
     parquet/                 SDMX-native canonical parquets — 3,706 files
     view-profiles/           Per-dataset JSON view profiles — 3,523 files
@@ -164,13 +167,14 @@ data/
 ## Technology Stack
 - **Backend**: FastAPI + DuckDB + Parquet
 - **Frontend**: Vanilla HTML5/CSS3/JS (ES6+), ECharts for visualization
-- **Database**: DuckDB (16 tables in `corpus/metadata.duckdb`)
+- **Database**: DuckDB (17 tables in `corpus/metadata.duckdb`)
 - **Data**: Parquet files (SDMX-native, 3,706 canonical files in `corpus/parquet/`)
 - **GeoJSON**: County/region/macroregion polygons for choropleth maps
 - **Deployment**: Docker + Fly.io (also Oracle Cloud, HF Spaces)
 
 ## Development Best Practices
 - **DuckDB concurrency**: `get_conn()` returns `_conn.cursor()` not `_conn` — parallel requests need separate cursors
+- **Dimension levels**: a dim's options may tile the same domain more than once (POP107D's AGE = 85 single years AND 17 five-year bands). Never SUM or chart such a dim whole — restrict to one level via `dimension_structure`. Accessors return empty when nothing was *verified*, so unprofiled datasets keep their old behaviour
 - **DuckDB write lock**: Only ONE process can write at a time. Stop dev server before running pipeline scripts
 - Test locally before committing; verify via browser dev tools (console + network tab) for frontend changes
 - Use `npx playwright` (already installed) to test/debug final UI results

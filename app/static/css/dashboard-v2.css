@@ -319,7 +319,7 @@ body.sidebar-open .dbv2-main {
     display: flex;
     gap: 16px;
     flex-wrap: wrap;
-    margin-top: 14px;
+    margin: 14px 0;
     padding: 10px 14px;
     background: var(--bg-1);
     border: 1px solid var(--border);
@@ -343,6 +343,66 @@ body.sidebar-open .dbv2-main {
     font-size: 0.8rem;
     max-width: 260px;
 }
+
+/* Multi-value filter: a checkbox list in a <details> popover. Native
+   disclosure keeps it keyboard-accessible with no JS focus handling. */
+.dbv2-multi { position: relative; display: inline-block; }
+.dbv2-multi > summary {
+    list-style: none;
+    cursor: pointer;
+    background: var(--bg-2);
+    color: var(--text-0);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 22px 4px 8px;
+    font-size: 0.8rem;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.dbv2-multi > summary::-webkit-details-marker { display: none; }
+.dbv2-multi > summary::after {
+    content: '▾';
+    position: absolute;
+    right: 8px;
+    pointer-events: none;
+}
+.dbv2-multi[open] > summary { border-color: var(--accent); color: var(--accent); }
+.dbv2-multi-list {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 100%;
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 6px;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+}
+.dbv2-multi-list label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    color: var(--text-0);
+    white-space: nowrap;
+    cursor: pointer;
+}
+.dbv2-multi-list label:hover { background: var(--bg-2); }
+
+/* Grain switcher — picks which level of a multi-level dimension is shown,
+   so it reads as one segmented control rather than a set of value pills. */
+.dbv2-levels { gap: 0; }
+.dbv2-levels .dbv2-pill { border-radius: 0; margin-left: -1px; }
+.dbv2-levels .dbv2-pill:first-child { border-radius: 12px 0 0 12px; margin-left: 0; }
+.dbv2-levels .dbv2-pill:last-child { border-radius: 0 12px 12px 0; }
+.dbv2-levels .dbv2-pill.active { background: var(--bg-2); z-index: 1; }
 
 /* ---------------------------------------------------------------- notice */
 
@@ -611,3 +671,24 @@ body.sidebar-open .dbv2-main {
     .dbv2-slot-side .dbv2-tile-chart,
     .layout-hero_side .dbv2-slot-side .dbv2-tile-chart { min-height: 240px; }
 }
+
+/* Expand one tile to the full grid. Side tiles are 200px tall, which a
+   103-bar pyramid or a 40-series heatmap cannot use. */
+.dbv2-expand {
+    margin-left: 8px;
+    padding: 2px 6px;
+    font-size: 0.72rem;
+    line-height: 1;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-2);
+    color: var(--text-1);
+    cursor: pointer;
+}
+.dbv2-expand:hover { border-color: var(--accent); color: var(--accent); }
+.dbv2-grid:has(.dbv2-tile.expanded) { display: block; }
+.dbv2-grid:has(.dbv2-tile.expanded) .dbv2-tile:not(.expanded) { display: none; }
+.dbv2-tile.expanded {
+    height: min(78vh, 900px);
+}
+.dbv2-tile.expanded .dbv2-tile-chart { height: calc(100% - 34px); }

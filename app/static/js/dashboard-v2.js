@@ -52,6 +52,11 @@ const UI_STRINGS = {
         tagTitle: t => `Caută „${t}"`,
         placeProfile: 'profil',
         placeTitle: n => `Profilul locului: ${n}`,
+        selected: n => `${n} selectate`,
+        expand: 'Mărește',
+        collapse: 'Micșorează',
+        grain: 'Nivel de detaliu',
+        grainTooltip: n => `${n} categorii — fără suprapuneri`,
     },
     en: {
         loading: 'Loading…',
@@ -98,6 +103,11 @@ const UI_STRINGS = {
         tagTitle: t => `Search "${t}"`,
         placeProfile: 'profile',
         placeTitle: n => `Place profile: ${n}`,
+        selected: n => `${n} selected`,
+        expand: 'Expand',
+        collapse: 'Collapse',
+        grain: 'Level of detail',
+        grainTooltip: n => `${n} categories — no overlap`,
     },
 };
 
@@ -147,6 +157,8 @@ class DashboardV2 {
         this.charts = [];       // live ECharts instances
         this.userFilters = {};  // column → label, from the compact filter row
         this.tileFilters = {};  // chart.id → {column → value}, per-tile controls
+        this.userLevels = {};   // column → level_id, from the global filter row
+        this._refreshTimer = null;
         this.tableOpen = false;
         this.tableData = null;  // cached raw rows for the table view
         this.tableSort = null;  // {col: idx, dir: 1|-1}
@@ -158,6 +170,9 @@ class DashboardV2 {
         try {
             this.userFilters = JSON.parse(params.get('f') || '{}');
         } catch { /* malformed ?f= — ignore */ }
+        try {
+            this.userLevels = JSON.parse(params.get('g') || '{}');
+        } catch { /* malformed ?g= — ignore */ }
         try {
             const t = JSON.parse(params.get('t') || '{}');
             for (const [id, st] of Object.entries(t)) {
@@ -357,14 +372,39 @@ class DashboardV2 {
      *  composer emits (metadata labels may carry indentation whitespace). */
     expandedUserFilters() {
         const out = {};
-        for (const [col, label] of Object.entries(this.userFilters)) {
-            if (!label) continue;
-            const vals = [label];
-            const trimmed = label.trim();
-            if (trimmed !== label) vals.push(trimmed);
-            out[col] = vals;
+        for (const [col, lvl] of Object.entries(this.userLevels)) {
+            const members = this.levelMembers(col, lvl);
+            if (members) out[col] = members;
+        }
+        for (const [col, val] of Object.entries(this.userFilters)) {
+            if (!val) continue;
+            const picks = Array.isArray(val) ? val : [val];
+            if (!picks.length) continue;
+            out[col] = picks.flatMap(v => this._labelVariants(v));
         }
         return out;
+    }
+
+    /** A label and its trimmed form — metadata carries indentation the
+     *  parquet may not, and the composer sends both spellings too. */
+    _labelVariants(label) {
+        const t = String(label).trim();
+        return t !== String(label) ? [String(label), t] : [String(label)];
+    }
+
+    /** Data values of one grain of a dimension, from composition.dim_levels
+     *  (sent once per dataset, not per tile). */
+    levelMembers(column, levelId) {
+        const entries = this.composition?.dim_levels?.[column];
+        if (!entries) return null;
+        return entries.find(l => l.level_id === levelId)?.members || null;
+    }
+
+    /** Coalesce bursts of control changes into one round of fetches —
+     *  ticking five checkboxes should not fire five times four requests. */
+    refreshSoon() {
+        clearTimeout(this._refreshTimer);
+        this._refreshTimer = setTimeout(() => this.refresh(), 250);
     }
 
     /** Fetch the slice of every tile (identical requests deduped), keyed by
@@ -561,6 +601,30 @@ class DashboardV2 {
         return frag;
     }
 
+    /** Blow one tile up to full width and height. A 103-bar pyramid or a
+     *  40-series heatmap is unreadable in a 200px side slot, and the grain
+     *  switcher makes that easy to hit on purpose. */
+    expandBtn(chart, tile) {
+        const btn = document.createElement('button');
+        btn.className = 'dbv2-expand';
+        btn.type = 'button';
+        const sync = () => {
+            const on = tile.classList.contains('expanded');
+            btn.textContent = on ? '\u2715' : '\u2922';
+            btn.title = on ? this.ui.collapse : this.ui.expand;
+        };
+        btn.addEventListener('click', () => {
+            const on = tile.classList.toggle('expanded');
+            this.expanded = on ? chart.id : null;
+            sync();
+            // The container changed size under ECharts; it cannot know.
+            const inst = this.charts.find(c => c.getDom() === tile.querySelector('.dbv2-tile-chart'));
+            requestAnimationFrame(() => inst?.resize());
+        });
+        sync();
+        return btn;
+    }
+
     _chipBtn(frag, label, tip, active, onClick) {
         const btn = document.createElement('button');
         btn.className = 'dbv2-chip-btn' + (active ? ' active' : '');
@@ -663,6 +727,7 @@ class DashboardV2 {
             const bar = tile.querySelector('.dbv2-tile-bar');
             bar.insertBefore(this.tileControls(chart), bar.querySelector('.dbv2-tile-type'));
             this.placeChip(chart, bar);
+            bar.appendChild(this.expandBtn(chart, tile));
             grid.appendChild(tile);
         });
         grid.classList.remove('hidden');
@@ -1033,11 +1098,72 @@ class DashboardV2 {
         return fd.allow_all ? '' : options[0].value;
     }
 
-    _setFilter(column, value) {
-        if (value) this.userFilters[column] = value;
-        else delete this.userFilters[column];
+    _setFilter(column, value, rerender = true) {
+        const empty = value == null || value === ''
+            || (Array.isArray(value) && value.length === 0);
+        if (empty) delete this.userFilters[column];
+        else this.userFilters[column] = value;
+        if (rerender) { this.renderFilterRow(); this.refresh(); }
+        else this.refreshSoon();
+    }
+
+    _setLevel(column, levelId, fallback) {
+        if (!levelId || levelId === fallback) delete this.userLevels[column];
+        else this.userLevels[column] = levelId;
         this.renderFilterRow();
         this.refresh();
+    }
+
+    /** Checkbox dropdown for 7-25 options. The composer has emitted
+     *  widget:'multi_select' since the beginning; nothing rendered it, so
+     *  every filter on this page used to be single-value. */
+    _multiSelect(wrap, fd, options, value) {
+        const picked = new Set(
+            (Array.isArray(value) ? value : (value ? [value] : [])).map(String));
+        const det = document.createElement('details');
+        det.className = 'dbv2-multi';
+        const sum = document.createElement('summary');
+        const caption = () => picked.size === 0 ? this.ui.all
+            : picked.size === 1
+                ? (options.find(o => picked.has(String(o.value)))?.label || '1')
+                : this.ui.selected(picked.size);
+        sum.textContent = caption();
+        det.appendChild(sum);
+        const list = document.createElement('div');
+        list.className = 'dbv2-multi-list';
+        for (const opt of options) {
+            const row = document.createElement('label');
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = picked.has(String(opt.value));
+            cb.addEventListener('change', () => {
+                if (cb.checked) picked.add(String(opt.value));
+                else picked.delete(String(opt.value));
+                sum.textContent = caption();
+                this._setFilter(fd.column, [...picked], false);
+            });
+            row.appendChild(cb);
+            row.append(' ' + opt.label);
+            list.appendChild(row);
+        }
+        det.appendChild(list);
+        wrap.appendChild(det);
+    }
+
+    /** Grain switcher: pick which level of a multi-level dimension is shown.
+     *  Not a value picker — every level covers the whole dimension once. */
+    _levelSwitch(wrap, column, levels, current, onPick) {
+        const pills = document.createElement('span');
+        pills.className = 'dbv2-pills dbv2-levels';
+        for (const lv of levels) {
+            const b = document.createElement('button');
+            b.className = 'dbv2-pill' + (lv.level_id === current ? ' active' : '');
+            b.textContent = lv.name;
+            b.title = this.ui.grainTooltip(lv.n);
+            b.addEventListener('click', () => onPick(lv.level_id));
+            pills.appendChild(b);
+        }
+        wrap.appendChild(pills);
     }
 
     /** (Re)build the global filter row. Widget per composer hint:
@@ -1045,10 +1171,23 @@ class DashboardV2 {
     renderFilterRow() {
         document.querySelector('.dbv2-filter-row')?.remove();
         const dims = this.composition.filter_dims || [];
-        if (!dims.length) return;
+        const grains = this.composition.grain_dims || [];
+        if (!dims.length && !grains.length) return;
         const grid = document.getElementById('dbv2-grid');
         const row = document.createElement('div');
         row.className = 'dbv2-filter-row';
+
+        // Grain first: it changes what every tile is counting, so it reads
+        // ahead of the filters that only narrow the selection.
+        for (const g of grains) {
+            const wrap = document.createElement('label');
+            wrap.className = 'dbv2-filter dbv2-grain';
+            wrap.textContent = g.label || g.column;
+            this._levelSwitch(wrap, g.column, g.levels,
+                this.userLevels[g.column] || g.default,
+                id => this._setLevel(g.column, id, g.default));
+            row.appendChild(wrap);
+        }
 
         for (const fd of dims) {
             // Composer emits data-grounded options (only values present in
@@ -1065,7 +1204,13 @@ class DashboardV2 {
             wrap.textContent = fd.label || fd.column;
             const value = this._filterValue(fd, options);
 
-            if (fd.widget === 'pill_group') {
+            if (fd.widget === 'level_switch' && fd.levels?.length > 1) {
+                this._levelSwitch(wrap, fd.column, fd.levels,
+                    this.userLevels[fd.column] || fd.level,
+                    id => this._setLevel(fd.column, id, fd.level));
+            } else if (fd.widget === 'multi_select') {
+                this._multiSelect(wrap, fd, options, value);
+            } else if (fd.widget === 'pill_group') {
                 const pills = document.createElement('span');
                 pills.className = 'dbv2-pills';
                 const entries = fd.allow_all
@@ -1120,7 +1265,9 @@ class DashboardV2 {
             }
             row.appendChild(wrap);
         }
-        if (row.children.length) grid.parentNode.insertBefore(row, grid.nextSibling);
+        // Above the grid: these controls change what every tile is counting,
+        // so they have to be visible before the charts, not after them.
+        if (row.children.length) grid.parentNode.insertBefore(row, grid);
     }
 
     syncURL() {
@@ -1131,6 +1278,11 @@ class DashboardV2 {
             url.searchParams.set('f', JSON.stringify(active));
         } else {
             url.searchParams.delete('f');
+        }
+        if (Object.keys(this.userLevels).length) {
+            url.searchParams.set('g', JSON.stringify(this.userLevels));
+        } else {
+            url.searchParams.delete('g');
         }
         // Per-tile state (filters/transform/transpose/norm/log), compacted
         const t = {};

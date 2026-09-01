@@ -297,6 +297,8 @@ def main():
                         help="Skip 12-split-datasets.py")
     parser.add_argument("--no-view-profiles", action="store_true",
                         help="Skip generate_view_profiles.py")
+    parser.add_argument("--no-dim-structure", action="store_true",
+                        help="Skip 13-dimension-structure.py")
     parser.add_argument("--skip-duckdb", action="store_true",
                         help="Skip scripts 4 + 10 (meta-index rebuild + DuckDB import)")
     parser.add_argument("--refetch-news", action="store_true",
@@ -402,7 +404,12 @@ def main():
                 failed.append((code, "12-split"))
                 matrix_ok = False
 
-        # g. View profiles
+        # g. Dimension structure (verified levels / aggregates / nesting)
+        if matrix_ok and not args.no_dim_structure:
+            if not python("13-dimension-structure.py", ["--matrix", code], dry_run=args.dry_run):
+                log.warning(f"{code}: dimension structure profiling failed (non-fatal)")
+
+        # h. View profiles
         if matrix_ok and not args.no_view_profiles:
             if not python("generate_view_profiles.py", ["--matrix", code], dry_run=args.dry_run):
                 log.warning(f"{code}: view profile generation failed (non-fatal)")

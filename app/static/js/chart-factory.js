@@ -54,20 +54,12 @@ async function createChart(container, chartConfig, data, metadata) {
             return createStackedBarChart(container, cfg, data, metadata);
         case 'choropleth': {
             // Detect geo level to ensure correct GeoJSON is loaded
+            // Must agree with createChoroplethChart exactly — a mismatch
+            // registers the wrong GeoJSON and ECharts throws on the map name.
             const geoDimMeta = metadata.dimensions?.find(d => d.dim_column_name === cfg.geo_dim);
-            let geoLevel = 'county';
-            if (geoDimMeta) {
-                const lvlCounts = {};
-                for (const opt of (geoDimMeta.options || [])) {
-                    const lvl = opt.parsed?.geo_level;
-                    if (lvl) lvlCounts[lvl] = (lvlCounts[lvl] || 0) + 1;
-                }
-                // Same priority as createChoroplethChart (county > region >
-                // macroregion) — a mismatch loads the wrong GeoJSON and
-                // crashes ECharts on the unregistered map.
-                if (lvlCounts['region'] > 0 && !lvlCounts['county']) geoLevel = 'region';
-                else if (lvlCounts['macroregion'] > 0 && !lvlCounts['county']) geoLevel = 'macroregion';
-            }
+            const geoIdx = data.columns.indexOf(cfg.geo_dim);
+            const geoLevel = typeof detectGeoLevel === 'function'
+                ? detectGeoLevel(data.rows, geoIdx, geoDimMeta) : 'county';
             if (typeof loadRomaniaGeoJSON === 'function') {
                 const loaded = await loadRomaniaGeoJSON(geoLevel);
                 if (loaded) return createChoroplethChart(container, cfg, data, metadata);

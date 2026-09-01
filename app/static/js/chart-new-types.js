@@ -36,13 +36,26 @@ function orderedDimValues(rows, colIdx, dimName, metadata) {
 
     let ordered;
     if (isStringData) {
-        // v3: data has string labels, metadata has nomItemIds — match by label
-        ordered = dimMeta.options
-            .map(o => o.label || o.option_label)
-            .filter(lbl => lbl && dataVals.has(lbl));
+        // v3: data has string labels, metadata has nomItemIds — match by label.
+        // Metadata labels carry hierarchy indentation ("      0 ani") that the
+        // parquet strips, so an exact-only match finds nothing and every
+        // ordered dim silently degrades to arbitrary Set order — which is how
+        // POP107D's pyramid ended up listing ages 11, 8, 25, 0, 67, 24…
+        ordered = [];
+        const seen = new Set();
+        for (const opt of dimMeta.options) {
+            const lbl = opt.label || opt.option_label;
+            if (!lbl) continue;
+            const match = dataVals.has(lbl) ? lbl
+                : dataVals.has(lbl.trim()) ? lbl.trim() : null;
+            if (match !== null && !seen.has(match)) {
+                seen.add(match);
+                ordered.push(match);
+            }
+        }
         // Append any data values not in metadata
         for (const v of dataVals) {
-            if (!ordered.includes(v)) ordered.push(v);
+            if (!seen.has(v)) { seen.add(v); ordered.push(v); }
         }
     } else {
         // v2: nomItemIds match data values

@@ -3,6 +3,8 @@ data*/*
 /tmp
 /*.png
 /data/*
+
+/graphify-out/*
 # Eval baselines must be committed so regressions show up in PR diffs
 !/data/eval/
 !/data/eval/**

@@ -1,5 +1,114 @@
 # Activity History
 
+## 2026-08-23 — follow-up: grain is global, maps follow it, honest headlines
+
+Review of the morning's work turned up six defects and two questions.
+
+**Grain was per-tile; it should be one control.** Four independent toggles for
+one underlying choice, and on tiles that *aggregate* the dim away it changed
+nothing at all — POP107D's county ranking returns byte-identical rows at
+either age grain, because both grains cover the same domain exactly once.
+Grain now ships as `composition.grain_dims` (one switcher per multi-level dim,
+members sent once per dataset) and renders at the top of the filter row, above
+the grid. Tile controls keep only real pins.
+
+**The map ignored the grain.** `chart-geo.js` and `chart-factory.js` each
+counted the dimension's *metadata* options to pick a GeoJSON, so ART101C —
+whose REF_AREA lists macroregions, regions and counties — always answered
+"county" and always drew the county map. Worse, the two copies could disagree,
+and the factory's copy chose which GeoJSON to *register*: switching to
+macroregiuni left `Romania-macroregions` unregistered and ECharts threw
+`Cannot read properties of undefined (reading 'regions')`. Replaced both with
+one `detectGeoLevel(rows, geoIdx, geoDimMeta)` that counts the rows actually
+returned. All three maps now switch cleanly.
+
+**Partial hierarchies were pinned instead of summed.** ART101C's categories are
+Nationale / Ale institutiilor / Specializate / Scolare / Publice, plus
+Judetene + Municipale + Comunale — which sum to **Publice alone** (1,758), not
+to the whole dimension. `verify_levels` correctly refused to call those an
+alternative grain, but the shallow level is still the honest partition:
+summing all eight gives 9,863 where the truth is 8,105. New `verify_partition`
+accepts a level whose leftovers tile exactly one of its members. Verified dims
+went 41 → 72, and ART101C's headline went from 3 (CATEGORY arbitrarily pinned
+to `Nationale`) to **8,105**.
+
+**Headline honesty.** "Ultima valoare" is neither a total nor the last row —
+it is the aggregate of the composer's temporal slice. Where a dim has no total
+and no verified partition, the composer holds it at one option, so CON111D was
+headlining `02 Silvicultura` on *two* dims at once. `latest`, `yoy` and
+`overall` are now suppressed whenever such a pin survives; `trend` and
+`coverage` remain. Cost measured on 250 datasets: **133 suppressed**, of which
+111 are non-additive units (percentage/currency/rate/time_unit) where no
+dataset-wide number exists at all — you cannot sum price indices across CAEN
+divisions. The other 22 are additive label-hierarchies `verify_partition`
+still misses; filed.
+
+**Locality filter was a footgun.** Picking one of `REF_AREA_2`'s 3,179
+localities collapsed the 41-county ranking to a single bar (`Alba: 3527`). A
+dim that `nests_in` a charted dim is already summed into it correctly, so it
+no longer appears in the global filter row. The real answer is a drill-down;
+filed.
+
+**Pyramid ages were in arbitrary order** (11, 8, 25, 0, 67, 24…), which the
+grain switcher made obvious once single years were readable. `orderedDimValues`
+matched metadata labels verbatim, but metadata carries hierarchy indentation
+("      0 ani") the parquet strips — so *every* match failed and it fell back
+to Set order. Now matches trimmed labels too, which fixes ordering for every
+indented dim, not just this pyramid.
+
+**Tiles can be expanded.** A 103-bar pyramid is unreadable in a 200px side
+slot. Each tile gets an expand control; expanding hides its siblings and gives
+it the full grid.
+
+Gate unchanged throughout (0 primary changes, 0 drift); 667/667 tile queries
+200; 244/247 still deliver both now+trend; empty tiles still 12.
+
+## 2026-08-23 — dimension levels: the engine now knows what options mean
+
+The chart engine reduced every dimension to `(dim_type, option_count)` and never looked at what the options *mean*. Two visible consequences, both measured before the change:
+
+- **POP107D** (21.6M rows, the flagship population dataset) reported Romania's population as **38,824,671**. Its `AGE` dim holds two complete overlapping partitions — 85 single years *and* 17 five-year bands. Verified on Bihor/Masculin/2025: singles sum to 293,272 and bands sum to 293,272, so an unpinned SUM returns exactly 2×. There is no `Total` row in the parquet, so `_total_entry` found nothing, `_hierarchy_root_pin` found no indentation, the unit is additive — and the composer left the dim unfiltered. Same for POP108D. The wrong number was the hero KPI and every county on the choropleth (Iași 1,961,582 vs ~790k real).
+- **ART101C**'s ranking tile drew three bars of height 3 — `MACROREGIUNEA TREI`, `Regiunea BUCURESTI - ILFOV`, `Municipiul Bucuresti` — the same 3 libraries at three nesting levels, summing to 9. Here the mixing is *on the axis*, where `exclude_total` structurally cannot help: sibling levels are not spelled "total", they are a coarser grain of the same thing.
+
+Note the composer's *skeleton* was never the problem: a 250-dataset sample showed 244/247 dashboards already delivering both a "now" tile and a "trend" tile. The weakness was inside each tile, and in controls.
+
+### New: `13-dimension-structure.py` → `dimension_structure` table
+
+One row per (matrix_code, dim_column): verified levels (JSON), default level, verified aggregate, per-dataset additivity, `nests_in`, plus `discrimination`/`dominance` as free byproducts of the same probe.
+
+**Structure proposes, data disposes.** Proposers are metadata-only and cheap — parsed age intervals (`age_min`/`age_max`, confidence 1.0 and previously unused), `geo_level`, `parent_id` depth (62% populated, previously unused), label indentation, `- total` suffixes, CAEN code depth. Verification is one `GROUP BY` per dim over the 3 most recent periods (one bad year must not flip a dataset): a level survives only when its sum matches the other proposed levels within 2%, and an aggregate survives only when it equals the level sum. That last test is what rejects `Total fructe` and `Cheltuieli totale de consum` — **136 options that read like totals were rejected against 25 confirmed**, which is `plan-strip-totals.md`'s "hard part" finally decided by data instead of by regex.
+
+Corpus run: 1,683 datasets, 3,944 dimensions, **33 seconds**. 41 multi-level dims (34 geo, 5 indent, 2 age), 43 `REF_AREA_2 → REF_AREA` nestings.
+
+Two bugs found while building it, both worth remembering:
+- `detect_nesting` originally scanned whole parquets — 8GB RSS and effectively unbounded on POP107D. Restricting it to the sampled periods took the whole corpus run from "still going after 16 minutes" to 33s. A locality belongs to one county in every year or none.
+- `propose_age`'s greedy interval cover hung forever on TFX0531 (overlapping bands 15-24 / 15-64 / 25-34 / 25-54 / 35-54 / 55-64). A cover assembled entirely from *borrowed* intervals — the mechanism that lets both grains share an open-ended top band like "85 ani si peste" — claims nothing, so `remaining` never shrinks. Fixed by requiring each cover to claim at least one unassigned interval; the leftovers are roll-ups, not another grain.
+
+### Composer consumes it
+
+`app/services/dimension_structure.py` is the access layer; every accessor returns None/empty when there is no *verified* answer, so unprofiled datasets behave exactly as before. Threaded through `dashboard_composer` (`_total_entry`, new `_level_filter`, `_build_slice`, `_tile_controls`, filter row), `dataset_meta` and `insights` as an optional `struct` argument.
+
+`_build_slice` now restricts a multi-level dim to one level in **both** positions: off an axis it replaces the "leave it unfiltered" branch (the POP107D fix), on an axis it replaces nothing that existed (the ART101C fix). No API change was needed — `query_builder` already renders `filters[col]` as an `IN (...)` list.
+
+`_best_temporal_series` gained `discrimination` as a rank term: a split whose options sit within 5% CV of each other loses. POP107D charted `series=SEX` where M and F differ by 2% — two lines drawn on top of each other.
+
+Controls now distinguish `mode: 'pin'` (held at one option, the control picks another) from `mode: 'level'` (shown at one grain, the control switches grain). Conflating them was already producing a wrong disclosure: the KPI card read "Numar persoane · 2025 · 0- 4 ani" next to a value that was the sum over all 18 bands.
+
+### Frontend
+
+- **Multi-select finally renders.** The composer has emitted `widget: 'multi_select'` for 7-25-option dims since the beginning and `renderFilterRow()` had no branch for it, so it fell through to a single `<select>` — *every filter on the page was single-value*. Implemented as a `<details>` checkbox popover, debounced (`refreshSoon`) so ticking five boxes does not fire five rounds of four requests.
+- **Grain switcher** — segmented control wherever a dim has ≥2 verified levels ("grupe de 5 ani / ani individuali", "macroregiuni / regiuni / judete"), on both tile controls and the global filter row. Level members ship once per dataset in `composition.dim_levels`, not once per tile, and only for levels ≤200 members.
+- Both persist to the URL (`?g=` global, `t.g` per tile).
+
+### Verification
+
+- `chart_selector` eval vs the committed baseline: **0 primary changes, 0 top-set changes, 0 confidence changes, 0 score drift** — identical before and after. This phase changes slices, not scores.
+- 250-dataset health sweep: 667/667 tile queries 200, 244/247 still deliver both now+trend, and the empty-tile count is **12 before and 12 after** (checked by stubbing `dstruct.load` to `{}`) — no tile was emptied by the new restrictions.
+- Playwright on POP107D / ART101C / TFP0512: all tiles render, zero console errors, grain switch and multi-select both round-trip through the URL.
+- Results: POP107D 38,824,671 → **19,612,984** (Iași 1,961,582 → 988,621); POP108D → 19,642,711; ART101C ranking 3 bars summing to 9 → 1 bar of 3. Each ART101C grain independently totals 3 — the invariant a partition must satisfy.
+
+Wired into `update-pipeline.py` after `12-split-datasets.py` (non-fatal, `--no-dim-structure` to skip).
+
 ## 2026-08-05 — update-pipeline.py was silently a no-op for existing matrices
 
 Investigated why the homepage "Actualizate recent" widget showed `TMI1163 · 2026-04-02` as the newest dataset despite two `update-pipeline.py` runs earlier today. Root cause: `6-fetch-csv.py`, `9-csv-to-parquet.py`, `12-parquet-to-sdmx.py`, and `fetch_meta()` all skip a matrix if its output file already exists — and `update-pipeline.py` only passed `--force` through when the user explicitly asked for it. Since virtually every matrix already has local files from earlier bulk fetches, running `python update-pipeline.py --refetch-news` (the documented/recommended incremental-update command) correctly identified the ~225 matrices INS flagged as changed, but then silently skipped every download/convert step for all of them — confirmed via file mtimes (`data/2-metas/ro/INT113A.json` and `data/4-datasets/ro/INT113A.csv` both untouched since Nov 2025) and the pipeline's own log (`12-parquet-to-sdmx.py --matrix INT113D` → `Success: 0 / Skipped: 1`).

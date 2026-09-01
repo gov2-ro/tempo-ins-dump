@@ -18,6 +18,7 @@ import json
 import re
 
 from app.services.chart_selector import TOTAL_RE
+from app.services import dimension_structure as dstruct
 
 # "Taurine - total" style aggregate options inside hierarchical dims
 _TOTAL_SUFFIX_RE = re.compile(r'-\s*total\s*$', re.I)
@@ -147,9 +148,22 @@ def _effective(dim, actual_values) -> list[tuple[dict, str | None]]:
     return eff or [(o, None) for o in opts]
 
 
-def _total_entry(dim, effective) -> tuple[dict, str | None] | None:
+def _total_entry(dim, effective, struct: dict | None = None
+                 ) -> tuple[dict, str | None] | None:
     """The total/aggregate option of a dimension, restricted to options
-    that exist in the data."""
+    that exist in the data.
+
+    The profiler's verified aggregate wins when there is one: it was checked
+    against the level sum, so it excludes options that merely *read* like a
+    total ("Total fructe", "Cheltuieli totale de consum"). Falls back to the
+    label regex for unprofiled dimensions.
+    """
+    verified = dstruct.aggregate_value(struct, _col(dim)) if struct else None
+    if verified is not None:
+        for o, v in effective:
+            if v == verified or (o.get('label') or '').strip() == str(verified).strip():
+                return o, v
+
     if dim.get('dim_type') == 'geo':
         for o, v in effective:
             if (o.get('parsed') or {}).get('geo_level') == 'national':
@@ -158,6 +172,31 @@ def _total_entry(dim, effective) -> tuple[dict, str | None] | None:
         if _TOTAL_RE.match((o.get('label') or '').strip()):
             return o, v
     return None
+
+
+def _level_filter(dim, effective, struct: dict | None,
+                  level_id: str | None = None) -> list[str] | None:
+    """Filter values restricting a dimension to one of its verified levels.
+
+    A dimension whose options tile the same domain twice — POP107D's AGE
+    carries both single years and five-year bands — cannot be summed whole
+    and cannot be charted whole. Restricting to one level is the fix in both
+    positions: off an axis it stops the double-count, on an axis it stops
+    ART101C drawing the same 3 libraries as macroregion, region and city.
+
+    None when the dimension has no verified multi-level structure.
+    """
+    if not struct:
+        return None
+    members = dstruct.level_members(struct, _col(dim), level_id)
+    if not members:
+        return None
+    # Only values the parquet actually holds; a level that survives with
+    # fewer than two members would narrow the chart to a single bar.
+    present = {v for _, v in effective if v is not None}
+    if present:
+        members = [m for m in members if m in present]
+    return members if len(members) >= 2 else None
 
 
 def _pin_values(dim, opt, data_value) -> list[str]:
@@ -291,14 +330,23 @@ def _arbitrary_pin_count(series_col: str, dimensions: list, time_col: str | None
 SERIES_RETUNABLE = {'line', 'area_stacked', 'stacked_bar', 'bar_vertical'}
 
 
+# Below this coefficient of variation the split's series sit on top of each
+# other and the legend costs more than it explains (POP107D's SEX: 0.02).
+FLAT_SPLIT_CV = 0.05
+
+
 def _best_temporal_series(dimensions: list, time_col: str | None,
-                          actual_values: dict | None, non_additive: bool):
+                          actual_values: dict | None, non_additive: bool,
+                          struct: dict | None = None):
     """Most informative series split for the evolution chart.
 
     assign_roles defaults to gender-first, but a substantive categorical dim
     (ownership, category, …) usually tells a richer story than the M/F split.
     Honesty beats richness though: a candidate that forces *other* dims onto
     arbitrary non-total pins loses to one whose slice stays complete.
+
+    A split that does not actually separate loses last: two lines drawn on top
+    of each other are a legend, not information.
     Returns a dimension or None (keep the selector's choice).
     """
     ranked = []
@@ -311,7 +359,9 @@ def _best_temporal_series(dimensions: list, time_col: str | None,
         pins = _arbitrary_pin_count(_col(d), dimensions, time_col,
                                     actual_values, non_additive)
         substantive = d.get('dim_type') not in ('gender', 'residence', 'age')
-        ranked.append(((-pins, substantive, n), d))
+        cv = dstruct.discrimination(struct, _col(d)) if struct else None
+        separates = cv is None or cv >= FLAT_SPLIT_CV
+        ranked.append(((-pins, separates, substantive, n), d))
     if not ranked:
         return None
     ranked.sort(key=lambda t: t[0], reverse=True)
@@ -319,7 +369,8 @@ def _best_temporal_series(dimensions: list, time_col: str | None,
 
 
 def retune_ranked_series(ranked: list[dict], dimensions: list, sig: dict,
-                         actual_values: dict | None) -> None:
+                         actual_values: dict | None,
+                         struct: dict | None = None) -> None:
     """Align ranked_charts' evolution-series defaults with the composer.
 
     assign_roles defaults to gender-first; the composer overrides that with
@@ -335,7 +386,8 @@ def retune_ranked_series(ranked: list[dict], dimensions: list, sig: dict,
     time_col = _col(time_dim)
     geo_dim = next((d for d in dimensions if d.get('dim_type') == 'geo'), None)
     geo_col = _col(geo_dim) if geo_dim else None
-    best = _best_temporal_series(dimensions, time_col, actual_values, non_additive)
+    best = _best_temporal_series(dimensions, time_col, actual_values,
+                                 non_additive, struct)
     if best is None:
         return
     for entry in ranked:
@@ -371,7 +423,9 @@ TIMELINE_CAPABLE = {'choropleth', 'population_pyramid', 'grouped_bar'}
 def _build_slice(roles: dict, dimensions: list, time_dim,
                  chart_type: str | None = None,
                  actual_values: dict | None = None,
-                 non_additive: bool = False) -> dict:
+                 non_additive: bool = False,
+                 struct: dict | None = None,
+                 levels: dict | None = None) -> dict:
     """Declarative data spec for one chart: GROUP BY its role dims, pin every
     other dim to its Total option (avoids double-count sums), pin time to the
     latest period when time is not an axis.
@@ -380,6 +434,11 @@ def _build_slice(roles: dict, dimensions: list, time_dim,
     the data, additive values are left unfiltered (sum = total) while
     non-additive ones (means/rates) get pinned to the first real option —
     the tile chip discloses the pin.
+
+    Dimensions the profiler found to carry several levels are restricted to
+    one level whether or not they sit on an axis, because mixing grains
+    double-counts in both positions. `levels` overrides the default level
+    per column (the level switcher).
     """
     group_by = []
     slice_roles = ('x_axis', 'series', 'facet', 'timeline') \
@@ -392,11 +451,18 @@ def _build_slice(roles: dict, dimensions: list, time_dim,
 
     filters: dict = {}
 
+    levels = levels or {}
     for dim in dimensions:
         c = _col(dim)
-        if c in group_by:
-            continue
         eff = _effective(dim, actual_values)
+        if c in group_by:
+            # On an axis: keep every option of one level, drop the others.
+            # exclude_total cannot reach this case — sibling levels are not
+            # spelled "total", they are just a coarser grain of the same thing.
+            lvl = _level_filter(dim, eff, struct, levels.get(c))
+            if lvl:
+                filters[c] = lvl
+            continue
         if len(eff) <= 1:
             continue  # singleton in the data — nothing to pin
         if dim.get('dim_type') == 'unit':
@@ -418,9 +484,16 @@ def _build_slice(roles: dict, dimensions: list, time_dim,
                 if latest:
                     filters[c] = _time_pin_values(latest)
             continue
-        total = _total_entry(dim, eff)
+        total = _total_entry(dim, eff, struct)
         if total:
             filters[c] = _pin_values(dim, *total)
+            continue
+        # No total to pin. A verified level still sums to the whole domain
+        # exactly once, so restricting to it is both honest and complete —
+        # this is what stops POP107D reporting 38.8M people instead of 19M.
+        lvl = _level_filter(dim, eff, struct, levels.get(c))
+        if lvl:
+            filters[c] = lvl
         elif non_additive:
             opt, val = _widest_pin(dim, eff, actual_values)
             filters[c] = _pin_values(dim, opt, val)
@@ -439,10 +512,17 @@ def _build_slice(roles: dict, dimensions: list, time_dim,
     }
 
 
-def _tile_controls(spec: dict, dimensions: list, actual_values: dict | None) -> list:
-    """One select per pinned dim of a tile — the pin is a default the user
-    can change, not a verdict. Options are data-grounded; values match the
-    slice filter values exactly."""
+def _tile_controls(spec: dict, dimensions: list, actual_values: dict | None,
+                   struct: dict | None = None) -> list:
+    """One control per constrained dim of a tile — the constraint is a default
+    the user can change, not a verdict. Options are data-grounded; values
+    match the slice filter values exactly.
+
+    Two kinds of constraint, and they must not be rendered the same way:
+      mode 'pin'   — the dim is held at one option; the control picks another.
+      mode 'level' — the dim is shown at one grain (5-year bands, counties);
+                     the control switches grain, it does not pick a value.
+    """
     controls = []
     for dim in dimensions:
         c = _col(dim)
@@ -456,14 +536,32 @@ def _tile_controls(spec: dict, dimensions: list, actual_values: dict | None) -> 
                    for o, v in eff]
         if dim.get('dim_type') == 'time':
             options = list(reversed(options))  # newest first
+
+        applied = spec['filters'][c]
+        # Grain is a property of the dimension, not of a tile: it lives in one
+        # global switcher. A tile control that only re-picks a grain is either
+        # a duplicate of it or — on tiles that aggregate the dim away — a
+        # no-op (POP107D's county ranking is identical at either age grain).
+        if len(applied) > 1:
+            continue
         controls.append({
             'column': c,
             'label': (dim.get('dim_label') or '').strip(),
             'dim_type': dim.get('dim_type'),
             'options': options,
-            'default': spec['filters'][c][0],
+            'default': applied[0],
+            'mode': 'pin',
         })
     return controls
+
+
+def _applied_level_id(struct: dict, col: str, applied: list) -> str | None:
+    """Which level the slice's filter values correspond to."""
+    got = set(map(str, applied))
+    for lvl in (struct.get(col, {}).get('levels') or []):
+        if got == {str(m) for m in (lvl.get('members') or [])}:
+            return lvl.get('level_id')
+    return struct.get(col, {}).get('default_level')
 
 
 def _annotations_for(axis: str, group_by: list, time_col: str | None, trend: dict) -> list:
@@ -499,7 +597,8 @@ def _annotations_for(axis: str, group_by: list, time_col: str | None, trend: dic
 
 def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
                       trend: dict | None = None,
-                      actual_values: dict | None = None) -> dict | None:
+                      actual_values: dict | None = None,
+                      struct: dict | None = None) -> dict | None:
     """Compose the dashboard recipe from ranked charts (roles pre-assigned).
 
     actual_values maps dim column → set of values present in the parquet;
@@ -563,11 +662,11 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
         if chart_type in SERIES_RETUNABLE and axis == 'temporal' \
                 and roles.get('x_axis') == time_col:
             best = _best_temporal_series(dimensions, time_col,
-                                         actual_values, non_additive)
+                                         actual_values, non_additive, struct)
             if best is not None and _col(best) != roles.get('series'):
                 roles = {**roles, 'series': _col(best)}
         spec = _build_slice(roles, dimensions, time_dim, chart_type,
-                            actual_values, non_additive)
+                            actual_values, non_additive, struct)
         charts.append({
             'id': entry['chart_type'],
             'chart_type': chart_type,
@@ -576,7 +675,7 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
             'score': entry.get('score'),
             'roles': roles,
             'data': spec,
-            'controls': _tile_controls(spec, dimensions, actual_values),
+            'controls': _tile_controls(spec, dimensions, actual_values, struct),
             'annotations': _annotations_for(axis, spec['group_by'], time_col, trend),
         })
 
@@ -587,7 +686,7 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
         if want == 'temporal' and time_col and (sig.get('time_points') or 0) >= 3:
             roles = {'x_axis': time_col}
             best = _best_temporal_series(dimensions, time_col,
-                                         actual_values, non_additive)
+                                         actual_values, non_additive, struct)
             if best is not None:
                 roles['series'] = _col(best)
             spec = _build_slice(roles, dimensions, time_dim,
@@ -602,7 +701,7 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
                 'synthesized': True,
                 'roles': roles,
                 'data': spec,
-                'controls': _tile_controls(spec, dimensions, actual_values),
+                'controls': _tile_controls(spec, dimensions, actual_values, struct),
                 'annotations': _annotations_for('temporal', spec['group_by'],
                                                 time_col, trend),
             })
@@ -628,7 +727,7 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
                 continue
             roles = {'x_axis': _col(rank_dim)}
             spec = _build_slice(roles, dimensions, time_dim, 'horizontal_bar',
-                                actual_values, non_additive)
+                                actual_values, non_additive, struct)
             charts.append({
                 'id': 'ranking',
                 'chart_type': 'horizontal_bar',
@@ -638,7 +737,7 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
                 'synthesized': True,
                 'roles': roles,
                 'data': spec,
-                'controls': _tile_controls(spec, dimensions, actual_values),
+                'controls': _tile_controls(spec, dimensions, actual_values, struct),
                 'annotations': [],
             })
             axes_used.add('ranking')
@@ -654,6 +753,8 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
     for chart, slot in zip(charts, slots):
         chart['slot'] = slot
 
+    grain_dims = _grain_dims(dimensions, actual_values, struct)
+
     # Dims no chart consumes as an axis → compact filter row. Options are
     # restricted to values present in the data; dims that are singletons in
     # the parquet (whatever metadata claims) get no control at all.
@@ -663,19 +764,32 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
         c = _col(d)
         if c in consumed:
             continue
+        # A dim that nests inside a charted one is already summed into it
+        # correctly. Offering it as a filter only lets the reader collapse a
+        # 41-county ranking to the single county holding the locality they
+        # picked — see BACKLOG for the drill-down that should replace it.
+        parent = dstruct.nests_in(struct, c) if struct else None
+        if parent and parent in consumed:
+            continue
         eff = _effective(d, actual_values)
         if len(eff) <= 1:
             continue
         options = [{'label': (o.get('label') or '').strip(),
                     'value': v if v is not None else o.get('label')}
                    for o, v in eff]
-        total = _total_entry(d, eff)
+        total = _total_entry(d, eff, struct)
         is_time = d.get('dim_type') == 'time'
-        root = None if (total or is_time) else _hierarchy_root_pin(d, eff)
+        lvl = None if (total or is_time) else _level_filter(d, eff, struct)
+        root = None if (total or is_time or lvl) else _hierarchy_root_pin(d, eff)
         if total:
             default = total[1] if total[1] is not None else total[0].get('label')
         elif is_time:
             default = _latest_time_value(d, eff)
+        elif lvl:
+            # Several grains of the same thing in one dim: "Toate" would sum
+            # them all and count the domain once per grain. Default to one
+            # level; the control switches grain rather than picking a value.
+            default = lvl
         elif root:
             # Label-encoded hierarchy: "Toate" would double-count levels —
             # default to the top-level aggregate instead.
@@ -686,12 +800,15 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
         # "Toate" (unfiltered sum) only makes sense for additive values
         # without an explicit total; units and time never sum meaningfully.
         allow_all = (default is None)
+        if lvl and dstruct.level_choices(struct, c):
+            continue  # driven by the global grain switcher
         widget = ('single_select' if len(eff) > 25
                   else 'multi_select' if len(eff) > 6 else 'pill_group')
-        filter_dims.append({'column': c, 'label': d.get('dim_label'),
-                            'dim_type': d.get('dim_type'), 'widget': widget,
-                            'options': options, 'default': default,
-                            'allow_all': allow_all})
+        filter_dims.append(
+            {'column': c, 'label': d.get('dim_label'),
+             'dim_type': d.get('dim_type'), 'widget': widget,
+             'options': options, 'default': default,
+             'allow_all': allow_all, 'mode': 'pin'})
 
     # Dims in the global filter row already control every tile — a per-tile
     # select for them would be a duplicate.
@@ -706,4 +823,49 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
         'charts': charts,
         'default_filters': {'exclude_total': True, 'time': 'latest'},
         'filter_dims': filter_dims,
+        'grain_dims': grain_dims,
+        'dim_levels': {g['column']: g.pop('_members') for g in grain_dims},
     }
+
+
+# A level the client can switch to has to ship its member values; beyond this
+# many they are not worth the payload (and a 3,000-locality "level" is a
+# drill-down, not a switch).
+MAX_SWITCHABLE_LEVEL = 200
+
+
+def _grain_dims(dimensions, actual_values, struct) -> list:
+    """One switcher per dimension that has more than one grain.
+
+    Grain is a property of the dimension, so it is chosen once for the whole
+    dashboard rather than per tile: four independent toggles for one
+    underlying choice is both confusing and, on tiles that aggregate the dim
+    away, a no-op. Members ship once per dataset for the same reason.
+    """
+    if not struct:
+        return []
+    out = []
+    for dim in dimensions:
+        col = _col(dim)
+        choices = dstruct.level_choices(struct, col)
+        if len(choices) < 2:
+            continue
+        eff = _effective(dim, actual_values)
+        entries = []
+        for choice in choices:
+            members = _level_filter(dim, eff, struct, choice['level_id'])
+            if not members or len(members) > MAX_SWITCHABLE_LEVEL:
+                continue
+            entries.append({**choice, 'members': members})
+        if len(entries) < 2:
+            continue
+        out.append({
+            'column': col,
+            'label': (dim.get('dim_label') or col).strip(),
+            'dim_type': dim.get('dim_type'),
+            'default': struct[col].get('default_level'),
+            'levels': [{k: v for k, v in e.items() if k != 'members'}
+                       for e in entries],
+            '_members': entries,
+        })
+    return out

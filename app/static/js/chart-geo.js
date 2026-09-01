@@ -70,6 +70,37 @@ async function loadRomaniaGeoJSON(geoLevel = 'county') {
 
 
 /**
+ * Which geo level the returned rows actually hold.
+ *
+ * Counting the dimension's *metadata* options instead pins the answer for the
+ * life of the dataset: ART101C's REF_AREA lists macroregions, regions and
+ * counties, so "does it have counties?" is always yes and the grain switcher
+ * appeared to do nothing. The rows know what the current slice contains.
+ *
+ * Single source of truth — chart-factory calls this to decide which GeoJSON
+ * to register, and a mismatch crashes ECharts on an unregistered map.
+ */
+function detectGeoLevel(rows, geoIdx, geoDimMeta) {
+    if (!geoDimMeta || geoIdx == null || geoIdx < 0) return 'county';
+    const byValue = {};
+    for (const opt of (geoDimMeta.options || [])) {
+        const lvl = opt.parsed?.geo_level;
+        if (!lvl) continue;
+        for (const key of [opt.nom_item_id, opt.sdmx_value, (opt.label || '').trim()]) {
+            if (key != null && key !== '') byValue[String(key)] = lvl;
+        }
+    }
+    const counts = {};
+    for (const row of (rows || [])) {
+        const lvl = byValue[String(row[geoIdx]).trim()];
+        if (lvl) counts[lvl] = (counts[lvl] || 0) + 1;
+    }
+    const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    return ranked.length ? ranked[0][0] : 'county';
+}
+
+
+/**
  * Create a choropleth map chart.
  * Data shape: rows = [[geo_id, time_id, value], ...] or [[geo_id, ..., time_id, value]]
  * config.geo_dim, config.time_dim specify which columns hold geo and time IDs.
@@ -110,18 +141,7 @@ function createChoroplethChart(container, config, data, metadata) {
         }
     }
 
-    // Detect primary geo level of this dataset
-    const levelCounts = {};
-    if (geoDimMeta) {
-        for (const opt of geoDimMeta.options) {
-            const lvl = opt.parsed?.geo_level;
-            if (lvl) levelCounts[lvl] = (levelCounts[lvl] || 0) + 1;
-        }
-    }
-    const geoLevel = levelCounts['county'] > 0 ? 'county'
-        : levelCounts['region'] > 0 ? 'region'
-        : levelCounts['macroregion'] > 0 ? 'macroregion'
-        : 'county';
+    const geoLevel = detectGeoLevel(rows, geoIdx, geoDimMeta);
     const mapName = geoLevel === 'county' ? 'Romania'
         : geoLevel === 'region' ? 'Romania-regions'
         : 'Romania-macroregions';

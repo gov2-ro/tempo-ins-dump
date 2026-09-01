@@ -18,6 +18,7 @@ from app.services.dashboard_composer import (
     _build_slice, _effective, _total_entry, primary_time_dim,
     NON_ADDITIVE_UNIT_TYPES)
 from app.services.query_builder import build_data_query
+from app.services import dimension_structure as dstruct
 
 log = logging.getLogger(__name__)
 
@@ -135,6 +136,9 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
     agg_func = 'AVG' if unit_type in ('percentage', 'time_unit') else 'SUM'
     non_additive = unit_type in NON_ADDITIVE_UNIT_TYPES
     actual_values = _parquet_dim_values(conn, matrix_code, dimensions)
+    # Same level/aggregate rules the tiles use, or the headline number and
+    # the hero chart disagree about the same dataset.
+    struct = dstruct.load(conn, matrix_code)
 
     time_dim = primary_time_dim(dimensions)
     geo_dim = next((d for d in dimensions if d['dim_type'] == 'geo'), None)
@@ -157,19 +161,34 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
         spec = _build_slice({'x_axis': time_dim['dim_column_name']},
                             dimensions, time_dim,
                             actual_values=actual_values,
-                            non_additive=non_additive)
+                            non_additive=non_additive, struct=struct)
         rows = _fetch_slice(conn, matrix_code, dimensions, spec, agg_func)
         period_totals = sorted(
             [(str(r[0]), r[1]) for r in rows if r[0] is not None and r[1] is not None])
         # Pins to a non-total option (data has no aggregate) make the series
         # partial — say so on the KPI card instead of presenting a "Masculin"
         # average as the dataset's headline value.
+        #
+        # A level restriction is not a pin: it keeps every option of one
+        # grain, so the value is complete and naming its first member
+        # ("0- 4 ani", "Cluj") would misdescribe a national total.
         for d in dimensions:
             if d.get('dim_type') in ('time', 'unit'):
                 continue
-            vals = spec.get('filters', {}).get(d['dim_column_name'])
-            if vals and not _TOTAL_RE.match(str(vals[0]).strip()):
+            col = d['dim_column_name']
+            vals = spec.get('filters', {}).get(col)
+            if not vals or len(vals) > 1 or dstruct.is_multi_level(struct, col):
+                continue
+            if not _TOTAL_RE.match(str(vals[0]).strip()):
                 pinned_context.append(str(vals[0]).strip())
+
+    # An arbitrary pin is not a headline. When some dimension has no total and
+    # no verified partition, the composer holds it at one option so the series
+    # is *a* slice, not the dataset — CON111D would otherwise headline
+    # "02 Silvicultura" on two dims at once. The number, its period-on-period
+    # change and its overall change all inherit that pin, so all three go.
+    if pinned_context:
+        period_totals = []
 
     if period_totals:
         latest_p, latest_v = period_totals[-1]
@@ -257,7 +276,7 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
     if rank_dim:
         spec = _build_slice({'x_axis': rank_dim['dim_column_name']},
                             dimensions, time_dim, 'horizontal_bar',
-                            actual_values, non_additive)
+                            actual_values, non_additive, struct)
         rows = _fetch_slice(conn, matrix_code, dimensions, spec, agg_func)
         exclude = _aggregate_labels(rank_dim)
         ranked = sorted(

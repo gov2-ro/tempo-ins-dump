@@ -4,7 +4,30 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Next up — deferred 2026-09-01
+
+Picked instead: the large-dataset correctness pass (see *Data Accuracy — Server-Side
+Aggregation*). These three were the runners-up, in the order I'd take them:
+
+1. **Headline coverage for label-hierarchies** — 22 additive hierarchies still take an
+   arbitrary pin and so lose their KPI entirely (the 2026-08-23 suppression rule drops
+   `latest`/`yoy`/`overall` whenever the series is a pinned slice). Extend
+   `verify_partition()` in `13-dimension-structure.py` past the one-member-leftover
+   shape it handles today. Small, and directly visible to visitors.
+   → detail under *Chart Selection — Future Improvements*.
+2. **Time-range control** — the biggest genuinely *missing* control. Time is either the
+   whole x-axis or one pinned period; ECharts `dataZoom` is view-only and never narrows
+   the query. Becomes more valuable once the windowing work below lands, since the
+   server will already know how to restrict periods.
+   → detail under *Dashboard v2*.
+3. **Pipeline bookkeeping rot** — ~2,180 parquets with no `matrices` row, POP107A
+   unreachable, 149 datasets with a non-time `TIME_PERIOD`. Invisible until someone hits
+   a 404, but it grows with every incremental run.
+   → detail under *Data pipeline*.
+
 ## Data pipeline
+- [ ] **149 datasets have a non-time `TIME_PERIOD`** (found 2026-08-23): `AMG115*`/`AMG116*` carry "hours worked" bands (`11 - 20 ore`, `Nu poate fi indicata o durata obisnuita`) in the time column, and `CNF101F` carries month names (`Aprilie`, `Ianuarie`). Any chart over these is meaningless, and `13-dimension-structure.py` cannot sample periods for them. Detect with: for each parquet, share of `TIME_PERIOD` values matching `^\d{4}$|^\d{4}-Q[1-4]$|^\d{4}-\d{2}$` below 0.8. Likely a `12-split-datasets.py` bug in the `_anual`/`_trimestrial` split path.
+- [ ] **POP107A is unreachable in the app** (found 2026-08-23): the parent has no parquet (`/data` 400s) and all six children (`POP107A_judete_varste` etc.) 404 because they have no `matrices` row. Symptom of a wider bookkeeping gap — ~2,180 of 3,863 parquets have no `matrices` row, `matrix_profiles` covers 1,986, and `dataset_splits` holds 300 rows for 101 parents. The incremental pipeline never re-runs `10-classify-dimensions.py` / `11-coverage-profiler.py` / `detect_trends.py`, which is where the drift comes from.
 - [x] ~~**`parse_news()` doesn't validate matrix codes**~~: Fixed 2026-08-05. Recurred a second time (2026-08-05 run hit `113  Matrice`, same as the `86 Matrice` from 2026-07-20 — both rows are apparently persistent in the news feed history). `parse_news()` now filters `Cod matrice` values against `MATRIX_CODE_RE = ^[A-Z0-9]{4,10}$` and logs skipped rows; `fetch_meta()` now validates the response body with `json.loads()` before writing, so a bad code can no longer leave a permanent 0-byte file in `data/2-metas/`. Cleaned up the existing `113  Matrice.json` and regenerated `matrices-list.csv` (was silently truncated to 975 rows by the `4-build-meta-index.py` crash; now 1996).
 - [x] ~~**Cartographic blank issue — legacy parquet column format**~~: Fixed via query-time remap. `dataset_data.py` now detects parquet schema (SDMX vs legacy v2) and reconciles dim names against the actual file via `sdmx_column_map`; `query_builder.py` accepts a `value_column` argument and aliases it to `OBS_VALUE` in the result. 67 legacy parquets (LOC103B_judet, EXP101D, LMV101B et al) — across clusters 1, 2, 3, 7, 8 — are now queryable.
 - [ ] **Pipeline-level migration of legacy parquets**: 67 parquets still ship with v2-style column names (`*_nom_id`, `value`). Query-time remap is the working fix today, but a clean pipeline run via `12-parquet-to-sdmx.py` (or equivalent) on these matrices would let us drop the special-case code path eventually.
@@ -289,6 +312,11 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
   aggregates `dataset_trends` via `UNNEST(ancestor_codes)`. Works for all context levels.
 
 ## Data Accuracy — Server-Side Aggregation
+- [ ] **`ORDER BY "TIME_PERIOD" ASC` + `LIMIT` drops the NEWEST periods** (`query_builder.py:87`): when truncation fires, the chart silently loses the most recent data — the opposite of what a first overview needs. Order descending and reverse, or window before limiting.
+- [ ] **`truncated` / `time_windowed` are computed and thrown away**: `dataset_data.py:256` sets both correctly and `dashboard-v2.js` never reads either, so a truncated tile renders as a confident, wrong chart. Surface them in the tile bar next to the existing honest `top 12 / 42` disclosure.
+- [ ] **`group_by` bypasses the 50k gate** (`dataset_data.py:128`): the guard is skipped whenever `group_by` is set — and v2 always sets it, so four concurrent full `GROUP BY` scans of a 21.6M-row parquet run against a 400MB DuckDB limit. Replace the row-count test with an output-cardinality estimate, Π(distinct of the group_by columns), which `dimension_structure.n_effective` already knows. Measured: POP107D grouped by `[TIME_PERIOD, REF_AREA_2]` yields 105,085 rows — over the cap, truncated, newest years dropped, no signal to the user.
+- [ ] **No point-level cost control**: series counts are capped (12/8) and category counts are capped (40/30/16), but points per series are unbounded and nothing is downsampled. Add ECharts `sampling: 'lttb'` and `large: true` on line/scatter plus a per-tile point budget. Scale context: 203 of 3,863 parquets exceed 50k rows, only 4 exceed 1M, median is 523 rows — a tail problem, not a corpus problem.
+- [ ] **Every interaction rebuilds all four charts**: `renderGrid()` disposes and re-creates every ECharts instance on each refresh, so one chip click costs 4 requests + 4 scans + 4 `echarts.init()`. The 2026-08-23 multi-select added a 250ms debounce (`refreshSoon`); incremental `setOption` is still the real fix.
 
 - [x] **Server-side GROUP BY for chart queries** — Done.
   Frontend sends `group_by` param with chart-relevant dimension columns. Backend
@@ -303,6 +331,11 @@ Shared substrate: extract `app/services/dataset_search.py` + `dataset_meta.py` o
   `time_unit` (12 datasets), SUM for everything else.
 
 ## Chart Selection — Future Improvements
+- [ ] **22 additive label-hierarchies still get an arbitrary pin** (2026-08-23): `verify_partition` catches the ART101C shape (leftovers tile exactly one member of the shallow level) but misses cases like TAV0212 `GRADE_DE_SEVERITATE_ALE_MALNUTRITIEI` and POP206L `CLASIFICAREA_INTERNATIONALA_A_MALADIILOR`. Each one costs that dataset its headline KPI, since the pin now suppresses `latest`/`yoy`/`overall`.
+- [ ] **Locality drill-down**: `dimension_structure.nests_in` records `REF_AREA_2 -> REF_AREA` for 43 datasets, and the child is now simply dropped from the global filter row (it used to collapse a 41-county ranking to one bar). The real answer is a drill-down: clicking a county re-groups the ranking by that county's localities. No GeoJSON below county, so the map stays at county level.
+- [ ] **Richer informativeness signals** (deferred 2026-08-23): `dimension_structure` now carries `discrimination` (CV across a level's options) and `dominance` (top option's share), because both fall out of the additivity probe for free, and `_best_temporal_series` uses `discrimination` to reject splits that do not separate. Not yet computed: *temporal divergence* (do the series actually diverge over time, or move in lockstep?) and *joint slice coverage* (CDP104H pins CATEGORY + latest year onto a combination that has no rows — per-dim distincts cannot see joint holes). Both are cheap on the same probe pass.
+- [ ] **Heatmap is the structural default too often**: it appeared in 135 of 247 sampled dashboards (2026-08-23) — it wins the structural slot whenever two categorical dims exist. Worth deciding whether a dense cross-tab is the right filler for a lay visitor before adding new chart types.
+- [ ] **Extend levels to the remaining proposers**: the corpus run verifies 41 multi-level dims (34 geo, 5 indentation, 2 age). `parent_id` and CAEN-depth proposers are implemented but currently never survive verification — worth checking whether that is correct (the levels genuinely do not tile) or whether the 2% tolerance / 3-period sample is too strict for sparse CAEN data.
 
 See also: `docs/chart-taxonomy.md` for full gap analysis per cluster (33 exemplar screenshots).
 
@@ -361,6 +394,10 @@ See also: `docs/chart-taxonomy.md` for full gap analysis per cluster (33 exempla
 - [ ] `POP108D` not loading? just `1992` - data is allright. For these large datasets, let's maybe load just the last few years? There are just 2 huge ones, larger than 1gb `POP108D` and `POP107D` – the next one is `INT109C` - 167Mb, the others being less than 100Mb – as csv. Should we use xlsx instead, generally, when fetching data?
 
 ## Dashboard v2
+- [ ] **Time range control**: there is still no time control at all — time is either the whole x-axis or pinned to a single period. ECharts `dataZoom` is view-only and never narrows the query.
+- [ ] **"Compare by ▾" pivot**: the `⇄` chip only swaps two already-assigned roles on four chart types. Generalise it to a picker over the ranked series candidates (audit item F6; BACKLOG "if just 2 dimensions, don't give options to choose (axis, group), just to swap, transpose").
+- [ ] **Nested geo as drill-down**: `dimension_structure.nests_in` now records `REF_AREA_2 → REF_AREA` for 43 datasets, but the UI still renders `REF_AREA_2` as a 3,179-entry `single_select` in the filter row (SOM101E, POP107D, LOC104B). Use the nesting to offer a drill-down from the selected county instead.
+- [ ] **Delete the obsolete widget files**: `filter-panel.js`, `view-controls.js`, `period-browser.js`, `data-table.js` (1,142 lines) are referenced only from `app/static/_obsolete/`. The multi-select implemented on 2026-08-23 was the last thing worth salvaging from them (audit item F2).
 - [ ] Split-parent datasets (e.g. AMG101A, AGR209A) have no parquet — v2 dashboard tiles show 500s/empty. Port the sub-dataset bar from `dataset-page-v2.js` (plan Phase 5) or redirect to the first sub-dataset.
 - [ ] Delete dormant `app/static/js/dataset-page-v2.js` (tabbed controller, never wired) once dashboard-v2 covers its useful bits (header, sub-dataset bar).
 - [ ] `small_multiples` hero with no facet dim (AMG101E) degrades to a single line — composer could swap chart_type to plain `line` when roles.facet is null.

@@ -14,6 +14,7 @@ from app.services.chart_selector import (
 from app.services.dashboard_composer import (
     compose_dashboard, retune_ranked_series, primary_time_dim,
     _build_slice, _non_total_options, NON_ADDITIVE_UNIT_TYPES)
+from app.services import dimension_structure as dstruct
 from app.services.query_builder import build_data_query
 
 
@@ -72,7 +73,8 @@ def _parquet_dim_values(conn, matrix_code: str, dimensions: list) -> dict:
 
 
 def _detect_composition(conn, matrix_code: str, dimensions: list,
-                        actual_values: dict, unit_type: str) -> bool | None:
+                        actual_values: dict, unit_type: str,
+                        struct: dict | None = None) -> bool | None:
     """Data-grounded parts-of-whole check for the stackable series dim.
 
     Picks the dim a stacked chart would use as its series (small
@@ -99,7 +101,7 @@ def _detect_composition(conn, matrix_code: str, dimensions: list,
     non_additive = unit_type in NON_ADDITIVE_UNIT_TYPES
     time_dim = primary_time_dim(dimensions)
     spec = _build_slice({'x_axis': col}, dimensions, time_dim,
-                        'horizontal_bar', actual_values, non_additive)
+                        'horizontal_bar', actual_values, non_additive, struct)
     try:
         sql = build_data_query(matrix_code, dimensions, spec['filters'],
                                1000, group_by=[col], agg_func='SUM')
@@ -370,9 +372,13 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
     # value presence grounds role defaults and slices, and the composition
     # probe feeds the selector's is_composition signal.
     actual_values = _parquet_dim_values(conn, matrix_code, dimensions)
+    # What this dataset's options mean: verified levels, real aggregates,
+    # nesting, additivity. Empty for unprofiled datasets — every consumer
+    # falls back to its label-based heuristic.
+    struct = dstruct.load(conn, matrix_code)
     unit_type = profile.get('primary_unit_type', 'count') or 'count'
     data_signals = {'is_composition': _detect_composition(
-        conn, matrix_code, dimensions, actual_values, unit_type)}
+        conn, matrix_code, dimensions, actual_values, unit_type, struct)}
     sig = build_signature(profile, dimensions, coverage, value_profile, trend,
                           data_signals)
     ranked = select_charts(sig)
@@ -382,7 +388,7 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
     for entry in ranked:
         entry['roles'] = assign_roles(entry['chart_type'], dimensions, sig,
                                       actual_values)
-    retune_ranked_series(ranked, dimensions, sig, actual_values)
+    retune_ranked_series(ranked, dimensions, sig, actual_values, struct)
 
     primary = ranked[0]['chart_type'] if ranked else 'table'
 
@@ -395,7 +401,7 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
     # children) must not get a composition, or every tile 500s. The v2
     # frontend shows the sub-dataset pills instead.
     composition = compose_dashboard(sig, ranked, dimensions, trend,
-                                    actual_values) if has_parquet else None
+                                    actual_values, struct) if has_parquet else None
 
     chart_config = {
         'ranked_charts': ranked,
