@@ -17,7 +17,8 @@ def build_data_query(matrix_code: str, dimensions: list, filters: dict,
                      limit: int = MAX_DATA_ROWS,
                      group_by: list[str] | None = None,
                      agg_func: str = "SUM",
-                     value_column: str = "OBS_VALUE") -> str:
+                     value_column: str = "OBS_VALUE",
+                     time_column: str | None = "TIME_PERIOD") -> str:
     """Build a DuckDB query against a parquet file for this matrix.
 
     Most parquets are SDMX-canonical (OBS_VALUE + string dim values), but
@@ -38,6 +39,12 @@ def build_data_query(matrix_code: str, dimensions: list, filters: dict,
         agg_func: Aggregation function for group_by mode (SUM, AVG, ...)
         value_column: Name of the parquet's value column. Defaults to
                       OBS_VALUE; pass "value" for legacy parquets.
+        time_column: Name of the parquet's time column, used to order the
+                     result newest-first before truncation. Legacy parquets
+                     carry a *_nom_id here. Pass None when the dataset has no
+                     column whose ordering means anything chronologically —
+                     the result is then left in whatever order the scan
+                     produced, as it was before.
 
     Returns:
         SQL query string. The output value column is always aliased to
@@ -84,15 +91,28 @@ def build_data_query(matrix_code: str, dimensions: list, filters: dict,
 
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
 
-    order_clause = 'ORDER BY "TIME_PERIOD" ASC' if "TIME_PERIOD" in output_cols else ""
-
-    return f"""
+    body = f"""
         SELECT {select_clause}
         FROM read_parquet('{parquet_path}')
         {where_sql}
         {group_clause}
-        {order_clause}
-        LIMIT {int(limit)}
+    """
+
+    if not time_column or time_column not in output_cols:
+        return f"{body} LIMIT {int(limit)}"
+
+    # Ordering ASC and then LIMITing throws away the NEWEST periods whenever
+    # truncation fires — the exact opposite of what a first overview needs.
+    # Take the newest rows, then restore ascending order for the client.
+    # The caller is expected to discard the oldest period in a truncated
+    # result: that one is cut mid-period and would understate itself.
+    return f"""
+        SELECT * FROM (
+            {body}
+            ORDER BY "{time_column}" DESC
+            LIMIT {int(limit)}
+        )
+        ORDER BY "{time_column}" ASC
     """
 
 

@@ -1,5 +1,72 @@
 # Activity History
 
+## 2026-09-01 — large datasets: keep the newest data, say when you cut
+
+Four queued correctness items about how large datasets are served, plus one
+reachable bug found while verifying them.
+
+**Truncation threw away the newest periods.** `build_data_query` ordered
+`TIME_PERIOD ASC` and then applied `LIMIT`, so whenever a result hit the cap
+the chart lost the most recent data and kept the oldest — the opposite of what
+a first overview wants. It now takes the newest rows in a subquery and
+restores ascending order outside it. ART101C grouped by (TIME_PERIOD,
+REF_AREA) at limit=500 moved from 1990–1999 to 2016–2024.
+
+A truncated result is also cut *mid-period*, so the oldest period present is
+incomplete: charting it draws a first point that dips for no reason and any
+total over it is wrong. `/data` now drops that boundary period and reports it
+as `partial_period_dropped`, unless it is the only period there is.
+
+**The 50k gate never fired for the queries that needed it.** The guard was
+skipped whenever `group_by` was set — and every v2 chart query sets it. The
+output of a grouped query is the product of the grouped dimensions'
+cardinalities, not the parquet's row count: POP107D by (TIME_PERIOD,
+REF_AREA_2) is 34 x 3,182 = 108k rows, so four such tiles could run full scans
+of a 21.6M-row parquet against a 400MB limit. Auto-windowing now covers
+grouped queries and sizes the window from that product (`_rows_per_period()`).
+POP107D by locality: 50,000 truncated rows spanning 1992–2008 → 47,685
+complete rows spanning 2011–2025. SOM101E, monthly: 2010–Feb 2011 → Jun
+2024–Aug 2025.
+
+Cardinalities come from `dimensions.option_count`, not
+`dimension_structure.n_effective` — the former covers the whole corpus and
+over-estimating only costs an extra windowed period.
+
+**Truncation was invisible.** `truncated` and `time_windowed` were computed
+correctly and never read, so a cut tile rendered as a confident chart. A
+`.dbv2-coverage` pill in the tile bar now shows the span actually plotted with
+a tooltip naming the reason. It does not fire on any composition today (0 of
+4,131 composed tiles truncate), so it is insurance for future composer picks
+and for direct API use; verified by injecting the flags into a live response.
+
+**The Tabel button was broken on all 127 datasets over 50k rows.** Found while
+checking the above. The table asks for 1,000 raw rows and the row-count gate
+refused it outright. That gate now runs *after* windowing and only refuses what
+is genuinely unbounded — no filters, no grouping, and no time column to window
+on. 79 of the 127 now work; 47 are split parents with no parquet, which get a
+404 naming the cause instead of a 500 leaking the absolute server path; 1
+(TUR106D) is refused deliberately, see below.
+
+`time_column` is now a `build_data_query` parameter rather than a hardcoded
+`TIME_PERIOD`, so the 67 legacy parquets get ordering and windowing through
+their `*_nom_id` time column. Their values are label strings, usable only
+while those sort chronologically: 28 of the 29 legacy large datasets use
+`Anul YYYY`, which does; TUR106D uses month names, which do not, so
+`_resolve_time_column()` returns None for it rather than inventing an order.
+
+**Point budget: measured, then not built.** The corpus tops out at 463 periods
+(PPA101A) against a 12-series cap — ~5.5k points, well inside ECharts. Added
+`sampling: 'lttb'` to line series as insurance and stopped there. Deliberately
+no `large: true` on the scatter/bubble charts: large mode ignores per-point
+`symbolSize`, which is exactly what those charts encode with.
+
+Verification: chart-selector eval gate unchanged (0 primary / 0 top-set / 0
+confidence / 0 drift). Full-corpus sweep of 4,131 composed tiles across 1,452
+datasets — 0 non-200, slowest 0.19s. A 760-tile before/after diff over the same
+254 datasets is byte-identical on status, row count, period span and every
+flag, which is the expected result: none of those tiles was truncating. The
+changes bite on user-driven and API slices, not on the composed dashboard.
+
 ## 2026-08-23 — follow-up: grain is global, maps follow it, honest headlines
 
 Review of the morning's work turned up six defects and two questions.

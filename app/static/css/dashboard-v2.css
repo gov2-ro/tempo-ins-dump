@@ -270,6 +270,25 @@ body.sidebar-open .dbv2-main {
     width: 220px;
 }
 
+/* Coverage badge — set when the server narrowed the slice (windowed or
+   truncated). margin-left:auto pushes it right; the type label then sits
+   after it, so it must not claim the auto margin too. */
+.dbv2-coverage {
+    margin-left: auto;
+    font-size: 0.66rem;
+    padding: 1px 6px;
+    border-radius: 999px;
+    color: var(--text-2);
+    background: var(--bg-2, rgba(148, 163, 184, 0.14));
+    border: 1px solid var(--border, rgba(148, 163, 184, 0.3));
+    cursor: help;
+    white-space: nowrap;
+}
+
+.dbv2-coverage + .dbv2-tile-type {
+    margin-left: 8px;
+}
+
 .dbv2-tile-type {
     margin-left: auto;
     font-size: 0.68rem;

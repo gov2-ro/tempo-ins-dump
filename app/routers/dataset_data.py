@@ -2,6 +2,7 @@
 import csv
 import io
 import json
+import re
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import Response
 from app.db import get_conn
@@ -84,6 +85,75 @@ def _detect_parquet_schema(conn, matrix_code: str) -> dict:
     return {"is_legacy": False, "value_column": "OBS_VALUE", "columns": cols}
 
 
+# Legacy period labels that sort chronologically as plain strings. Annual
+# labels do ("Anul 1990" < "Anul 2024"); month names do not ("Aprilie" sorts
+# before "Ianuarie"), so those datasets keep the old unordered behaviour
+# rather than being given a confident but wrong idea of "newest".
+_ANNUAL_LABEL_RE = re.compile(r"^\s*Anul\s+\d{4}\s*$")
+
+
+def _resolve_time_column(conn, dimensions, schema, legacy_to_sdmx,
+                         matrix_code: str) -> str | None:
+    """The parquet column holding time, or None if there isn't a usable one.
+
+    SDMX parquets name it TIME_PERIOD. The 67 legacy ones carry a *_nom_id
+    whose SDMX counterpart is TIME_PERIOD, and store label strings rather
+    than dates — usable only while those labels sort chronologically.
+    """
+    cols = {d['dim_column_name'] for d in dimensions}
+    if 'TIME_PERIOD' in cols:
+        return 'TIME_PERIOD'
+    legacy = next((c for c in cols
+                   if legacy_to_sdmx.get(c) == 'TIME_PERIOD'), None)
+    if not legacy:
+        return None
+    path = PARQUET_DIR / f"{matrix_code}.parquet"
+    try:
+        vals = [r[0] for r in conn.execute(
+            f'SELECT DISTINCT "{legacy}" FROM read_parquet(\'{path}\') LIMIT 500'
+        ).fetchall()]
+    except Exception:
+        return None
+    if vals and all(_ANNUAL_LABEL_RE.match(str(v or '')) for v in vals):
+        return legacy
+    return None
+
+
+def _rows_per_period(dimensions, group_by_cols, filter_dict, time_dim,
+                     row_count: int, n_periods: int) -> float:
+    """How many result rows one time period is expected to contribute.
+
+    Ungrouped, that is just the parquet's rows spread over its periods.
+    Grouped, the result is one row per surviving combination of the grouped
+    dimensions, so the estimate is the product of their cardinalities — a
+    filtered dimension contributes only the values the caller asked for.
+
+    Cardinalities come from `dimensions.option_count`, which is metadata and
+    therefore an upper bound: it counts every option the dataset declares,
+    including combinations that never occur in the data. Over-estimating is
+    the safe direction here — it windows a period or two more than strictly
+    needed rather than letting the query blow past the cap.
+    """
+    if not group_by_cols:
+        return row_count / max(n_periods, 1)
+
+    # A handful of datasets (INT109C) declare several dimensions under the
+    # same column name; take the widest, which is the bound that matters.
+    declared: dict[str, int] = {}
+    for d in dimensions:
+        col = d['dim_column_name']
+        declared[col] = max(declared.get(col, 1), d.get('option_count') or 1)
+
+    cells = 1
+    for col in group_by_cols:
+        if col == time_dim:
+            continue
+        picked = filter_dict.get(col)
+        n = len(picked) if picked else declared.get(col, 1)
+        cells *= max(n, 1)
+    return float(cells)
+
+
 @router.get("/datasets/{matrix_code}/data")
 def get_dataset_data(
     matrix_code: str,
@@ -114,6 +184,15 @@ def get_dataset_data(
 
     row_count = matrix[0] or 0
 
+    if not (PARQUET_DIR / f"{matrix_code}.parquet").exists():
+        # Split parents keep a `matrices` row but publish data only through
+        # their children. A large one used to be masked by the row-count gate
+        # and a small one leaked an absolute server path in a 500.
+        raise HTTPException(
+            404, f"Dataset {matrix_code} has no data file — it may be "
+                 f"published as sub-datasets."
+        )
+
     # Parse group_by early (needed for large dataset check)
     group_by_cols = None
     if group_by:
@@ -124,24 +203,17 @@ def get_dataset_data(
         except json.JSONDecodeError:
             pass
 
-    # Require filters for large datasets — skip when GROUP BY aggregates
-    if row_count > LARGE_DATASET_THRESHOLD and not filter_dict and not group_by_cols:
-        raise HTTPException(
-            400,
-            f"Dataset has {row_count:,} rows. Please apply at least one filter "
-            f"to narrow results (max {MAX_DATA_ROWS:,} rows returned)."
-        )
-
     # Get dimensions for this matrix
     dims = conn.execute("""
-        SELECT dim_code, dim_label, dim_column_name
+        SELECT dim_code, dim_label, dim_column_name, option_count
         FROM dimensions
         WHERE matrix_code = ?
         ORDER BY dim_code
     """, [matrix_code]).fetchall()
 
     dimensions = [
-        {'dim_code': d[0], 'dim_label': d[1], 'dim_column_name': d[2]}
+        {'dim_code': d[0], 'dim_label': d[1], 'dim_column_name': d[2],
+         'option_count': d[3] or 1}
         for d in dims
     ]
 
@@ -189,28 +261,36 @@ def get_dataset_data(
             if d['dim_column_name'].endswith('_nom_id'):
                 d['dim_column_name'] = col_map.get(d['dim_column_name'], d['dim_column_name'])
 
-    # Auto time-window when projected result would exceed MAX_DATA_ROWS and
-    # the user hasn't already constrained time. Skip when group_by is set —
-    # that already aggregates row count down. Threshold matches the row cap
+    # Auto time-window when the projected result would exceed MAX_DATA_ROWS and
+    # the user hasn't already constrained time. Threshold matches the row cap
     # so we limit periods *before* the result gets silently truncated; the
     # frontend can still page through earlier periods via the period browser.
+    #
+    # This used to skip grouped queries on the theory that GROUP BY already
+    # shrinks the output. It does not always: the output is the product of the
+    # grouped dimensions' cardinalities, which for POP107D grouped by
+    # (TIME_PERIOD, REF_AREA_2) is 34 x 3,182 = 108k rows — over the cap. And
+    # since every v2 chart query sets group_by, the guard never fired for the
+    # queries that need it most, leaving four concurrent full scans of a
+    # 21.6M-row parquet to race a 400MB memory limit.
     TIME_WINDOW_THRESHOLD = MAX_DATA_ROWS
     time_windowed = False
-    # Skip auto-windowing for legacy parquets — they don't have TIME_PERIOD
-    # column. Most are small enough not to need it anyway.
-    if row_count > TIME_WINDOW_THRESHOLD and not group_by_cols and not schema["is_legacy"]:
-        time_dim = next((d['dim_column_name'] for d in dimensions
-                         if d['dim_column_name'] == 'TIME_PERIOD'), None)
-        if time_dim and time_dim not in filter_dict:
+    # The time column is TIME_PERIOD on SDMX parquets and a *_nom_id on the
+    # 67 legacy ones. Everything downstream — windowing, newest-first
+    # ordering, the partial-period drop — keys off this one name.
+    time_col = _resolve_time_column(conn, dimensions, schema, legacy_to_sdmx,
+                                    matrix_code)
+    if row_count > TIME_WINDOW_THRESHOLD and time_col:
+        time_dim = time_col if time_col not in filter_dict else None
+        if time_dim:
             # Try parquet scan first (fast for moderate files), fall back to metadata
-            from app.config import PARQUET_DIR
             parquet_path = PARQUET_DIR / f"{matrix_code}.parquet"
             time_vals = []
             try:
                 time_vals = [r[0] for r in conn.execute(f"""
-                    SELECT DISTINCT "TIME_PERIOD"
+                    SELECT DISTINCT "{time_dim}"
                     FROM read_parquet('{parquet_path}')
-                    ORDER BY "TIME_PERIOD" DESC
+                    ORDER BY "{time_dim}" DESC
                 """).fetchall()]
             except Exception:
                 pass
@@ -224,7 +304,9 @@ def get_dataset_data(
                     time_vals = [str(y) for y in range(yr_row[1], yr_row[0] - 1, -1)]
             if time_vals:
                 n_periods = len(time_vals)
-                rows_per_period = row_count / max(n_periods, 1)
+                rows_per_period = _rows_per_period(
+                    dimensions, group_by_cols, filter_dict, time_dim,
+                    row_count, n_periods)
                 # For extremely large datasets, allow a smaller minimum to avoid OOM
                 min_periods = 2 if row_count > 5_000_000 else 5
                 safe_periods = max(min_periods, int(MAX_DATA_ROWS / max(rows_per_period, 1)))
@@ -232,6 +314,22 @@ def get_dataset_data(
                 if safe_periods < n_periods:
                     filter_dict[time_dim] = time_vals[:safe_periods]
                     time_windowed = True
+
+    # Refuse only what is genuinely unbounded. This used to reject every
+    # unfiltered raw-row request on a large dataset, which also broke the
+    # dataset page's own table view: it asks for 1,000 rows and got a 400 on
+    # all 127 datasets above the threshold. A bounded request is safe now —
+    # the window above cuts to the newest periods, the query takes the newest
+    # rows, and DuckDB answers it with a streaming top-N. What remains
+    # unbounded is a big dataset with no filters, no grouping and no time
+    # dimension to window on.
+    if (row_count > LARGE_DATASET_THRESHOLD and not filter_dict
+            and not group_by_cols and not time_windowed):
+        raise HTTPException(
+            400,
+            f"Dataset has {row_count:,} rows. Please apply at least one filter "
+            f"to narrow results (max {MAX_DATA_ROWS:,} rows returned)."
+        )
 
     # Determine aggregation function based on unit type
     agg_func = "SUM"
@@ -246,7 +344,8 @@ def get_dataset_data(
     # Build and execute query
     sql = build_data_query(matrix_code, dimensions, filter_dict, limit + 1,
                            group_by=group_by_cols, agg_func=agg_func,
-                           value_column=schema["value_column"])
+                           value_column=schema["value_column"],
+                           time_column=time_col)
 
     try:
         result = conn.execute(sql).fetchall()
@@ -265,6 +364,22 @@ def get_dataset_data(
             result_dims = dimensions  # fallback
     else:
         result_dims = dimensions
+
+    # A truncated result is cut mid-period. The query now takes the NEWEST
+    # rows, so the incomplete one is the oldest period present — charting it
+    # draws a first point that dips for no reason, and any total computed over
+    # it is simply wrong. Drop it: a shorter honest series beats a longer one
+    # that lies at the edge. Keep it when it is the only period, where there
+    # is nothing better to show.
+    partial_period = None
+    if truncated:
+        tidx = next((i for i, d in enumerate(result_dims)
+                     if d['dim_column_name'] == time_col), None) if time_col else None
+        if tidx is not None:
+            periods = {r[tidx] for r in rows if r[tidx] is not None}
+            if len(periods) > 1:
+                partial_period = min(periods)
+                rows = [r for r in rows if r[tidx] != partial_period]
 
     # Build column_labels: map data values to display labels.
     column_labels = {}
@@ -317,6 +432,8 @@ def get_dataset_data(
     }
     if time_windowed:
         resp['time_windowed'] = True
+    if partial_period is not None:
+        resp['partial_period_dropped'] = str(partial_period)
     return resp
 
 
@@ -340,6 +457,12 @@ def download_dataset(
     ).fetchone()
     if not matrix:
         raise HTTPException(404, f"Dataset {matrix_code} not found")
+
+    if not (PARQUET_DIR / f"{matrix_code}.parquet").exists():
+        raise HTTPException(
+            404, f"Dataset {matrix_code} has no data file — it may be "
+                 f"published as sub-datasets."
+        )
 
     dims = conn.execute("""
         SELECT dim_code, dim_label, dim_column_name

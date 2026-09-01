@@ -57,6 +57,11 @@ const UI_STRINGS = {
         collapse: 'Micșorează',
         grain: 'Nivel de detaliu',
         grainTooltip: n => `${n} categorii — fără suprapuneri`,
+        partial: 'date parțiale',
+        windowedTip: n => `Setul are prea multe date pentru un singur grafic; sunt afișate cele mai recente ${n} perioade. Filtrează pentru a vedea alte perioade.`,
+        windowedTipAny: 'Setul are prea multe date pentru un singur grafic; sunt afișate doar perioadele cele mai recente.',
+        truncatedTip: 'Rezultatul a atins limita de rânduri — unele combinații lipsesc.',
+        droppedTip: p => `Perioada ${p} a fost exclusă: ar fi apărut incompletă.`,
     },
     en: {
         loading: 'Loading…',
@@ -108,6 +113,11 @@ const UI_STRINGS = {
         collapse: 'Collapse',
         grain: 'Level of detail',
         grainTooltip: n => `${n} categories — no overlap`,
+        partial: 'partial data',
+        windowedTip: n => `This dataset holds too much data for one chart; the most recent ${n} periods are shown. Filter to see other periods.`,
+        windowedTipAny: 'This dataset holds too much data for one chart; only the most recent periods are shown.',
+        truncatedTip: 'The result hit the row cap — some combinations are missing.',
+        droppedTip: p => `Period ${p} was left out: it would have been incomplete.`,
     },
 };
 
@@ -604,6 +614,36 @@ class DashboardV2 {
     /** Blow one tile up to full width and height. A 103-bar pyramid or a
      *  40-series heatmap is unreadable in a 200px side slot, and the grain
      *  switcher makes that easy to hit on purpose. */
+    /** What the tile actually shows, when the server had to narrow the slice.
+     *  Staying silent lets a windowed chart pass for the whole series — the
+     *  viewer sees a line starting in 2011 and has no way to know the dataset
+     *  goes back to 1992. */
+    coverageNote(data) {
+        if (!data || (!data.time_windowed && !data.truncated)) return null;
+        // Read the time column off the slice itself: a tile whose group_by
+        // omits time still gets narrowed server-side, and asking the chart's
+        // roles for a column that is not in the response yields "0 periods".
+        const timeDim = (this.metadata.dimensions || []).find(
+            d => d.dim_type === 'time' && data.columns.includes(d.dim_column_name)
+        )?.dim_column_name || (data.columns.includes('TIME_PERIOD') ? 'TIME_PERIOD' : null);
+        const idx = timeDim ? data.columns.indexOf(timeDim) : -1;
+        let span = null, n = 0;
+        if (idx !== -1) {
+            const periods = [...new Set(data.rows.map(r => String(r[idx])))].sort();
+            n = periods.length;
+            if (n) span = n > 1 ? `${periods[0]}–${periods[n - 1]}` : periods[0];
+        }
+        const tips = [];
+        if (data.time_windowed) tips.push(n ? this.ui.windowedTip(n) : this.ui.windowedTipAny);
+        if (data.truncated) tips.push(this.ui.truncatedTip);
+        if (data.partial_period_dropped) tips.push(this.ui.droppedTip(data.partial_period_dropped));
+        const el = document.createElement('span');
+        el.className = 'dbv2-coverage';
+        el.textContent = span || this.ui.partial;
+        el.title = tips.join(' ');
+        return el;
+    }
+
     expandBtn(chart, tile) {
         const btn = document.createElement('button');
         btn.className = 'dbv2-expand';
@@ -760,6 +800,12 @@ class DashboardV2 {
                 ? { ...chart.roles, x_axis: chart.roles.series, series: chart.roles.x_axis }
                 : chart.roles;
             const timeDim = sliceDim('time');
+
+            const note = this.coverageNote(data);
+            if (note) {
+                const bar = container.parentNode.querySelector('.dbv2-tile-bar');
+                bar?.insertBefore(note, bar.querySelector('.dbv2-tile-type'));
+            }
 
             let tileData = data;
             let valueFormat = null;

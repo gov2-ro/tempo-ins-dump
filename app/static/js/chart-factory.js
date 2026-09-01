@@ -165,6 +165,11 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
                 name: seriesLabel,
                 type: forceType || 'line',
                 smooth: true,
+                // Insurance, not a fix: the corpus tops out at 463 periods
+                // (PPA101A) against a 12-series cap, so nothing today comes
+                // close to needing this. ECharts only downsamples once points
+                // outnumber pixels, so it costs nothing until something does.
+                sampling: 'lttb',
                 data: timeIds.map(tid => dataMap[tid] ?? null),
                 connectNulls: true,
                 ...(isArea && { areaStyle: { opacity: 0.35 } }),
@@ -184,6 +189,7 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
             name: metadata.matrix_name || 'Value',
             type: forceType || 'line',
             smooth: true,
+            sampling: 'lttb',
             data: timeIds.map(tid => dataMap[tid] ?? null),
             ...(isArea && { areaStyle: { opacity: 0.35 } }),
         });
