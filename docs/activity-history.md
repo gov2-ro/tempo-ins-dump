@@ -1,5 +1,61 @@
 # Activity History
 
+## 2026-09-02 — one parquet adapter, and 188 datasets get their insights back
+
+**188 of 3,863 parquets are still v2 format** — `value` instead of `OBS_VALUE`,
+`*_nom_id` instead of SDMX dimension names. `dataset_data.py`, `dataset_meta.py`
+and `agent.py` each carried their own copy of the translation. `insights.py`
+carried none, so every one of those 188 datasets logged
+`Binder Error: Referenced column "TIME_PERIOD" not found` and fell back to a
+single coverage KPI: no headline, no trend, no sentences, while its charts
+rendered fine.
+
+The translation now lives once, in `query_builder.resolve_parquet_schema()` and
+`adapt_to_parquet()`. Three copies replaced, one omission filled.
+
+Corpus-wide, over all 1,986 profiled datasets:
+
+| | before | after |
+|---|---|---|
+| with a headline value | 633 | **713** |
+| with sentences | 1,229 | **1,366** |
+| existing headline **values** changed | — | **0** |
+
+That last row is the one that matters: 83 datasets gained a headline, 3 lost
+one, and nothing that was already right became different.
+
+`agent.py` had a quieter version of the same bug — it rewrote dimension names
+forward but never passed `value_column`, so it queried a legacy parquet's
+`value` column as `OBS_VALUE` and errored. It also returned raw `*_nom_id`
+column names to the model after `get_dataset_schema` had shown it canonical
+ones. Both fixed.
+
+**A guard against mixing units.** Fixing insights unmasked something: PMI113A's
+headline became 2,331,345,489 — the sum of tonnes, thousand lei and lei per
+tonne, because its indicator dimension has no Total. `_mixes_units()` now
+suppresses the headline when the slice spans more than one unit of measure.
+74 datasets have such a slice and all but 3 were already suppressed for another
+reason, so the cost is three numbers, every one of them previously wrong:
+AGR202B (hectolitres + kilograms + thousand pieces + tonnes live weight),
+TRO1611 (percentages + two different counts) and ASS101A (a `UNIT_MEASURE` dim
+that is really a facility-type breakdown, Total included).
+
+Note the wider version of that problem is **pre-existing and corpus-wide**:
+100 already-canonical datasets sum an un-totalled multi-option indicator dim
+into their headline today. The legacy fix added 7 to that set rather than
+creating a new class of error. Filed.
+
+`_parquet_dim_values` was deliberately left alone — it probes for column
+existence rather than translating a query, and its fallback works even where
+`sdmx_column_map` has no rows.
+
+Verification: chart-selector eval gate unchanged (0 primary / 0 top-set /
+0 confidence / 0 drift). Full-corpus tile sweep of 4,131 tiles across 1,452
+datasets, identical to the previous run on status, rows, span and every flag.
+Table view on the 127 large datasets unchanged at 79 / 47 (no parquet) / 1
+(unorderable months). Playwright: zero console errors on POP107D, ART101C,
+POP201D, AGR108A, PMI113A.
+
 ## 2026-09-01 — large datasets: keep the newest data, say when you cut
 
 Four queued correctness items about how large datasets are served, plus one

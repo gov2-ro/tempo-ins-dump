@@ -8,7 +8,8 @@ from fastapi.responses import Response
 from app.db import get_conn
 from app.config import MAX_DATA_ROWS, LARGE_DATASET_THRESHOLD, PARQUET_DIR
 
-from app.services.query_builder import build_data_query, AVG_UNIT_TYPES
+from app.services.query_builder import (
+    build_data_query, resolve_parquet_schema, adapt_to_parquet, AVG_UNIT_TYPES)
 
 router = APIRouter()
 
@@ -62,29 +63,6 @@ def get_population_reference(level: str = Query("county", pattern="^(county|regi
     return _POP_REFERENCE_CACHE[level]
 
 
-def _detect_parquet_schema(conn, matrix_code: str) -> dict:
-    """Peek at the parquet file to determine its column convention.
-
-    Returns: {is_legacy: bool, value_column: str, columns: list[str]}.
-    Most parquets are SDMX (OBS_VALUE + REF_AREA / TIME_PERIOD / ...);
-    ~67 still use legacy v2 schema (value + *_nom_id columns).
-    """
-    parquet_path = PARQUET_DIR / f"{matrix_code}.parquet"
-    try:
-        cols = [r[0] for r in conn.execute(
-            f"DESCRIBE SELECT * FROM read_parquet('{parquet_path}') LIMIT 0"
-        ).fetchall()]
-    except Exception:
-        return {"is_legacy": False, "value_column": "OBS_VALUE", "columns": []}
-
-    if "OBS_VALUE" in cols:
-        return {"is_legacy": False, "value_column": "OBS_VALUE", "columns": cols}
-    if "value" in cols and any(c.endswith("_nom_id") for c in cols):
-        return {"is_legacy": True, "value_column": "value", "columns": cols}
-    # Unknown convention — fall back to OBS_VALUE assumption
-    return {"is_legacy": False, "value_column": "OBS_VALUE", "columns": cols}
-
-
 # Legacy period labels that sort chronologically as plain strings. Annual
 # labels do ("Anul 1990" < "Anul 2024"); month names do not ("Aprilie" sorts
 # before "Ianuarie"), so those datasets keep the old unordered behaviour
@@ -92,19 +70,18 @@ def _detect_parquet_schema(conn, matrix_code: str) -> dict:
 _ANNUAL_LABEL_RE = re.compile(r"^\s*Anul\s+\d{4}\s*$")
 
 
-def _resolve_time_column(conn, dimensions, schema, legacy_to_sdmx,
-                         matrix_code: str) -> str | None:
+def _resolve_time_column(conn, dimensions, schema, matrix_code: str) -> str | None:
     """The parquet column holding time, or None if there isn't a usable one.
 
-    SDMX parquets name it TIME_PERIOD. The 67 legacy ones carry a *_nom_id
-    whose SDMX counterpart is TIME_PERIOD, and store label strings rather
-    than dates — usable only while those labels sort chronologically.
+    SDMX parquets name it TIME_PERIOD. The legacy ones carry a *_nom_id whose
+    SDMX counterpart is TIME_PERIOD, and store label strings rather than
+    dates — usable only while those labels sort chronologically.
     """
     cols = {d['dim_column_name'] for d in dimensions}
     if 'TIME_PERIOD' in cols:
         return 'TIME_PERIOD'
     legacy = next((c for c in cols
-                   if legacy_to_sdmx.get(c) == 'TIME_PERIOD'), None)
+                   if schema['to_sdmx'].get(c) == 'TIME_PERIOD'), None)
     if not legacy:
         return None
     path = PARQUET_DIR / f"{matrix_code}.parquet"
@@ -218,48 +195,16 @@ def get_dataset_data(
     ]
 
     # Reconcile dim_column_name with the parquet's actual column names.
-    # The dim_column_name recorded in `dimensions` is sometimes SDMX-canonical
-    # (REF_AREA, TIME_PERIOD, ...), sometimes legacy v2 (*_nom_id), depending
-    # on which pipeline phase last touched the row. The parquet itself can
-    # also be in either format. We use sdmx_column_map (SDMX ↔ legacy) to
-    # rewrite dim names so they match the file.
-    schema = _detect_parquet_schema(conn, matrix_code)
-
-    def _load_col_map(direction: str) -> dict:
-        parent_row = conn.execute(
-            "SELECT parent_matrix_code FROM matrices WHERE matrix_code = ?", [matrix_code]
-        ).fetchone()
-        lookup_code = (parent_row[0] or matrix_code) if parent_row else matrix_code
-        if direction == "legacy_to_sdmx":
-            sql = "SELECT old_column_name, sdmx_column_name FROM sdmx_column_map WHERE matrix_code = ?"
-        else:  # sdmx_to_legacy
-            sql = "SELECT sdmx_column_name, old_column_name FROM sdmx_column_map WHERE matrix_code = ?"
-        return dict(conn.execute(sql, [lookup_code]).fetchall())
-
-    legacy_to_sdmx = {}
-    if schema["is_legacy"]:
-        # Parquet is legacy. Any dim names that look SDMX-canonical need to
-        # be rewritten BACK to *_nom_id to match the file — and the same goes
-        # for the caller's group_by / filter keys (charts always send SDMX
-        # names). Without this, group_by silently falls back to "all dims"
-        # (unaggregated) and filters never match. Responses are translated
-        # back to SDMX names below so clients see one canonical schema.
-        rev_map = _load_col_map("sdmx_to_legacy")
-        if rev_map:
-            legacy_to_sdmx = {v: k for k, v in rev_map.items()}
-            for d in dimensions:
-                if not d['dim_column_name'].endswith('_nom_id'):
-                    d['dim_column_name'] = rev_map.get(d['dim_column_name'], d['dim_column_name'])
-            if group_by_cols:
-                group_by_cols = [rev_map.get(c, c) for c in group_by_cols]
-            filter_dict = {rev_map.get(k, k): v for k, v in filter_dict.items()}
-    elif any(d['dim_column_name'].endswith('_nom_id') for d in dimensions):
-        # Parquet is SDMX. Any dim names still in *_nom_id form need rewriting
-        # forward to canonical names.
-        col_map = _load_col_map("legacy_to_sdmx")
-        for d in dimensions:
-            if d['dim_column_name'].endswith('_nom_id'):
-                d['dim_column_name'] = col_map.get(d['dim_column_name'], d['dim_column_name'])
+    # The recorded name is sometimes SDMX-canonical, sometimes legacy v2
+    # (*_nom_id), depending on which pipeline phase last touched the row, and
+    # the file can be in either format too. resolve_parquet_schema owns that
+    # translation for every consumer — it used to be reimplemented here, in
+    # dataset_meta and in agent, and omitted in insights, which is why 188
+    # datasets published a single KPI.
+    schema = resolve_parquet_schema(conn, matrix_code)
+    legacy_to_sdmx = schema["to_sdmx"]
+    dimensions, group_by_cols, filter_dict = adapt_to_parquet(
+        schema, dimensions, group_by_cols, filter_dict)
 
     # Auto time-window when the projected result would exceed MAX_DATA_ROWS and
     # the user hasn't already constrained time. Threshold matches the row cap
@@ -278,8 +223,7 @@ def get_dataset_data(
     # The time column is TIME_PERIOD on SDMX parquets and a *_nom_id on the
     # 67 legacy ones. Everything downstream — windowing, newest-first
     # ordering, the partial-period drop — keys off this one name.
-    time_col = _resolve_time_column(conn, dimensions, schema, legacy_to_sdmx,
-                                    matrix_code)
+    time_col = _resolve_time_column(conn, dimensions, schema, matrix_code)
     if row_count > TIME_WINDOW_THRESHOLD and time_col:
         time_dim = time_col if time_col not in filter_dict else None
         if time_dim:
@@ -472,28 +416,9 @@ def download_dataset(
     dimensions = [{'dim_code': d[0], 'dim_label': d[1], 'dim_column_name': d[2]} for d in dims]
 
     # Same parquet-schema reconciliation as /data endpoint
-    schema = _detect_parquet_schema(conn, matrix_code)
-    parent_row = conn.execute(
-        "SELECT parent_matrix_code FROM matrices WHERE matrix_code = ?", [matrix_code]
-    ).fetchone()
-    lookup_code = (parent_row[0] or matrix_code) if parent_row else matrix_code
-    if schema["is_legacy"]:
-        if any(not d['dim_column_name'].endswith('_nom_id') for d in dimensions):
-            rev_map = dict(conn.execute(
-                "SELECT sdmx_column_name, old_column_name FROM sdmx_column_map WHERE matrix_code = ?",
-                [lookup_code]
-            ).fetchall())
-            for d in dimensions:
-                if not d['dim_column_name'].endswith('_nom_id'):
-                    d['dim_column_name'] = rev_map.get(d['dim_column_name'], d['dim_column_name'])
-    elif any(d['dim_column_name'].endswith('_nom_id') for d in dimensions):
-        col_map = dict(conn.execute(
-            "SELECT old_column_name, sdmx_column_name FROM sdmx_column_map WHERE matrix_code = ?",
-            [lookup_code]
-        ).fetchall())
-        for d in dimensions:
-            if d['dim_column_name'].endswith('_nom_id'):
-                d['dim_column_name'] = col_map.get(d['dim_column_name'], d['dim_column_name'])
+    schema = resolve_parquet_schema(conn, matrix_code)
+    dimensions, _, filter_dict = adapt_to_parquet(
+        schema, dimensions, None, filter_dict)
 
     sql = build_data_query(matrix_code, dimensions, filter_dict, MAX_DATA_ROWS,
                            value_column=schema["value_column"])

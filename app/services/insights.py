@@ -17,7 +17,8 @@ from app.services.dataset_meta import get_dataset_meta, _parquet_dim_values
 from app.services.dashboard_composer import (
     _build_slice, _effective, _total_entry, primary_time_dim,
     NON_ADDITIVE_UNIT_TYPES)
-from app.services.query_builder import build_data_query
+from app.services.query_builder import (
+    build_data_query, resolve_parquet_schema, adapt_to_parquet)
 from app.services import dimension_structure as dstruct
 
 log = logging.getLogger(__name__)
@@ -104,15 +105,47 @@ def _seasonal_prev(period_totals: list, latest_p: str):
     return None
 
 
-def _fetch_slice(conn, matrix_code, dimensions, spec, agg_func):
-    """Run one composed slice (filters are data-grounded by the composer)."""
-    sql = build_data_query(matrix_code, dimensions, spec.get('filters', {}),
-                           50000, group_by=spec['group_by'], agg_func=agg_func)
+def _fetch_slice(conn, matrix_code, dimensions, spec, agg_func, schema=None):
+    """Run one composed slice (filters are data-grounded by the composer).
+
+    The composer names dimensions in SDMX terms; 188 parquets are still v2
+    and name them `*_nom_id` with a `value` column. Without this translation
+    every one of those datasets logged a Binder Error here and fell back to a
+    single coverage KPI with no headline and no sentences.
+    """
+    schema = schema or resolve_parquet_schema(conn, matrix_code)
+    dims, group_by, filters = adapt_to_parquet(
+        schema, dimensions, spec['group_by'], spec.get('filters', {}))
+    sql = build_data_query(matrix_code, dims, filters, 50000,
+                           group_by=group_by, agg_func=agg_func,
+                           value_column=schema['value_column'])
     try:
         return conn.execute(sql).fetchall()
     except Exception as e:
         log.warning("Insights slice failed for %s: %s", matrix_code, e)
         return []
+
+
+def _mixes_units(dimensions, spec, actual_values) -> bool:
+    """Does this slice add together more than one unit of measure?
+
+    PMI113A spans tonnes, thousand lei and lei per tonne; summing them gives
+    2.3 billion of nothing. dim_type alone does not identify the unit column
+    there — it classifies UNIT_MEASURE as an indicator — so the canonical
+    name counts too. Rare in practice: 74 datasets have such a slice and all
+    but 4 are already suppressed for another reason.
+    """
+    filters = spec.get('filters') or {}
+    for d in dimensions:
+        col = d['dim_column_name']
+        if d.get('dim_type') != 'unit' and col != 'UNIT_MEASURE':
+            continue
+        picked = filters.get(col)
+        n = len(picked) if picked else len(actual_values.get(col)
+                                           or d.get('options') or [])
+        if n > 1:
+            return True
+    return False
 
 
 def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
@@ -139,6 +172,7 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
     # Same level/aggregate rules the tiles use, or the headline number and
     # the hero chart disagree about the same dataset.
     struct = dstruct.load(conn, matrix_code)
+    schema = resolve_parquet_schema(conn, matrix_code)
 
     time_dim = primary_time_dim(dimensions)
     geo_dim = next((d for d in dimensions if d['dim_type'] == 'geo'), None)
@@ -157,12 +191,14 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
     # ---- national/total series over time -----------------------------------
     period_totals = []
     pinned_context = []
+    mixed_units = False
     if time_dim:
         spec = _build_slice({'x_axis': time_dim['dim_column_name']},
                             dimensions, time_dim,
                             actual_values=actual_values,
                             non_additive=non_additive, struct=struct)
-        rows = _fetch_slice(conn, matrix_code, dimensions, spec, agg_func)
+        rows = _fetch_slice(conn, matrix_code, dimensions, spec, agg_func, schema)
+        mixed_units = _mixes_units(dimensions, spec, actual_values)
         period_totals = sorted(
             [(str(r[0]), r[1]) for r in rows if r[0] is not None and r[1] is not None])
         # Pins to a non-total option (data has no aggregate) make the series
@@ -187,7 +223,7 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
     # is *a* slice, not the dataset — CON111D would otherwise headline
     # "02 Silvicultura" on two dims at once. The number, its period-on-period
     # change and its overall change all inherit that pin, so all three go.
-    if pinned_context:
+    if pinned_context or mixed_units:
         period_totals = []
 
     if period_totals:
@@ -277,7 +313,7 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
         spec = _build_slice({'x_axis': rank_dim['dim_column_name']},
                             dimensions, time_dim, 'horizontal_bar',
                             actual_values, non_additive, struct)
-        rows = _fetch_slice(conn, matrix_code, dimensions, spec, agg_func)
+        rows = _fetch_slice(conn, matrix_code, dimensions, spec, agg_func, schema)
         exclude = _aggregate_labels(rank_dim)
         ranked = sorted(
             [(str(r[0]), r[1]) for r in rows

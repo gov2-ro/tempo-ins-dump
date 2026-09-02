@@ -116,6 +116,89 @@ def build_data_query(matrix_code: str, dimensions: list, filters: dict,
     """
 
 
+# ---------------------------------------------------------------------------
+# Legacy-parquet adaptation
+#
+# 188 of 3,863 parquets (2026-09) still carry the v2 schema: `value` instead of
+# `OBS_VALUE`, and `*_nom_id` dimension names instead of SDMX ones. Callers
+# speak SDMX; the file may not. Every consumer used to carry its own copy of
+# the translation — dataset_data.py, dataset_meta.py and agent.py each had one,
+# and insights.py had none, which is why all 188 of those datasets showed a
+# single KPI and an empty "Pe scurt". One implementation, here.
+# ---------------------------------------------------------------------------
+
+def resolve_parquet_schema(conn, matrix_code: str) -> dict:
+    """How to address this matrix's parquet.
+
+    Returns is_legacy / value_column / columns plus two name maps:
+      to_file — SDMX name  -> the column name the file actually uses
+      to_sdmx — file column -> SDMX name, for translating results back
+
+    Both maps are empty for an already-canonical file, so callers can apply
+    them unconditionally.
+    """
+    path = _resolve_parquet_path(matrix_code)
+    try:
+        cols = [r[0] for r in conn.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{path}') LIMIT 0").fetchall()]
+    except Exception:
+        return {"is_legacy": False, "value_column": "OBS_VALUE", "columns": [],
+                "to_file": {}, "to_sdmx": {}}
+
+    if "OBS_VALUE" in cols:
+        is_legacy, value_column = False, "OBS_VALUE"
+    elif "value" in cols and any(c.endswith("_nom_id") for c in cols):
+        is_legacy, value_column = True, "value"
+    else:
+        # Unknown convention — assume canonical, as the old code did.
+        is_legacy, value_column = False, "OBS_VALUE"
+
+    # sdmx_column_map is keyed by the parent for split children.
+    parent = conn.execute(
+        "SELECT parent_matrix_code FROM matrices WHERE matrix_code = ?",
+        [matrix_code]).fetchone()
+    lookup = (parent[0] or matrix_code) if parent else matrix_code
+    pairs = conn.execute(
+        "SELECT sdmx_column_name, old_column_name FROM sdmx_column_map "
+        "WHERE matrix_code = ?", [lookup]).fetchall()
+
+    if is_legacy:
+        to_file = {sdmx: old for sdmx, old in pairs}
+        to_sdmx = {old: sdmx for sdmx, old in pairs}
+    else:
+        # File is canonical; only the *recorded* dim names may be stale.
+        to_file = {old: sdmx for sdmx, old in pairs}
+        to_sdmx = {}
+
+    return {"is_legacy": is_legacy, "value_column": value_column,
+            "columns": cols, "to_file": to_file, "to_sdmx": to_sdmx}
+
+
+def adapt_to_parquet(schema: dict, dimensions: list,
+                     group_by: list | None = None,
+                     filters: dict | None = None) -> tuple:
+    """Rewrite dimension names, group_by and filter keys onto the file.
+
+    `dimensions` is copied, not mutated — several callers reuse the list they
+    pass in for labelling the response, which must stay in SDMX terms.
+    Returns (dimensions, group_by, filters).
+    """
+    to_file = schema.get("to_file") or {}
+    legacy = schema.get("is_legacy")
+
+    def _rename(col: str) -> str:
+        if legacy:
+            # Anything not already a file column gets translated if we can.
+            return col if col.endswith("_nom_id") else to_file.get(col, col)
+        return to_file.get(col, col) if col.endswith("_nom_id") else col
+
+    dims = [{**d, "dim_column_name": _rename(d["dim_column_name"])}
+            for d in dimensions]
+    gb = [_rename(c) for c in group_by] if group_by else group_by
+    flt = {_rename(k): v for k, v in (filters or {}).items()} if filters is not None else filters
+    return dims, gb, flt
+
+
 def _escape_sql(s: str) -> str:
     """Escape single quotes in SQL string literals."""
     return s.replace("'", "''")

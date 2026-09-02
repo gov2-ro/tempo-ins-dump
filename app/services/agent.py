@@ -215,7 +215,8 @@ def _handle_get_dataset_schema(inp: dict, conn) -> dict:
 
 
 def _handle_query_dataset_data(inp: dict, conn) -> dict:
-    from app.services.query_builder import build_data_query, AVG_UNIT_TYPES
+    from app.services.query_builder import (
+        build_data_query, resolve_parquet_schema, adapt_to_parquet, AVG_UNIT_TYPES)
     from app.config import LARGE_DATASET_THRESHOLD
 
     matrix_code = inp.get("matrix_code", "").strip()
@@ -249,18 +250,13 @@ def _handle_query_dataset_data(inp: dict, conn) -> dict:
     ).fetchall()
     dimensions = [{"dim_code": d[0], "dim_label": d[1], "dim_column_name": d[2]} for d in dims]
 
-    if any(d["dim_column_name"].endswith("_nom_id") for d in dimensions):
-        parent_row = conn.execute(
-            "SELECT parent_matrix_code FROM matrices WHERE matrix_code = ?", [matrix_code]
-        ).fetchone()
-        lookup_code = (parent_row[0] or matrix_code) if parent_row else matrix_code
-        col_map = dict(conn.execute(
-            "SELECT old_column_name, sdmx_column_name FROM sdmx_column_map WHERE matrix_code = ?",
-            [lookup_code],
-        ).fetchall())
-        for d in dimensions:
-            if d["dim_column_name"].endswith("_nom_id"):
-                d["dim_column_name"] = col_map.get(d["dim_column_name"], d["dim_column_name"])
+    # Shared with dataset_data/insights: the file may be SDMX or legacy v2,
+    # and the recorded dim names may be either. This branch also used to
+    # forget value_column, so a legacy parquet's `value` was queried as
+    # OBS_VALUE and the tool errored.
+    schema = resolve_parquet_schema(conn, matrix_code)
+    dimensions, group_by, filters = adapt_to_parquet(
+        schema, dimensions, group_by, filters)
 
     # Aggregation function
     agg_func = "SUM"
@@ -274,7 +270,8 @@ def _handle_query_dataset_data(inp: dict, conn) -> dict:
     warnings = []
 
     def _execute_query(f):
-        sql = build_data_query(matrix_code, dimensions, f, limit + 1, group_by=group_by, agg_func=agg_func)
+        sql = build_data_query(matrix_code, dimensions, f, limit + 1, group_by=group_by,
+                               agg_func=agg_func, value_column=schema['value_column'])
         return conn.execute(sql).fetchall()
 
     # ----------------------------------------------------------------------
@@ -348,7 +345,11 @@ def _handle_query_dataset_data(inp: dict, conn) -> dict:
     else:
         result_dims = dimensions
 
-    columns = [d["dim_column_name"] for d in result_dims] + ["OBS_VALUE"]
+    # Report SDMX names even when the file is legacy — get_dataset_schema
+    # showed the model canonical names, so returning `perioade_nom_id` here
+    # would contradict what it was told.
+    columns = [schema["to_sdmx"].get(d["dim_column_name"], d["dim_column_name"])
+               for d in result_dims] + ["OBS_VALUE"]
     data_rows = [list(r) for r in rows]
 
     return {
