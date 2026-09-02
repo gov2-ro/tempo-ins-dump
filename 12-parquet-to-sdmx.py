@@ -329,6 +329,16 @@ def main():
         print(f"  Success:  {success}")
         print(f"  Skipped:  {skipped}")
         print(f"  Errors:   {errors}")
+
+        # Exit non-zero when nothing was actually converted. Without this the
+        # script reported success to update-pipeline.py even when every matrix
+        # errored — the 2026-08-05 run logged "OK: 225 | Failed: 0" while
+        # FOM105I and friends converted nothing, which is how 188 v2-format
+        # parquets ended up in corpus/parquet unnoticed. A bulk run still
+        # exits 0 on partial failure; the per-matrix mode the orchestrator
+        # uses does not.
+        if errors and (args.matrix or success == 0):
+            sys.exit(1)
         if total_src > 0:
             print(f"  Size:     {total_src / 1024 / 1024:.1f} MB → {total_dst / 1024 / 1024:.1f} MB "
                   f"({total_dst / total_src:.1%})")

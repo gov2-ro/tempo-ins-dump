@@ -56,6 +56,32 @@ Table view on the 127 large datasets unchanged at 79 / 47 (no parquet) / 1
 (unorderable months). Playwright: zero console errors on POP107D, ART101C,
 POP201D, AGR108A, PMI113A.
 
+### Why the pipeline still emits v2 parquets
+
+Investigated the same day. `12-parquet-to-sdmx.py` returns `{"error": ...}` per
+matrix, logs a warning, increments a counter — and then falls through to the
+summary with **no `sys.exit` anywhere in the file**. `update-pipeline.py` checks
+the return code, sees 0, and marks the matrix OK. The 2026-08-05 run logged
+`Processed: 225 | OK: 225 | Failed: 0`; FOM105I's conversion step took 0.1s
+against ~3s for a real one, and produced nothing.
+
+Two error strings hide behind that: `No column map in sdmx_column_map` and
+`Source not found`. Fixed by exiting 1 when nothing converted — bulk runs still
+tolerate partial failure, the per-matrix mode the orchestrator uses does not.
+
+The 188 now split cleanly: **141 repairable today** (map + v2 source present, a
+`--force` run converts them) and **47 needing `sdmx_column_map` rows first**,
+several of them split children whose parent has no map either. The repair was
+not run — it rewrites 141 data files.
+
+Worth noting the wider version: `6-fetch-csv.py`, `12-split-datasets.py`,
+`13-dimension-structure.py` and `3-fetch-metas.py` contain no `sys.exit`
+either. The orchestrator's `matrix_ok` gating can only catch an unhandled
+traceback. Filed rather than changed — flipping four scripts to fail loudly
+will surface failures that have been invisible for months, and that deserves a
+deliberate decision.
+
+
 ## 2026-09-01 — large datasets: keep the newest data, say when you cut
 
 Four queued correctness items about how large datasets are served, plus one
