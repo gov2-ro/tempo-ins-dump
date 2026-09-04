@@ -24,6 +24,7 @@ from pathlib import Path
 import duckdb
 
 from duckdb_config import DB_FILE
+from sdmx_labels import parse_time_period
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 
@@ -33,63 +34,6 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger(__name__)
-
-# ── Time Period Parser (from 10-sdmx-export.py) ─────────────────────────────
-
-ROMANIAN_ORDINALS = {"I": 1, "II": 2, "III": 3, "IV": 4}
-ROMANIAN_MONTHS = {
-    "ianuarie": 1, "februarie": 2, "martie": 3, "aprilie": 4,
-    "mai": 5, "iunie": 6, "iulie": 7, "august": 8,
-    "septembrie": 9, "octombrie": 10, "noiembrie": 11, "decembrie": 12,
-}
-
-_TIME_PATTERNS = [
-    (re.compile(r"^Trimestrul\s+(I{1,3}V?|IV)\s+(\d{4})$"), "quarterly"),
-    (re.compile(r"^Luna\s+([a-zA-ZăâîșțĂÂÎȘȚ]+)\s+(\d{4})$"), "monthly_name"),
-    (re.compile(r"^Luna\s+(\d{1,2})\s+(\d{4})$"), "monthly"),
-    (re.compile(r"^Cincinal\s+(\d{4})-(\d{4})$"), "quinquennial"),
-    (re.compile(r"^La\s+2\s+ani\s+(\d{4})$"), "biennial"),
-    (re.compile(r"^Semestrul\s+(I{1,2})\s+(\d{4})$"), "semi_annual"),
-    (re.compile(r"^Decada\s+(\d)\s+(\d{4}-\d{2})$"), "decade"),
-    (re.compile(r"^Anul\s+(\d{4})$"), "annual"),
-    (re.compile(r"^Anii\s+(\d{4})\s*-\s*(\d{4})$"), "year_range"),
-    # Bare year (common in some datasets)
-    (re.compile(r"^(\d{4})$"), "bare_year"),
-]
-
-
-def parse_time_period(label: str) -> str | None:
-    """Convert Romanian time period label to ISO 8601 string."""
-    s = label.strip()
-    for pattern, freq in _TIME_PATTERNS:
-        m = pattern.match(s)
-        if not m:
-            continue
-        if freq == "annual" or freq == "bare_year":
-            return m.group(1)
-        elif freq == "quarterly":
-            q = ROMANIAN_ORDINALS.get(m.group(1))
-            return f"{m.group(2)}-Q{q}" if q else None
-        elif freq == "monthly_name":
-            month = ROMANIAN_MONTHS.get(m.group(1).lower())
-            return f"{m.group(2)}-{month:02d}" if month else None
-        elif freq == "monthly":
-            month = int(m.group(1))
-            return f"{m.group(2)}-{month:02d}" if 1 <= month <= 12 else None
-        elif freq == "quinquennial":
-            return f"{m.group(1)}-P5Y"
-        elif freq == "biennial":
-            return m.group(1)
-        elif freq == "year_range":
-            years = int(m.group(2)) - int(m.group(1)) + 1
-            return f"{m.group(1)}-P{years}Y"
-        elif freq == "semi_annual":
-            s_num = ROMANIAN_ORDINALS.get(m.group(1), 1)
-            return f"{m.group(2)}-S{s_num}"
-        elif freq == "decade":
-            return f"{m.group(2)}-D{m.group(1)}"
-    return None
-
 
 # ── SDMX Concept Mapping ────────────────────────────────────────────────────
 
