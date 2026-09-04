@@ -1,5 +1,51 @@
 # Activity History
 
+## 2026-09-04 — legacy migration: 94 converted, 47 reverted, and a bigger problem found
+
+Ran the migration teed up on 2026-09-02: 141 v2-format parquets that had both an
+`sdmx_column_map` row and a `parquet-v2/ro` source. All 141 converted, all 141
+verified to have identical row counts and identical `SUM(value)`.
+
+Then the verification caught what the row counts could not. **46 of the 141 came
+back with NULL dimension values** — up to 61% of rows in TRN113A — because
+`12-parquet-to-sdmx.py` writes NULL when a nomItemId is missing from
+`sdmx_codes`. `query_builder` puts `"col" IS NOT NULL` on every grouped query,
+so those rows vanish from charts and headlines with no indication.
+
+Checked whether the repair caused it: **it did not**. A 250-file sample of the
+already-canonical corpus showed 33% with the same NULLs, so this is a
+long-standing converter defect. Measured across the whole corpus:
+
+| | |
+|---|---|
+| canonical SDMX parquets | 3,769 |
+| containing NULL dimension values | **1,108 (29%)** |
+| rows affected | 3.6M of 87.5M (4.1%) |
+| files where *every* row has a NULL dim | **51** (CON113A, COM104B, CDP104*) |
+
+Reverted the 47 affected files and kept the 94 clean ones. Legacy parquets:
+**188 → 94**. Data fidelity beats architectural tidiness — losing 61% of a
+dataset's rows is worse than keeping a code path.
+
+**Two headlines and four time axes were silently wrong, and are now right.**
+Legacy period labels sort alphabetically, so `Luna septembrie 2024` looked like
+the latest month and `Trimestrul IV 2024` like the latest quarter. TAA0101's
+headline was September 2024 (740,303) when December existed (797,907);
+PNS101D's was Q4 2024 when 2025-Q2 existed. TUR106D's charts had been plotting
+months in alphabetical order — April 2015 to September 2025 — and now run
+chronologically. TUR106D is the same dataset `_resolve_time_column` refused to
+order on 2026-09-01 for exactly this reason; converting it fixed the cause.
+
+Verification: 4,130 tiles compared against the pre-repair run — 0 status
+changes, 0 row-count changes, 246 span changes of which 235 are pure label
+formatting (`Anul 1990` → `1990`) and 11 are the ordering corrections above.
+Insights across all 1,986 datasets: 713 headlines and 1,366 sentences, same as
+before, with exactly the 2 corrections named. Chart-selector eval gate
+unchanged (0/0/0/0).
+
+The corpus lives under `data/`, which is gitignored — this run changed the
+local corpus only. A deploy needs `scripts/prepare-deploy-data.sh` to pick it up.
+
 ## 2026-09-02 — one parquet adapter, and 188 datasets get their insights back
 
 **188 of 3,863 parquets are still v2 format** — `value` instead of `OBS_VALUE`,
