@@ -1,5 +1,63 @@
 # Activity History
 
+## 2026-09-04b — the NULLs are not the converter's fault; stage 12 reads a dead input
+
+Followed the 09-04 finding (29% of canonical parquets carry NULL dimension
+values) to its cause, expecting an `sdmx_codes` coverage gap. It is not that —
+only 272 of 18,475 options lack a code, and CON113A, which is 100% NULL, has a
+code for every one of its options.
+
+The actual shape of the pipeline:
+
+- **`9-csv-to-parquet.py`** reads `data/4-datasets/ro/*.csv` and writes
+  `data/corpus/parquet/{code}.parquet` — `*_nom_id` column names holding **text
+  labels**. `duckdb_config.PARQUET_DIR` is `CORPUS_PARQUET_DIR`, so despite the
+  name this stage writes straight into the corpus. This is what the app calls a
+  "legacy" parquet. It is complete and current.
+- **`12-parquet-to-sdmx.py`** reads `data/parquet-v2/{lang}/` and writes to the
+  **same output path**. 4,058 of the 4,141 files in that directory date from
+  Feb–Apr 2026, produced by `7-data-compactor.py` — which is commented out of
+  `update-pipeline.py`.
+
+So stage 12 does not convert stage 9's output. It converts a February snapshot
+from a decommissioned script, and overwrites stage 9's fresh file with it.
+
+**Why the snapshot is lossy.** The compactor matched CSV labels against metadata
+labels literally. INS publishes comma-delimited CSVs and rewrites commas inside
+values as double spaces, so `De calatori, de cale normala` arrives as
+`De calatori  de cale normala` and never matches. Every comma-bearing label
+became NULL.
+
+    TUR104C  metadata: 6 tourist destinations
+             parquet:  3 — the three missing all contain a comma
+             188 of 380 rows have a NULL destination
+
+    TRN113A  CSV: 7 wagon types
+             parquet-v2: 2 + a NULL bucket of 108 rows; the 5 lost all
+             contain a comma
+
+`query_builder` puts `"col" IS NOT NULL` on every grouped query, so those rows
+are dropped from charts, headlines and rankings silently.
+
+Scale: 1,108 of 3,769 canonical parquets carry NULL dimension values, 3.6M of
+87.5M rows, 51 files where every row does. Of the 482 with an original CSV to
+compare against, a random sample of 60 came back **60/60 losing values**.
+
+**The data is recoverable.** Re-running `9-csv-to-parquet.py --matrix TRN113A`
+reproduced all 7 wagon types and matched the pre-repair backup exactly, 176
+rows. Nothing needs re-fetching from INS.
+
+Stopped here rather than redesigning the pipeline: the fix is a choice between
+pointing stage 12 at stage 9's label output, regenerating `parquet-v2` with
+comma-tolerant matching, or retiring stage 12 so stage 9 emits SDMX directly.
+That belongs to the maintainer.
+
+One accident worth recording: `9-csv-to-parquet.py --matrix TRN113A --force`
+was run to test whether the CSV still held the lost labels, and because
+`PARQUET_DIR` is the corpus directory it overwrote
+`data/corpus/parquet/TRN113A.parquet`. Restored from the 09-04 backup and
+verified (176 rows, 7 types, SUM 235,276). That surprise is itself the finding.
+
 ## 2026-09-04 — legacy migration: 94 converted, 47 reverted, and a bigger problem found
 
 Ran the migration teed up on 2026-09-02: 141 v2-format parquets that had both an
