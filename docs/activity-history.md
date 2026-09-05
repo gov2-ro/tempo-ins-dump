@@ -1,5 +1,24 @@
 # Activity History
 
+## 2026-09-05b — stage 9 SDMX migration, Phase D (pipeline wiring, code only)
+
+Closed out `docs/stage9-sdmx-migration-spec.md` (Phases A–C in the entry
+below, same day). Code-only changes, nothing executed:
+
+- `update-pipeline.py`: removed step (e) (`12-parquet-to-sdmx.py`) from the
+  per-matrix loop — stage 9 already writes canonical SDMX parquet directly.
+  Relettered the now-contiguous steps (e→d gap closed the pre-existing
+  skipped "g" too, while I was in there).
+- `12-parquet-to-sdmx.py`: docstring marked deprecated with the reason
+  (reads a dead `data/parquet-v2/` snapshot) and what still touches that
+  directory (`12-split-datasets.py`, for v2-sourced splits) — not deleted,
+  per the spec, until `parquet-v2/` itself is retired.
+- `CLAUDE.md` / `readme.md`: pipeline tables and the `parquet-v2/` data-dir
+  note updated to match.
+
+The actual corpus swap (replacing `data/corpus/parquet/` with the shadow
+output from Phase C) is still the user's call — not performed here.
+
 ## 2026-09-05 — stage 9 emits SDMX directly, Phases A–C of the migration spec
 
 Implemented `docs/stage9-sdmx-migration-spec.md` (approved 2026-09-04): stage 9

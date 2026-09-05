@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
 """
+DEPRECATED (2026-09-05) — do not run this script.
+
+9-csv-to-parquet.py now writes canonical SDMX parquet directly from the
+source CSVs (see docs/stage9-sdmx-migration-spec.md and
+docs/reports/stage9-sdmx-migration.md). This script's input,
+data/parquet-v2/, is a dead Feb-2026 snapshot from a decommissioned
+compactor — running this will overwrite good stage-9 output with a lossy
+February version. It has been removed from update-pipeline.py. Kept
+in the tree for reference only until data/parquet-v2/ is retired
+(blocked on repointing 12-split-datasets.py's PARQUET_V2_DIR reads first).
+
 12-parquet-to-sdmx.py — Transform parquet-v2 files to SDMX-native parquet-v3.
 
 Changes:

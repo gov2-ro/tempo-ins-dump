@@ -66,13 +66,13 @@ Sequential data pipeline — run in order. All scripts accept `--lang ro|en` (de
 | 6 | `6-fetch-csv.py` | `data/4-datasets/{lang}/` | Downloads raw CSV data from TEMPO API |
 | 7 | `7-data-compactor.py` | `data/5-compact-datasets/{lang}/` | Replaces text labels with numeric IDs |
 | 8 | `8-setup-duckdb-schema.py` | `data/corpus/metadata.duckdb` | Creates DuckDB schema (contexts, matrices, dimensions) |
-| 9 | `9-csv-to-parquet.py` | `data/parquet-v2/ro/` | Converts compacted CSVs to Parquet (intermediate) |
+| 9 | `9-csv-to-parquet.py` | `data/corpus/parquet/` | Converts CSVs directly to canonical SDMX parquet — maps values via `sdmx_codes`, renames columns via `sdmx_column_map`, never writes NULL |
 | 10 | `10-import-metadata.py` | DuckDB tables | Imports all metadata into DuckDB |
 | 10 | `10-classify-dimensions.py` | `dimension_options_parsed`, `matrix_profiles` | Parses/classifies dimensions, detects archetypes |
 | 10 | `10-sdmx-export.py` | `data/6-sdmx-csv/ro/` | Converts to SDMX-CSV 2.0 |
-| 11 | `11-build-sdmx-codes.py` | DuckDB code mapping tables | Builds SDMX code mappings |
+| 11 | `11-build-sdmx-codes.py` | DuckDB code mapping tables | Builds SDMX code mappings (`sdmx_codes`, `sdmx_column_map` — stage 9 depends on these) |
 | 11 | `11-coverage-profiler.py` | `dataset_coverage` DuckDB table | Analyzes data completeness |
-| 12 | `12-parquet-to-sdmx.py` | `data/corpus/parquet/` | Transforms parquet-v2 to SDMX-native canonical parquet |
+| 12 | `12-parquet-to-sdmx.py` | *(deprecated, not run)* | Read a dead `parquet-v2/` snapshot; stage 9 writes SDMX directly now (2026-09-05) — see `docs/reports/stage9-sdmx-migration.md` |
 | 12 | `12-split-datasets.py` | `data/corpus/parquet/` | Splits inconsistent datasets into clean sub-datasets |
 
 ### Incremental Update (`update-pipeline.py`)
@@ -141,7 +141,8 @@ data/
   2-metas/{lang}/          {dataset-id}.json — metadata per dataset
   4-datasets/{lang}/       raw CSVs from TEMPO API
   4-datasets-slim-samples/ 50/ and 100/ row samples for LLM analysis
-  parquet-v2/ro/           Parquet v2 (numeric IDs) — pipeline intermediate
+  parquet-v2/ro/           Parquet v2 (numeric IDs) — dead since 2026-09-05 (stage 9 no longer
+                           reads it); still read by 12-split-datasets.py for v2-sourced splits
   corpus/                  ← used by app
     parquet/               Canonical SDMX parquet files — 3,706 files
     metadata.duckdb        Main DuckDB metadata (16 tables)

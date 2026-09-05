@@ -386,30 +386,25 @@ def main():
         #         failed.append((code, "7-compact"))
         #         matrix_ok = False
 
-        # d. CSV → parquet-v2
+        # d. CSV → canonical SDMX parquet (stage 9 writes SDMX directly since
+        #    2026-09-05; 12-parquet-to-sdmx.py is deprecated, see its docstring)
         if matrix_ok:
             if not python("9-csv-to-parquet.py", ["--matrix", code] + force_flag, dry_run=args.dry_run):
                 failed.append((code, "9-csv-to-parquet"))
                 matrix_ok = False
 
-        # e. parquet-v2 → SDMX parquet
-        if matrix_ok:
-            if not python("12-parquet-to-sdmx.py", ["--matrix", code] + force_flag, dry_run=args.dry_run):
-                failed.append((code, "12-parquet-to-sdmx"))
-                matrix_ok = False
-
-        # f. Split datasets
+        # e. Split datasets
         if matrix_ok and not args.no_split:
             if not python("12-split-datasets.py", ["--matrix", code], dry_run=args.dry_run):
                 failed.append((code, "12-split"))
                 matrix_ok = False
 
-        # g. Dimension structure (verified levels / aggregates / nesting)
+        # f. Dimension structure (verified levels / aggregates / nesting)
         if matrix_ok and not args.no_dim_structure:
             if not python("13-dimension-structure.py", ["--matrix", code], dry_run=args.dry_run):
                 log.warning(f"{code}: dimension structure profiling failed (non-fatal)")
 
-        # h. View profiles
+        # g. View profiles
         if matrix_ok and not args.no_view_profiles:
             if not python("generate_view_profiles.py", ["--matrix", code], dry_run=args.dry_run):
                 log.warning(f"{code}: view profile generation failed (non-fatal)")

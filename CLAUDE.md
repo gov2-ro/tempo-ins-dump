@@ -20,17 +20,22 @@ Sequential. All accept `--lang ro|en` (default: `ro`). Output paths + full detai
 | 6 | `6-fetch-csv.py` | Download raw CSV data |
 | 7 | `7-data-compactor.py` | Replace text labels with numeric IDs |
 | 8 | `8-setup-duckdb-schema.py` | Create DuckDB schema (`corpus/metadata.duckdb`) |
-| 9 | `9-csv-to-parquet.py` | Convert compacted CSVs to intermediate Parquet (`parquet-v2/`) |
+| 9 | `9-csv-to-parquet.py` | Convert CSVs directly to canonical SDMX parquet (`corpus/parquet/`) — maps values via `sdmx_codes`, renames columns via `sdmx_column_map`, never writes NULL |
 | 10 | `10-import-metadata.py` | Import metadata into DuckDB |
 | 10 | `10-classify-dimensions.py` | Parse/classify dimensions, detect archetypes |
 | 10 | `10-sdmx-export.py` | Convert to SDMX-CSV 2.0 |
-| 11 | `11-build-sdmx-codes.py` | Build SDMX code mappings |
+| 11 | `11-build-sdmx-codes.py` | Build SDMX code mappings (`sdmx_codes`, `sdmx_column_map` — stage 9 depends on these) |
 | 11 | `11-coverage-profiler.py` | Analyze data completeness → `dataset_coverage` |
-| 12 | `12-parquet-to-sdmx.py` | Transform parquet-v2 → canonical SDMX parquet (`corpus/parquet/`) |
+| 12 | `12-parquet-to-sdmx.py` | **Deprecated** (2026-09-05) — stage 9 now writes SDMX directly; this read a dead `parquet-v2/` snapshot. Kept for reference only, not run |
 | 12 | `12-split-datasets.py` | Split inconsistent datasets into clean sub-datasets |
 | 13 | `13-dimension-structure.py` | Verify each dimension's internal structure → `dimension_structure` (levels, real aggregates, additivity, nesting) |
 
-**Orchestrator**: `update-pipeline.py` — incremental runs from INS news feed (per-matrix: meta → CSV → parquet → SDMX → split → dim structure → view profile).
+A matrix with no `sdmx_column_map` rows yet (a handful — see `docs/BACKLOG.md`)
+gets its original `*_nom_id`/`value` column shape from stage 9 instead of
+invented names the app doesn't recognize; it canonicalizes automatically once
+stage 11 gains coverage for it, no code change needed.
+
+**Orchestrator**: `update-pipeline.py` — incremental runs from INS news feed (per-matrix: meta → CSV → SDMX parquet → split → dim structure → view profile).
 
 ### Other Root Scripts
 `generate_view_profiles.py` (per-dataset JSON view profiles), `generate_sdmx_yaml.py`, `build-geo-regions.py` (county GeoJSON → regions/macroregions), `build-static-site.py`, `split_rules.py`, `detect_trends.py`, `duckdb_config.py` (path config), `duckdb-browser.py`, `get-news.py`, `test_chart_selector.py`. See readme.md for descriptions. Helper scripts (audit, baselines, search index, canonicalize, normalize) are in `scripts/`.
@@ -139,7 +144,8 @@ data/
   2-metas/{lang}/            {dataset-id}.json — metadata per dataset
   4-datasets/{lang}/         raw CSVs from TEMPO API
   4-datasets-slim-samples/   50/ and 100/ row samples for LLM analysis
-  parquet-v2/ro/             Parquet (numeric IDs) — pipeline intermediate, read by scripts 12-*
+  parquet-v2/ro/             Parquet (numeric IDs) — dead since 2026-09-05 (stage 9 no longer
+                             reads it); still read by 12-split-datasets.py for v2-sourced splits
   meta/                      Reference data (judet CSVs, SIRUTA)
   logs/                      Pipeline execution logs
   sdmx-dashboards/           SDMX dashboard YAML configs (generate_sdmx_yaml.py)
