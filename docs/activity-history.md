@@ -1,5 +1,67 @@
 # Activity History
 
+## 2026-09-05 — stage 9 emits SDMX directly, Phases A–C of the migration spec
+
+Implemented `docs/stage9-sdmx-migration-spec.md` (approved 2026-09-04): stage 9
+now does what stage 9 + `12-parquet-to-sdmx.py` used to do together —
+read the original CSV, map values via `parse_time_period()` / a normalised
+label lookup against `sdmx_codes` (never NULL, unmatched values keep the
+cleaned original text), rename columns via `sdmx_column_map`, write
+atomically. `12-parquet-to-sdmx.py` is not yet removed from the pipeline
+(Phase D, next) and was never run during this work.
+
+**Phase A**: extracted `norm_label()`/`parse_time_period()` into a new
+`sdmx_labels.py`; `11-build-sdmx-codes.py` now imports from it.
+`--dry-run` output byte-identical to pre-refactor. Unit tests added.
+
+**Phase B**: rewrote `9-csv-to-parquet.py`. Validated on the spec's six
+matrices (POP107D's CSV isn't present locally — substituted INT109C,
+568,990 rows/166MB, 1.4s/~1GB peak RSS) plus a 200-random-matrix sample:
+0% unmatched, 0 NULLs.
+
+**Phase C**: full shadow regeneration (1,910 of 1,912 matrices with a
+local CSV; the 2 failures are header-only CSVs the live corpus also has no
+parquet for) plus all 9 verification gates from spec §6. All pass. Two real
+bugs found and fixed along the way, both in `docs/reports/stage9-sdmx-migration.md`
+in full:
+
+1. **Case-collision in `norm_label()`.** The spec's normaliser lowercases
+   before matching; at least 20 matrices have INS metadata options that
+   differ *only* by case and are genuinely distinct (`AGR208A`: `PLANTATII`
+   a section header, `Plantatii` an unrelated line item — both real
+   `nom_item_id`s). A single lowercased key silently merged each pair.
+   Fixed with `norm_label_cs()` (case-preserving) tried first, falling back
+   to the lowercased match only on a miss. `AGR208A` back to its true
+   134 distinct values (was silently dropping to 131).
+2. **Fallback column names broke the app for the ~26 matrices with zero
+   `sdmx_column_map` coverage.** The app's `dataset_meta.py` /
+   `dashboard_composer.py` still address these matrices' dimensions by
+   their original `*_nom_id` names — nothing has ever taught them
+   otherwise — and the app already serves these matrices fine today via
+   `query_builder`'s legacy-format detection. Inventing new SDMX-ish names
+   for them (the spec's literal design) produced 71 tile 500s across 26
+   matrices in the gate-8 tile sweep. Fixed: a matrix with *zero*
+   `sdmx_column_map` rows now keeps its original `*_nom_id`/`value` shape
+   (matching exactly what old stage 9 always wrote) while still getting
+   every value-level fix. `CON103J` — which has no parquet in the live
+   corpus at all — now works end-to-end for the first time.
+
+Verification numbers (full detail in the report): 0 NULLs across 1,910
+files, 0 unexplained `SUM` differences (243 explained by NULL-recovery or
+fresher CSV data), 99.99941% cell match rate (spec baseline 99.91%),
+chart_selector eval unchanged (0/0/0/0), tile sweep 3,920/3,920 tiles 200,
+insights headlines up (781→796) with every value/gain/loss change traced to
+a one-sentence cause. Three datasets lose their headline KPI for an
+explained, non-pipeline reason (dashboard_composer's existing
+anti-double-counting logic correctly starts pinning once comma-recovery
+reveals real sub-categories) — filed in `docs/BACKLOG.md`, not fixed here
+(out of this migration's scope).
+
+The live corpus was never touched — every run used `--out-dir` with a
+shadow path, and gates 7–9 ran against a throwaway copy of
+`metadata.duckdb` + `parquet/` via `TEMPO_DATA_DIR`. Per the spec, the user
+runs the actual swap; Phase D (pipeline wiring, code-only) is next.
+
 ## 2026-09-04b — the NULLs are not the converter's fault; stage 12 reads a dead input
 
 Followed the 09-04 finding (29% of canonical parquets carry NULL dimension
