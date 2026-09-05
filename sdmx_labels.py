@@ -20,6 +20,21 @@ def norm_label(s: str) -> str:
     return re.sub(r"\s+", " ", str(s or "").replace(",", " ")).strip().lower()
 
 
+def norm_label_cs(s: str) -> str:
+    """Case-preserving twin of norm_label() — same comma/whitespace cleanup,
+    no lowercasing.
+
+    Some dimensions use ALL CAPS for a section header and Title Case for an
+    unrelated line item that happens to share the same words (INS's own
+    metadata carries both as distinct nom_item_ids — e.g. AGR208A has both
+    'PLANTATII' and 'Plantatii'). norm_label() alone would silently merge
+    them. Try this exact-case match first; fall back to norm_label() only
+    when it misses, so a genuine case-only mismatch (CSV vs metadata) still
+    resolves without conflating two real, distinct options.
+    """
+    return re.sub(r"\s+", " ", str(s or "").replace(",", " ")).strip()
+
+
 def clean_label(s: str) -> str:
     """Whitespace-collapse a label for display/storage, preserving case.
 

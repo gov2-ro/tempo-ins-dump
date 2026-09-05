@@ -38,7 +38,7 @@ from duckdb_config import (
     TEST_LIMIT,
     sanitize_column_name,
 )
-from sdmx_labels import norm_label, clean_label, parse_time_period
+from sdmx_labels import norm_label, norm_label_cs, clean_label, parse_time_period
 
 # Exit non-zero for a single matrix only when unmatched cells exceed this —
 # spec §2.3: "that threshold means something structural broke, not that a
@@ -123,7 +123,15 @@ class Lookups:
         ).fetchall():
             self.column_map.setdefault(mc, {})[old] = new
 
-        self.value_map = {}
+        # Two lookups per dimension: exact-case first, case-insensitive as
+        # fallback. Some dimensions have two genuinely distinct nom_item_ids
+        # that differ only by case (AGR208A has both 'PLANTATII' — a section
+        # header — and 'Plantatii' — a line item); a single lowercased
+        # lookup would silently conflate them. Trying the case-preserving
+        # key first keeps both distinct while still catching a CSV/metadata
+        # mismatch that really is case-only.
+        self.value_map_cs = {}
+        self.value_map_ci = {}
         for mc, dim_code, option_label, sdmx_value in conn.execute("""
             SELECT d.matrix_code, d.dim_code, o.option_label, s.sdmx_value
             FROM dimensions d
@@ -131,7 +139,8 @@ class Lookups:
             LEFT JOIN sdmx_codes s ON s.nom_item_id = o.nom_item_id
         """).fetchall():
             target = sdmx_value if sdmx_value is not None else clean_label(option_label)
-            self.value_map.setdefault(mc, {}).setdefault(dim_code, {})[norm_label(option_label)] = target
+            self.value_map_cs.setdefault(mc, {}).setdefault(dim_code, {})[norm_label_cs(option_label)] = target
+            self.value_map_ci.setdefault(mc, {}).setdefault(dim_code, {})[norm_label(option_label)] = target
 
         self.dim_count = dict(conn.execute(
             "SELECT matrix_code, COUNT(*) FROM dimensions GROUP BY matrix_code").fetchall())
@@ -202,6 +211,16 @@ def convert_matrix(matrix_code: str, lookups: Lookups, conn, out_dir: Path) -> d
         stats['error'] = "CSV file not found"
         return stats
 
+    # A header-only CSV (no data rows) leaves auto_detect nothing to sniff,
+    # so read_csv degrades to a single VARCHAR column and the CAST-based
+    # SELECT below fails with a confusing binder error instead of a clear
+    # one. Catch it here — seen on EXP101F / EXP102F.
+    with open(csv_file, 'r', encoding='utf-8', errors='replace') as f:
+        f.readline()
+        if f.readline() == '':
+            stats['error'] = "CSV file is empty"
+            return stats
+
     try:
         labels = load_dimension_labels(matrix_code)
     except Exception as e:
@@ -233,7 +252,8 @@ def convert_matrix(matrix_code: str, lookups: Lookups, conn, out_dir: Path) -> d
         stats['error'] = "CSV file is empty"
         return stats
 
-    value_lut_all = lookups.value_map.get(matrix_code, {})
+    value_lut_cs_all = lookups.value_map_cs.get(matrix_code, {})
+    value_lut_ci_all = lookups.value_map_ci.get(matrix_code, {})
     select_parts = []
     join_parts = []
     total_unmatched = 0
@@ -242,7 +262,8 @@ def convert_matrix(matrix_code: str, lookups: Lookups, conn, out_dir: Path) -> d
     try:
         for i in range(num_dims):
             dim_code = i + 1
-            lut = value_lut_all.get(dim_code, {})
+            lut_cs = value_lut_cs_all.get(dim_code, {})
+            lut_ci = value_lut_ci_all.get(dim_code, {})
             distincts = conn.execute(
                 f"SELECT column{i} AS raw, COUNT(*) AS cnt FROM csv_tmp GROUP BY column{i}"
             ).fetchall()
@@ -252,7 +273,9 @@ def convert_matrix(matrix_code: str, lookups: Lookups, conn, out_dir: Path) -> d
                 raw_s = raw if raw is not None else ""
                 final = parse_time_period(raw_s.strip()) if is_time[i] else None
                 if final is None:
-                    final = lut.get(norm_label(raw_s))
+                    final = lut_cs.get(norm_label_cs(raw_s))
+                if final is None:
+                    final = lut_ci.get(norm_label(raw_s))
                 if final is None and not is_time[i]:
                     # Opportunistic: a column with no sdmx_column_map entry
                     # (spec §8's 47 unfixed matrices) never gets is_time=True,
