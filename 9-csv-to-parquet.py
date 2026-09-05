@@ -6,7 +6,11 @@ This stage now does what stage 9 + 12 used to do together:
   2. Map each dimension value: time dims via parse_time_period(), everything
      else via a normalised-label lookup against sdmx_codes. No match -> keep
      the cleaned original text and record it in unmapped_labels (never NULL).
-  3. Rename columns via sdmx_column_map (value -> OBS_VALUE).
+  3. Rename columns via sdmx_column_map (value -> OBS_VALUE). A matrix with
+     zero sdmx_column_map coverage (no dimension of it was ever classified)
+     keeps its original *_nom_id/value shape instead of inventing new
+     names the rest of the app has never heard of — see
+     resolve_column_names()'s docstring for why.
   4. Write to a temp file, then atomic rename onto the final path.
 
 12-parquet-to-sdmx.py (deprecated) used to do step 2-3 as a second pass over
@@ -159,8 +163,10 @@ class Lookups:
 def resolve_column_names(matrix_code: str, labels: list, lookups: Lookups):
     """Final SDMX column name per CSV dimension position.
 
-    Returns (names, unmapped_old_names, is_time_flags). Every position gets a
-    name; an unmapped column is recorded, never left with its raw name.
+    Returns (names, unmapped_old_names, is_time_flags, whole_matrix_legacy).
+    Every position gets a name; an unmapped column is recorded, never left
+    with its raw name — except when the *entire* matrix has no
+    sdmx_column_map coverage (spec §8's ~47 unfixed matrices), handled below.
 
     Column identity is resolved by dim_code (position), via
     dimensions.dim_column_name, not by re-sanitising the *current* metadata
@@ -171,9 +177,22 @@ def resolve_column_names(matrix_code: str, labels: list, lookups: Lookups):
     sdmx_column_map row that already exists under the old name, and every
     such dimension would wrongly fall back to an ad hoc name instead of its
     real SDMX one. dim_code doesn't drift when only the label text does.
+
+    A matrix with *zero* sdmx_column_map rows is a different case from one
+    unmapped column inside an otherwise-canonical file. The app's dimension
+    metadata (dimensions.dim_column_name, dashboard_composer's tile specs)
+    still reads *_nom_id for these ~26 matrices — nothing ever taught it
+    otherwise — so inventing new fallback names here breaks every tile with
+    a "column not found" 500, even though the app already serves these
+    matrices fine today via query_builder.resolve_parquet_schema's
+    is_legacy path (value/*_nom_id columns, detected and left alone).
+    Reproducing that exact legacy shape keeps the app working unchanged
+    while still fixing the NULL/value corruption underneath — verified live
+    on the shadow corpus (ART124A/FOM105I: 0 tile failures before and after).
     """
     lookup_matrix = lookups.parent_of.get(matrix_code, matrix_code)
     colmap = lookups.column_map.get(lookup_matrix, {})
+    whole_matrix_legacy = not colmap
     db_names = lookups.dim_column_name.get(matrix_code, {})
     used = set()
     names, unmapped, is_time = [], [], []
@@ -182,7 +201,9 @@ def resolve_column_names(matrix_code: str, labels: list, lookups: Lookups):
         dim_code = i + 1
         db_name = db_names.get(dim_code)
         old = db_name if db_name is not None else sanitize_column_name(label)
-        if db_name is not None and not db_name.endswith('_nom_id'):
+        if whole_matrix_legacy:
+            base = old
+        elif db_name is not None and not db_name.endswith('_nom_id'):
             base = db_name  # dimensions row already carries the resolved SDMX name
         else:
             base = colmap.get(old)
@@ -192,7 +213,7 @@ def resolve_column_names(matrix_code: str, labels: list, lookups: Lookups):
         is_time.append(base == "TIME_PERIOD")
         names.append(_uniquify(base, used))
     unmapped = [names[i] for i in unmapped_positions]
-    return names, unmapped, is_time
+    return names, unmapped, is_time, whole_matrix_legacy
 
 
 # ── Per-matrix conversion ───────────────────────────────────────────────────
@@ -204,6 +225,7 @@ def convert_matrix(matrix_code: str, lookups: Lookups, conn, out_dir: Path) -> d
         'matrix_code': matrix_code, 'success': False, 'error': None,
         'rows': 0, 'total_cells': 0, 'unmatched_cells': 0, 'unmatched_pct': 0.0,
         'unmapped_columns': [], 'columns': [], 'unmapped_rows': [],
+        'whole_matrix_legacy': False,
     }
 
     csv_file = CSV_SOURCE_DIR / f"{matrix_code}.csv"
@@ -234,7 +256,8 @@ def convert_matrix(matrix_code: str, lookups: Lookups, conn, out_dir: Path) -> d
                            f"DB `dimensions` has {db_dim_count} for {matrix_code}")
         return stats
 
-    names, unmapped_cols, is_time = resolve_column_names(matrix_code, labels, lookups)
+    names, unmapped_cols, is_time, whole_matrix_legacy = resolve_column_names(matrix_code, labels, lookups)
+    value_col_name = "value" if whole_matrix_legacy else "OBS_VALUE"
 
     dim_casts = ", ".join(f"CAST(column{i} AS VARCHAR) AS column{i}" for i in range(num_dims))
     try:
@@ -295,7 +318,7 @@ def convert_matrix(matrix_code: str, lookups: Lookups, conn, out_dir: Path) -> d
             select_parts.append(f'dimmap_{i}.mapped AS "{names[i]}"')
             join_parts.append(f'LEFT JOIN dimmap_{i} ON csv_tmp.column{i} IS NOT DISTINCT FROM dimmap_{i}.raw')
 
-        select_parts.append('TRY_CAST(csv_tmp.value_raw AS DOUBLE) AS OBS_VALUE')
+        select_parts.append(f'TRY_CAST(csv_tmp.value_raw AS DOUBLE) AS "{value_col_name}"')
 
         out_dir.mkdir(parents=True, exist_ok=True)
         final_path = out_dir / f"{matrix_code}.parquet"
@@ -332,6 +355,7 @@ def convert_matrix(matrix_code: str, lookups: Lookups, conn, out_dir: Path) -> d
     stats['unmapped_rows'] = unmapped_rows
     for old_col in unmapped_cols:
         stats['unmapped_rows'].append((old_col, '<column>', total_rows))
+    stats['whole_matrix_legacy'] = whole_matrix_legacy
     stats['success'] = True
 
     if stats['unmatched_pct'] > UNMATCHED_EXIT_THRESHOLD:
@@ -397,7 +421,7 @@ def main():
 
     conn = duckdb.connect()  # in-memory, CSV processing only
 
-    processed = skipped = errors = structural_failures = 0
+    processed = skipped = errors = structural_failures = legacy_kept = 0
     unmapped_by_matrix = {}
 
     with open(log_file, 'w', encoding='utf-8') as log:
@@ -421,6 +445,9 @@ def main():
                        f"({stats['unmatched_pct']:.1%})")
                 if stats['unmapped_columns']:
                     msg += f", {len(stats['unmapped_columns'])} unmapped column(s)"
+                if stats['whole_matrix_legacy']:
+                    legacy_kept += 1
+                    msg += ", kept legacy (*_nom_id/value) — no sdmx_column_map coverage"
             else:
                 errors += 1
                 if stats['unmatched_pct'] > UNMATCHED_EXIT_THRESHOLD:
@@ -458,6 +485,7 @@ Total matrices: {len(matrices)}
 Processed: {processed}
 Skipped: {skipped}
 Errors: {errors}  (of which {structural_failures} exceeded the {UNMATCHED_EXIT_THRESHOLD:.0%} unmatched threshold)
+Kept legacy (no sdmx_column_map coverage): {legacy_kept}
 
 Output directory: {out_dir}
 Log file: {log_file}
