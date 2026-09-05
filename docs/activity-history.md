@@ -1,5 +1,36 @@
 # Activity History
 
+## 2026-09-06 — stage 9 SDMX migration: corpus swap executed and verified live
+
+The maintainer ran the swap Phase C stopped short of: `9-csv-to-parquet.py`
+(no `--out-dir`, i.e. straight at the live corpus) against all 1,912
+matrices with a source CSV. Matches the shadow run exactly —
+**Processed: 1,910, Errors: 2 (EXP101F/EXP102F, header-only CSVs), Kept
+legacy: 26** — and this time `unmapped_labels` was written for real: 224
+rows across 20 matrices.
+
+Post-swap verification (dev server started fresh, no lock conflict since
+nothing else was writing):
+
+- `data/corpus/parquet/`: 1,910 files newer than the spec doc, 4,392 total
+  (unchanged count includes untouched split children). Spot-checked
+  `TUR104C`/`TRN113A`/`ART101C`/`AGR208A`: 0 NULLs, correct row counts.
+- `unmapped_labels` table populated and readable; top entries match the
+  report's predictions exactly (`INT112A`/`INT112B`'s "An creare 2022/2023"
+  time phrasing, 216 rows each).
+- Smoke test via the running app: `/api/datasets/{code}` meta (200),
+  every composed tile's `/data` query (200), `/insights` (200) for
+  `TUR104C`, `TRN113A`, `AGR208A`, and `CON103J` (the one with no parquet
+  in the corpus at all before this migration — now fully served).
+  `TUR104C`'s `/data` response confirmed the actual bug fix end to end:
+  all 6 tourist destinations returned with commas intact, e.g. "Statiuni
+  din zona litorala, exclusiv orasul Constanta" — this is the literal
+  response a browser chart consumes, not just a parquet-level check.
+
+No further action needed. `docs/reports/stage9-sdmx-migration.md`'s
+verification stands as the pre-swap evidence; this entry is the post-swap
+confirmation that production matches it.
+
 ## 2026-09-05b — stage 9 SDMX migration, Phase D (pipeline wiring, code only)
 
 Closed out `docs/stage9-sdmx-migration-spec.md` (Phases A–C in the entry
