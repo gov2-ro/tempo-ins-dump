@@ -1,5 +1,62 @@
 # Activity History
 
+## 2026-09-06b — 12-split-datasets.py broke on the new canonical corpus, fixed
+
+Running `12-split-datasets.py` with no `--matrix` (a full/global run) against
+the post-swap corpus deleted all 300 existing split-child entries
+(`clean_previous_splits`' unscoped branch) and then failed to regenerate
+almost all of them — `PPA101A -> PPA101A_anual_lei_fir_judet: Parser Error:
+syntax error at or near ")"`, `"localitati_nom_id" IN ()`, repeated for
+every multi-dimension split attempted.
+
+Root cause: `split_parquet_cross_product` (used whenever a matrix needs
+splitting on *multiple* dimensions at once — the single-dimension path,
+`split_parquet_by_filter`, already had a working canonical-parquet branch)
+hardcoded `PARQUET_V2_DIR` and built its WHERE clause from raw
+`nom_item_id` integers. The new canonical parquet has neither that column
+name nor those integer values, so every group's id list came back empty —
+an `IN ()`, which is a SQL syntax error, not a runtime one. Exactly the
+`12-split-datasets.py`-must-be-repointed-first dependency the migration
+spec flagged and explicitly left out of scope, now unavoidable now that the
+corpus really is canonical.
+
+**Data safety**: parent matrices were never at risk —
+`clean_previous_splits` only deletes split-child rows/dims, never parents —
+so this was a *temporary unavailability* of derived datasets, not a loss of
+source data. Confirmed via `PPA101A`/`AGR202B`'s parent parquets and DB rows
+being fully intact throughout.
+
+Fix: mirrored `split_parquet_by_filter`'s v3-aware branch into
+`split_parquet_cross_product` — prefer the canonical parquet, translate
+`nom_item_id`s to SDMX string values via the existing `_nom_ids_to_sdmx()`,
+`CAST(...AS VARCHAR) IN (...)` on the SDMX column name directly, same as
+the single-rule path already did. Verified on `ACC102B`
+(multi_um+geo_hierarchy, previously failing) before trusting a full run:
+6 sub-datasets, 5,980 rows, 0 errors.
+
+Found a second, smaller, **pre-existing** gap while diagnosing this: 7
+matrices (`AGR202B`, `PPA101A`, `POP107D`, `POP108D`, `SOM101E`, `SOM101F`,
+`LOC108B`) combine a "hierarchy" pattern (Judete+Localitati, which
+`detect_hierarchy()` deliberately leaves with empty `option_ids` — it's
+meant to be filtered row-level, via a dedicated `_split_hierarchy()`
+function the single-rule path already calls) with another pattern. The
+cross-product path has no row-level branch, so these still abort with "0
+combo(s) produced data" — this predates the SDMX migration entirely (the
+same empty-`option_ids`-in-cross-product bug would have fired against the
+old v2 parquets too) and is a separate, smaller fix. Filed in
+`docs/BACKLOG.md`, not attempted here.
+
+Full corpus-wide re-run after the fix: **2,141 sub-datasets across 733
+distinct parents, 22,227,984 rows, 0 unexpected errors** — every failure
+accounted for: the 7 hierarchy-combo matrices above, the 2 empty-CSV
+matrices from the stage-9 work (`EXP101F`/`EXP102F`), 2 matrices with no
+parquet in *either* format (`LMV101E`/`LMV102E` — no CSV was ever fetched
+for them, unrelated to this incident), and 4 matrices whose cross-product
+only produced one non-empty combo (`BUF108J/111J/114J/115J` — likely
+genuinely sparse data, noted for a follow-up look). Smoke-tested
+`ACC102B_judete_numar_persoane` end to end through the running app: 200,
+correct canonical columns, real data.
+
 ## 2026-09-06 — stage 9 SDMX migration: corpus swap executed and verified live
 
 The maintainer ran the swap Phase C stopped short of: `9-csv-to-parquet.py`
