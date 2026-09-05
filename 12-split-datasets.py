@@ -506,10 +506,19 @@ _PATTERN_ORDER = [
 def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bool = False) -> list[dict]:
     """Split a parquet on multiple dimensions simultaneously (cross-product).
 
+    Prefers the canonical v3 (SDMX) source, same as split_parquet_by_filter —
+    falls back to parquet-v2 only when no v3 file exists yet. See that
+    function's v3 branch for the pattern this mirrors: split_dimension is
+    already the SDMX column name in v3, and group.option_ids (nom_item_ids)
+    must be translated to SDMX string values before they can appear in a
+    v3 WHERE clause.
+
     Returns list of dicts with keys: sub_code, path, row_count, combo, rules.
     """
-    # Use parquet-v2 (integer IDs)
-    src = PARQUET_V2_DIR / f"{matrix_code}.parquet"
+    v3_src = PARQUET_V3_DIR / f"{matrix_code}.parquet"
+    v2_src = PARQUET_V2_DIR / f"{matrix_code}.parquet"
+    src = v3_src if v3_src.exists() else v2_src
+    is_src_v3 = (src == v3_src)
     if not src.exists():
         logger.warning(f"Parquet not found: {src}")
         return []
@@ -528,6 +537,13 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
     combos = list(iterproduct(*[rule.groups for rule in sorted_rules]))
     logger.debug(f"  Cross-product: {' × '.join(str(len(r.groups)) for r in sorted_rules)} = {len(combos)} sub-datasets")
 
+    if not is_src_v3:
+        # v2 source: map SDMX names → actual v2 parquet column names
+        sdmx_map = _sdmx_to_v2_col_map(conn, matrix_code, src)
+        col_types = {r[0]: r[1] for r in conn.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{src}')"
+        ).fetchall()}
+
     seen_codes = {}  # track duplicate sub_codes
     for combo in combos:
         suffix = "_".join(g.label for g in combo)
@@ -538,7 +554,7 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
             sub_code = f"{sub_code}_{seen_codes[sub_code]}"
         else:
             seen_codes[sub_code] = 1
-        dst = PARQUET_V2_DIR / f"{sub_code}.parquet"
+        dst = (PARQUET_V3_DIR if is_src_v3 else PARQUET_V2_DIR) / f"{sub_code}.parquet"
 
         if dry_run:
             logger.info(f"  [DRY-RUN] {matrix_code} -> {sub_code}")
@@ -549,28 +565,45 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
             continue
 
         all_cols = _get_parquet_columns(conn, src)
-        # Map SDMX names → actual v2 parquet column names
-        sdmx_map = _sdmx_to_v2_col_map(conn, matrix_code, src)
-        mapped_drop = {sdmx_map.get(c, c) for c in all_drop_cols}
-        keep_cols = [c for c in all_cols if c not in mapped_drop]
+        if is_src_v3:
+            keep_cols = [c for c in all_cols if c not in all_drop_cols]
+        else:
+            mapped_drop = {sdmx_map.get(c, c) for c in all_drop_cols}
+            keep_cols = [c for c in all_cols if c not in mapped_drop]
         select = ", ".join(f'"{c}"' for c in keep_cols)
 
-        col_types = {r[0]: r[1] for r in conn.execute(
-            f"DESCRIBE SELECT * FROM read_parquet('{src}')"
-        ).fetchall()}
-
         where_parts = []
+        skip = False
         for rule, group in zip(sorted_rules, combo):
-            split_col = sdmx_map.get(rule.split_dimension, rule.split_dimension)
-            split_col_type = col_types.get(split_col, "INTEGER")
-
-            if split_col_type == "VARCHAR" and group.option_labels:
-                labels = [l.strip() for l in group.option_labels.values()]
-                ids_str = ",".join(f"'{l.replace(chr(39), chr(39)+chr(39))}'" for l in labels)
-                where_parts.append(f'TRIM("{split_col}") IN ({ids_str})')
+            if is_src_v3:
+                # v3: split_dimension is already the SDMX column name;
+                # translate nom_item_ids → SDMX string values.
+                split_col = rule.split_dimension
+                sdmx_values = _nom_ids_to_sdmx(conn, group.option_ids)
+                if not sdmx_values:
+                    logger.warning(f"  No SDMX values found for {matrix_code}/{group.label} ({split_col})")
+                    skip = True
+                    break
+                ids_str = ", ".join(f"'{v.replace(chr(39), chr(39)*2)}'" for v in sdmx_values)
+                where_parts.append(f'CAST("{split_col}" AS VARCHAR) IN ({ids_str})')
             else:
-                ids_str = ",".join(str(i) for i in group.option_ids)
-                where_parts.append(f'"{split_col}" IN ({ids_str})')
+                split_col = sdmx_map.get(rule.split_dimension, rule.split_dimension)
+                split_col_type = col_types.get(split_col, "INTEGER")
+
+                if split_col_type == "VARCHAR" and group.option_labels:
+                    labels = [l.strip() for l in group.option_labels.values()]
+                    ids_str = ",".join(f"'{l.replace(chr(39), chr(39)+chr(39))}'" for l in labels)
+                    where_parts.append(f'TRIM("{split_col}") IN ({ids_str})')
+                else:
+                    if not group.option_ids:
+                        logger.warning(f"  No option_ids for {matrix_code}/{group.label} ({split_col})")
+                        skip = True
+                        break
+                    ids_str = ",".join(str(i) for i in group.option_ids)
+                    where_parts.append(f'"{split_col}" IN ({ids_str})')
+
+        if skip:
+            continue
 
         where_clause = " AND ".join(where_parts)
         query = f"""
