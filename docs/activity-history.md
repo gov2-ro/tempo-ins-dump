@@ -1,5 +1,65 @@
 # Activity History
 
+## 2026-09-06d — hierarchy-pattern cross-product fix + root cause of the "non-determinism"
+
+Followed up on the two backlog items from the entries below.
+
+**Hierarchy pattern in cross-product** (`12-split-datasets.py`): the 7
+matrices combining `detect_hierarchy()`'s pattern with another (`AGR202B`,
+`PPA101A`, `POP107D`, `POP108D`, `SOM101E`, `SOM101F`, `LOC108B`) always
+failed with "0 combo(s) produced data" — `detect_hierarchy()` deliberately
+builds its `SplitGroup`s with empty `option_ids` (the county/locality
+choice is a row-level column-projection decision — drop the locality
+column + `DISTINCT` for "judet", keep everything for "localitate" — not a
+value filter; `_split_hierarchy()` already implements this for the
+single-rule path), but `split_parquet_cross_product` only knew value-`IN`
+filtering. Fixed: when a combo's rule is pattern `"hierarchy"`, skip the
+value-filter branch and instead adjust the `SELECT` projection after the
+loop, mirroring `_split_hierarchy()` exactly. Verified on all 7 (POP107D:
+33.2M rows across its 4 children, 1.9s) plus smoke-tested
+`PPA101A_lunar_lei_litru_judet` through the running app. Also checked the
+4 `BUF*J` "only 1 combo" cases while in there — confirmed genuinely sparse
+data (3 of 4 geo×time combinations truly have zero rows), not a bug.
+
+Found, but did **not** fix (pre-existing, unrelated, needs a product
+decision): the "judet" split doesn't actually aggregate to county totals —
+`_split_hierarchy()`'s `DISTINCT` rarely collapses anything because the
+same (product, county, time) combination has a *different* OBS_VALUE per
+locality in the source data. Confirmed on `AGR101B_judet`, completely
+untouched by this fix: 2,416 of 2,431 dimension-combos have more than one
+distinct value. Filed in `docs/BACKLOG.md`.
+
+**Root cause of the "detect_all() non-determinism"** (2026-09-06c below):
+it wasn't timing-sensitive non-determinism at all. Split children inherit
+their parent's full dimension metadata (`_copy_dimensions`/
+`_copy_dimensions_multi`), so a pattern detector with no `is_split` guard
+can re-match a child — e.g. a `_localitate` child, which still carries
+"judet"+"localitate"-labeled dimensions — as if it were a fresh parent.
+`detect_geo_hierarchy()` and `detect_mixed_time_granularity()` already
+filtered `matrices.is_split`; `detect_multi_um()`, `detect_mixed_metrics()`,
+`detect_slash_dims()`, and `detect_hierarchy()` didn't. The re-matched
+child's file gets written, then registration fails ("Parent matrix
+X_localitate not found" — `clean_previous_splits()` already deleted it),
+leaving an orphaned, unregistered parquet every single run.
+
+Fixed once, centrally, in `detect_all()` rather than patching four
+separate queries: exclude any rule whose `matrix_code` is currently
+`is_split=TRUE` before returning. Verified: a full run's own counters
+(previously off by 100+ every time) now agree exactly — "Sub-datasets
+created: 2183" == "dataset_splits rows: 2183" — with zero "Parent matrix
+... not found" warnings.
+
+**Cleanup**: deleted 190 leftover orphans from before this fix (same
+double-suffix naming as the 2026-09-06c incident, confirmed unreferenced)
+and 19 pre-existing 0-row orphans unrelated to any of tonight's changes —
+`split_parquet_by_filter` has no cleanup step for a genuinely-empty result,
+unlike `split_parquet_cross_product` which already deletes 0-row combos.
+Filed in `docs/BACKLOG.md` as a minor, separate hygiene gap.
+
+Final state: **2,183 split children across 740 parents**, `matrices`
+count == `dataset_splits` count, no duplicate `sub_matrix_code`s, all 38
+tests passing, smoke-tested through the running app.
+
 ## 2026-09-06c — cleaned up 167 orphaned parquet files from a re-run
 
 A second global `12-split-datasets.py` run (right after the fix in the
