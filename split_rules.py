@@ -660,6 +660,25 @@ def detect_all(conn) -> list[SplitRule]:
     mixed_metrics = [r for r in mixed_metrics if r.matrix_code not in multi_um_codes]
 
     all_rules = multi_um + mixed_metrics + slash_dims + hierarchy + age_gran + geo_hier + mixed_time
+
+    # Split children inherit their parent's dimension metadata (_copy_dimensions*),
+    # so a detector with no is_split guard of its own can re-match a child as if
+    # it were a fresh parent — e.g. detect_hierarchy() has no such guard, so a
+    # "_localitate" child (itself carrying "judet"+"localitate"-labeled dims)
+    # gets treated as a new hierarchy candidate. Its file gets written, but
+    # register_*_sub_dataset() then fails ("Parent matrix X_localitate not
+    # found") because clean_previous_splits() already deleted it — an orphaned
+    # parquet with no DB row. Only detect_geo_hierarchy/detect_mixed_time_
+    # granularity guard against this themselves; enforce it once, centrally,
+    # for every detector instead of patching each query individually.
+    split_codes = {r[0] for r in conn.execute(
+        "SELECT matrix_code FROM matrices WHERE is_split").fetchall()}
+    if split_codes:
+        before = len(all_rules)
+        all_rules = [r for r in all_rules if r.matrix_code not in split_codes]
+        if before != len(all_rules):
+            logger.debug(f"  Excluded {before - len(all_rules)} rule(s) matching already-split children")
+
     total_datasets = len(set(r.matrix_code for r in all_rules))
     logger.debug(f"Total split rules: {len(all_rules)} across {total_datasets} datasets")
     return all_rules
