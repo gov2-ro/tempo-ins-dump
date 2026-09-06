@@ -570,11 +570,19 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
         else:
             mapped_drop = {sdmx_map.get(c, c) for c in all_drop_cols}
             keep_cols = [c for c in all_cols if c not in mapped_drop]
-        select = ", ".join(f'"{c}"' for c in keep_cols)
 
         where_parts = []
         skip = False
+        # "hierarchy" groups carry no option_ids/labels — they're a row-level
+        # column-projection choice (county view vs locality view), not a
+        # value filter. See _split_hierarchy(), which the single-rule path
+        # already uses; resolved after the loop, once we know which combo
+        # member (if any) is the hierarchy one.
+        hierarchy_rule = hierarchy_group = None
         for rule, group in zip(sorted_rules, combo):
+            if rule.pattern == "hierarchy":
+                hierarchy_rule, hierarchy_group = rule, group
+                continue
             if is_src_v3:
                 # v3: split_dimension is already the SDMX column name;
                 # translate nom_item_ids → SDMX string values.
@@ -605,10 +613,24 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
         if skip:
             continue
 
-        where_clause = " AND ".join(where_parts)
+        distinct = ""
+        if hierarchy_group is not None:
+            locality_col = (hierarchy_rule.split_dimension if is_src_v3
+                             else sdmx_map.get(hierarchy_rule.split_dimension, hierarchy_rule.split_dimension))
+            if hierarchy_group.label == "judet":
+                # County view: locality column dropped, so rows that only
+                # differed by locality collapse — dedupe, same as
+                # _split_hierarchy's single-rule county branch.
+                keep_cols = [c for c in keep_cols if c != locality_col]
+                distinct = "DISTINCT "
+            # else "localitate": keep every column, no distinct — the parent
+            # data is already locality-grained.
+
+        select = ", ".join(f'"{c}"' for c in keep_cols)
+        where_clause = " AND ".join(where_parts) if where_parts else "TRUE"
         query = f"""
             COPY (
-                SELECT {select}
+                SELECT {distinct}{select}
                 FROM read_parquet('{src}')
                 WHERE {where_clause}
             ) TO '{dst}' (FORMAT PARQUET, COMPRESSION '{PARQUET_COMPRESSION}')
