@@ -1,5 +1,32 @@
 # Activity History
 
+## 2026-09-06c — cleaned up 167 orphaned parquet files from a re-run
+
+A second global `12-split-datasets.py` run (right after the fix in the
+entry below) printed "Sub-datasets created: 2289" but `dataset_splits`
+only held 2141 rows afterward — the same count as the run before it.
+Traced the gap: 167 parquet files on disk, all named with a *double*
+suffix (`AGR101B_localitate_judet.parquet` — only a cross-product combo
+produces that shape), timestamped exactly within that run's window, with
+no corresponding `matrices`/`dataset_splits` row.
+
+Reproduced directly: `--matrix AGR101B` alone matches exactly **one**
+"hierarchy" rule today (clean single-suffix output, `AGR101B_judet`/
+`AGR101B_localitate`, 287,782 rows, registers fine) — but the double-suffix
+orphans require *two* rules combining into a cross-product. `detect_all()`
+(in `split_rules.py`) queries live `dimensions`/`matrices.is_split` state,
+and nothing guards against that state shifting between one invocation's
+detection pass and a fast repeated global run's writes — a real
+non-determinism, but the files it produced were simply never registered,
+so nothing was lost or served incorrectly. Confirmed: no duplicate
+`sub_matrix_code`s, `matrices` count == `dataset_splits` count (2141 both),
+`ACC102B` still serves correctly through the app.
+
+Deleted the 167 confirmed orphans (unreferenced by any DB row, verified
+before deleting) to keep `data/corpus/parquet/` matching what's actually
+registered. Filed the underlying non-determinism in `docs/BACKLOG.md` —
+not chased further tonight, no correctness impact found.
+
 ## 2026-09-06b — 12-split-datasets.py broke on the new canonical corpus, fixed
 
 Running `12-split-datasets.py` with no `--matrix` (a full/global run) against
