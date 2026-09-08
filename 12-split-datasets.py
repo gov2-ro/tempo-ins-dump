@@ -254,6 +254,16 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> lis
                 logger.warning(f"  Deleted: {p.name}")
         return []
 
+    # Clean up 0-row parquet files — main() skips registering these (they're
+    # counted as errors, not silently dropped from `results`), but nothing
+    # removed the file itself, unlike split_parquet_cross_product's
+    # equivalent step. Left them as permanent, unregistered orphans.
+    for r in results:
+        if r["row_count"] == 0:
+            p = Path(r["path"])
+            if p.exists():
+                p.unlink()
+
     return results
 
 
