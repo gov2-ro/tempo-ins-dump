@@ -1,5 +1,13 @@
 # Activity History
 
+## 2026-09-08 — split_parquet_by_filter 0-row cleanup
+
+Small follow-up from the 2026-09-06 split work: `split_parquet_by_filter`
+had no cleanup for a 0-row group's output file (`split_parquet_cross_product`
+already had this). Added the same delete step. Verified on `FOM107A`
+(`FOM107A_macroregiuni` no longer left on disk; `FOM107A_judete`/
+`FOM107A_regiuni` still register normally, `dataset_splits` unchanged).
+
 ## 2026-09-06d — hierarchy-pattern cross-product fix + root cause of the "non-determinism"
 
 Followed up on the two backlog items from the entries below.
