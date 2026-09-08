@@ -1,5 +1,61 @@
 # Activity History
 
+## 2026-09-08b — sdmx_column_map backfill for the 26 legacy-shaped matrices
+
+Closed the last open item from the stage-9 SDMX migration.
+
+**Root cause was simpler than expected**: `dimension_options_parsed` already
+had classifications for all 26 matrices — they'd just never been through
+`11-build-sdmx-codes.py` since their metadata was imported. Not a
+classification gap.
+
+**A full rebuild would have been destructive, though.** Checked before
+running anything: `dimensions.dim_column_name` is already SDMX-style for
+~2058 of ~2219 matrices (some untracked historical process converted it at
+some point — never found what). `build_sdmx_column_map()` treats current
+`dim_column_name` as the "old" name to map from; re-running it fresh would
+have produced garbage self-mappings (`REF_AREA -> REF_AREA`) for those
+2058, silently destroying their real `*_nom_id -> SDMX` mappings — 8,396 of
+a freshly-computed table's keys would have vanished from the live one,
+1,888 of them for canonical (non-split) matrices. This is now the reason
+recorded in `docs/BACKLOG.md` for never running that rebuild casually
+again.
+
+**Fix**: computed the same `build_sdmx_column_map()` output, filtered to
+just the 26 target matrices (confirmed zero pre-existing rows for any of
+them first), `INSERT`ed only those 123 rows. Purely additive — the live
+table's other 10,683 rows untouched, verified. Tested all 26 through
+`9-csv-to-parquet.py` into a shadow dir (0% unmatched, 0 NULLs) before
+copying into the live corpus.
+
+**Second bug found while verifying**: 3 of the 26 (`CON103J`, `PMI115C`,
+`SAR107B`) have split children. Re-splitting them broke — DuckDB refused a
+plain `UPDATE` on their `dimensions` rows ("still referenced by a foreign
+key in a different table" — a real, non-obvious DuckDB limitation: any row
+with `dimension_options` children can't be updated in place at all, not
+just its primary key), so `dimensions.dim_column_name` stayed the
+pre-backfill raw `*_nom_id` name while the parquet itself was now
+canonical. `dataset_meta.py`/`dashboard_composer.py` already reconcile
+this transparently (confirmed — the app served all three fine throughout),
+but `split_rules.py`'s detectors read `dim_column_name` directly and
+don't. Fixed properly: added `_resolve_v3_column()` (look a stale name up
+in `sdmx_column_map`, which the backfill above made current, before
+trusting it) and wired it into both split-executor functions —
+`split_dimension`, `drop_columns`, and `_split_hierarchy`'s
+`locality_col` — the same "resolve past a stale recorded name" pattern
+`9-csv-to-parquet.py` already uses for the "Ani"/"Perioade" label drift.
+
+Full corpus split re-run afterward: 2,183 sub-datasets, counters agree
+exactly, 0 new orphans — confirms the fix didn't regress anything else.
+Smoke-tested all 3 previously-broken parents plus two of their children
+through the running app.
+
+One residual, unrelated gap found and left alone: `ART124A` keeps 2
+non-canonical dimension names (`FILME`/`TIPURI_DE_FILME`) because those
+two dimensions were never classified by `10-classify-dimensions.py` in the
+first place (zero rows in `dimension_options_parsed`) — a different,
+smaller gap than the one this backfill closed. Filed in `docs/BACKLOG.md`.
+
 ## 2026-09-08 — split_parquet_by_filter 0-row cleanup
 
 Small follow-up from the 2026-09-06 split work: `split_parquet_by_filter`
