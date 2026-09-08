@@ -141,6 +141,30 @@ def _nom_ids_to_sdmx(conn, nom_ids: list) -> list:
     return [r[0] for r in rows if r[0] is not None]
 
 
+def _resolve_v3_column(conn, matrix_code: str, name: str, dim_cols: list) -> str:
+    """Resolve a split rule's column name (split_dimension, or a drop_columns
+    entry) against a v3 parquet's actual columns.
+
+    dimensions.dim_column_name — where split_rules.py's detectors read
+    split_dimension/drop_columns from — can be stale (still the raw
+    *_nom_id name) for a matrix whose sdmx_column_map coverage was added
+    after its dimensions rows were last written (e.g. the 2026-09-08
+    backfill for 26 matrices with zero coverage: their parquet is now
+    canonical SDMX, but nothing rewrote dimensions.dim_column_name to
+    match — DuckDB's FK from dimension_options blocks a plain UPDATE on
+    that row, see docs/BACKLOG.md). sdmx_column_map itself is current
+    (that's what the backfill added), so look the stale name up there —
+    the same mechanism 9-csv-to-parquet.py's resolve_column_names() uses.
+    """
+    if name in dim_cols:
+        return name
+    row = conn.execute(
+        "SELECT sdmx_column_name FROM sdmx_column_map WHERE matrix_code = ? AND old_column_name = ?",
+        [matrix_code, name]
+    ).fetchone()
+    return row[0] if row else name
+
+
 def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> list[dict]:
     """Split a parquet file based on a SplitRule. Returns list of sub-dataset info dicts."""
     # Prefer v3 SDMX source if available; fall back to v2
@@ -154,6 +178,11 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> lis
 
     results = []
     split_col = rule.split_dimension
+    drop_cols = rule.drop_columns
+    if is_src_v3:
+        v3_dim_cols = [c for c in _get_parquet_columns(conn, src) if c != 'OBS_VALUE']
+        split_col = _resolve_v3_column(conn, rule.matrix_code, rule.split_dimension, v3_dim_cols)
+        drop_cols = [_resolve_v3_column(conn, rule.matrix_code, c, v3_dim_cols) for c in rule.drop_columns]
 
     # Deduplicate suffixes to avoid filename collisions
     seen_suffixes = {}
@@ -192,7 +221,7 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> lis
                 ids_str = ", ".join(f"'{v.replace(chr(39), chr(39)*2)}'" for v in sdmx_values)
                 where_clause = f'CAST("{split_col}" AS VARCHAR) IN ({ids_str})'
                 all_cols = _get_parquet_columns(conn, src)
-                keep_cols = [c for c in all_cols if c not in rule.drop_columns]
+                keep_cols = [c for c in all_cols if c not in drop_cols]
                 select = ", ".join(f'"{c}"' for c in keep_cols)
             else:
                 # V2 source: map SDMX names → actual v2 parquet column names
@@ -276,9 +305,14 @@ def _split_hierarchy(conn, src: Path, dst: Path, rule: SplitRule, group: SplitGr
     """).fetchall()
 
     all_cols = _get_parquet_columns(conn, src)
-    # Map SDMX name → actual v2 parquet column name
-    sdmx_map = _sdmx_to_v2_col_map(conn, rule.matrix_code, src)
-    locality_col = sdmx_map.get(rule.split_dimension, rule.split_dimension)
+    # Map SDMX name → actual parquet column name (v2 raw name, or a v3
+    # column when dimensions.dim_column_name is stale — see
+    # _resolve_v3_column's docstring).
+    dim_cols_no_value = [c for c in all_cols if c not in ('value', 'OBS_VALUE')]
+    locality_col = _resolve_v3_column(conn, rule.matrix_code, rule.split_dimension, dim_cols_no_value)
+    if locality_col not in all_cols:
+        sdmx_map = _sdmx_to_v2_col_map(conn, rule.matrix_code, src)
+        locality_col = sdmx_map.get(rule.split_dimension, rule.split_dimension)
 
     if group.label == "judet":
         # County level: exclude locality column entirely
@@ -576,7 +610,9 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
 
         all_cols = _get_parquet_columns(conn, src)
         if is_src_v3:
-            keep_cols = [c for c in all_cols if c not in all_drop_cols]
+            v3_dim_cols = [c for c in all_cols if c != 'OBS_VALUE']
+            resolved_drop = {_resolve_v3_column(conn, matrix_code, c, v3_dim_cols) for c in all_drop_cols}
+            keep_cols = [c for c in all_cols if c not in resolved_drop]
         else:
             mapped_drop = {sdmx_map.get(c, c) for c in all_drop_cols}
             keep_cols = [c for c in all_cols if c not in mapped_drop]
@@ -594,9 +630,11 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
                 hierarchy_rule, hierarchy_group = rule, group
                 continue
             if is_src_v3:
-                # v3: split_dimension is already the SDMX column name;
-                # translate nom_item_ids → SDMX string values.
-                split_col = rule.split_dimension
+                # v3: split_dimension is usually already the SDMX column
+                # name; resolve it when dimensions.dim_column_name is stale
+                # (see _resolve_v3_column). Then translate nom_item_ids →
+                # SDMX string values.
+                split_col = _resolve_v3_column(conn, matrix_code, rule.split_dimension, v3_dim_cols)
                 sdmx_values = _nom_ids_to_sdmx(conn, group.option_ids)
                 if not sdmx_values:
                     logger.warning(f"  No SDMX values found for {matrix_code}/{group.label} ({split_col})")
@@ -625,7 +663,7 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
 
         distinct = ""
         if hierarchy_group is not None:
-            locality_col = (hierarchy_rule.split_dimension if is_src_v3
+            locality_col = (_resolve_v3_column(conn, matrix_code, hierarchy_rule.split_dimension, v3_dim_cols) if is_src_v3
                              else sdmx_map.get(hierarchy_rule.split_dimension, hierarchy_rule.split_dimension))
             if hierarchy_group.label == "judet":
                 # County view: locality column dropped, so rows that only
