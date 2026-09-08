@@ -144,7 +144,7 @@ data/
   parquet-v2/ro/           Parquet v2 (numeric IDs) — dead since 2026-09-05 (stage 9 no longer
                            reads it); still read by 12-split-datasets.py for v2-sourced splits
   corpus/                  ← used by app
-    parquet/               Canonical SDMX parquet files — 3,706 files
+    parquet/               Canonical SDMX parquet files — 4,102 (1,919 top-level + 2,183 splits)
     metadata.duckdb        Main DuckDB metadata (16 tables)
     search.duckdb          Search index DB
     view-profiles/         Per-dataset JSON view profiles — 3,523 files

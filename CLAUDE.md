@@ -154,7 +154,7 @@ data/
   corpus/
     metadata.duckdb          Main DuckDB metadata (17 tables)
     search.duckdb            Search index DB
-    parquet/                 SDMX-native canonical parquets — 3,706 files
+    parquet/                 SDMX-native canonical parquets — 4,102 (1,919 top-level + 2,183 splits)
     view-profiles/           Per-dataset JSON view profiles — 3,523 files
   eval/                      Eval baselines (chart_selector, agent_search)
 
@@ -174,7 +174,7 @@ data/
 - **Backend**: FastAPI + DuckDB + Parquet
 - **Frontend**: Vanilla HTML5/CSS3/JS (ES6+), ECharts for visualization
 - **Database**: DuckDB (17 tables in `corpus/metadata.duckdb`)
-- **Data**: Parquet files (SDMX-native, 3,706 canonical files in `corpus/parquet/`)
+- **Data**: Parquet files (SDMX-native, 4,102 files in `corpus/parquet/` — 1,919 top-level + 2,183 split children)
 - **GeoJSON**: County/region/macroregion polygons for choropleth maps
 - **Deployment**: Docker + Fly.io (also Oracle Cloud, HF Spaces)
 
