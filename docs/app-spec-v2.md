@@ -1,5 +1,10 @@
 # INS TEMPO Data Explorer v2 — Application Specification
 
+> Historical design/reference. Paths, counts, thresholds and implementation status
+> below may describe earlier generations. Use [CURRENT_STATE.md](CURRENT_STATE.md)
+> for current operation and [fixes/README.md](fixes/README.md) for accepted remediation
+> scope. Actual code/schema and verified tests take precedence over these examples.
+
 ## 1. Design Philosophy
 
 The v1 app is a competent search-and-drill portal: pick a category, find a dataset, view a chart. The v2 redesign exploits the enriched metadata pipeline to make the app **discovery-first**. The key insight: we now know *what the data looks like* (trends, coverage, value profiles) before the user opens it. That lets us surface signals, not just listings.

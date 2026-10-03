@@ -1,5 +1,10 @@
 # Dashboard Audit — Charts, Filters, Views & Slices (2026-07)
 
+> Historical July audit. Subsequent phases fixed several gaps listed below;
+> consult [activity-history.md](activity-history.md), [CURRENT_STATE.md](CURRENT_STATE.md)
+> and [fixes/README.md](fixes/README.md) for current status. “Fixed” here records
+> the July change, not a blanket guarantee that all aggregation paths are correct.
+
 Audit of how each dataset presents charts + filters, and the roadmap that came
 out of it: evolve the dataset page from "a chart with dropdowns" into a
 **perspectives surface** — for every dataset shape, the viewer is offered the

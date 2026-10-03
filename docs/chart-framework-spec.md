@@ -1,5 +1,10 @@
 # Generic Statistical Data Visualization Framework
 
+> Historical design/reference. Paths, counts, thresholds and implementation status
+> below may describe earlier generations. Use [CURRENT_STATE.md](CURRENT_STATE.md)
+> for current operation and [fixes/README.md](fixes/README.md) for accepted remediation
+> scope. Actual code/schema and verified tests take precedence over these examples.
+
 ## Context
 
 The current INS TEMPO Explorer has 4 hardcoded archetypes (`time_series`, `geo_time`, `demographic`, `time_residence`) mapped to specific chart types in `app/services/chart_config.py`. This works for Romanian INS data but cannot handle Eurostat, OECD, or arbitrary SDMX-like statistical datasets without adding more archetypes — a pattern that doesn't scale.

@@ -4,10 +4,12 @@ Folosit și de [geo-spatial.org Data Hub](https://services.geo-spatial.org/datah
 
 _INS Tempo Online but make it nice._
 
-![prima pagină](docs/misc/screenshots/landing.png)
-![dataset](docs/misc/screenshots/dataset.png)
+📋 [Backlog](docs/BACKLOG.md) · 📅 [Activity History](docs/activity-history.md) · 🤖 [LLMs.txt](https://ins.gov2.ro/llms.txt)
 
-📋 [Backlog](docs/backlog.md) · 📅 [Activity History](docs/activity-history.md) · 🤖 [LLMs.txt](https://ins.gov2.ro/llms.txt)
+Current architecture/runbook: [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md).
+Agent-ready remediation packages: [docs/fixes/README.md](docs/fixes/README.md).
+The 2026-10-03 audit found unresolved aggregation, API safety and export issues;
+see the prioritized backlog before relying on derived totals or full downloads.
 
 -----
 
@@ -27,7 +29,7 @@ FastAPI backend with DuckDB + Parquet, Vanilla JS + ECharts frontend.
 ```
 app/
   main.py             — FastAPI entry, mounts API routers + static files
-  config.py           — DB_PATH, PARQUET_DIR (v3), MAX_DATA_ROWS=50000
+  config.py           — DB_PATH, PARQUET_DIR (corpus/parquet), MAX_DATA_ROWS=50000
   db.py               — DuckDB cursor-per-request (concurrency-safe)
   routers/            — /api/categories, /api/datasets, /api/datasets/{id}/data, /api/datasets/{id}/download, /sdmx/
 ```
@@ -42,7 +44,9 @@ The app exposes a minimal SDMX 2.1 REST API (agency `INS`) compatible with sdmxt
 | `GET /sdmx/2.1/datastructure/INS/{flow}/1.0` | DataStructure Definition (DSD) XML with codelists |
 | `GET /sdmx/2.1/dataflow/INS/{flow}/1.0` | Dataflow definition XML |
 
-Example: `/sdmx/2.1/data/INS,ACC102B/..` returns all observations for dataset `ACC102B`.
+Example: `/sdmx/2.1/data/INS,ACC102B` requests observations for dataset `ACC102B`.
+The current endpoint silently caps results at 50,000 observations; see
+[SDMX limitations](docs/SDMX-API.md) and [complete-export spec](docs/fixes/04-complete-exports.md).
 
 ```
   services/           — dataset_search, dataset_meta, chart_selector, query_builder, agent, headlines, llm_client
@@ -54,7 +58,12 @@ Example: `/sdmx/2.1/data/INS,ACC102B/..` returns all observations for dataset `A
 
 ## Pipeline Scripts
 
-Sequential data pipeline — run in order. All scripts accept `--lang ro|en` (default: `ro`).
+Script numbers are historical, **not execution order**: import metadata → classify
+dimensions → build stage-11 SDMX mappings → stage-9 conversion → split/profile.
+Fetching scripts accept `--lang`; other scripts have different options and/or
+use `TEMPO_LANG`. Canonical output is shared across languages; the incremental
+`--lang en` path is not a verified safe refresh. See [CURRENT_STATE.md](docs/CURRENT_STATE.md)
+and [BILINGUAL.md](docs/BILINGUAL.md) before running writers.
 
 | # | Script | Output | Description |
 |---|---|---|---|
@@ -90,7 +99,11 @@ python update-pipeline.py --force-meta           # with --skip-existing, still r
 python update-pipeline.py --dry-run              # preview without executing
 ```
 
-Per-matrix steps: fetch metadata JSON → download CSV → convert to parquet → SDMX transform → split if needed → view profile. After all matrices: rebuild meta index, sync `ultima_actualizare` dates to DuckDB. Saves `data/logs/last-pipeline-run.txt` on completion — used as auto `--since` on next run.
+Current per-matrix steps: metadata → CSV → canonical SDMX parquet → split →
+dimension structure → view profile. Afterwards: meta index/import and date sync.
+It does not reliably refresh changed dimension mappings or all derived metadata,
+and may save `data/logs/last-pipeline-run.txt` despite failures. These are open
+[FIX-03](docs/fixes/03-pipeline-and-corpus.md) requirements, not success guarantees.
 
 ### Other root-level scripts
 
@@ -144,10 +157,10 @@ data/
   parquet-v2/ro/           Parquet v2 (numeric IDs) — dead since 2026-09-05 (stage 9 no longer
                            reads it); still read by 12-split-datasets.py for v2-sourced splits
   corpus/                  ← used by app
-    parquet/               Canonical SDMX parquet files — 4,102 (1,919 top-level + 2,183 splits)
-    metadata.duckdb        Main DuckDB metadata (16 tables)
+    parquet/               SDMX-format parquet files — 4,274 on disk (2026-10-03; includes leftovers)
+    metadata.duckdb        Main DuckDB metadata (inspect actual schema)
     search.duckdb          Search index DB
-    view-profiles/         Per-dataset JSON view profiles — 3,523 files
+    view-profiles/         Per-dataset JSON view profiles — 3,679 files (2026-10-03)
   eval/                    Eval baselines (chart_selector, agent_search)
   meta/                    Reference data (judet CSVs, SIRUTA)
   logs/                    Pipeline execution logs (incl. last-pipeline-run.txt)
@@ -158,9 +171,9 @@ data/
 ## Deployment
 
 - **Dockerfile** + **fly.toml** — Fly.io deployment (shared-cpu-1x, 512MB, Amsterdam region)
-- `scripts/prepare-deploy-data.sh` — Stages parquet-v3 + v2 fallbacks + DuckDB + view-profiles into `deploy-data/`
-- `deploy/oracle/` — Oracle Cloud deployment (systemd + nginx)
-- `deploy/hf-spaces/` — Hugging Face Spaces deployment
+- `scripts/prepare-deploy-data.sh` — Stages corpus parquet + DuckDB + view profiles into `deploy-data/`; currently omits search index and is not an automatic build prerequisite
+- `scripts/deploy/oracle/` — Oracle Cloud deployment (systemd + nginx)
+- `scripts/deploy/hf-spaces/` — Hugging Face Spaces deployment
 
 
 
@@ -174,7 +187,7 @@ data/
 - [x] Chart framework (archetypes: geo_time, demographic, time_residence, time_series)
 - [x] Choropleth map, demographic grouped bar, line charts
 - [x] Dataset splitting (by county, age groups, multi-UM)
-- [x] View profiles (3,883 JSON configs)
+- [x] View-profile generator (current coverage is incomplete; see FIX-03)
 - [x] SDMX code mappings + parquet-v3 conversion
 - [x] Deployment setup (Fly.io, Oracle, HF Spaces)
 - [x] Define charting rules + JSON chart profiles per dataset
@@ -183,23 +196,18 @@ data/
 
 ### Current
 - [ ] UI polish — responsive layout, chart label truncation
-- [ ] URL state persistence (filters, period, chart type in URL)
+- [x] URL state for core filters/chart choices and v2 tile transforms; remaining controls tracked in backlog
 - [ ] Monthly → yearly aggregation toggle
 
 ### Later
 - [ ] SDMX generic UI framework (multi-source: Eurostat, OECD)
-- [ ] NL2SQL natural language queries
+- [x] Natural-language data agent via validated service tools; no generated SQL
+- [ ] Ask budgets/privacy and shared safe aggregation (FIX-08/FIX-02)
 - [ ] Notebook-ready exports, publish to Kaggle
 - [ ] Basic stats/charts per localități (normalize to population)
 - [ ] Static site migration (DuckDB-WASM, Cloudflare Pages)
 
-~see also: [ui/readme.md](ui/readme.md)~
- 
-## Notes
-
-Kill process for 5050
-
-  lsof -i :5050 | grep -v COMMAND | awk '{print $2}' | xargs kill -9 2>/dev/null && echo "Killed process on port 5050" || echo "No process found on port 5050"
+## Source API notes
 
 > Atentie! Nomenclatoarele care prezinta doar optiunea "Total" se vor completa automat cu alte optiuni doar daca nomenclatorului anterior i se deselecteaza optiunea "Total" si i se alege o singura alta optiune,
 
@@ -210,8 +218,9 @@ Kill process for 5050
 ## docs/ Summary
 
 ### Core Architecture
-- **[DUCKDB_SPECS.md](docs/DUCKDB_SPECS.md)** — Schema design for the DuckDB + Parquet hybrid: tables, file structure, query examples. The canonical DB spec.
-- **[DUCKDB_GUIDE.md](docs/DUCKDB_GUIDE.md)** — Practical query patterns and performance tips for DuckDB + Parquet usage.
+- **[CURRENT_STATE.md](docs/CURRENT_STATE.md)** — Current paths, dependency order, serving behavior and unresolved operating limits.
+- **[DUCKDB_SPECS.md](docs/DUCKDB_SPECS.md)** — Historical schema design; actual DB introspection is authoritative.
+- **[DUCKDB_GUIDE.md](docs/DUCKDB_GUIDE.md)** — Historical query examples; use current paths and verify aggregation grain.
 - **[classify-dimensions.md](docs/classify-dimensions.md)** — Spec for dimension classification/normalization: semantic types, parsing rules, archetype detection.
 
 ### Application Specs

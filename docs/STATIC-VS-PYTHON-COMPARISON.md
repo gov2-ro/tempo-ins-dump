@@ -1,5 +1,10 @@
 # Static vs Python Version Comparison Report
 
+> Historical design/reference. Paths, counts, thresholds and implementation status
+> below may describe earlier generations. Use [CURRENT_STATE.md](CURRENT_STATE.md)
+> for current operation and [fixes/README.md](fixes/README.md) for accepted remediation
+> scope. Actual code/schema and verified tests take precedence over these examples.
+
 ## 🧪 Test Results (September 11, 2025)
 
 ### ✅ **Data Integrity**

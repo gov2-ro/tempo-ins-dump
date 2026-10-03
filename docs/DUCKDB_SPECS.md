@@ -1,5 +1,10 @@
 # DuckDB + Parquet Hybrid Architecture Specifications
 
+> Historical design/reference. Paths, counts, thresholds and implementation status
+> below may describe earlier generations. Use [CURRENT_STATE.md](CURRENT_STATE.md)
+> for current operation and [fixes/README.md](fixes/README.md) for accepted remediation
+> scope. Actual code/schema and verified tests take precedence over these examples.
+
 ## Overview
 Import INS TEMPO data using a hybrid approach:
 - **DuckDB database** for metadata (contexts, matrices, dimensions, options)

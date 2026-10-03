@@ -1,6 +1,9 @@
 # Spec: stage 9 emits SDMX directly; retire stage 12
 
-**Status:** approved 2026-09-04, not started
+**Status:** completed — implementation/verification 2026-09-05, corpus swap
+2026-09-06, final mapping backfill 2026-09-08. Historical specification; do not
+repeat the swap as a new task. See activity-history.md and
+[CURRENT_STATE.md](CURRENT_STATE.md). Remaining corpus/semantic issues are FIX-03/FIX-02.
 **Audience:** the implementing model (Sonnet). Read the whole document before writing
 code — §4 (repo traps) and §7 (when to escalate) especially.
 **Background:** `docs/activity-history.md`, entries 2026-09-04 and 2026-09-04b.

@@ -1,5 +1,10 @@
 # INS TEMPO Data Explorer — Application Specification
 
+> Historical design/reference. Paths, counts, thresholds and implementation status
+> below may describe earlier generations. Use [CURRENT_STATE.md](CURRENT_STATE.md)
+> for current operation and [fixes/README.md](fixes/README.md) for accepted remediation
+> scope. Actual code/schema and verified tests take precedence over these examples.
+
 ## Overview
 
 A modern web interface to navigate and explore ~1,886 datasets from the Romanian National Institute of Statistics (INS TEMPO). The current official interface is not user-friendly. This application leverages rich metadata in DuckDB, pre-classified dataset archetypes, parsed dimension semantics, and data in Parquet files to auto-generate appropriate charts and contextual filters for each dataset.

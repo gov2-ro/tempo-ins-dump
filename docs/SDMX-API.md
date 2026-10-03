@@ -1,5 +1,11 @@
 # SDMX 2.1 REST API
 
+> Current caveats (2026-10-03): period SQL injection, DSD/data code mismatch and
+> silent 50,000-observation limits remain unresolved. See [FIX-01](fixes/01-api-safety-and-sdmx.md)
+> and [FIX-04](fixes/04-complete-exports.md). This document describes existing routes,
+> not verified standards compliance or complete exports. Omit the data key for
+> wildcard requests when a client normalizes trailing dot-path segments.
+
 The FastAPI app (`app/`) exposes a minimal SDMX 2.1 REST API that makes INS TEMPO datasets consumable by SDMX-aware tools — in particular the [SDMX Dashboard Generator](https://bis-med-it.github.io/SDMX-dashboard-generator/).
 
 ---
@@ -27,13 +33,13 @@ Returns observations in **SDMX-ML 2.1 GenericData XML** format (flat `AllDimensi
 
 ```bash
 # All data
-curl 'http://localhost:8080/sdmx/2.1/data/INS,ACC102B/.'
+curl 'http://localhost:8080/sdmx/2.1/data/INS,ACC102B'
 
 # Filter first dimension to "Mortale", all others wildcard, last 5 time periods
 curl 'http://localhost:8080/sdmx/2.1/data/INS,ACC102B/Mortale..?lastNObservations=5'
 
 # Time range
-curl 'http://localhost:8080/sdmx/2.1/data/INS,ACC102B/.?startPeriod=2015&endPeriod=2022'
+curl 'http://localhost:8080/sdmx/2.1/data/INS,ACC102B?startPeriod=2015&endPeriod=2022'
 ```
 
 ### DSD — `GET /sdmx/2.1/datastructure/INS/{flow}/1.0`

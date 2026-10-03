@@ -1,5 +1,52 @@
 # Activity History
 
+## 2026-10-03 — Agent-ready remediation specs and documentation reconciliation
+
+Created eight scoped implementation specs under docs/fixes with dependency order,
+concrete contracts, synthetic acceptance tests and completion/rollback evidence.
+Packages cover API/SDMX safety, statistical semantics, pipeline/corpus repair,
+complete exports, release gates/FTS, place indicators, responsive dataset UI and
+Ask budgets/privacy. These are delegation specifications; implementation is pending.
+
+Added CURRENT_STATE.md as the current operating reference. Rewrote BILINGUAL.md
+to match shared canonical storage and actual translation limitations; corrected
+readme.md and AGENTS.md paths, dependency order, frontend ownership and dated
+inventory. Preserved CodeGraph guidance in AGENTS.md. Marked older schema/UI
+references as historical, and reconciled stage-9 migration completion, restored
+POP107A reachability, legacy-file migration, dispatch/cross-filter/URL completion
+and current registration/profile counts in the backlog. Kept still-open numerical,
+pipeline and export defects open and preserved the maintainer's Analytics item.
+
+Validation for this documentation change: relative-link checks on the handoff
+specs/current reference and new links, package dependency/status review, and git
+diff whitespace checks. Application tests/evals from the audit remain dated
+evidence, not fresh proof of implementation. No code/data/production changes.
+
+## 2026-10-03 — Project and live-site audit
+
+Reviewed architecture and existing graph, pipeline/update control flow, shared
+query/chart/insight/search services, curated KPI configs, SDMX routes, Docker/Fly
+staging, docs/backlog/history, and representative live flows using Playwright.
+Checked home/search, POP107A v1/v2, Bihor, public APIs, export behavior, desktop
+and 390px layouts. Recorded prioritized reproductions and acceptance directions
+in BACKLOG's new audit section. Preserved the pre-existing Simple Analytics item.
+
+Validation: 38 tests passed (3 FastAPI deprecation warnings); chart eval unchanged
+for all 1,986 baseline datasets, with 2,116 additions; search eval's 17 top sets
+unchanged with 2 order changes. Scanned all 4,274 local parquets read-only:
+0 unreadable, 0 legacy value-column files, 57 files with NULL dimensions, and 162
+with nonstandard/non-date TIME_PERIOD values under the supported-format check.
+Cross-checked metadata/view-profile registration separately; counts include
+leftovers and are not automatically counts of published defects.
+
+Confirmed important live defects: electricity headline doubles the source total,
+POP107A sums overlapping age/geographic levels to 129M people, exports silently
+stop at 50k rows, and Bihor's unemployment card uses a mislabeled registered rate
+and the oldest 30 periods. Confirmed SDMX SQL injection with a harmless boolean
+predicate **only through local TestClient**, and tested local DSD/data code
+consistency. No production mutations, corpus repairs, paid Ask calls, credentials,
+load tests, or deployment. Application code remains unchanged; audit notes only.
+
 ## 2026-09-08b — sdmx_column_map backfill for the 26 legacy-shaped matrices
 
 Closed the last open item from the stage-9 SDMX migration.

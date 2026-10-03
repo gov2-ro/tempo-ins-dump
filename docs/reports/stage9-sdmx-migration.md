@@ -1,5 +1,10 @@
 # Report: stage 9 emits SDMX directly — Phase C verification
 
+> Historical Phase C report (2026-09-05). Its “live corpus was never touched”
+> statement describes that shadow-verification run only. The maintainer executed
+> the swap on 2026-09-06; mapping backfill finished 2026-09-08. See
+> [activity-history.md](../activity-history.md) and [CURRENT_STATE.md](../CURRENT_STATE.md).
+
 **Spec:** `docs/stage9-sdmx-migration-spec.md`
 **Run date:** 2026-09-05
 **Scope:** Phases A–C complete (this report). Phase D (pipeline wiring) is
