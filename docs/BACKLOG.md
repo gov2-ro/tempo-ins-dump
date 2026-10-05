@@ -80,11 +80,12 @@ open below; it does not take precedence over these correctness blockers.
 - [ ] **Pretty permalink URLs for category/theme pages** — currently `?cat=E:E1` (code-based). Should use slugs like `/?cat=economie/preturi` for SEO and shareability. Requires slug mapping (code → slug) built from category names, a slug→code reverse map on load, and updating `_syncURL`/`_restoreDrillFromUrl` accordingly. The `?cat=CODE:CODE` format can stay as a fallback alias.
 - [ ] create a release log. how? backwards? 
 - [ ] cleanup, refactor folders, move most scripts in a folder (`scripts`?) - and current scripts into `utils`?
+  - Includes renaming the numbered pipeline scripts to match the real run order (see AGENTS.md phase table). Deferred 2026-10-05: filenames are referenced by `update-pipeline.py`, the dev MCP, ~40 docs and the activity log — do it together with the FIX-03 orchestrator rework, not as a standalone rename.
 
 ## Geographic profiles
 - [ ] **Place profiles: norm by population toggle** — On any absolute-count KPI/indicator chart in place profiles, add a "per 1,000 population" toggle. Requires population lookup for place + year from `POP105A_judete_grupe.parquet` (or equivalent). Affects `place-page.js` KPI cards and indicator grid sparklines. Spec: `docs/superpowers/specs/2026-05-07-place-profiles-design.md`.
 - [ ] **Place profiles: choropleth click-through** — Clicking a county on any choropleth map should open `/place/county/{slug}` in addition to (or instead of) the current filter behaviour. Add click handler in `app/static/js/chart-geo.js`.
-- [ ] **Place profiles: dataset page cross-link** — When a dataset is filtered to a single county via `?place={slug}`, show a "Profil {name}" link in the dataset page header. Modify `app/static/js/dataset-page.js`.
+- [ ] **Place profiles: dataset page cross-link** — When a dataset is filtered to a single county via `?place={slug}`, show a "Profil {name}" link in the dataset page header. Modify `app/static/js/dashboard-v2.js` (v2 page; `dataset-page.js` is archived).
 
 ## Misc
 - [x] research data dissemination, where could we expose the data. Kaggle, Hugging Face, torrent, Jupyter notebooks or similar? Could we set an automatic pipeline to update data when it updates?
@@ -114,6 +115,8 @@ open below; it does not take precedence over these correctness blockers.
 - [ ] how to deal with parent columns, like judete and localitati - SOM101E
 - [ ] older datasets like sustainable development 2020 should be archived?
 - [ ] add simpleanalytics ?
+- [ ] **Ask default model is stale** — `app/config.py` defaults `TEMPO_LLM_MODEL` to `claude-sonnet-4-6`, and `fly.toml` doesn't override it. Pick the current model deliberately (cost/latency) and check `app/static/ask-models.json` matches. Fold into FIX-08.
+- [ ] **`llms.txt` dataset count** — it's hand-maintained, and the catalog size drifts. Consider generating the count at serve time in `app/main.py`'s `/llms.txt` handler.
 
 
 ## Data Pipeline — API improvements (from TEMPO R pkg analysis)

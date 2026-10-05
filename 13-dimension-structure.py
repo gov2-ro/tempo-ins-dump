@@ -32,6 +32,7 @@ import math
 import os
 import re
 import statistics
+import sys
 import time
 from collections import defaultdict
 
@@ -745,6 +746,7 @@ def main():
 
     print(f"Profiling {len(codes)} datasets...")
     records, errors = [], 0
+    failed_codes = []
     for i, code in enumerate(codes, 1):
         if i % PROGRESS_INTERVAL == 0:
             print(f"  [{i}/{len(codes)}] {time.time() - start:.1f}s", flush=True)
@@ -752,12 +754,15 @@ def main():
             records += profile_matrix(rconn, pconn, code)
         except Exception as e:
             errors += 1
+            failed_codes.append(code)
             if errors <= 5:
                 print(f"  ERROR on {code}: {e}")
 
     print(f"\nProfiled {len(records)} dimensions in {time.time() - start:.1f}s "
           f"({errors} errors)")
     if args.dry_run:
+        if failed_codes:
+            sys.exit(1)
         multi = [r for r in records if r['confidence'] == 'verified' and r['n_levels'] >= 2]
         print(f"[DRY-RUN] {len(multi)} multi-level dims; nothing written")
         for r in multi[:15]:
@@ -772,9 +777,12 @@ def main():
         wconn.execute(f"DROP TABLE IF EXISTS {TABLE}")
     wconn.execute(DDL.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS"))
     if args.matrix:
-        wconn.execute(
-            f"DELETE FROM {TABLE} WHERE matrix_code IN "
-            f"({', '.join('?' for _ in codes)})", codes)
+        # Keep the last usable profile of any matrix whose profiling just failed.
+        del_codes = [c for c in codes if c not in set(failed_codes)]
+        if del_codes:
+            wconn.execute(
+                f"DELETE FROM {TABLE} WHERE matrix_code IN "
+                f"({', '.join('?' for _ in del_codes)})", del_codes)
 
     placeholders = ", ".join("?" for _ in COLS)
     insert = f"INSERT INTO {TABLE} ({', '.join(COLS)}) VALUES ({placeholders})"
@@ -787,8 +795,13 @@ def main():
     if not is_main:
         print(f"\n*** Results in {FALLBACK_DB} (main DB was locked). "
               f"Merge with ATTACH + INSERT. ***")
+        failed_codes.append("(main DB locked; wrote fallback)")
     pconn.close()
     wconn.close()
+    if failed_codes:
+        print(f"ERROR: profiling failed for {len(failed_codes)} matrices: "
+              f"{', '.join(failed_codes[:20])}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

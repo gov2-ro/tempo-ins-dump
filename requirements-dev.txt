@@ -1,0 +1,6 @@
+# Tests, CI and the dev MCP server. Synthetic tests need only runtime + these.
+-r requirements.txt
+pytest==9.0.3
+httpx==0.28.1         # fastapi.testclient
+PyYAML==6.0.2         # app/services/agent_eval.py (optional import)
+mcp==1.27.0           # tools/tempo-dev-mcp

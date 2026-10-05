@@ -1,6 +1,6 @@
 # INS TEMPO Explorer
 
-> Romanian National Institute of Statistics (INS) data API. ~3,600 canonical statistical datasets from TEMPO Online covering demographics, economy, agriculture, education, health, and more. Bilingual (Romanian/English). Data spans 1990-2024+.
+> Romanian National Institute of Statistics (INS) data API. 3,000+ statistical datasets from TEMPO Online covering demographics, economy, agriculture, education, health, and more. Bilingual (Romanian/English). Data spans 1990-2024+.
 
 ## Base URL
 

@@ -25,6 +25,7 @@ def test_slugify_diacritics():
     assert slugify("Brăila") == "braila"
 
 
+@pytest.mark.corpus
 def test_resolve_county_returns_geo_names():
     result = resolve_place("county", "bihor")
     assert result is not None
@@ -34,6 +35,7 @@ def test_resolve_county_returns_geo_names():
     assert "Bihor" in result["ref_area_values"]
 
 
+@pytest.mark.corpus
 def test_resolve_region_returns_multiple_names():
     result = resolve_place("region", "nord-vest")
     assert result is not None
@@ -42,11 +44,13 @@ def test_resolve_region_returns_multiple_names():
     assert len(result["ref_area_values"]) >= 1
 
 
+@pytest.mark.corpus
 def test_resolve_unknown_returns_none():
     result = resolve_place("county", "notaplace99")
     assert result is None
 
 
+@pytest.mark.corpus
 def test_get_place_datasets_returns_list():
     datasets = get_place_datasets("county", "bihor")
     assert isinstance(datasets, list)
@@ -59,11 +63,13 @@ def test_get_place_datasets_returns_list():
         assert d["has_data"] is True
 
 
+@pytest.mark.corpus
 def test_get_place_datasets_unknown_returns_empty():
     datasets = get_place_datasets("county", "notaplace99")
     assert datasets == []
 
 
+@pytest.mark.corpus
 def test_get_place_kpis_county_returns_list():
     kpis = get_place_kpis("county", "bihor")
     assert isinstance(kpis, list)
@@ -75,12 +81,14 @@ def test_get_place_kpis_county_returns_list():
     assert isinstance(kpi["sparkline"], list)
 
 
+@pytest.mark.corpus
 def test_get_place_kpis_has_unemployment():
     kpis = get_place_kpis("county", "bihor")
     labels = [k["label"] for k in kpis]
     assert any("șomaj" in l.lower() or "somaj" in l.lower() for l in labels)
 
 
+@pytest.mark.corpus
 def test_get_place_kpis_sparkline_ordered():
     kpis = get_place_kpis("county", "bihor")
     pop_kpi = next((k for k in kpis if "opulat" in k["label"]), None)
@@ -89,12 +97,14 @@ def test_get_place_kpis_sparkline_ordered():
         assert years == sorted(years)  # ascending
 
 
+@pytest.mark.corpus
 def test_get_place_kpis_missing_locality_returns_empty():
     # Localities have no KPI config — must return empty list, not error
     kpis = get_place_kpis("locality", "oradea")
     assert isinstance(kpis, list)  # empty list OK
 
 
+@pytest.mark.corpus
 def test_get_place_peers_county_has_same_region():
     peers = get_place_peers("county", "bihor")
     assert "same_region" in peers
@@ -103,12 +113,14 @@ def test_get_place_peers_county_has_same_region():
     assert "cluj" in slugs  # Cluj is also Nord-Vest
 
 
+@pytest.mark.corpus
 def test_get_place_peers_county_has_similar_size():
     peers = get_place_peers("county", "bihor")
     assert "similar_size" in peers
     assert len(peers["similar_size"]) <= 3
 
 
+@pytest.mark.corpus
 def test_get_place_peers_self_excluded():
     peers = get_place_peers("county", "bihor")
     all_peer_slugs = (
@@ -118,6 +130,7 @@ def test_get_place_peers_self_excluded():
     assert "bihor" not in all_peer_slugs
 
 
+@pytest.mark.corpus
 def test_get_kpi_baselines_returns_national():
     baselines = get_kpi_baselines("county", "bihor", "Rata șomajului BIM")
     assert "national" in baselines
@@ -125,12 +138,14 @@ def test_get_kpi_baselines_returns_national():
     assert len(baselines["national"]) > 0
 
 
+@pytest.mark.corpus
 def test_get_kpi_baselines_returns_region():
     baselines = get_kpi_baselines("county", "bihor", "Rata șomajului BIM")
     assert "region" in baselines
     assert isinstance(baselines["region"], list)
 
 
+@pytest.mark.corpus
 def test_get_place_peers_region_returns_siblings():
     peers = get_place_peers("region", "nord-vest")
     assert "same_region" in peers
@@ -149,6 +164,7 @@ from app.main import app
 _client = TestClient(app)
 
 
+@pytest.mark.corpus
 def test_api_places_list():
     resp = _client.get("/api/places")
     assert resp.status_code == 200
@@ -159,6 +175,7 @@ def test_api_places_list():
     assert "cluj" in county_slugs
 
 
+@pytest.mark.corpus
 def test_api_place_profile_county():
     resp = _client.get("/api/places/county/bihor")
     assert resp.status_code == 200
@@ -170,11 +187,13 @@ def test_api_place_profile_county():
     assert "same_region" in data["peers"]
 
 
+@pytest.mark.corpus
 def test_api_place_profile_not_found():
     resp = _client.get("/api/places/county/notaplace")
     assert resp.status_code == 404
 
 
+@pytest.mark.corpus
 def test_api_place_baselines():
     # Get the first KPI label for county
     import json
