@@ -86,24 +86,43 @@ and [BILINGUAL.md](docs/BILINGUAL.md) before running writers.
 
 ### Incremental Update (`update-pipeline.py`)
 
-Orchestrates incremental updates from the INS news feed — processes only datasets updated since the last run. Every matrix it touches was either named explicitly or flagged by INS as changed, so it force-refreshes (re-fetches metadata, CSV, parquet, SDMX) by default — a locally-cached file is never a reason to skip a matrix INS says is stale.
+Orchestrates incremental updates from the INS news feed. Every matrix it touches was named explicitly (`--matrix`), flagged by INS as changed (feed) or owed from a previous failed run (retry set), so it force-refreshes (re-fetches metadata, CSV, parquet, SDMX) by default.
 
 ```bash
-python update-pipeline.py                        # auto-incremental (since last run), force-refreshed
+python update-pipeline.py                        # feed entries since the watermark + retry set
 python update-pipeline.py --refetch-news         # re-fetch news CSV first
-python update-pipeline.py --since 01.03.2026     # explicit date filter
-python update-pipeline.py --all                  # ignore last run, process all news currently in insse_news.csv
-python update-pipeline.py --matrix ACC101B       # single dataset
-python update-pipeline.py --skip-existing        # resume/debug: skip matrices whose local files already exist
-python update-pipeline.py --force-meta           # with --skip-existing, still re-sync metadata dates
-python update-pipeline.py --dry-run              # preview without executing
+python update-pipeline.py --since 01.03.2026     # feed entries dated >= this (inclusive); never lowers the watermark
+python update-pipeline.py --all                  # whole feed, ignore the watermark
+python update-pipeline.py --matrix ACC101B       # exactly these codes; never moves the watermark
+python update-pipeline.py --skip-existing        # resume/debug: skip fetch/convert if files exist (partial run)
+python update-pipeline.py --dry-run              # plan only: writes no state, log, DB or file
+python update-pipeline.py --strict               # optional-stage failures also exit 1
 ```
 
-Current per-matrix steps: metadata → CSV → canonical SDMX parquet → split →
-dimension structure → view profile. Afterwards: meta index/import and date sync.
-It does not reliably refresh changed dimension mappings or all derived metadata,
-and may save `data/logs/last-pipeline-run.txt` despite failures. These are open
-[FIX-03](docs/fixes/03-pipeline-and-corpus.md) requirements, not success guarantees.
+Per-matrix steps: metadata → CSV → canonical SDMX parquet → split → dimension
+structure → view profile; afterwards meta index, metadata import and date sync.
+
+- **Required** (any failure: exit 1, matrix goes to the retry set, watermark frozen):
+  metadata, CSV (`6-fetch-csv`), conversion (`9`), split (`12`, unless `--no-split`),
+  and the batch index/import/date-sync. A failed `--fetch-context` aborts the run.
+- **Optional** (recorded and printed, exit 0 unless `--strict`): `13-dimension-structure`,
+  `generate_view_profiles`. The matrix is marked `ok_degraded`; derived features are not verified.
+- **Empty at source** (`6-fetch-csv` exit 3) is recorded as `empty`: not retried, not a failure.
+- Nothing is deleted on failure; the previous parquet/profile artifacts stay.
+- **State**: `data/logs/update-pipeline-state.json` (`--state-file`) holds the watermark,
+  retry set and per-matrix/per-stage outcomes with reasons and source update dates.
+  `last-pipeline-run.txt` mirrors the watermark for legacy readers.
+- **Watermark** = newest feed date of a fully successful run (not wall-clock today). It is
+  inclusive, so the latest day is reprocessed next run. Partial runs (`--skip-existing`,
+  `--no-split`, `--skip-duckdb`) and `--matrix` runs never advance it.
+- **Language**: only `ro`. `--lang en` / `TEMPO_LANG=en` are rejected (exit 2) because the
+  processing stages write shared canonical output; children always get `TEMPO_LANG=ro`.
+- Exit codes: 0 ok, 1 required failure, 2 usage / unsafe mode.
+
+Still open under [FIX-03](docs/fixes/03-pipeline-and-corpus.md): mapping/classification
+refresh and import ordering in the incremental run, targeted refresh paths, generation
+manifests. `scripts/audit-corpus.py --data-dir DIR [--json-out F]` is a read-only,
+deterministic corpus audit (categories, schema, NULL dims, time validity, grain, coverage).
 
 ### Other root-level scripts
 
