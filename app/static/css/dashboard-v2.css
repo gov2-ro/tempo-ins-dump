@@ -711,3 +711,42 @@ body.sidebar-open .dbv2-main {
     height: min(78vh, 900px);
 }
 .dbv2-tile.expanded .dbv2-tile-chart { height: calc(100% - 34px); }
+
+/* ------------------------------------------------- FIX-07 responsive/a11y */
+
+/* body is a flex column (explore.css): without min-width:0 the main column
+   grows to its widest min-content child instead of shrinking to the viewport. */
+.dbv2-main { min-width: 0; width: 100%; box-sizing: border-box; }
+.dbv2-grid.layout-hero_side, .dbv2-grid.layout-hero_2side,
+.dbv2-grid.layout-hero_2side_full, .dbv2-grid.layout-hero_side_full { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.dbv2-grid.layout-single_full,
+.dbv2-grid.layout-hero_full { grid-template-columns: minmax(0, 1fr); }
+.dbv2-pills, .dbv2-filter, .dbv2-filter-row { min-width: 0; max-width: 100%; }
+.dbv2-filter select, .dbv2-chip-select { max-width: 100%; min-width: 0; }
+.dbv2-notable { margin-left: 0; max-width: 100%; white-space: normal; text-align: left; }
+.dbv2-sentences { overflow-wrap: anywhere; display: flex; flex-wrap: wrap; gap: 6px 4px; align-items: baseline; }
+.dbv2-table-wrap { overflow-x: auto; max-width: 100%; }  /* data tables scroll in their own box */
+.dbv2-tile-type { font-size: 0.72rem; color: var(--text-2); }
+.dbv2-pill:focus-visible, .dbv2-chip-btn:focus-visible, .dbv2-expand:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.dbv2-pill[aria-pressed="true"], .dbv2-chip-btn[aria-pressed="true"] { font-weight: 600; }
+
+@media (max-width: 900px) {
+    .dbv2-grid.layout-hero_side,
+    .dbv2-grid.layout-hero_2side,
+    .dbv2-grid.layout-hero_2side_full,
+    .dbv2-grid.layout-hero_side_full { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 600px) {
+    .dbv2-main { padding: 12px 12px 40px; }
+    .dbv2-kpi { min-width: 0; flex: 1 1 140px; }
+    .dbv2-filter-row { gap: 10px; padding: 8px 10px; }
+    .dbv2-filter { flex-wrap: wrap; flex: 1 1 100%; }
+    .dbv2-filter select { flex: 1 1 auto; }
+    .dbv2-tile-bar { padding: 8px 10px 4px; }
+    .dbv2-chip, .dbv2-chip-select { max-width: 100%; }
+    .dbv2-rel-card { padding: 10px 12px; }
+    .dbv2-related-row { grid-template-columns: minmax(0, 1fr); }
+}

@@ -1984,3 +1984,70 @@ body.sidebar-open #app {
     transition: color 0.15s;
 }
 .footer-link:hover { color: var(--text-0); }
+
+/* ==========================================================================
+   FIX-07 — responsive dataset controls + keyboard focus (v1 and v2 share this)
+   No overflow:hidden on body: controls wrap, or scroll inside their own box.
+   ========================================================================== */
+
+/* Keyboard focus: one visible ring for every interactive control */
+a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible,
+textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.dim-picker-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Selected state is not colour-only: pressed pills get an underline marker */
+.ct-btn[aria-pressed="true"], .ct-btn.active { font-weight: 600; }
+
+/* Offscreen quick-nav must not be tabbable */
+.lens-sidebar.hidden { visibility: hidden; }
+
+.tb-label { white-space: nowrap; }
+.tb-compact .topbar-left, .tb-compact .topbar-right { min-width: 0; }
+.tb-compact .topbar-right > * { flex-shrink: 0; }
+
+/* Bounded control containers (all widths) */
+.panel-bar { min-width: 0; }
+.panel-pills { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+.dim-picker-row { flex-wrap: wrap; }
+.dim-picker { min-width: 0; max-width: 100%; display: flex; align-items: center; gap: 6px; }
+.dim-picker-select { max-width: 100%; min-width: 0; }
+.dash-download { flex-wrap: wrap; }
+.dash-header, .dash-title, .dash-title-row { min-width: 0; }
+.dash-title { overflow-wrap: anywhere; }
+
+@media (max-width: 780px) {
+    /* the push-aside sidebar would overflow the viewport; overlay instead */
+    body.sidebar-open #app,
+    body.sidebar-open .dbv2-main { margin-left: 0; }
+    .lens-sidebar { width: min(260px, 86vw); box-shadow: 0 0 24px rgba(0,0,0,0.35); }
+}
+
+@media (max-width: 600px) {
+    .topbar.tb-compact { padding: 0 8px; gap: 4px; }
+    .tb-compact .topbar-left { gap: 4px; flex-shrink: 1; }
+    .tb-compact .topbar-right { gap: 2px; }
+    .tb-compact .logo { font-size: 14px; gap: 5px; }
+    .tb-compact .search-trigger { min-width: 0; width: 32px; padding: 0; justify-content: center; height: 32px; flex-shrink: 0; }
+    .tb-compact .toggle-btn { width: 30px; }
+    .tb-compact .toggle-btn[href] { padding: 0 !important; }
+    .tb-compact .toggle-btn .tb-label { display: none; }
+    .tb-compact .lang-toggle { width: auto; padding: 0 6px; }
+    .tb-compact .lang-flag { display: none; }
+    .tb-compact .about-btn { width: 20px; height: 20px; }
+    .tb-compact .back-btn { max-width: 26px; overflow: hidden; white-space: nowrap; padding: 4px; }
+    .dashboard-view, .dbv2-main { padding-left: 12px; padding-right: 12px; }
+    .dash-header { padding-top: 16px; }
+    .dash-title { font-size: 18px; }
+    .panel-bar { gap: 6px; }
+    .panel-png-btn { margin-left: 0; }
+    .dim-picker-row { padding: 4px 8px 0; gap: 8px; }
+    .dim-picker { flex: 1 1 100%; flex-wrap: wrap; }
+    .dim-picker-select { flex: 1 1 120px; max-width: 100%; }
+    .period-nav { flex-wrap: wrap; margin-left: 0; max-width: 100%; }
+    .chart-container { height: 300px; }
+}
+.filter-select:focus-visible, .col-filter:focus-visible, .sidebar-search input:focus-visible,
+.search-input-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
