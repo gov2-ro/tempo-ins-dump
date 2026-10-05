@@ -206,7 +206,7 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
     };
     const yAxisLabel = vfmt === 'index' ? v => v.toFixed(0)
                      : vfmt === 'pct_change' ? v => v.toFixed(1) + '%'
-                     : v => formatNumber(v);
+                     : v => axisNumber(v);
 
     const option = {
         tooltip: {
@@ -240,10 +240,11 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
             textStyle: { fontSize: 11 },
         },
         grid: {
-            left: 60,
+            left: 16,
             right: 20,
             top: 20,
             bottom: series.length > 1 ? 60 : 30,
+            containLabel: true,   // value-axis labels never clip, whatever their width
         },
         xAxis: {
             type: 'category',
@@ -312,7 +313,7 @@ function createGenericChart(chart, data, metadata) {
     chart.setOption({
         tooltip: { trigger: 'axis' },
         grid: { left: 140, right: 20, top: 10, bottom: 30 },
-        xAxis: { type: 'value', axisLabel: { fontSize: 11, formatter: v => formatNumber(v) } },
+        xAxis: { type: 'value', axisLabel: { fontSize: 11, formatter: v => axisNumber(v) } },
         yAxis: {
             type: 'category',
             data: top.map(d => d.name).reverse(),

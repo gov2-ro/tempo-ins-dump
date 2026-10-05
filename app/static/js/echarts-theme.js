@@ -87,6 +87,19 @@
     const _origInit = echarts.init.bind(echarts);
     echarts.init = (dom, _theme, opts) => {
         const themeName = document.body.dataset.theme === 'light' ? 'lens-light' : 'lens-dark';
-        return _origInit(dom, themeName, opts);
+        const chart = _origInit(dom, themeName, opts);
+        // Keep the canvas in step with its container (sidebar/panel/layout
+        // changes do not fire window resize). Observer dies with the chart.
+        if (dom && typeof ResizeObserver !== 'undefined') {
+            let raf = 0;
+            const ro = new ResizeObserver(() => {
+                cancelAnimationFrame(raf);
+                raf = requestAnimationFrame(() => { if (!chart.isDisposed()) chart.resize(); });
+            });
+            ro.observe(dom);
+            const _dispose = chart.dispose.bind(chart);
+            chart.dispose = () => { ro.disconnect(); cancelAnimationFrame(raf); _dispose(); };
+        }
+        return chart;
     };
 })();

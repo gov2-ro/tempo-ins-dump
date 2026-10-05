@@ -652,6 +652,8 @@ class DashboardV2 {
             const on = tile.classList.contains('expanded');
             btn.textContent = on ? '\u2715' : '\u2922';
             btn.title = on ? this.ui.collapse : this.ui.expand;
+            btn.setAttribute('aria-label', btn.title);
+            btn.setAttribute('aria-expanded', on ? 'true' : 'false');
         };
         btn.addEventListener('click', () => {
             const on = tile.classList.toggle('expanded');
@@ -670,6 +672,7 @@ class DashboardV2 {
         btn.className = 'dbv2-chip-btn' + (active ? ' active' : '');
         btn.textContent = label;
         btn.title = tip;
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
         btn.addEventListener('click', onClick);
         frag.appendChild(btn);
     }
@@ -760,7 +763,7 @@ class DashboardV2 {
             tile.innerHTML = `
                 <div class="dbv2-tile-bar">
                     <span class="dbv2-tile-title">${this.tileTitle(chart)}</span>
-                    <span class="dbv2-tile-type">${chart.chart_type}</span>
+                    <span class="dbv2-tile-type" data-chart-type="${chart.chart_type}">${chartTypeLabel(chart.chart_type, this.lang)}</span>
                 </div>
                 <div class="dbv2-tile-chart" id="dbv2-chart-${chart.id}"></div>
             `;
@@ -1204,6 +1207,8 @@ class DashboardV2 {
         for (const lv of levels) {
             const b = document.createElement('button');
             b.className = 'dbv2-pill' + (lv.level_id === current ? ' active' : '');
+            b.setAttribute('aria-pressed', lv.level_id === current ? 'true' : 'false');
+            b.dataset.fk = `g|${column}|${lv.level_id}`;
             b.textContent = lv.name;
             b.title = this.ui.grainTooltip(lv.n);
             b.addEventListener('click', () => onPick(lv.level_id));
@@ -1215,6 +1220,10 @@ class DashboardV2 {
     /** (Re)build the global filter row. Widget per composer hint:
      *  pill_group (few options), select (medium), typeahead (many). */
     renderFilterRow() {
+        // The row is rebuilt on every change; remember the focused control so
+        // keyboard users keep their place.
+        const focusKey = document.activeElement?.closest?.('.dbv2-filter-row')
+            ? document.activeElement.dataset.fk : null;
         document.querySelector('.dbv2-filter-row')?.remove();
         const dims = this.composition.filter_dims || [];
         const grains = this.composition.grain_dims || [];
@@ -1226,7 +1235,9 @@ class DashboardV2 {
         // Grain first: it changes what every tile is counting, so it reads
         // ahead of the filters that only narrow the selection.
         for (const g of grains) {
-            const wrap = document.createElement('label');
+            const wrap = document.createElement('div');
+            wrap.setAttribute('role', 'group');
+            wrap.setAttribute('aria-label', g.label || g.column);
             wrap.className = 'dbv2-filter dbv2-grain';
             wrap.textContent = g.label || g.column;
             this._levelSwitch(wrap, g.column, g.levels,
@@ -1245,7 +1256,10 @@ class DashboardV2 {
                     .map(o => ({ label: o.label.trim(), value: o.label }));
             if (options.length < 2) continue;
 
-            const wrap = document.createElement('label');
+            const grouped = fd.widget === 'pill_group'
+                || (fd.widget === 'level_switch' && fd.levels?.length > 1);
+            const wrap = document.createElement(grouped ? 'div' : 'label');
+            if (grouped) { wrap.setAttribute('role', 'group'); wrap.setAttribute('aria-label', fd.label || fd.column); }
             wrap.className = 'dbv2-filter';
             wrap.textContent = fd.label || fd.column;
             const value = this._filterValue(fd, options);
@@ -1264,6 +1278,8 @@ class DashboardV2 {
                 for (const opt of entries) {
                     const b = document.createElement('button');
                     b.className = 'dbv2-pill' + (String(opt.value) === String(value) ? ' active' : '');
+                    b.setAttribute('aria-pressed', String(opt.value) === String(value) ? 'true' : 'false');
+                    b.dataset.fk = `p|${fd.column}|${opt.value}`;
                     b.textContent = opt.label;
                     b.addEventListener('click', () => this._setFilter(fd.column, opt.value));
                     pills.appendChild(b);
@@ -1293,6 +1309,7 @@ class DashboardV2 {
             } else {
                 const sel = document.createElement('select');
                 sel.dataset.col = fd.column;
+                sel.dataset.fk = `s|${fd.column}`;
                 if (fd.allow_all) {
                     const o = document.createElement('option');
                     o.value = '';
@@ -1314,6 +1331,10 @@ class DashboardV2 {
         // Above the grid: these controls change what every tile is counting,
         // so they have to be visible before the charts, not after them.
         if (row.children.length) grid.parentNode.insertBefore(row, grid);
+        if (focusKey) {
+            const again = [...row.querySelectorAll('[data-fk]')].find(n => n.dataset.fk === focusKey);
+            again?.focus({ preventScroll: true });
+        }
     }
 
     syncURL() {

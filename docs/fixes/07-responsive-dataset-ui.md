@@ -1,6 +1,6 @@
 # FIX-07 — Responsive dataset controls and readable charts
 
-Status: not started. Priority: P2. Owner: frontend.
+Status: implemented on branch fix/07-responsive-ui (layout, a11y, axis/labels; FIX-02 disclosure messaging deferred). Priority: P2. Owner: frontend.
 Dependencies: coordinate FIX-02's unavailable/provenance payloads. Layout fixes
 may proceed independently; do not change chart aggregation while fixing CSS.
 
