@@ -282,8 +282,11 @@ INS total. On the live corpus 385 of 936 comparable summed KPIs disagree with IN
 (e.g. ACC102B 4,960 vs 4,862; summed rates/averages off by orders of magnitude).
 With the measure fix and the gate (`kpi_total_checks` in the generation), the copy
 publishes 1,084 latest KPIs, every summed one confirmed by INS or by verified
-structure that INS does not contradict. Still open: time-shift remap, view
-profiles, search index, manifest and release gate.
+structure that INS does not contradict. Time columns: classify typed hours bands,
+base/creation years, 'ANI/UM' (the indicator's title) and similar labels as time,
+so 149 served files had 'Perioade' in TIME_PERIOD_2; fixed at the root (period
+labels only) and rebuilt on the copy (162 files, values unchanged; 0 served time
+violations). Still open: view profiles, search index, manifest and release gate.
 
 Stored `matrices/dataset_splits.parquet_path` values are absolute paths from
 whichever tree wrote them (3,349 still point at the deleted `parquet-v3/`); code

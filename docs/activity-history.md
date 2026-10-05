@@ -1,5 +1,24 @@
 # Activity History
 
+## 2026-10-05 — FIX-03: time-column remap on the copy
+
+149 served files had no valid TIME_PERIOD. `10-classify-dimensions` typed any label
+containing "saptamani" or the word "ani" as time — weekly-hours bands, "Ani de
+baza", "Ani de creare", "ANI/UM" (a one-option dimension holding the indicator's
+title, 110 sustainable-development files) — and stage 11 gave the first time
+dimension TIME_PERIOD, pushing "Perioade" to TIME_PERIOD_2. Their headline KPIs
+summed across the real years (INT112A's "period" was "An creare 2023").
+
+Fixed at the root: time only for period labels; a period-labelled dimension with
+no dated option (CNF101F "Luni" = month names) is categorical; stage 11 names the
+demoted concepts. Targeted classify/stage 11 keep existing rows, so
+`repair-corpus.py --step time-columns` resets each affected parent in the copy to
+its imported state before classify → 11 → 9 → 12 → stats → 13 rebuild it.
+Verified: 162 files identical cell for cell except column names, child sets
+unchanged, audit 0 served time violations, 37 of the 41 summed KPIs this exposed
+match INS (26 new requests), 4 withheld (no INS total). Tests: fix/03 470,
+integration 479. `check-kpi-totals collect` now bypasses the gate it feeds.
+
 ## 2026-10-05 — FIX-03 repair on a copy; summed KPIs checked against INS
 
 Repair applied step by step on a copied generation (`~/devbox/gov2/tempo-gen-20261005`),
