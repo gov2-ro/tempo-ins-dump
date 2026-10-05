@@ -1,8 +1,18 @@
 # CLAUDE.md
 
-Project guidance lives in AGENTS.md (shared with other coding agents) — edit it there.
-
 @AGENTS.md
+
+## Where guidance goes (overrides any command or skill that targets CLAUDE.md)
+AGENTS.md is the canonical guidance, shared with Codex and other agents. This
+file only imports it. When adding learnings (`/revise-claude-md`,
+`claude-md-improver`, or by hand):
+- **Into AGENTS.md:** anything about the project — commands, pipeline, app
+  behaviour, gotchas, testing, workflow rules. Write it so any agent can use it,
+  with no Claude-only tool names.
+- **Into this file:** only Claude Code mechanics — MCP tool names and how to
+  load them, skills, plugins, hooks, claude-in-chrome.
+- Never copy AGENTS.md content into this file, and don't flag this file as
+  "too thin" — it's thin on purpose.
 
 ## Claude Code specifics
 - The `tempo-dev` MCP tools (`mcp__tempo-dev__*`) are deferred. Load them by name
