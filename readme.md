@@ -31,7 +31,7 @@ app/
   main.py             — FastAPI entry, mounts API routers + static files
   config.py           — DB_PATH, PARQUET_DIR (corpus/parquet), MAX_DATA_ROWS=50000
   db.py               — DuckDB cursor-per-request (concurrency-safe)
-  routers/            — /api/categories, /api/datasets, /api/datasets/{id}/data, /api/datasets/{id}/download, /sdmx/
+  routers/            — /api/categories, /api/datasets, /api/datasets/{id}/data, /api/datasets/{id}/download, /sdmx/, /api/ask, /places
 ```
 
 #### SDMX 2.1 REST API
@@ -49,9 +49,11 @@ The current endpoint silently caps results at 50,000 observations; see
 [SDMX limitations](docs/SDMX-API.md) and [complete-export spec](docs/fixes/04-complete-exports.md).
 
 ```
-  services/           — dataset_search, dataset_meta, chart_selector, query_builder, agent, headlines, llm_client
-  static/js/          — dataset-page, chart-factory, chart-geo, chart-demographic, filter-panel, ask, dims-explorer
-  static/css/         — dataset.css, datasets.css, main.css
+  services/           — dataset_search, dataset_meta, query_builder, chart_selector, dashboard_composer, insights,
+                        headlines, dimension_structure, place_service, agent, llm_client
+  static/             — dataset-v2.html + js/dashboard-v2.js (main dataset page), index.html + js/explore-app.js (v1
+                        explorer), places/place, compare, ask, dimensions-explorer pages
+  static/js/          — chart-factory → chart-geo, chart-demographic, chart-new-types; site-chrome, filter-panel, …
   static/geo/         — romania-counties/regions/macroregions.geojson
 ```
 
@@ -60,6 +62,7 @@ The current endpoint silently caps results at 50,000 observations; see
 
 Script numbers are historical, **not execution order**: import metadata → classify
 dimensions → build stage-11 SDMX mappings → stage-9 conversion → split/profile.
+The full run order by phase is in [AGENTS.md](AGENTS.md#data-pipeline).
 Fetching scripts accept `--lang`; other scripts have different options and/or
 use `TEMPO_LANG`. Canonical output is shared across languages; the incremental
 `--lang en` path is not a verified safe refresh. See [CURRENT_STATE.md](docs/CURRENT_STATE.md)
@@ -71,18 +74,19 @@ and [BILINGUAL.md](docs/BILINGUAL.md) before running writers.
 | 2 | `2-fetch-matrices.py` | `data/1-indexes/{lang}/matrices.csv` | Fetches dataset list |
 | 3 | `3-fetch-metas.py` | `data/2-metas/{lang}/{id}.json` | Downloads metadata per dataset |
 | 4 | `4-build-meta-index.py` | `data/1-indexes/{lang}/matrices-list.csv` | Builds summary index from metadata |
-| 5 | `5-varstats-db.py` | `data/3-db/{lang}/tempo-indexes.db` | Creates SQLite DB from metadata (legacy) |
+| 5 | `5-varstats-db.py` | `data/3-db/{lang}/tempo-indexes.db` | *(legacy)* Creates SQLite DB from metadata |
 | 6 | `6-fetch-csv.py` | `data/4-datasets/{lang}/` | Downloads raw CSV data from TEMPO API |
-| 7 | `7-data-compactor.py` | `data/5-compact-datasets/{lang}/` | Replaces text labels with numeric IDs |
+| 7 | `7-data-compactor.py` | `data/5-compact-datasets/{lang}/` | *(legacy)* Replaces text labels with numeric IDs |
 | 8 | `8-setup-duckdb-schema.py` | `data/corpus/metadata.duckdb` | Creates DuckDB schema (contexts, matrices, dimensions) |
 | 9 | `9-csv-to-parquet.py` | `data/corpus/parquet/` | Converts CSVs directly to canonical SDMX parquet — maps values via `sdmx_codes`, renames columns via `sdmx_column_map`, never writes NULL |
 | 10 | `10-import-metadata.py` | DuckDB tables | Imports all metadata into DuckDB |
 | 10 | `10-classify-dimensions.py` | `dimension_options_parsed`, `matrix_profiles` | Parses/classifies dimensions, detects archetypes |
-| 10 | `10-sdmx-export.py` | `data/6-sdmx-csv/ro/` | Converts to SDMX-CSV 2.0 |
+| 10 | `10-sdmx-export.py` | `data/6-sdmx-csv/ro/` | *(legacy)* Converts to SDMX-CSV 2.0 |
 | 11 | `11-build-sdmx-codes.py` | DuckDB code mapping tables | Builds SDMX code mappings (`sdmx_codes`, `sdmx_column_map` — stage 9 depends on these) |
 | 11 | `11-coverage-profiler.py` | `dataset_coverage` DuckDB table | Analyzes data completeness |
 | 12 | `12-parquet-to-sdmx.py` | *(deprecated, not run)* | Read a dead `parquet-v2/` snapshot; stage 9 writes SDMX directly now (2026-09-05) — see `docs/reports/stage9-sdmx-migration.md` |
 | 12 | `12-split-datasets.py` | `data/corpus/parquet/` | Splits inconsistent datasets into clean sub-datasets |
+| 13 | `13-dimension-structure.py` | `dimension_structure` DuckDB table | Verifies each dimension's levels, real aggregates, additivity and nesting |
 
 ### Incremental Update (`update-pipeline.py`)
 
@@ -114,11 +118,12 @@ and may save `data/logs/last-pipeline-run.txt` despite failures. These are open
 | `build-geo-regions.py` | Dissolves county GeoJSON into regions + macroregions |
 | `build-static-site.py` | Builds static HTML site from corpus |
 | `split_rules.py` | Split rules engine — classifies datasets needing structural splits |
+| `sdmx_labels.py` | Shared `norm_label`/`parse_time_period` used by stages 9 and 11 so their label matching agrees |
 | `detect_trends.py` | Detects trends, YoY growth, seasonality → `dataset_trends` DuckDB table |
 | `duckdb_config.py` | Central config: paths for all DuckDB/Parquet processing |
 | `duckdb-browser.py` | Flask browser for exploring DuckDB + Parquet data |
 | `get-news.py` | Scrapes INS news/press releases → `data/insse_news.csv` |
-| `test_chart_selector.py` | Tests chart selection engine across all datasets |
+| `test_chart_selector.py` | Reports chart-selection results across all datasets (a report, not a test — tests live in `tests/`) |
 
 ### scripts/
 

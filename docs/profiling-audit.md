@@ -63,8 +63,7 @@ The two layers are not in conflict. The pre-DuckDB profiler is still the right t
 - [ ] **Consolidate unit classification** between `profiling/unit_classifier.py` and `10-classify-dimensions.py` UNIT_MAP
   Currently maintained separately — divergence risk. Options: (a) have `profiling/unit_classifier.py` import from `10-classify-dimensions.py`, or (b) extract a shared `unit_labels.py` module.
 
-- [ ] **Archive `build-dataset-metadata.py`**
-  First verify: `grep -r "dataset-metadata.json" ui/` — if nothing reads it, add deprecation comment and stop running it.
+- [x] **Archive `build-dataset-metadata.py`** — 2026-10-05: `ui/` no longer exists and nothing reads `dataset-metadata.json`; moved to gitignored `_obsolete/`.
 
 - [ ] **Mark `profiling/variable_classifier.py` as reference-only**
   Add comment noting that `10-classify-dimensions.py` and `split_rules.py` supersede its label classification logic for the DuckDB pipeline.
