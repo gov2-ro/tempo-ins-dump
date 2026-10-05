@@ -9,7 +9,9 @@ Creates two tables:
 These tables enable the parquet-v2 → parquet-v3 transformation (12-parquet-to-sdmx.py).
 
 Usage:
-    python 11-build-sdmx-codes.py              # build both tables
+    python 11-build-sdmx-codes.py              # build both tables (drop + rebuild)
+    python 11-build-sdmx-codes.py --matrix A,B  # targeted refresh: only those matrices'
+                                                # column maps + not-yet-coded nom_item_ids
     python 11-build-sdmx-codes.py --debug       # verbose logging
     python 11-build-sdmx-codes.py --dry-run     # preview without writing to DB
 """
@@ -136,7 +138,14 @@ def _label_to_column_id(label: str) -> str:
 
 # ── Build sdmx_codes table ──────────────────────────────────────────────────
 
-def build_sdmx_codes(conn: duckdb.DuckDBPyConnection, debug: bool = False) -> int:
+def _in_matrices(codes, col="d.matrix_code"):
+    """SQL fragment + params restricting a query to the given matrix codes."""
+    if not codes:
+        return "", []
+    return f"AND {col} IN ({', '.join('?' for _ in codes)})", list(codes)
+
+
+def build_sdmx_codes(conn: duckdb.DuckDBPyConnection, debug: bool = False, codes=None) -> list:
     """Build the sdmx_codes table mapping nom_item_id → sdmx_value.
 
     Returns number of rows inserted.
@@ -144,7 +153,8 @@ def build_sdmx_codes(conn: duckdb.DuckDBPyConnection, debug: bool = False) -> in
     log.info("Building sdmx_codes table...")
 
     # Fetch all parsed options with their labels
-    rows = conn.execute("""
+    where, params = _in_matrices(codes)
+    rows = conn.execute(f"""
         SELECT DISTINCT
             p.nom_item_id,
             p.dim_type,
@@ -156,7 +166,9 @@ def build_sdmx_codes(conn: duckdb.DuckDBPyConnection, debug: bool = False) -> in
             p.geo_name_clean
         FROM dimension_options_parsed p
         JOIN dimension_options o ON o.nom_item_id = p.nom_item_id
-    """).fetchall()
+        JOIN dimensions d ON d.dimension_id = o.dimension_id
+        WHERE 1=1 {where}
+    """, params).fetchall()
 
     # Deduplicate: same nom_item_id may appear in multiple dimensions
     # Keep one row per nom_item_id (they should have consistent dim_type)
@@ -227,7 +239,7 @@ def build_sdmx_codes(conn: duckdb.DuckDBPyConnection, debug: bool = False) -> in
     return final_records
 
 
-def build_sdmx_column_map(conn: duckdb.DuckDBPyConnection, debug: bool = False) -> list:
+def build_sdmx_column_map(conn: duckdb.DuckDBPyConnection, debug: bool = False, codes=None) -> list:
     """Build the sdmx_column_map table mapping (matrix_code, old_column_name) → sdmx_column_name.
 
     Returns list of (matrix_code, old_column_name, sdmx_column_name, dim_type) tuples.
@@ -235,7 +247,8 @@ def build_sdmx_column_map(conn: duckdb.DuckDBPyConnection, debug: bool = False) 
     log.info("Building sdmx_column_map table...")
 
     # Get all dimensions with their majority dim_type
-    rows = conn.execute("""
+    where, params = _in_matrices(codes)
+    rows = conn.execute(f"""
         WITH dim_types AS (
             SELECT
                 d.matrix_code,
@@ -247,6 +260,7 @@ def build_sdmx_column_map(conn: duckdb.DuckDBPyConnection, debug: bool = False) 
             FROM dimensions d
             JOIN dimension_options o ON o.dimension_id = d.dimension_id
             JOIN dimension_options_parsed p ON p.nom_item_id = o.nom_item_id
+            WHERE 1=1 {where}
             GROUP BY d.matrix_code, d.dim_code, d.dim_label, d.dim_column_name, p.dim_type
         ),
         majority AS (
@@ -267,7 +281,7 @@ def build_sdmx_column_map(conn: duckdb.DuckDBPyConnection, debug: bool = False) 
         FROM majority
         WHERE rn = 1
         ORDER BY matrix_code, dim_code
-    """).fetchall()
+    """, params).fetchall()
 
     log.info(f"  Processing {len(rows)} dimension entries across matrices...")
 
@@ -281,8 +295,16 @@ def build_sdmx_column_map(conn: duckdb.DuckDBPyConnection, debug: bool = False) 
     for matrix_code, dims in matrices.items():
         used_names = set()
         used_old_cols = set()  # Track old_column_name to skip duplicates (truncation collisions)
+        if codes:
+            # Targeted refresh: a dimension whose dim_column_name is already a resolved
+            # SDMX name (true for most of the corpus, see docs/BACKLOG.md) must keep its
+            # existing sdmx_column_map row; treating that name as the "old" column would
+            # write a REF_AREA -> REF_AREA self-mapping over the real legacy mapping.
+            used_names.update(d[2] for d in dims if not d[2].endswith("_nom_id"))
 
         for dim_code, dim_label, old_col_name, dim_type in dims:
+            if codes and not old_col_name.endswith("_nom_id"):
+                continue
             if old_col_name in used_old_cols:
                 dupes_skipped += 1
                 if debug:
@@ -340,22 +362,42 @@ CREATE INDEX IF NOT EXISTS idx_sdmx_colmap_sdmx ON sdmx_column_map(sdmx_column_n
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Build SDMX code mapping tables")
     parser.add_argument("--debug", action="store_true", help="Verbose logging")
     parser.add_argument("--dry-run", action="store_true", help="Preview without writing")
-    args = parser.parse_args()
+    parser.add_argument("--matrix", metavar="CODE[,CODE,...]",
+                        help="Targeted refresh: rebuild only these matrices' sdmx_column_map "
+                             "rows and add sdmx_codes for nom_item_ids not coded yet. The "
+                             "tables are not dropped; other matrices keep their rows")
+    args = parser.parse_args(argv)
+    codes = [c.strip() for c in args.matrix.split(",") if c.strip()] if args.matrix else []
+    if args.matrix is not None and not codes:
+        parser.error("--matrix needs at least one code")
 
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
     db_path = str(DB_FILE)
     log.info(f"Database: {db_path}")
+    if not Path(db_path).exists():
+        log.error(f"Database not found: {db_path}")
+        return 1
 
     conn = duckdb.connect(db_path, read_only=args.dry_run)
 
     try:
-        if not args.dry_run:
+        if codes:
+            have = {r[0] for r in conn.execute(
+                "SELECT DISTINCT matrix_code FROM dimensions").fetchall()}
+            missing = [c for c in codes if c not in have]
+            if missing:
+                log.error(f"No dimensions in the DB for: {', '.join(missing)} "
+                          "(run 10-import-metadata.py and 10-classify-dimensions.py first)")
+                return 1
+            if not args.dry_run:
+                conn.execute(SDMX_SCHEMA_SQL)  # IF NOT EXISTS: keeps every other matrix
+        elif not args.dry_run:
             # Drop and recreate tables
             conn.execute("DROP TABLE IF EXISTS sdmx_codes")
             conn.execute("DROP TABLE IF EXISTS sdmx_column_map")
@@ -363,11 +405,14 @@ def main():
             log.info("Created sdmx_codes and sdmx_column_map tables")
 
         # Phase 0: Build sdmx_codes
-        code_records = build_sdmx_codes(conn, debug=args.debug)
+        code_records = build_sdmx_codes(conn, debug=args.debug, codes=codes)
 
         if not args.dry_run:
+            # Targeted: existing codes are kept (a nom_item_id is global and other
+            # matrices already resolve through it); only new ids are added.
+            verb = "INSERT OR IGNORE" if codes else "INSERT"
             conn.executemany(
-                "INSERT INTO sdmx_codes VALUES (?, ?, ?, ?, ?, ?, ?)",
+                f"{verb} INTO sdmx_codes VALUES (?, ?, ?, ?, ?, ?, ?)",
                 code_records,
             )
             count = conn.execute("SELECT COUNT(*) FROM sdmx_codes").fetchone()[0]
@@ -376,11 +421,14 @@ def main():
             log.info(f"[DRY RUN] Would insert {len(code_records)} rows into sdmx_codes")
 
         # Phase 1: Build sdmx_column_map
-        col_records = build_sdmx_column_map(conn, debug=args.debug)
+        col_records = build_sdmx_column_map(conn, debug=args.debug, codes=codes)
 
         if not args.dry_run:
+            # Targeted: replace only the keys regenerated here; every other row (other
+            # matrices, already-canonical dimensions of these) stays.
+            verb = "INSERT OR REPLACE" if codes else "INSERT"
             conn.executemany(
-                "INSERT INTO sdmx_column_map VALUES (?, ?, ?, ?)",
+                f"{verb} INTO sdmx_column_map VALUES (?, ?, ?, ?)",
                 col_records,
             )
             count = conn.execute("SELECT COUNT(*) FROM sdmx_column_map").fetchone()[0]

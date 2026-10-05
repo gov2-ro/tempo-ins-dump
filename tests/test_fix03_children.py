@@ -174,7 +174,7 @@ def run_split_main(mod, tmp_path, monkeypatch, split_impl):
     monkeypatch.setattr(mod, "detect_all", lambda conn: [rule])
     monkeypatch.setattr(mod, "ensure_schema", lambda conn: conn.execute(
         "CREATE TABLE IF NOT EXISTS dataset_splits(parent_matrix_code VARCHAR)"))
-    monkeypatch.setattr(mod, "clean_previous_splits", lambda conn, parent_matrix_code=None: None)
+    monkeypatch.setattr(mod, "swap_children", lambda *a, **k: None)   # swap itself: test_fix03b_split
     monkeypatch.setattr(mod, "split_parquet_by_filter", split_impl)
     monkeypatch.setattr(mod, "register_sub_dataset", lambda *a, **k: None)
     monkeypatch.setattr(sys, "argv", ["12-split-datasets.py", "--matrix", "AAA1"])
@@ -185,7 +185,7 @@ def run_split_main(mod, tmp_path, monkeypatch, split_impl):
 def test_split_handled_failure_exits_nonzero(tmp_path, monkeypatch):
     mod = load("split_t", "12-split-datasets.py")
 
-    def failing(conn, rule, dry_run=False):
+    def failing(conn, rule, dry_run=False, stage_dir=None):
         mod.record_failure("Failed to split AAA1 -> AAA1_x: boom")
         return []
     with pytest.raises(SystemExit) as e:
@@ -197,12 +197,12 @@ def test_split_empty_child_counts_as_failure(tmp_path, monkeypatch):
     mod = load("split_t2", "12-split-datasets.py")
     with pytest.raises(SystemExit) as e:
         run_split_main(mod, tmp_path, monkeypatch,
-                       lambda conn, rule, dry_run=False: [{"sub_code": "AAA1_x", "row_count": 0}])
+                       lambda conn, rule, dry_run=False, stage_dir=None: [{"sub_code": "AAA1_x", "row_count": 0}])
     assert e.value.code == 1
 
 
 def test_split_clean_run_exits_zero(tmp_path, monkeypatch):
     mod = load("split_t3", "12-split-datasets.py")
     run_split_main(mod, tmp_path, monkeypatch,
-                   lambda conn, rule, dry_run=False: [{"sub_code": "AAA1_x", "row_count": 5},
+                   lambda conn, rule, dry_run=False, stage_dir=None: [{"sub_code": "AAA1_x", "row_count": 5},
                                                       {"sub_code": "AAA1_y", "row_count": 3}])

@@ -7,7 +7,10 @@ from pathlib import Path
 
 # Base directories
 BASE_DIR = Path(__file__).parent
-DATA_DIR = BASE_DIR / "data"
+# TEMPO_PIPELINE_DATA_DIR relocates every pipeline path (inputs, corpus, logs) to a
+# scratch tree, so a synthetic fixture can be run through the real scripts without
+# touching data/. (TEMPO_DATA_DIR is the *app's* variable and is deliberately ignored.)
+DATA_DIR = Path(os.environ.get("TEMPO_PIPELINE_DATA_DIR") or (BASE_DIR / "data"))
 
 # Language selection — set via TEMPO_LANG env var (default: ro)
 LANG = os.environ.get("TEMPO_LANG", "ro")

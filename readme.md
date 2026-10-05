@@ -79,13 +79,13 @@ and [BILINGUAL.md](docs/BILINGUAL.md) before running writers.
 | 7 | `7-data-compactor.py` | `data/5-compact-datasets/{lang}/` | *(legacy)* Replaces text labels with numeric IDs |
 | 8 | `8-setup-duckdb-schema.py` | `data/corpus/metadata.duckdb` | Creates DuckDB schema (contexts, matrices, dimensions) |
 | 9 | `9-csv-to-parquet.py` | `data/corpus/parquet/` | Converts CSVs directly to canonical SDMX parquet — maps values via `sdmx_codes`, renames columns via `sdmx_column_map`, never writes NULL |
-| 10 | `10-import-metadata.py` | DuckDB tables | Imports all metadata into DuckDB |
-| 10 | `10-classify-dimensions.py` | `dimension_options_parsed`, `matrix_profiles` | Parses/classifies dimensions, detects archetypes |
+| 10 | `10-import-metadata.py` | DuckDB tables | Reconciles matrices/dimensions/options with `data/2-metas` (new options/periods of existing datasets included); `--matrix A,B` targets, `--stats-only`, `--dry-run` |
+| 10 | `10-classify-dimensions.py` | `dimension_options_parsed`, `matrix_profiles` | Parses/classifies dimensions, detects archetypes; `--matrix A,B` refreshes only those (tables kept) |
 | 10 | `10-sdmx-export.py` | `data/6-sdmx-csv/ro/` | *(legacy)* Converts to SDMX-CSV 2.0 |
-| 11 | `11-build-sdmx-codes.py` | DuckDB code mapping tables | Builds SDMX code mappings (`sdmx_codes`, `sdmx_column_map` — stage 9 depends on these) |
+| 11 | `11-build-sdmx-codes.py` | DuckDB code mapping tables | Builds SDMX code mappings (`sdmx_codes`, `sdmx_column_map` — stage 9 depends on these). The no-flag run drops and rebuilds both tables and is unsafe for canonical matrices; use `--matrix A,B` for refreshes |
 | 11 | `11-coverage-profiler.py` | `dataset_coverage` DuckDB table | Analyzes data completeness |
 | 12 | `12-parquet-to-sdmx.py` | *(deprecated, not run)* | Read a dead `parquet-v2/` snapshot; stage 9 writes SDMX directly now (2026-09-05) — see `docs/reports/stage9-sdmx-migration.md` |
-| 12 | `12-split-datasets.py` | `data/corpus/parquet/` | Splits inconsistent datasets into clean sub-datasets |
+| 12 | `12-split-datasets.py` | `data/corpus/parquet/` | Splits inconsistent datasets into clean sub-datasets; each parent's children are staged, validated and swapped in with their DB rows as one set (failure keeps the previous generation) |
 | 13 | `13-dimension-structure.py` | `dimension_structure` DuckDB table | Verifies each dimension's levels, real aggregates, additivity and nesting |
 
 ### Incremental Update (`update-pipeline.py`)
@@ -103,14 +103,29 @@ python update-pipeline.py --dry-run              # plan only: writes no state, l
 python update-pipeline.py --strict               # optional-stage failures also exit 1
 ```
 
-Per-matrix steps: metadata → CSV → canonical SDMX parquet → split → dimension
-structure → view profile; afterwards meta index, metadata import and date sync.
+Per-matrix steps, in dependency order (each return code is checked; the first failed
+required stage stops that matrix, the others still run):
+
+1. metadata fetch → 6-fetch-csv
+2. `10-import-metadata --matrix` (changed options/periods) → `10-classify-dimensions --matrix`
+   → `11-build-sdmx-codes --matrix` (stage 9 resolves labels/columns through these)
+3. `9-csv-to-parquet` → `12-split-datasets --matrix` (children replaced as a set)
+   → `10-import-metadata --matrix --stats-only` (row_count/size/path of the new parquet)
+4. optional: `13-dimension-structure` and `generate_view_profiles` for the parent **and its children**
+5. validate (parent/child parquet readable, row counts equal the DB, children registered)
+
+Run level afterwards: `4-build-meta-index`, date sync. Coverage, trends, value profiles
+and the search index have no per-matrix mode: the touched matrices are recorded under
+`stale` in the state file; `--global-profiles` runs those four whole-corpus scripts
+(optional stages). Flags: `--skip-duckdb` leaves the DB refresh stages out (partial run).
 
 - **Required** (any failure: exit 1, matrix goes to the retry set, watermark frozen):
-  metadata, CSV (`6-fetch-csv`), conversion (`9`), split (`12`, unless `--no-split`),
-  and the batch index/import/date-sync. A failed `--fetch-context` aborts the run.
+  metadata, CSV (`6-fetch-csv`), import/classify/code maps, conversion (`9`), split (`12`,
+  unless `--no-split`), stats refresh, validation, and the batch index/date-sync.
+  A failed `--fetch-context` aborts the run.
 - **Optional** (recorded and printed, exit 0 unless `--strict`): `13-dimension-structure`,
-  `generate_view_profiles`. The matrix is marked `ok_degraded`; derived features are not verified.
+  `generate_view_profiles`, `--global-profiles` scripts. The matrix is marked `ok_degraded`;
+  derived features are not verified.
 - **Empty at source** (`6-fetch-csv` exit 3) is recorded as `empty`: not retried, not a failure.
 - Nothing is deleted on failure; the previous parquet/profile artifacts stay.
 - **State**: `data/logs/update-pipeline-state.json` (`--state-file`) holds the watermark,
@@ -123,9 +138,8 @@ structure → view profile; afterwards meta index, metadata import and date sync
   processing stages write shared canonical output; children always get `TEMPO_LANG=ro`.
 - Exit codes: 0 ok, 1 required failure, 2 usage / unsafe mode.
 
-Still open under [FIX-03](docs/fixes/03-pipeline-and-corpus.md): mapping/classification
-refresh and import ordering in the incremental run, targeted refresh paths, generation
-manifests. `scripts/audit-corpus.py --data-dir DIR [--json-out F]` is a read-only,
+Still open under [FIX-03](docs/fixes/03-pipeline-and-corpus.md): generation manifests,
+corpus repair/quarantine. `scripts/audit-corpus.py --data-dir DIR [--json-out F]` is a read-only,
 deterministic corpus audit (categories, schema, NULL dims, time validity, grain, coverage).
 
 ### Other root-level scripts

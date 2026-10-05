@@ -8,7 +8,7 @@ Creates two new DuckDB tables:
 
 Usage:
     python 10-classify-dimensions.py                     # Process all datasets
-    python 10-classify-dimensions.py --matrix ACC101B    # Single dataset (testing)
+    python 10-classify-dimensions.py --matrix A,B        # Targeted refresh (tables kept)
     python 10-classify-dimensions.py --debug             # Verbose per-option logging
 """
 
@@ -17,6 +17,7 @@ import json
 import re
 import sys
 import unicodedata
+from pathlib import Path
 from collections import defaultdict
 
 import duckdb
@@ -461,12 +462,21 @@ def assign_archetype(has_time, has_geo, has_gender, has_age, has_residence) -> s
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser(description='Classify and parse INS dimension options')
-    ap.add_argument('--matrix', help='Process only this matrix code (for testing)')
+    ap.add_argument('--matrix', metavar='CODE[,CODE,...]',
+                    help='Targeted refresh of these matrices only. Never drops the tables; '
+                         'other matrices keep their rows and already-parsed nom_item_ids '
+                         'are left as they are')
     ap.add_argument('--debug', action='store_true', help='Verbose per-option logging')
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
+    codes = [c.strip() for c in args.matrix.split(',') if c.strip()] if args.matrix else []
+    if args.matrix is not None and not codes:
+        ap.error('--matrix needs at least one code')
 
+    if not Path(DB_FILE).exists():
+        print(f"ERROR: database not found: {DB_FILE}")
+        sys.exit(1)
     conn = duckdb.connect(str(DB_FILE))
 
     print("=" * 70)
@@ -475,8 +485,8 @@ def main():
 
     # ── Schema setup ─────────────────────────────────────────────────────────
     print("\n→ Creating tables...")
-    single_matrix = bool(args.matrix)
-    if not single_matrix:
+    targeted = bool(codes)
+    if not targeted:
         # Full rebuild: drop and recreate both tables
         conn.execute("DROP TABLE IF EXISTS dimension_options_parsed")
         conn.execute("DROP TABLE IF EXISTS matrix_profiles")
@@ -531,7 +541,11 @@ def main():
     """)
 
     # ── Fetch all options with dimension context ──────────────────────────────
-    matrix_filter = f"AND d.matrix_code = '{args.matrix}'" if args.matrix else ""
+    matrix_filter = ""
+    params: list = []
+    if codes:
+        matrix_filter = f"AND d.matrix_code IN ({', '.join('?' for _ in codes)})"
+        params = list(codes)
 
     print("→ Fetching dimension options from DuckDB...")
     rows = conn.execute(f"""
@@ -545,12 +559,21 @@ def main():
         JOIN dimensions d ON opt.dimension_id = d.dimension_id
         WHERE 1=1 {matrix_filter}
         ORDER BY d.matrix_code, d.dim_code, opt.option_offset
-    """).fetchall()
+    """, params).fetchall()
 
     print(f"  Loaded {len(rows):,} option rows")
     if not rows:
         print("  No rows found — check DB path or --matrix filter.")
+        conn.close()
         sys.exit(1)
+    if codes:
+        found = {r[3] for r in rows}
+        missing = [c for c in codes if c not in found]
+        if missing:
+            print(f"  ERROR: no dimension options in the DB for: {', '.join(missing)} "
+                  "(import their metadata first)")
+            conn.close()
+            sys.exit(1)
 
     # ── Parse every unique nom_item_id ────────────────────────────────────────
     # A nom_item_id is globally unique; use first-seen dim_label to determine type.
@@ -645,8 +668,12 @@ def main():
             p.get('raw_label'),
         ))
 
+    # A nom_item_id is global, so a targeted run must not rewrite rows other matrices
+    # already rely on (their dim_type came from a first-seen rule over the whole corpus):
+    # it only adds ids that are not parsed yet. A full run replaces everything.
+    verb = "INSERT OR IGNORE" if targeted else "INSERT OR REPLACE"
     conn.executemany(
-        "INSERT OR REPLACE INTO dimension_options_parsed VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        f"{verb} INTO dimension_options_parsed VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         insert_rows
     )
 
