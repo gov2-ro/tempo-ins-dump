@@ -1366,17 +1366,12 @@ class LensApp {
             </div>
         `;
 
-        // Download buttons — build URL with current filters and language at click time
-        const buildDownloadUrl = (fmt) => {
-            const f = JSON.stringify(this.getFilters());
-            return `/api/datasets/${m.matrix_code}/download?format=${fmt}&lang=${this.lang}&filters=${encodeURIComponent(f)}`;
-        };
-        header.querySelector('#dl-csv-btn').addEventListener('click', () => {
-            window.location.href = buildDownloadUrl('csv');
-        });
-        header.querySelector('#dl-xlsx-btn').addEventListener('click', () => {
-            window.location.href = buildDownloadUrl('xlsx');
-        });
+        // Download buttons: raw observations for the current filters/language
+        // (not the chart sample); preflight reports row count or rejection.
+        const dlBtn = (id, fmt) => header.querySelector(id).addEventListener('click', ev =>
+            API.download(m.matrix_code, fmt, this.lang, this.getFilters(), ev.currentTarget));
+        dlBtn('#dl-csv-btn', 'csv');
+        dlBtn('#dl-xlsx-btn', 'xlsx');
 
         // Bind breadcrumb clicks → navigate to category drill
         header.querySelectorAll('.dash-crumb-link').forEach(el => {

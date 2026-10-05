@@ -62,6 +62,41 @@ def build_data_query_params(matrix_code: str, dimensions: list, filters: dict,
                   value_column, time_column, [])
 
 
+def build_export_query_params(matrix_code: str, dimensions: list, filters: dict,
+                              value_column: str = "OBS_VALUE",
+                              count_only: bool = False):
+    """Raw-observation query for downloads (FIX-04): every row matching the
+    explicit filters, no LIMIT, no chart windowing. Returns ``(sql, params)``.
+
+    ``count_only`` returns ``SELECT count(*)`` over the same selection. Otherwise
+    rows are ordered by every dimension column then the value, so repeated
+    exports of the same selection are identical.
+    """
+    params = [str(_resolve_parquet_path(matrix_code))]
+    cols = [d['dim_column_name'] for d in dimensions]
+    valid = set(cols)
+    where = []
+    for col, values in filters.items():
+        if col not in valid or not values:
+            continue
+        vals = [str(v) for v in values if v is not None]
+        if not vals:
+            continue
+        params.extend(vals)
+        where.append(f'CAST({quote_ident(col)} AS VARCHAR) IN '
+                     f'({", ".join("?" for _ in vals)})')
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+    if count_only:
+        return f"SELECT count(*) FROM read_parquet(?) {where_sql}", params
+    vq = quote_ident(value_column)
+    sel = ", ".join(quote_ident(c) for c in cols)
+    val_sel = f'{vq} AS "OBS_VALUE"' if value_column != "OBS_VALUE" else '"OBS_VALUE"'
+    order = ", ".join([quote_ident(c) for c in cols] + [vq])
+    sql = (f"SELECT {sel}, {val_sel} FROM read_parquet(?) {where_sql} "
+           f"ORDER BY {order}")
+    return sql, params
+
+
 def _build(matrix_code, dimensions, filters, limit, group_by, agg_func,
            value_column, time_column, params):
     """Shared implementation. ``params`` is a list to bind into, or None to

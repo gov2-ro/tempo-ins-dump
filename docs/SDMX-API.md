@@ -2,8 +2,9 @@
 
 > Status (FIX-01 phase 2): the DSD, data and key parsing share one code registry
 > (`app/services/sdmx_registry.py`) and XML is built with an XML serializer. The
-> 50,000-observation limit remains and exports are not complete; see
-> [FIX-04](fixes/04-complete-exports.md). Structural validity is tested with a
+> data response is complete-or-reject (FIX-04): the full selection is streamed,
+> or a selection over `TEMPO_SDMX_MAX_OBS` (default 250,000) is rejected with
+> 413 before any XML is sent. Structural validity is tested with a
 > hand-written SDMX 2.1 structure checker, not the official XSDs.
 
 The FastAPI app (`app/`) exposes a minimal SDMX 2.1 REST API that makes INS TEMPO datasets consumable by SDMX-aware tools — in particular the [SDMX Dashboard Generator](https://bis-med-it.github.io/SDMX-dashboard-generator/).
@@ -195,5 +196,14 @@ In the UI: use the YAML selector to pick a config. The app fetches live data fro
 - **Source data**: `data/parquet-v3/ro/` — SDMX-native column names (`REF_AREA`, `TIME_PERIOD`, `UNIT_MEASURE`, `OBS_VALUE`), human-readable string values
 - **Metadata**: `data/tempo_metadata.duckdb` — `dimensions`, `dimension_options`, `matrices` tables
 - **Router**: `app/routers/sdmx.py`, mounted at `/sdmx` in `app/main.py`
-- **Max rows**: 50,000 per data request (same as the regular API)
+- **Max rows**: none silently. The selection is counted first; over `TEMPO_SDMX_MAX_OBS` (default 250,000) the request gets 413 (narrow with key, startPeriod/endPeriod, lastNObservations, or use CSV). Otherwise the full selection streams in batches. Headers: `X-Export-Matching-Rows`, `X-Export-Complete: true`.
+
+## Downloads (CSV / XLSX)
+
+`GET /api/datasets/{code}/download?format=csv|xlsx&lang=&filters=` returns every raw observation matching the filters (never the 50,000 chart cap), ordered by all dimensions then value.
+
+- CSV streams in batches (UTF-8, no BOM, CRLF); no row limit unless `TEMPO_EXPORT_MAX_ROWS` is set (413 when exceeded).
+- XLSX is built write-only in a temp file (deleted on success, error and disconnect) and rejected with 413, before any headers, if the selection exceeds 1,048,575 data rows (Excel's sheet limit minus header). Use CSV for those.
+- Headers: `X-Export-Matching-Rows`, `X-Export-Rows` (equal), `X-Export-Complete: true`. `preflight=1` returns the same counts as JSON without a file (used by the UI).
+- Spreadsheet safety: XLSX stores labels as text cells verbatim; CSV prefixes labels starting with `= + - @` TAB CR (not plain numbers) with `'`; `safe=0` disables it. OBS_VALUE is never altered.
 - **v2 fallback**: If no parquet-v3 file exists for a dataset, the data endpoint falls back to parquet-v2 (numeric IDs — labels will be raw codes in that case)

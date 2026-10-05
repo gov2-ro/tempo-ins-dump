@@ -484,12 +484,12 @@ class DashboardV2 {
         `;
         document.title = `${m.matrix_name} — INS+ v2`;
 
-        const dlUrl = fmt => `/api/datasets/${m.matrix_code}/download?format=${fmt}`
-            + `&lang=${this.lang}&filters=${encodeURIComponent(JSON.stringify(this.expandedUserFilters()))}`;
-        document.getElementById('dbv2-csv-btn').addEventListener('click',
-            () => { window.location.href = dlUrl('csv'); });
-        document.getElementById('dbv2-xlsx-btn').addEventListener('click',
-            () => { window.location.href = dlUrl('xlsx'); });
+        // Raw observations for the current filters/language (not the chart
+        // sample); preflight reports the row count or the rejection.
+        const dlBtn = (id, fmt) => document.getElementById(id).addEventListener('click', ev =>
+            API.download(m.matrix_code, fmt, this.lang, this.expandedUserFilters(), ev.currentTarget));
+        dlBtn('dbv2-csv-btn', 'csv');
+        dlBtn('dbv2-xlsx-btn', 'xlsx');
         document.getElementById('dbv2-table-btn').addEventListener('click',
             () => this.toggleTable());
         // Theme & language toggles live in the site chrome topbar —

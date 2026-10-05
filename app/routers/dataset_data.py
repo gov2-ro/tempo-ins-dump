@@ -3,14 +3,15 @@ import csv
 import io
 import json
 import logging
+import os
 import re
 from fastapi import APIRouter, Query, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from app.db import get_conn
 from app.config import MAX_DATA_ROWS, LARGE_DATASET_THRESHOLD, PARQUET_DIR
 
 from app.services.query_builder import (
-    build_data_query_params, resolve_parquet_schema, adapt_to_parquet,
+    build_data_query_params, build_export_query_params, resolve_parquet_schema, adapt_to_parquet,
     AVG_UNIT_TYPES, quote_ident)
 from app.services.request_validation import parse_filters, parse_group_by
 
@@ -411,20 +412,39 @@ def download_dataset(
     format: str = Query("csv", pattern="^(csv|xlsx)$"),
     filters: str = Query("{}", description="JSON object: {column_name: [scalar, ...]}"),
     lang: str = Query("ro", pattern="^(ro|en)$"),
+    safe: int = Query(1, ge=0, le=1, description="1 = neutralise formula-like labels in CSV"),
+    preflight: int = Query(0, ge=0, le=1, description="1 = return JSON counts/policy, no file"),
 ):
-    """Download dataset as CSV or XLSX, respecting active filters and language.
+    """Download every raw observation matching the filters, as CSV or XLSX.
+
+    Not bound by the chart cap. Headers on file responses:
+    X-Export-Matching-Rows / X-Export-Rows (equal: the file is complete) and
+    X-Export-Complete: true. XLSX over the worksheet limit, or any export over
+    TEMPO_EXPORT_MAX_ROWS, is rejected with 413 before any file is sent.
 
     4xx: 404 unknown dataset / no data file; 400 malformed filters (same
-    rules as /data); 422 bad format or lang.
+    rules as /data); 413 selection too large for the format; 422 bad
+    format or lang.
     """
     conn = get_conn()
+    release = conn.close
     try:
-        return _download(conn, matrix_code, format, filters, lang)
-    finally:
-        conn.close()
+        resp = _download(conn, matrix_code, format, filters, lang, bool(safe),
+                         bool(preflight), release)
+    except BaseException:
+        release()
+        raise
+    # Streaming responses own the cursor and close it when the stream ends.
+    if not getattr(resp, "_owns_conn", False):
+        release()
+    return resp
 
 
-def _download(conn, matrix_code: str, format: str, filters: str, lang: str):
+def _download(conn, matrix_code: str, format: str, filters: str, lang: str,
+              safe: bool, preflight: bool, release):
+    import app.config as cfg
+    from app.services import export as ex
+
     matrix = conn.execute(
         "SELECT row_count FROM matrices WHERE matrix_code = ?", [matrix_code]
     ).fetchone()
@@ -450,70 +470,98 @@ def _download(conn, matrix_code: str, format: str, filters: str, lang: str):
     dimensions, _, filter_dict = adapt_to_parquet(
         schema, dimensions, None, filter_dict)
 
-    sql, params = build_data_query_params(
-        matrix_code, dimensions, filter_dict, MAX_DATA_ROWS,
-        value_column=schema["value_column"])
+    # Matching row count first: it drives the size policy and the headers.
+    try:
+        csql, cparams = build_export_query_params(
+            matrix_code, dimensions, filter_dict,
+            value_column=schema["value_column"], count_only=True)
+        total = conn.execute(csql, cparams).fetchone()[0]
+    except Exception:
+        log.exception("download count failed matrix=%s", matrix_code)
+        raise HTTPException(500, "Query failed")
+
+    # Size policy: reject BEFORE any file bytes/headers are sent.
+    if format == "xlsx" and total > ex.xlsx_row_limit():
+        raise HTTPException(
+            413, f"Selection has {total} rows, more than the XLSX limit of "
+                 f"{ex.xlsx_row_limit()} data rows. Narrow the filters or "
+                 f"download CSV, which has no row limit.")
+    if cfg.EXPORT_MAX_ROWS and total > cfg.EXPORT_MAX_ROWS:
+        raise HTTPException(
+            413, f"Selection has {total} rows, more than the export limit of "
+                 f"{cfg.EXPORT_MAX_ROWS}. Narrow the filters.")
+
+    if preflight:
+        return {"matrix_code": matrix_code, "format": format,
+                "matching_rows": total, "complete": True,
+                "xlsx_row_limit": ex.xlsx_row_limit(),
+                "export_row_limit": cfg.EXPORT_MAX_ROWS or None}
+
+    # Concurrency slot (non-blocking, before any headers). Released with the
+    # cursor: when the stream ends, errors or the client disconnects.
+    slot = ex.try_acquire("xlsx" if format == "xlsx" else "csv")
+    if slot is None:
+        raise ex.busy_error()
+
+    def release_all():
+        slot()
+        release()
 
     try:
-        rows = conn.execute(sql, params).fetchall()
+        return _stream_file(conn, matrix_code, format, lang, safe, dimensions,
+                            filter_dict, schema, total, release_all)
+    except BaseException:
+        release_all()
+        raise
+
+
+def _stream_file(conn, matrix_code, format, lang, safe, dimensions,
+                 filter_dict, schema, total, release):
+    import app.config as cfg
+    from app.services import export as ex
+
+    col_names = [d['dim_column_name'] for d in dimensions] + ['OBS_VALUE']
+    value_maps = ex.load_value_maps(conn, matrix_code, dimensions) if lang == "en" else {}
+    transform = ex.make_row_transform(col_names, value_maps, safe, format == "csv")
+
+    sql, params = build_export_query_params(
+        matrix_code, dimensions, filter_dict, value_column=schema["value_column"])
+    try:
+        cur = conn.execute(sql, params)
     except Exception:
         log.exception("download query failed matrix=%s", matrix_code)
         raise HTTPException(500, "Query failed")
 
-    col_names = [d['dim_column_name'] for d in dimensions] + ['OBS_VALUE']
-
-    # Build EN translation maps if requested
-    value_maps: dict = {}
-    if lang == "en":
-        for d in dimensions:
-            col = d['dim_column_name']
-            mapping = conn.execute("""
-                SELECT dopt.option_label, COALESCE(sc.display_label_en, dopt.option_label)
-                FROM dimension_options dopt
-                JOIN dimensions dim ON dim.dimension_id = dopt.dimension_id
-                LEFT JOIN sdmx_codes sc ON sc.nom_item_id = dopt.nom_item_id
-                WHERE dim.matrix_code = ? AND dim.dim_column_name = ?
-            """, [matrix_code, col]).fetchall()
-            if mapping:
-                value_maps[col] = {ro: en for ro, en in mapping}
-
-    def _translate(row):
-        if not value_maps:
-            return row
-        translated = []
-        for i, v in enumerate(row[:-1]):
-            col = col_names[i]
-            if v is not None and col in value_maps:
-                translated.append(value_maps[col].get(str(v), v))
-            else:
-                translated.append(v)
-        translated.append(row[-1])
-        return translated
+    headers = {"X-Export-Matching-Rows": str(total), "X-Export-Rows": str(total),
+               "X-Export-Complete": "true",
+               "Access-Control-Expose-Headers":
+                   "X-Export-Matching-Rows, X-Export-Rows, X-Export-Complete"}
 
     if format == "csv":
-        buf = io.StringIO()
-        writer = csv.writer(buf)
-        writer.writerow(col_names)
-        for row in rows:
-            writer.writerow(_translate(row))
-        return Response(
-            buf.getvalue(),
-            media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f"attachment; filename={matrix_code}.csv"},
-        )
-    else:
-        from openpyxl import Workbook
-        wb = Workbook()
-        ws = wb.active
-        ws.title = matrix_code
-        ws.append(col_names)
-        for row in rows:
-            ws.append([v if v is not None else "" for v in _translate(row)])
-        buf = io.BytesIO()
-        wb.save(buf)
-        buf.seek(0)
-        return Response(
-            buf.read(),
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename={matrix_code}.xlsx"},
-        )
+        headers["Content-Disposition"] = f"attachment; filename={matrix_code}.csv"
+        resp = StreamingResponse(
+            ex.iter_csv(cur, col_names, transform, cfg.EXPORT_BATCH_ROWS, release),
+            media_type="text/csv; charset=utf-8", headers=headers)
+        resp._owns_conn = True
+        return resp
+
+    try:
+        path, written = ex.write_xlsx_tempfile(
+            cur, matrix_code, col_names, transform, cfg.EXPORT_BATCH_ROWS,
+            ex.xlsx_row_limit(), safe)
+    except OverflowError:
+        raise HTTPException(
+            413, "Selection grew past the XLSX row limit while exporting. "
+                 "Download CSV instead.")
+    except Exception:
+        log.exception("xlsx export failed matrix=%s", matrix_code)
+        raise HTTPException(500, "Export failed")
+    headers["X-Export-Rows"] = str(written)
+    headers["Content-Length"] = str(os.path.getsize(path))
+    headers["Content-Disposition"] = f"attachment; filename={matrix_code}.xlsx"
+    resp = StreamingResponse(
+        ex.iter_file_then_delete(path, release),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers)
+    resp._owns_conn = True
+    return resp

@@ -17,18 +17,21 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
+from xml.sax.saxutils import quoteattr
 
 from app.db import get_conn
-from app.config import PARQUET_DIR
+from app.config import PARQUET_DIR, SDMX_MAX_OBS, EXPORT_BATCH_ROWS as SDMX_BATCH_ROWS
 from app.services.request_validation import (
     parse_period_range, period_span_sql, quote_ident, valid_matrix_code)
 from app.services.sdmx_registry import build_registry
+from app.services.export import try_acquire, busy_error
 
 router = APIRouter()
 log = logging.getLogger(__name__)
 
 AGENCY = "INS"
+_OBS_MARK = "@@OBS-STREAM@@"
 
 NS = {
     "message": "http://www.sdmx.org/resources/sdmxml/schemas/v2_1/message",
@@ -192,30 +195,75 @@ def get_data(
                              else f"WHERE {clause}")
                 params.extend(r[0] for r in time_rows)
 
+        # Complete-or-reject (FIX-04): never a silently capped document.
+        try:
+            total = conn.execute(
+                f"SELECT count(*) FROM read_parquet(?) {where_sql}",
+                [str(parquet), *params]).fetchone()[0]
+        except Exception:
+            log.exception("sdmx count failed flow=%s", flow)
+            raise HTTPException(500, "Query failed")
+        if total > SDMX_MAX_OBS:
+            raise HTTPException(
+                413, f"Selection has {total} observations, more than the SDMX "
+                     f"limit of {SDMX_MAX_OBS}. Narrow it with a key, "
+                     f"startPeriod/endPeriod or lastNObservations, or download "
+                     f"CSV (no row limit).")
+
+        # Concurrency slot: non-blocking, before any headers are sent.
+        slot = try_acquire("sdmx")
+        if slot is None:
+            raise busy_error()
         col_select = ", ".join(quote_ident(d.file_col) for d in reg.dims)
         col_select += f", {quote_ident(reg.value_col)}"
-        # NOTE: row cap is FIX-04's to change; behaviour kept as before.
-        sql = f"SELECT {col_select} FROM read_parquet(?) {where_sql} LIMIT 50000"
+        sql = f"SELECT {col_select} FROM read_parquet(?) {where_sql}"
         try:
-            rows = conn.execute(sql, [str(parquet), *params]).fetchall()
+            cur = conn.execute(sql, [str(parquet), *params])
         except Exception:
+            slot()
             log.exception("sdmx data query failed flow=%s", flow)
             raise HTTPException(500, "Query failed")
-    finally:
+    except BaseException:
         conn.close()
+        raise
 
     root = ET.Element(_q("message", "GenericData"))
     _header_data(root, flow)
     ds = _sub(root, "message", "DataSet", structureRef=flow, action="Replace")
-    n = len(reg.dims)
-    for row in rows:
-        obs = _sub(ds, "generic", "Obs")
-        obskey = _sub(obs, "generic", "ObsKey")
-        for i, d in enumerate(reg.dims):
-            _sub(obskey, "generic", "Value", id=d.id, value=reg.encode_dim(d, row[i]))
-        ov = row[n]
-        _sub(obs, "generic", "ObsValue", value="" if ov is None else str(ov))
-    return _serialize(root)
+    ds.text = _OBS_MARK
+    head, tail = ET.tostring(root, encoding="utf-8", xml_declaration=True) \
+        .decode("utf-8").split(_OBS_MARK)
+    gp = "generic"
+    head = head.replace("<message:DataSet ",
+                        f'<message:DataSet xmlns:generic="{NS["generic"]}" ', 1)
+
+    def stream():
+        try:
+            yield head
+            n = len(reg.dims)
+            while True:
+                batch = cur.fetchmany(SDMX_BATCH_ROWS)
+                if not batch:
+                    break
+                out = []
+                for row in batch:
+                    vals = "".join(
+                        f"<{gp}:Value id={quoteattr(_text(d.id))} "
+                        f"value={quoteattr(_text(reg.encode_dim(d, row[i])))}/>"
+                        for i, d in enumerate(reg.dims))
+                    ov = row[n]
+                    out.append(f"<{gp}:Obs><{gp}:ObsKey>{vals}</{gp}:ObsKey>"
+                               f"<{gp}:ObsValue value="
+                               f"{quoteattr('' if ov is None else str(ov))}/></{gp}:Obs>")
+                yield "".join(out)
+            yield tail
+        finally:
+            slot()
+            conn.close()
+
+    return StreamingResponse(
+        stream(), media_type="application/xml",
+        headers={"X-Export-Matching-Rows": str(total), "X-Export-Complete": "true"})
 
 
 def _header_data(root, flow: str):

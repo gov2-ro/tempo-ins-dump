@@ -12,7 +12,18 @@ PARQUET_V2_DIR = DATA_DIR / "parquet-v2" / "ro"  # Legacy fallback (unused if co
 
 # API settings
 DEFAULT_PAGE_SIZE = 50
-MAX_DATA_ROWS = int(os.environ.get("TEMPO_MAX_ROWS", "50000"))
+MAX_DATA_ROWS = int(os.environ.get("TEMPO_MAX_ROWS", "50000"))  # chart/query cap only
+# Downloads (FIX-04) are NOT bound by MAX_DATA_ROWS. 0 = no cap (CSV streams in
+# bounded memory). XLSX is always capped by Excel's sheet size (1,048,575 data rows).
+EXPORT_MAX_ROWS = int(os.environ.get("TEMPO_EXPORT_MAX_ROWS", "0"))
+EXPORT_XLSX_MAX_ROWS = int(os.environ.get("TEMPO_EXPORT_XLSX_MAX_ROWS", "1048575"))
+# SDMX-ML is verbose (~350 B/obs) and streamed; over this many observations the
+# request is rejected (413) rather than truncated.
+SDMX_MAX_OBS = int(os.environ.get("TEMPO_SDMX_MAX_OBS", "250000"))
+# Concurrent file exports (CSV+XLSX+SDMX share one pool); XLSX is further limited.
+EXPORT_MAX_CONCURRENT = int(os.environ.get("TEMPO_EXPORT_MAX_CONCURRENT", "2"))
+EXPORT_XLSX_MAX_CONCURRENT = int(os.environ.get("TEMPO_EXPORT_XLSX_MAX_CONCURRENT", "1"))
+EXPORT_BATCH_ROWS = int(os.environ.get("TEMPO_EXPORT_BATCH_ROWS", "5000"))
 LARGE_DATASET_THRESHOLD = 50_000  # Require filters above this row count
 
 DEBUG = os.environ.get("TEMPO_DEBUG", "false").lower() in ("1", "true", "yes")
