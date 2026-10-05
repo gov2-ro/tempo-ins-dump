@@ -104,10 +104,17 @@ def test_malformed_group_by_is_400(client, raw):
 
 
 def test_valid_group_by(client):
-    body = data(client, group_by=f(["TIME_PERIOD"])).json()
+    # FIX-02: REF_AREA (Cluj, Iasi) has no verified structure, so collapsing it
+    # is refused rather than silently summed; an explicit slice is allowed.
+    refused = data(client, group_by=f(["TIME_PERIOD"])).json()
+    assert refused["unavailable"] is True and refused["rows"] == []
+    assert refused["aggregation"]["reason"] == "unverified_structure"
+    body = data(client, group_by=f(["TIME_PERIOD"]),
+                filters=f({"REF_AREA": ["Cluj"], "CATEGORY": ["Total"]})).json()
     assert body["columns"] == ["TIME_PERIOD", "OBS_VALUE"]
     sums = {r[0]: r[1] for r in body["rows"]}
-    assert sums == {"2019": 10.0, "2020": 50.0, "2021": 40.0}
+    assert sums == {"2019": 10.0, "2020": 20.0}
+    assert body["aggregation"]["outcome"] == "valid_slice"
     assert data(client, group_by="[]").json()["returned_rows"] == 4
     assert data(client, group_by="").json()["returned_rows"] == 4
 

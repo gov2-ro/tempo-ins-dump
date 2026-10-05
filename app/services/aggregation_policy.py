@@ -67,6 +67,7 @@ FIX-07 and FIX-08 consume these exact names — see `provenance()`):
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 
 from app.services import dimension_structure as dstruct
@@ -101,6 +102,14 @@ _ADD_TEXT_RE = re.compile(
     r'productia|valoare adaugata|subventi\w*|impozit\w*)\b', re.I)
 
 
+def _fold(text: str) -> str:
+    """Lower-case, accent-stripped text (the indicator regexes are accent-free)."""
+    if not text:
+        return ''
+    return ''.join(c for c in unicodedata.normalize('NFKD', str(text))
+                   if not unicodedata.combining(c)).lower()
+
+
 def is_non_additive_unit(unit_type: str | None) -> bool:
     return (unit_type or '') in NON_ADDITIVE_UNIT_TYPES
 
@@ -119,12 +128,30 @@ def classify_measure(unit_type: str | None, text: str = '',
     ut = unit_type or ''
     if ut not in NON_ADDITIVE_UNIT_TYPES:
         return 'additive'
+    text = _fold(text)
     if ut == 'currency' and text:
         if _NON_ADD_TEXT_RE.search(text):
             return 'non_additive'
         if _ADD_TEXT_RE.search(text):
             return 'additive'
     return 'non_additive'
+
+
+def dataset_measure(unit_type: str | None, text: str = '',
+                    struct: dict | None = None) -> str:
+    """Dataset-level 'additive' | 'non_additive' for every consumer.
+
+    `text` is the dataset name (+ definition). A verified per-dimension
+    `additive` flag from dimension_structure wins (any False -> non_additive;
+    otherwise at least one True -> additive); else classify_measure decides
+    from the unit type and indicator wording. Composer, insights, grouped API
+    queries and the Ask agent all call this, so they agree.
+    """
+    flags = [s.get('additive') for s in (struct or {}).values()
+             if isinstance(s, dict) and s.get('additive') is not None]
+    verified = (False if flags and not all(flags)
+                else True if flags else None)
+    return classify_measure(unit_type, text, verified)
 
 
 # --- pure arithmetic helpers -------------------------------------------------
@@ -321,7 +348,8 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
            struct: dict | None = None, unit_type: str | None = None,
            measure: str | None = None, levels: dict | None = None,
            weights: WeightSpec | None = None, allow_approximation: bool = False,
-           declared_partitions=None, declared_aggregates=None) -> AggregationDecision:
+           declared_partitions=None, declared_aggregates=None,
+           api_mode: bool = False) -> AggregationDecision:
     """Decide how (and whether) the slice can be reduced to one number per
     group_by cell.
 
@@ -338,6 +366,11 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
                  disjoint partition (headline_config `sum_over`).
     declared_aggregates  columns whose pinned filter value a curator declares to
                  be a real aggregate row (headline_config `aggregates`).
+    api_mode     grouped API / agent queries (FIX-02 phase 2): an axis dim with
+                 several verified levels and no caller filter is restricted to
+                 its default level (reported in `levels`), and an unfiltered,
+                 uncollapsed multi-period time dim is flagged `time_collapsed`
+                 (the query would sum across periods).
     """
     struct = struct or {}
     filters = {k: list(v) for k, v in (filters or {}).items()}
@@ -368,10 +401,20 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
         if eff is None:
             eff = [(o, None) for o in dim.get('options', [])]
         if dtype == 'time':
+            if api_mode and col not in group_by and not filters.get(col) \
+                    and len(eff) > 1:
+                warnings.append({'column': col, 'code': 'time_collapsed'})
             note(col, 'time')
             continue
         if col in group_by:
             _axis_checks(dim, eff, struct, filters.get(col), warnings)
+            if api_mode and not filters.get(col):
+                members = _axis_level_members(struct, col, eff, levels.get(col))
+                if members:
+                    out_filters[col] = members
+                    out_levels[col] = levels.get(col) or struct[col].get('default_level')
+                    warnings[:] = [w for w in warnings if not (
+                        w.get('column') == col and w.get('code') == 'mixed_grain_on_axis')]
             note(col, 'grouped')
             continue
         sel = filters.get(col)
@@ -553,6 +596,18 @@ def _axis_checks(dim, eff, struct, sel, warnings):
         warnings.append({'column': col, 'code': 'mixed_grain_on_axis'})
     elif _metadata_overlap(dim, opts):
         warnings.append({'column': col, 'code': 'mixed_grain_on_axis'})
+
+
+def _axis_level_members(struct, col, eff, level_id):
+    """Members of the chosen/default verified level for an axis dim that spans
+    several verified levels, restricted to values present in the data."""
+    if len(dstruct._verified_levels(struct, col)) < 2:
+        return None
+    members = dstruct.level_members(struct, col, level_id)
+    present = {dv for _, dv in eff if dv is not None}
+    if members and present:
+        members = [m for m in members if m in present]
+    return members or None
 
 
 def _unprofiled_partition(dim, eff, struct):

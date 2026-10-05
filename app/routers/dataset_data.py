@@ -12,7 +12,7 @@ from app.config import MAX_DATA_ROWS, LARGE_DATASET_THRESHOLD, PARQUET_DIR
 
 from app.services.query_builder import (
     build_data_query_params, build_export_query_params, resolve_parquet_schema, adapt_to_parquet,
-    AVG_UNIT_TYPES, quote_ident)
+    quote_ident)
 from app.services.request_validation import parse_filters, parse_group_by
 
 log = logging.getLogger(__name__)
@@ -110,6 +110,16 @@ def _resolve_time_column(conn, dimensions, schema, matrix_code: str) -> str | No
     return None
 
 
+def _to_sdmx_name(schema, col: str) -> str:
+    """A request column name (SDMX, or the file's legacy *_nom_id spelling) as
+    the SDMX name the aggregation context uses."""
+    if schema.get("is_legacy"):
+        return (schema.get("to_sdmx") or {}).get(col, col)
+    if col.endswith("_nom_id"):
+        return (schema.get("to_file") or {}).get(col, col)
+    return col
+
+
 def _rows_per_period(dimensions, group_by_cols, filter_dict, time_dim,
                      row_count: int, n_periods: int) -> float:
     """How many result rows one time period is expected to contribute.
@@ -164,7 +174,10 @@ def get_dataset_data(
     filters: str = Query("{}", description="JSON object: {column_name: [scalar, ...]}"),
     limit: int = Query(MAX_DATA_ROWS, ge=1, le=MAX_DATA_ROWS),
     group_by: str = Query("", description="JSON array of dim columns to GROUP BY, e.g. [\"TIME_PERIOD\",\"SEX\"]. "
-                          "Other dims are summed. Empty = no aggregation (raw rows)."),
+                          "Other dims are collapsed only when the shared aggregation policy "
+                          "allows it (see `aggregation` in the response). Empty = raw rows."),
+    approximate: int = Query(0, ge=0, le=1, description="1 = allow an explicitly labelled unweighted "
+                             "mean when a non-additive measure must be collapsed"),
 ):
     """Query dataset parquet with dimension filters.
 
@@ -174,15 +187,28 @@ def get_dataset_data(
     4xx: 404 unknown dataset / no data file; 400 malformed filters or group_by
     (not JSON, wrong shape, unknown column, non-scalar value) or an unbounded
     request on a large dataset; 422 limit < 1 or > MAX rows.
+
+    Grouped requests (FIX-02): the collapsed dimensions go through the shared
+    aggregation policy. The response carries `aggregation` (the decision dict:
+    outcome, reason, method, verification, approximation, filters actually
+    applied, levels, per-dimension audit, warnings). Totals are pinned to real
+    aggregate rows, a verified level is applied to collapsed AND multi-level
+    axis dims. When the policy refuses, the response is still HTTP 200 but
+    `unavailable: true`, `rows: []` and `aggregation.reason` /
+    `aggregation.blocking_dimension` say why; an unsafe sum is never returned.
+    Raw (ungrouped) requests and valid explicit slices are unaffected, and
+    `aggregation` is null for raw rows.
     """
     conn = get_conn()
     try:
-        return _dataset_data(conn, matrix_code, filters, limit, group_by)
+        return _dataset_data(conn, matrix_code, filters, limit, group_by,
+                             approximate=bool(approximate))
     finally:
         conn.close()
 
 
-def _dataset_data(conn, matrix_code: str, filters: str, limit: int, group_by: str):
+def _dataset_data(conn, matrix_code: str, filters: str, limit: int, group_by: str,
+                  approximate: bool = False):
     # Get matrix info
     matrix = conn.execute(
         "SELECT row_count FROM matrices WHERE matrix_code = ?", [matrix_code]
@@ -227,6 +253,32 @@ def _dataset_data(conn, matrix_code: str, filters: str, limit: int, group_by: st
     allowed = _allowed_columns(dimensions, schema)
     filter_dict = parse_filters(filters, allowed)
     group_by_cols = parse_group_by(group_by, allowed)
+
+    # FIX-02: a grouped request collapses every dim it does not group by, so the
+    # shared policy decides whether (and how) that is allowed. The decision's
+    # filters (aggregate pins, verified levels) are applied to the query.
+    aggregation = None
+    agg_func = "SUM"
+    if group_by_cols:
+        from app.services.dataset_meta import get_aggregation_context, decide_grouped
+        ctx = get_aggregation_context(conn, matrix_code)
+        if ctx is not None:
+            to_sdmx = lambda c: _to_sdmx_name(schema, c)
+            sd_group = [to_sdmx(c) for c in group_by_cols]
+            sd_filters = {to_sdmx(k): v for k, v in filter_dict.items()}
+            decision = decide_grouped(ctx, sd_group, sd_filters,
+                                      allow_approximation=approximate)
+            aggregation = decision.to_dict()
+            if not decision.available:
+                return {
+                    'columns': sd_group + ['OBS_VALUE'], 'column_labels': {},
+                    'rows': [], 'total_rows': row_count, 'returned_rows': 0,
+                    'truncated': False, 'unavailable': True,
+                    'aggregation': aggregation,
+                }
+            group_by_cols = sd_group
+            filter_dict = {k: list(v) for k, v in decision.effective_filters.items()}
+            agg_func = decision.agg_func or "SUM"
     dimensions, group_by_cols, filter_dict = adapt_to_parquet(
         schema, dimensions, group_by_cols, filter_dict)
 
@@ -298,16 +350,6 @@ def _dataset_data(conn, matrix_code: str, filters: str, limit: int, group_by: st
             f"Dataset has {row_count:,} rows. Please apply at least one filter "
             f"to narrow results (max {MAX_DATA_ROWS:,} rows returned)."
         )
-
-    # Determine aggregation function based on unit type
-    agg_func = "SUM"
-    if group_by_cols:
-        unit_row = conn.execute(
-            "SELECT primary_unit_type FROM matrix_profiles WHERE matrix_code = ?",
-            [matrix_code]
-        ).fetchone()
-        if unit_row and unit_row[0] in AVG_UNIT_TYPES:
-            agg_func = "AVG"
 
     # Build and execute query
     sql, params = build_data_query_params(
@@ -398,6 +440,7 @@ def _dataset_data(conn, matrix_code: str, filters: str, limit: int, group_by: st
         'total_rows': row_count,
         'returned_rows': len(data_rows),
         'truncated': truncated,
+        'aggregation': aggregation,
     }
     if time_windowed:
         resp['time_windowed'] = True

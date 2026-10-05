@@ -1,13 +1,6 @@
 """Dynamic SQL builder for parquet queries with filter pushdown."""
 from app.config import PARQUET_DIR, MAX_DATA_ROWS
 
-# Unit types whose values are levels/shares, not additive quantities —
-# grouped queries must AVG them. SUMming percentages, base-100 indices or
-# rates across a dimension produces meaningless numbers. Single source of
-# truth for dataset_data.py, insights.py and agent.py.
-AVG_UNIT_TYPES = {'percentage', 'time_unit', 'index', 'rate', 'ratio'}
-
-
 def _resolve_parquet_path(matrix_code: str):
     """Find the v3 parquet file for a matrix code."""
     return PARQUET_DIR / f"{matrix_code}.parquet"

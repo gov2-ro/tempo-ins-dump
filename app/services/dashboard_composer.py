@@ -20,7 +20,6 @@ import re
 from app.services.chart_selector import TOTAL_RE
 from app.services import dimension_structure as dstruct
 from app.services import aggregation_policy as ap
-from app.services.aggregation_policy import NON_ADDITIVE_UNIT_TYPES  # noqa: F401  (re-exported)
 
 # "Taurine - total" style aggregate options inside hierarchical dims
 _TOTAL_SUFFIX_RE = re.compile(r'-\s*total\s*$', re.I)
@@ -49,8 +48,7 @@ COMPANION_AXES = {
     'temporal': ['ranking'],
 }
 
-# Non-additive unit policy lives in aggregation_policy (single shared list);
-# NON_ADDITIVE_UNIT_TYPES is re-exported above for existing importers.
+# Non-additive policy lives in aggregation_policy (one shared verdict).
 
 # A categorical dim needs at least this many real options to make a
 # ranking bar worth a tile.
@@ -378,7 +376,7 @@ def retune_ranked_series(ranked: list[dict], dimensions: list, sig: dict,
     (v1 lens) must get the same default, or the two surfaces tell
     different stories about the same dataset. Mutates entries in place.
     """
-    non_additive = sig.get('primary_unit_type') in NON_ADDITIVE_UNIT_TYPES
+    non_additive = _sig_non_additive(sig)
     time_dim = primary_time_dim(dimensions)
     if time_dim is None:
         return
@@ -411,6 +409,15 @@ def _chart_axis(chart_type: str, roles: dict, time_col: str | None,
 def _slice_id(group_by: list, filters: dict) -> str:
     key = json.dumps([group_by, filters], sort_keys=True, ensure_ascii=False)
     return hashlib.md5(key.encode('utf-8')).hexdigest()[:10]
+
+
+def _sig_non_additive(sig: dict) -> bool:
+    """Indicator-level additivity: the dataset's verified `_measure` (name,
+    definition, structure) when the caller computed it, else the unit type."""
+    m = sig.get('_measure')
+    if m:
+        return m == 'non_additive'
+    return ap.classify_measure(sig.get('primary_unit_type')) == 'non_additive'
 
 
 def spec_decision(spec: dict, dimensions: list, actual_values: dict | None,
@@ -636,7 +643,7 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
     nothing rankable (frontend falls back to single-chart behaviour).
     """
     trend = trend or {}
-    non_additive = sig.get('primary_unit_type') in NON_ADDITIVE_UNIT_TYPES
+    non_additive = _sig_non_additive(sig)
     time_dim = primary_time_dim(dimensions)
     geo_dim = next((d for d in dimensions if d.get('dim_type') == 'geo'), None)
     time_col = _col(time_dim) if time_dim else None
