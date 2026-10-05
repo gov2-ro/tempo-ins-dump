@@ -6,7 +6,6 @@ dashboard_composer slice rules, so totals pinning, whitespace variants and
 SDMX time values behave exactly like the dashboard tiles.
 """
 import json
-import re
 import time
 import logging
 
@@ -15,8 +14,8 @@ from app.db import get_conn
 from app.services.chart_selector import TOTAL_RE as _TOTAL_RE
 from app.services.dataset_meta import get_dataset_meta, _parquet_dim_values
 from app.services.dashboard_composer import (
-    _build_slice, _effective, _total_entry, primary_time_dim,
-    NON_ADDITIVE_UNIT_TYPES)
+    _build_slice, _effective, _total_entry, primary_time_dim, spec_decision)
+from app.services import aggregation_policy as ap
 from app.services.query_builder import (
     build_data_query, resolve_parquet_schema, adapt_to_parquet)
 from app.services import dimension_structure as dstruct
@@ -26,9 +25,6 @@ log = logging.getLogger(__name__)
 _cache: dict = {}
 CACHE_TTL = 3600
 CACHE_MAX = 512
-
-# SDMX-normalized periods: "2025" (annual) or "2025-03" / "2025-Q1" (sub-annual)
-_PERIOD_RE = re.compile(r'^(\d{4})(-.+)?$')
 
 T = {
     'ro': {
@@ -87,24 +83,6 @@ def _period_label(p):
     return str(p).replace('Anul ', '').strip() if p is not None else None
 
 
-def _seasonal_prev(period_totals: list, latest_p: str):
-    """(period, value) for the same sub-period one year earlier, or None.
-
-    For monthly/quarterly data, comparing the last two periods is MoM/QoQ —
-    the honest year-over-year comparison is against the same month/quarter
-    of the previous year ("2025-03" → "2024-03"). Annual periods (no
-    sub-part) and non-SDMX labels return None.
-    """
-    m = _PERIOD_RE.match(str(latest_p).strip())
-    if not m or not m.group(2):
-        return None
-    target = f"{int(m.group(1)) - 1}{m.group(2)}"
-    for p, v in period_totals:
-        if p == target:
-            return p, v
-    return None
-
-
 def _fetch_slice(conn, matrix_code, dimensions, spec, agg_func, schema=None):
     """Run one composed slice (filters are data-grounded by the composer).
 
@@ -126,28 +104,6 @@ def _fetch_slice(conn, matrix_code, dimensions, spec, agg_func, schema=None):
         return []
 
 
-def _mixes_units(dimensions, spec, actual_values) -> bool:
-    """Does this slice add together more than one unit of measure?
-
-    PMI113A spans tonnes, thousand lei and lei per tonne; summing them gives
-    2.3 billion of nothing. dim_type alone does not identify the unit column
-    there — it classifies UNIT_MEASURE as an indicator — so the canonical
-    name counts too. Rare in practice: 74 datasets have such a slice and all
-    but 4 are already suppressed for another reason.
-    """
-    filters = spec.get('filters') or {}
-    for d in dimensions:
-        col = d['dim_column_name']
-        if d.get('dim_type') != 'unit' and col != 'UNIT_MEASURE':
-            continue
-        picked = filters.get(col)
-        n = len(picked) if picked else len(actual_values.get(col)
-                                           or d.get('options') or [])
-        if n > 1:
-            return True
-    return False
-
-
 def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
     now = time.time()
     key = f"{matrix_code}_{lang}"
@@ -166,8 +122,9 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
     tr = T[lang if lang in T else 'ro']
 
     unit_type = cfg.get('primary_unit_type') or 'count'
-    agg_func = 'AVG' if unit_type in ('percentage', 'time_unit') else 'SUM'
-    non_additive = unit_type in NON_ADDITIVE_UNIT_TYPES
+    # One shared non-additive policy (aggregation_policy); the aggregate
+    # function comes from the decision, never from a local unit list.
+    non_additive = ap.is_non_additive_unit(unit_type)
     actual_values = _parquet_dim_values(conn, matrix_code, dimensions)
     # Same level/aggregate rules the tiles use, or the headline number and
     # the hero chart disagree about the same dataset.
@@ -189,85 +146,107 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
     s_yoy = s_geo = s_break = None
 
     # ---- national/total series over time -----------------------------------
+    # Every number below goes through the shared aggregation decision (the
+    # same one the composer tiles use). When it refuses, the KPIs are
+    # withheld and the reason is reported under `suppressed`, never replaced
+    # by an unverified sum.
+    suppressed = []
     period_totals = []
     pinned_context = []
-    mixed_units = False
+    decision = None
     if time_dim:
         spec = _build_slice({'x_axis': time_dim['dim_column_name']},
                             dimensions, time_dim,
                             actual_values=actual_values,
                             non_additive=non_additive, struct=struct)
-        rows = _fetch_slice(conn, matrix_code, dimensions, spec, agg_func, schema)
-        mixed_units = _mixes_units(dimensions, spec, actual_values)
-        period_totals = sorted(
-            [(str(r[0]), r[1]) for r in rows if r[0] is not None and r[1] is not None])
-        # Pins to a non-total option (data has no aggregate) make the series
-        # partial — say so on the KPI card instead of presenting a "Masculin"
-        # average as the dataset's headline value.
-        #
-        # A level restriction is not a pin: it keeps every option of one
-        # grain, so the value is complete and naming its first member
-        # ("0- 4 ani", "Cluj") would misdescribe a national total.
-        for d in dimensions:
-            if d.get('dim_type') in ('time', 'unit'):
-                continue
-            col = d['dim_column_name']
-            vals = spec.get('filters', {}).get(col)
-            if not vals or len(vals) > 1 or dstruct.is_multi_level(struct, col):
-                continue
-            if not _TOTAL_RE.match(str(vals[0]).strip()):
-                pinned_context.append(str(vals[0]).strip())
-
-    # An arbitrary pin is not a headline. When some dimension has no total and
-    # no verified partition, the composer holds it at one option so the series
-    # is *a* slice, not the dataset — CON111D would otherwise headline
-    # "02 Silvicultura" on two dims at once. The number, its period-on-period
-    # change and its overall change all inherit that pin, so all three go.
-    if pinned_context or mixed_units:
-        period_totals = []
+        decision = spec_decision(spec, dimensions, actual_values, struct,
+                                 non_additive)
+        if decision.available:
+            rows = _fetch_slice(conn, matrix_code, dimensions, spec,
+                                decision.agg_func or 'SUM', schema)
+            period_totals = sorted(
+                [(str(r[0]), r[1]) for r in rows
+                 if r[0] is not None and r[1] is not None])
+            # An arbitrary pin is not a headline. When some dimension has no
+            # total and no verified partition the composer holds it at one
+            # option, so the series is *a* slice, not the dataset — CON111D
+            # would otherwise headline "02 Silvicultura" on two dims at once.
+            # The number and both of its changes inherit that pin, so all go.
+            # (A level restriction is not a pin: it keeps every option of one
+            # grain, so the value is complete.)
+            pinned_context = [
+                str(spec['filters'][a['column']][0]).strip()
+                for a in decision.dimensions if a['treatment'] == 'pinned_value']
+            if pinned_context:
+                suppressed.append({'key': 'latest', 'outcome': ap.UNAVAILABLE,
+                                   'reason': 'arbitrary_pin', 'column': None})
+                period_totals = []
+        else:
+            suppressed.append({'key': 'latest', 'outcome': decision.outcome,
+                               'reason': decision.reason,
+                               'column': decision.blocking_dimension})
 
     if period_totals:
         latest_p, latest_v = period_totals[-1]
-        prev = period_totals[-2] if len(period_totals) > 1 else None
         first = period_totals[0]
+        period = _period_label(latest_p)
+
+        def _prov(comparison=None):
+            return ap.provenance(decision, source_code=matrix_code, period=period,
+                                 unit=unit_label, comparison=comparison)
 
         kpis.append({
             'key': 'latest', 'label': tr['latest'],
-            'value': latest_v, 'period': _period_label(latest_p),
+            'value': latest_v, 'period': period,
             'unit': unit_label, 'format': 'number',
             'context': pinned_context,
             'sparkline': [v for _, v in period_totals[-12:]],
+            'provenance': _prov(),
         })
 
-        seasonal = _seasonal_prev(period_totals, latest_p)
-        if seasonal and seasonal[1]:
-            # Sub-annual data: headline change = same period last year;
-            # the previous-period change (MoM/QoQ) is a secondary card.
-            pct = round((latest_v - seasonal[1]) / abs(seasonal[1]) * 100, 1)
-            kpis.append({'key': 'yoy', 'label': tr['yoy_year'], 'value': pct,
-                         'format': 'pct', 'direction': 'up' if pct >= 0 else 'down'})
+        # Headline change: same period last year for sub-annual data, else the
+        # previous point. Zero/missing comparators are reported, not divided.
+        change = ap.compute_change(period_totals)
+        if change['status'] == 'ok':
+            pct = change['value']
+            sub_annual = change['basis'] == 'yoy' and \
+                period_totals[-2][0] != change['from_period']
+            kpis.append({'key': 'yoy',
+                         'label': tr['yoy_year'] if change['basis'] == 'yoy' else tr['yoy'],
+                         'value': pct, 'format': 'pct',
+                         'direction': 'up' if pct >= 0 else 'down',
+                         'provenance': _prov(ap.comparison_of(change))})
             tmpl = tr['s_up'] if pct >= 0 else tr['s_down']
             s_yoy = tmpl.format(pct=_fmt(abs(pct), lang),
-                                prev=_period_label(seasonal[0]))
-            if prev and prev[1]:
-                pct2 = round((latest_v - prev[1]) / abs(prev[1]) * 100, 1)
-                kpis.append({'key': 'prev', 'label': tr['yoy'], 'value': pct2,
-                             'format': 'pct',
-                             'direction': 'up' if pct2 >= 0 else 'down'})
-        elif prev and prev[1]:
-            pct = round((latest_v - prev[1]) / abs(prev[1]) * 100, 1)
-            kpis.append({'key': 'yoy', 'label': tr['yoy'], 'value': pct,
-                         'format': 'pct', 'direction': 'up' if pct >= 0 else 'down'})
-            tmpl = tr['s_up'] if pct >= 0 else tr['s_down']
-            s_yoy = tmpl.format(pct=_fmt(abs(pct), lang),
-                                prev=_period_label(prev[0]))
+                                prev=_period_label(change['from_period']))
+            if sub_annual:
+                # Secondary card: previous period (MoM/QoQ).
+                step = ap.compute_change(period_totals, prefer_yoy=False)
+                if step['status'] == 'ok':
+                    kpis.append({'key': 'prev', 'label': tr['yoy'],
+                                 'value': step['value'], 'format': 'pct',
+                                 'direction': 'up' if step['value'] >= 0 else 'down',
+                                 'provenance': _prov(ap.comparison_of(step))})
+                else:
+                    suppressed.append({'key': 'prev', 'outcome': ap.UNAVAILABLE,
+                                       'reason': step['reason'], 'column': None})
+        else:
+            suppressed.append({'key': 'yoy', 'outcome': ap.UNAVAILABLE,
+                               'reason': change['reason'], 'column': None})
 
-        if len(period_totals) >= 3 and first[1]:
-            pct = round((latest_v - first[1]) / abs(first[1]) * 100, 1)
-            overall_dir = 'up' if pct >= 0 else 'down'
-            kpis.append({'key': 'overall', 'label': tr['overall'], 'value': pct,
-                         'format': 'pct', 'direction': overall_dir,
-                         'since': _period_label(first[0])})
+        if len(period_totals) >= 3:
+            overall = ap.compute_change_against(
+                latest_p, latest_v, first[0], first[1], 'since_first')
+            if overall['status'] == 'ok':
+                pct = overall['value']
+                kpis.append({'key': 'overall', 'label': tr['overall'], 'value': pct,
+                             'format': 'pct',
+                             'direction': 'up' if pct >= 0 else 'down',
+                             'since': _period_label(first[0]),
+                             'provenance': _prov(ap.comparison_of(overall))})
+            else:
+                suppressed.append({'key': 'overall', 'outcome': ap.UNAVAILABLE,
+                                   'reason': overall['reason'], 'column': None})
 
     # ---- trend badge --------------------------------------------------------
     # Only when it adds signal beyond the overall-change card: volatile/flat
@@ -313,7 +292,16 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
         spec = _build_slice({'x_axis': rank_dim['dim_column_name']},
                             dimensions, time_dim, 'horizontal_bar',
                             actual_values, non_additive, struct)
-        rows = _fetch_slice(conn, matrix_code, dimensions, spec, agg_func, schema)
+        rank_decision = spec_decision(spec, dimensions, actual_values, struct,
+                                      non_additive)
+        if rank_decision.available:
+            rows = _fetch_slice(conn, matrix_code, dimensions, spec,
+                                rank_decision.agg_func or 'SUM', schema)
+        else:
+            rows = []
+            suppressed.append({'key': 'ranking', 'outcome': rank_decision.outcome,
+                               'reason': rank_decision.reason,
+                               'column': rank_decision.blocking_dimension})
         exclude = _aggregate_labels(rank_dim)
         ranked = sorted(
             [(str(r[0]), r[1]) for r in rows
@@ -338,7 +326,8 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
                     top=top[0].strip(), top_val=_fmt(top[1], lang))
 
     sentences = [s for s in (s_yoy, s_geo, s_break) if s]
-    data = {'kpis': kpis, 'sentences': sentences[:3], 'notables': notables}
+    data = {'kpis': kpis, 'sentences': sentences[:3], 'notables': notables,
+            'suppressed': suppressed}
 
     if len(_cache) > CACHE_MAX:
         _cache.clear()

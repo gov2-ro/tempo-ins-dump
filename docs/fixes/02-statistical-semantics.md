@@ -1,6 +1,6 @@
 # FIX-02 — Verified aggregation and KPI provenance
 
-Status: not started. Priority: P0. Owner: shared statistical services.
+Status: phase 1 implemented on branch fix/02-aggregation (shared aggregation_policy, composer/insights/headlines migrated, provenance fields); phase 2 (grouped API queries, agent, frontend, FIX-03 profile backfill) not started. Priority: P0. Owner: shared statistical services.
 Dependencies: FIX-03 repairs and expands profiles; immediate suppression can ship
 first. FIX-06 and FIX-08 consume this contract.
 
