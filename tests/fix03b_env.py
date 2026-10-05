@@ -164,6 +164,34 @@ class Env:
                     os.environ[k] = v
         return rc, out.getvalue(), err.getvalue()
 
+    def load_module(self, script):
+        """Load a stage script as a module bound to the scratch tree (for monkeypatching
+        its functions). Its module globals (DB_FILE, PARQUET_V3_DIR, ...) point into
+        the scratch tree; sys.modules is left as it was."""
+        saved_env = {k: os.environ.get(k) for k in ("TEMPO_PIPELINE_DATA_DIR", "TEMPO_LANG")}
+        os.environ.update(self.env())
+        spec = importlib.util.spec_from_file_location("duckdb_config", ROOT / "duckdb_config.py")
+        cfg = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cfg)
+        saved_cfg = sys.modules.get("duckdb_config")
+        sys.modules["duckdb_config"] = cfg
+        try:
+            spec = importlib.util.spec_from_file_location("stage_" + script.replace("-", "_").replace(".py", ""),
+                                                          ROOT / script)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+        finally:
+            if saved_cfg is not None:
+                sys.modules["duckdb_config"] = saved_cfg
+            else:
+                sys.modules.pop("duckdb_config", None)
+            for k, v in saved_env.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        return mod
+
     def refresh(self, code, split=True):
         """The orchestrator's per-matrix order, against the fixture tree."""
         self.run("10-import-metadata.py", "--matrix", code)

@@ -36,7 +36,7 @@ def pipe(tmp_path, monkeypatch):
     ctl = SimpleNamespace(
         mod=mod, tmp=tmp_path, parquet=parquet, calls=[], envs=[], meta_calls=[],
         rcs={}, meta_fail=set(), sync_calls=[], sync_error=None, raise_on=None,
-        children={}, validate_fail={},
+        children={}, validate_fail={}, cmds=[],
         state_path=logs / "update-pipeline-state.json",
         legacy=logs / "last-pipeline-run.txt",
     )
@@ -46,6 +46,7 @@ def pipe(tmp_path, monkeypatch):
         arg = cmd[2:]
         code = arg[arg.index("--matrix") + 1] if "--matrix" in arg else None
         ctl.calls.append((script, code))
+        ctl.cmds.append((script, arg))
         ctl.envs.append(env)
         if ctl.raise_on == (script, code):
             raise RuntimeError("simulated crash")

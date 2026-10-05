@@ -195,3 +195,29 @@ def test_dry_run_is_side_effect_free(env):
     env.run("12-split-datasets.py", "--matrix", "TST101", "--dry-run")
     assert snap() == before
     assert not [p for p in env.parquet.iterdir() if p.name.startswith(".")]
+
+
+def test_global_import_reconciles_only_what_changed(env):
+    idx = env.data / "1-indexes" / "ro"
+    (idx / "context.csv").write_text("context_code,parentCode,level,context_name\n1,,1,Ctx\n")
+    (idx / "matrices.csv").write_text("code,name\nTST101,One\nTST202,Two\n")
+    other = fingerprint(env, "TST202")
+    env.write_meta("TST101", periods=PER_V2, indicators=IND_V2)
+    r = env.run("10-import-metadata.py")
+    assert "Changed: 1" in r.stdout and "Unchanged: 1" in r.stdout
+    assert {"Indicator C", "Anul 2022"} <= {x[0] for x in env.q(
+        "SELECT o.option_label FROM dimension_options o JOIN dimensions d USING (dimension_id) "
+        "WHERE d.matrix_code = 'TST101'")}
+    assert fingerprint(env, "TST202") == other
+    assert "Changed: 0" in env.run("10-import-metadata.py").stdout       # converged: a no-op
+
+
+def test_real_command_line_smoke(env):
+    """The same targeted refresh through real subprocesses (TEMPO_PIPELINE_DATA_DIR)."""
+    env.write_meta("TST101", periods=PER_V2, indicators=IND_V2)
+    env.write_csv("TST101", rows(IND_V2, PER_V2))
+    for script, extra in (("10-import-metadata.py", []), ("10-classify-dimensions.py", []),
+                          ("11-build-sdmx-codes.py", []), ("9-csv-to-parquet.py", ["--force"]),
+                          ("12-split-datasets.py", [])):
+        env.run(script, "--matrix", "TST101", *extra, subprocess_mode=True)
+    assert len(env.pq("TST101")) == 18
