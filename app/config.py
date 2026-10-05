@@ -17,6 +17,9 @@ MAX_DATA_ROWS = int(os.environ.get("TEMPO_MAX_ROWS", "50000"))  # chart/query ca
 # bounded memory). XLSX is always capped by Excel's sheet size (1,048,575 data rows).
 EXPORT_MAX_ROWS = int(os.environ.get("TEMPO_EXPORT_MAX_ROWS", "0"))
 EXPORT_XLSX_MAX_ROWS = int(os.environ.get("TEMPO_EXPORT_XLSX_MAX_ROWS", "1048575"))
+# SDMX-ML is verbose (~350 B/obs) and streamed; over this many observations the
+# request is rejected (413) rather than truncated.
+SDMX_MAX_OBS = int(os.environ.get("TEMPO_SDMX_MAX_OBS", "250000"))
 EXPORT_BATCH_ROWS = int(os.environ.get("TEMPO_EXPORT_BATCH_ROWS", "5000"))
 LARGE_DATASET_THRESHOLD = 50_000  # Require filters above this row count
 

@@ -281,3 +281,37 @@ def test_generators_cleanup_on_early_close(tmp_path):
     next(g)
     g.close()
     assert not p.exists() and closed == [1]
+
+
+# ------------------------------------------------------------------ SDMX
+
+def _obs_count(content):
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(content)
+    return sum(1 for e in root.iter() if e.tag.endswith("}Obs"))
+
+
+def test_sdmx_complete_over_50k(client):
+    r = client.get("/sdmx/2.1/data/INS,BIG1/")
+    assert r.status_code == 200
+    assert r.headers["x-export-matching-rows"] == str(N_ROWS)
+    assert _obs_count(r.content) == N_ROWS
+
+
+def test_sdmx_small_selection_and_lastn(client):
+    r = client.get("/sdmx/2.1/data/INS,BIG1/", params={"lastNObservations": 2})
+    assert r.status_code == 200
+    assert _obs_count(r.content) == 2 * len(CATS) * len(AREAS)
+    r = client.get("/sdmx/2.1/data/INS,BIG1/",
+                   params={"startPeriod": "2000-01", "endPeriod": "2000-03"})
+    assert _obs_count(r.content) == 3 * len(CATS) * len(AREAS)
+
+
+def test_sdmx_over_budget_rejected_not_truncated(client, monkeypatch):
+    import app.routers.sdmx as sx
+    monkeypatch.setattr(sx, "SDMX_MAX_OBS", 1000)
+    r = client.get("/sdmx/2.1/data/INS,BIG1/")
+    assert r.status_code == 413
+    assert not r.text.startswith("<")
+    assert client.get("/sdmx/2.1/data/INS,BIG1/",
+                      params={"lastNObservations": 1}).status_code == 200
