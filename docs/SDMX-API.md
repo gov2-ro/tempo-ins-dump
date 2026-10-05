@@ -25,9 +25,28 @@ Returns observations in **SDMX-ML 2.1 GenericData XML** format (flat `AllDimensi
 | `agency` | path | Must be `INS` |
 | `flow` | path | Dataset code (e.g. `ACC102B`) |
 | `key` | path | Dot-separated dimension filter (SDMX key syntax). Use `.` or omit for wildcard. |
-| `lastNObservations` | query | Return only the last N distinct TIME_PERIOD values |
-| `startPeriod` | query | Filter TIME_PERIOD ≥ value (e.g. `2010`) |
-| `endPeriod` | query | Filter TIME_PERIOD ≤ value |
+| `lastNObservations` | query | Return only the last N distinct TIME_PERIOD values (integer 1..10000) |
+| `startPeriod` | query | Lower period bound: `YYYY`, `YYYY-Q1`..`YYYY-Q4` or `YYYY-MM` |
+| `endPeriod` | query | Upper period bound, same formats |
+
+**Period bounds.** Only the three formats above are accepted (month `01`..`12`,
+quarter `Q1`..`Q4`). Each period is a span of months: `startPeriod` means the first
+month it covers, `endPeriod` the last. A row is returned when its own period lies
+wholly inside `[startPeriod, endPeriod]`. Granularities may be mixed:
+`startPeriod=2020` on monthly data starts at 2020-01 and `endPeriod=2020` ends at
+2020-12; an annual row is *not* returned for `startPeriod=2020-Q2` (it starts before
+the bound). Rows whose TIME_PERIOD is not in one of the three formats (legacy labels
+such as `Anul 2020`) never match a bound, but are returned when no bound is given.
+All user values are bound SQL parameters.
+
+**Error responses** (`{"detail": "..."}`):
+
+| Status | Cause |
+|---|---|
+| 400 | malformed `startPeriod`/`endPeriod`; `startPeriod` later than `endPeriod`; key with more non-empty segments than the dataset has dimensions |
+| 404 | unknown dataset, or a flow code that is not `[A-Za-z0-9_]{1,64}` |
+| 422 | `lastNObservations` not an integer >= 1 |
+| 500 | internal query failure — body is only `{"detail": "Query failed"}`; details are in the server log |
 
 **Key syntax:** dots separate dimensions in declaration order. An empty segment means "all values". `+` is an OR separator within a segment.
 
@@ -54,7 +73,7 @@ curl 'http://localhost:8080/sdmx/2.1/datastructure/INS/ACC102B/1.0'
 
 ### Dataflow — `GET /sdmx/2.1/dataflow/INS/{flow}/1.0`
 
-Returns an **SDMX-ML 2.1 XML** Dataflow definition with the dataset name and a reference to its DSD.
+Unknown datasets return 404. Returns an **SDMX-ML 2.1 XML** Dataflow definition with the dataset name and a reference to its DSD.
 
 ```bash
 curl 'http://localhost:8080/sdmx/2.1/dataflow/INS/ACC102B/1.0'
