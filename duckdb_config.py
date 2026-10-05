@@ -40,6 +40,17 @@ VIEW_PROFILES_DIR = CORPUS_DIR / "view-profiles"
 # Legacy alias (some scripts still reference this)
 PARQUET_DIR = CORPUS_PARQUET_DIR
 
+
+def corpus_parquet(matrix_code: str) -> Path:
+    """The corpus file of a dataset (parent or split child).
+
+    Resolve files by code, never by the stored matrices/dataset_splits.parquet_path:
+    those are absolute paths written by whichever tree ran the import (some still
+    point at the deleted data/parquet-v3/), so following them from a copied corpus
+    reads, or moves, files in the live one.
+    """
+    return CORPUS_PARQUET_DIR / f"{matrix_code}.parquet"
+
 LOGS_DIR = DATA_DIR / "logs"
 
 # Processing settings

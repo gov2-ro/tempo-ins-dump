@@ -9,7 +9,7 @@ import math
 import time
 import duckdb
 
-from duckdb_config import DB_FILE
+from duckdb_config import DB_FILE, corpus_parquet
 DB_PATH = str(DB_FILE)
 
 
@@ -262,9 +262,9 @@ def main():
         has_seasonality BOOLEAN, breakpoint_years VARCHAR, geo_variance DOUBLE,
         geo_outlier_counties VARCHAR)""")
 
-    matrices = conn.execute(
-        "SELECT m.matrix_code, m.parquet_path FROM matrices m WHERE m.parquet_path IS NOT NULL ORDER BY m.matrix_code"
-    ).fetchall()
+    matrices = [(mc, str(corpus_parquet(mc))) for (mc,) in conn.execute(
+        "SELECT matrix_code FROM matrices ORDER BY matrix_code").fetchall()
+        if corpus_parquet(mc).exists()]
     total = len(matrices)
     print(f"Processing {total} datasets...")
 

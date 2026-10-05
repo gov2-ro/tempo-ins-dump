@@ -257,15 +257,20 @@ def swap_children(conn, parent: str, subs: list[dict], register_one) -> None:
 
     # live files the swap displaces: registered old children + anything already sitting
     # at a new child's final path
+    # Stored parquet_path values are absolute paths from whichever tree wrote them;
+    # only their file names are trusted, so a copied corpus never moves live files.
     cols, rows = snap["dataset_splits"]
     pi = cols.index("parquet_path")
-    candidates = {Path(r[pi]) for r in rows if r[pi]}
+    candidates = {PARQUET_V3_DIR / Path(r[pi]).name for r in rows if r[pi]}
     if "matrices" in snap:
         mcols, mrows = snap["matrices"]
         mi = mcols.index("parquet_path")
-        candidates |= {Path(r[mi]) for r in mrows if r[mi]}
+        candidates |= {PARQUET_V3_DIR / Path(r[mi]).name for r in mrows if r[mi]}
     candidates |= {PARQUET_V3_DIR / f"{c}.parquet" for c in old_codes}
     candidates |= {Path(s["path"]) for s in subs}
+    outside = [f for f in candidates if f.resolve().parent != PARQUET_V3_DIR.resolve()]
+    if outside:
+        raise RuntimeError(f"{parent}: refusing to displace files outside {PARQUET_V3_DIR}: {outside[:3]}")
     displaced = {f: backup_dir / f"{i}-{f.name}"
                  for i, f in enumerate(sorted(candidates)) if f.exists()}
 

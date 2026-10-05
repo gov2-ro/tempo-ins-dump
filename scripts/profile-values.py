@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import duckdb
-from duckdb_config import DB_FILE
+from duckdb_config import DB_FILE, corpus_parquet
 
 conn = duckdb.connect(str(DB_FILE))
 
@@ -35,11 +35,9 @@ conn.execute("""
     )
 """)
 
-matrices = conn.execute("""
-    SELECT matrix_code, parquet_path FROM matrices
-    WHERE parquet_path IS NOT NULL AND is_canonical = TRUE
-    ORDER BY matrix_code
-""").fetchall()
+matrices = [(mc, str(corpus_parquet(mc))) for (mc,) in conn.execute("""
+    SELECT matrix_code FROM matrices WHERE is_canonical = TRUE ORDER BY matrix_code
+""").fetchall()]
 
 print(f"Profiling {len(matrices)} datasets...")
 t0 = time.time()

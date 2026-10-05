@@ -556,7 +556,7 @@ def validate_matrix(code: str, children: list[str], check_split: bool = True) ->
             if sorted(r[0] for r in reg) != sorted(children):
                 return "dataset_splits does not match the child set"
             for sub, cnt, path in reg:
-                f = Path(path) if path else pq_dir / f"{sub}.parquet"
+                f = pq_dir / f"{sub}.parquet"   # stored paths may belong to another tree
                 if not f.exists():
                     return f"child parquet missing: {sub}"
                 try:

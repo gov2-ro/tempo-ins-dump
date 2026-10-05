@@ -169,3 +169,27 @@ def test_dry_run_leaves_live_children_alone(env):
     before = state(env, "TST101")
     env.run("12-split-datasets.py", "--matrix", "TST101", "--dry-run")
     assert state(env, "TST101") == before
+
+
+def test_stored_paths_into_another_tree_are_never_moved(env, tmp_path):
+    """A copied corpus keeps the live tree's absolute parquet_path values. Stage 12 run
+    on the copy must resolve them inside its own parquet dir, never displace live files."""
+    import duckdb
+    live = tmp_path / "live" / "corpus" / "parquet"
+    live.mkdir(parents=True)
+    for p in env.parquet.glob("TST101*.parquet"):
+        (live / p.name).write_bytes(p.read_bytes())
+    before = {p.name: p.read_bytes() for p in live.iterdir()}
+    con = duckdb.connect(str(env.db))
+    for table, col in (("dataset_splits", "sub_matrix_code"), ("matrices", "matrix_code")):
+        con.execute(f"UPDATE {table} SET parquet_path = ? || '/' || {col} || '.parquet' "
+                    f"WHERE {col} LIKE 'TST101%'", [str(live)])
+    con.close()
+
+    new_generation(env, periods=PER2, ums=UM2)
+    env.run("12-split-datasets.py", "--matrix", "TST101")
+
+    assert {p.name: p.read_bytes() for p in live.iterdir()} == before   # live tree untouched
+    assert child_codes(env, "TST101") == ["TST101_numar", "TST101_procente"]
+    assert not (env.parquet / "TST101_lei.parquet").exists()          # retired in the copy
+    assert state(env, "TST101")["leftovers"] == []

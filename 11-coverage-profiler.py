@@ -9,7 +9,7 @@ import os
 import time
 from collections import Counter
 
-from duckdb_config import DB_FILE
+from duckdb_config import DB_FILE, corpus_parquet
 DB_PATH = str(DB_FILE)
 FALLBACK_DB = "data/dataset_coverage.duckdb"
 CURRENT_YEAR = 2026
@@ -105,9 +105,9 @@ def load_metadata(rconn):
     ).fetchall():
         dim_nids.setdefault(dim_id, []).append(nid)
 
-    matrices = rconn.execute(
-        "SELECT matrix_code, row_count, parquet_path FROM matrices ORDER BY matrix_code"
-    ).fetchall()
+    matrices = [(mc, rc, str(corpus_parquet(mc))) for mc, rc in rconn.execute(
+        "SELECT matrix_code, row_count FROM matrices ORDER BY matrix_code"
+    ).fetchall()]
 
     return dims_by_matrix, time_years, geo_levels, dim_nids, matrices
 
