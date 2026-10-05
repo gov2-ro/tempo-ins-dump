@@ -290,7 +290,7 @@ def _method_info(spec: dict, decision) -> dict:
     elif m == "unweighted_mean":
         note_ro = (f"APROXIMARE: medie simplă a valorilor pe {ro}; nu sunt disponibile "
                    f"ponderi, deci nu este rata oficială pentru total.")
-        note_en = (f"APPROXIMATION: unweighted mean of the {en} values; no weights are "
+        note_en = (f"APPROXIMATION: unweighted mean of values across {en}; no weights are "
                    f"available, so this is not the official rate for the total.")
     elif m == "sum_partition":
         note_ro = f"Sumă pe {ro}." if ro else "Sumă."
