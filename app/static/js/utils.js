@@ -143,3 +143,88 @@ function seasonalOverlay(data, timeDim, useAvg) {
     }
     return { columns: ['__SUB__', '__YEAR__', 'OBS_VALUE'], column_labels: {}, rows };
 }
+
+// ---------------------------------------------------------------- FIX-07 --
+
+/** Localized accessible names/tooltips for the shared topbar (v1 + v2). */
+const CHROME_A11Y = {
+    ro: { 'sidebar-toggle': 'Navigare rapidă', 'search-trigger': 'Caută seturi de date',
+          'about-btn': 'Despre', 'theme-toggle': 'Schimbă tema luminoasă/întunecată',
+          'lang-toggle': 'Schimbă limba', 'sidebar-close': 'Închide', 'back-btn': 'Înapoi la explorare' },
+    en: { 'sidebar-toggle': 'Quick navigate', 'search-trigger': 'Search datasets',
+          'about-btn': 'About', 'theme-toggle': 'Toggle light/dark theme',
+          'lang-toggle': 'Switch language', 'sidebar-close': 'Close', 'back-btn': 'Back to explore' },
+};
+function localizeChrome(lang) {
+    const names = CHROME_A11Y[lang] || CHROME_A11Y.ro;
+    for (const [id, name] of Object.entries(names)) {
+        const node = document.getElementById(id);
+        if (!node) continue;
+        node.setAttribute('aria-label', name);
+        if (id !== 'search-trigger' && id !== 'back-btn') node.title = name;
+    }
+    const places = document.querySelector('.topbar-right a[href="/places"]');
+    if (places) {
+        const t = lang === 'en' ? 'Places' : 'Locuri';
+        places.setAttribute('aria-label', t);
+        places.title = t;
+        const lab = places.querySelector('.tb-label');
+        if (lab) lab.textContent = t;
+    }
+    const ask = document.querySelector('.topbar-right a[href="/ask.html"]');
+    if (ask) ask.setAttribute('aria-label', lang === 'en' ? 'Ask AI' : 'Întreabă AI');
+}
+
+/** Compact axis number: 1234567 -> "1,2 mil." / "1.2M". Ticks only; tooltips keep full values. */
+function formatCompact(val, lang = 'ro') {
+    const n = Number(val);
+    if (val === null || val === undefined || !isFinite(n)) return '';
+    const a = Math.abs(n);
+    const units = lang === 'en'
+        ? [[1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K']]
+        : [[1e12, ' tril.'], [1e9, ' mld.'], [1e6, ' mil.'], [1e3, ' K']];
+    for (const [div, suf] of units) {
+        if (a >= div) {
+            const v = n / div;
+            const d = Math.abs(v) >= 100 ? 0 : (Math.abs(v) >= 10 ? 1 : 2);
+            let s = v.toFixed(d);
+            if (s.includes('.')) s = s.replace(/0+$/, '').replace(/\.$/, '');
+            if (lang !== 'en') s = s.replace('.', ',');
+            return s + suf;
+        }
+    }
+    if (Number.isInteger(n)) return String(n);
+    return String(Number(n.toPrecision(3))).replace('.', lang === 'en' ? '.' : ',');
+}
+
+/** User-facing chart type names (internal identifiers stay in diagnostics). */
+const CHART_TYPE_LABELS = {
+    ro: { line: 'Linie', bar: 'Bare', bar_vertical: 'Bare', horizontal_bar: 'Bare orizontale',
+          grouped_bar: 'Bare grupate', stacked_bar: 'Bare stivuite', area_stacked: 'Arii stivuite',
+          stacked_area: 'Arii stivuite', area: 'Arie', pie: 'Plăcintă', donut: 'Inel', treemap: 'Treemap',
+          heatmap: 'Hartă termică', choropleth: 'Hartă', population_pyramid: 'Piramida vârstelor',
+          scatter: 'Dispersie', radar: 'Radar', bubble: 'Bule', small_multiples: 'Grafice multiple',
+          table: 'Tabel', sunburst: 'Sunburst', slope: 'Pantă', bump: 'Clasament' },
+    en: { line: 'Line', bar: 'Bars', bar_vertical: 'Bars', horizontal_bar: 'Horizontal bars',
+          grouped_bar: 'Grouped bars', stacked_bar: 'Stacked bars', area_stacked: 'Stacked area',
+          stacked_area: 'Stacked area', area: 'Area', pie: 'Pie', donut: 'Donut', treemap: 'Treemap',
+          heatmap: 'Heatmap', choropleth: 'Map', population_pyramid: 'Population pyramid',
+          scatter: 'Scatter', radar: 'Radar', bubble: 'Bubbles', small_multiples: 'Small multiples',
+          table: 'Table', sunburst: 'Sunburst', slope: 'Slope', bump: 'Rank' },
+};
+function chartTypeLabel(type, lang = 'ro') {
+    const t = (CHART_TYPE_LABELS[lang] || CHART_TYPE_LABELS.ro)[type];
+    if (t) return t;
+    const s = String(type || '').replace(/_/g, ' ');
+    return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Active UI language for chart helpers (same precedence as the page controllers). */
+function currentLang() {
+    try {
+        const l = new URLSearchParams(location.search).get('lang') || localStorage.getItem('lens_lang');
+        return l === 'en' ? 'en' : 'ro';
+    } catch (e) { return 'ro'; }
+}
+/** Value-axis tick label: compact, locale-aware. Tooltips keep formatNumber's full value. */
+function axisNumber(v) { return formatCompact(v, currentLang()); }

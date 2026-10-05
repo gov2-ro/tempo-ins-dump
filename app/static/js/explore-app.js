@@ -432,6 +432,7 @@ class LensApp {
     applyLang() {
         const nextLang = this.lang === 'ro' ? 'en' : 'ro';
         document.getElementById('lang-label').textContent = nextLang.toUpperCase();
+        localizeChrome(this.lang);
         const flagEl = document.getElementById('lang-flag');
         if (flagEl) flagEl.src = FLAG_DATA[nextLang] || '';
         document.getElementById('search-trigger').querySelector('span').textContent = this.ui.searchTrigger;
@@ -1667,11 +1668,13 @@ class LensApp {
         for (const type of setup.timeChartTypes) {
             const btn = document.createElement('button');
             btn.className = 'ct-btn' + (type === this.timeChartType ? ' active' : '');
-            btn.textContent = LABELS[type] || type;
+            btn.textContent = chartTypeLabel(type, this.lang);
+            btn.setAttribute('aria-pressed', type === this.timeChartType ? 'true' : 'false');
             btn.addEventListener('click', () => {
                 this.timeChartType = type;
-                pills.querySelectorAll('.ct-btn:not(.transform-btn)').forEach(b => b.classList.remove('active'));
+                pills.querySelectorAll('.ct-btn:not(.transform-btn)').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
                 btn.classList.add('active');
+                btn.setAttribute('aria-pressed', 'true');
                 const el = document.getElementById('time-chart');
                 el.style.opacity = '0.4';
                 el.style.transition = 'opacity 0.15s';
@@ -1694,10 +1697,11 @@ class LensApp {
             btn.className = 'ct-btn transform-btn' + (this.timeTransform === mode ? ' active' : '');
             btn.textContent = label;
             btn.title = tooltip;
+            btn.setAttribute('aria-pressed', this.timeTransform === mode ? 'true' : 'false');
             btn.addEventListener('click', () => {
                 this.timeTransform = this.timeTransform === mode ? null : mode;
-                pills.querySelectorAll('.transform-btn').forEach(b => b.classList.remove('active'));
-                if (this.timeTransform) btn.classList.add('active');
+                pills.querySelectorAll('.transform-btn').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
+                if (this.timeTransform) { btn.classList.add('active'); btn.setAttribute('aria-pressed', 'true'); }
                 this.renderTimeChart();
                 this._syncURL();
             });
@@ -1800,11 +1804,13 @@ class LensApp {
         for (const type of setup.snapshotChartTypes) {
             const btn = document.createElement('button');
             btn.className = 'ct-btn' + (type === this.snapshotChartType ? ' active' : '');
-            btn.textContent = LABELS[type] || type;
+            btn.textContent = chartTypeLabel(type, this.lang);
+            btn.setAttribute('aria-pressed', type === this.snapshotChartType ? 'true' : 'false');
             btn.addEventListener('click', () => {
                 this.snapshotChartType = type;
-                pills.querySelectorAll('.ct-btn').forEach(b => b.classList.remove('active'));
+                pills.querySelectorAll('.ct-btn').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
                 btn.classList.add('active');
+                btn.setAttribute('aria-pressed', 'true');
                 const el = document.getElementById('snapshot-chart');
                 el.style.opacity = '0.4';
                 el.style.transition = 'opacity 0.15s';
@@ -1893,24 +1899,26 @@ class LensApp {
         prevBtn.className = 'period-btn';
         prevBtn.innerHTML = '&#9664;';
         prevBtn.disabled = currentIdx <= 0;
-        prevBtn.title = 'Previous period';
+        prevBtn.title = prevBtn.ariaLabel = this.lang === 'en' ? 'Previous period' : 'Perioada anterioară';
         prevBtn.addEventListener('click', () => this.advancePeriod(-1));
 
         const label = document.createElement('span');
         label.className = 'period-label';
+        label.setAttribute('role', 'status');
         label.textContent = periods[currentIdx]?.label || '';
 
         const nextBtn = document.createElement('button');
         nextBtn.className = 'period-btn';
         nextBtn.innerHTML = '&#9654;';
         nextBtn.disabled = currentIdx >= periods.length - 1;
-        nextBtn.title = 'Next period';
+        nextBtn.title = nextBtn.ariaLabel = this.lang === 'en' ? 'Next period' : 'Perioada următoare';
         nextBtn.addEventListener('click', () => this.advancePeriod(1));
 
         const playBtn = document.createElement('button');
         playBtn.className = 'period-play' + (this.playInterval ? ' playing' : '');
         playBtn.innerHTML = this.playInterval ? '&#9646;&#9646;' : '&#9654;';
-        playBtn.title = this.playInterval ? this.ui.pause : this.ui.play;
+        playBtn.title = playBtn.ariaLabel = this.playInterval ? this.ui.pause : this.ui.play;
+        playBtn.setAttribute('aria-pressed', this.playInterval ? 'true' : 'false');
         playBtn.addEventListener('click', () => this.togglePlay());
 
         nav.appendChild(prevBtn);
@@ -2792,6 +2800,7 @@ class LensApp {
         const toggle = document.getElementById('sidebar-toggle');
         sidebar.classList.remove('hidden');
         toggle.classList.add('active');
+        toggle.setAttribute('aria-expanded', 'true');
         document.body.classList.add('sidebar-open');
         sessionStorage.setItem('lensNavOpen', '1');
 
@@ -2813,6 +2822,7 @@ class LensApp {
         const toggle = document.getElementById('sidebar-toggle');
         sidebar.classList.add('hidden');
         toggle.classList.remove('active');
+        toggle.setAttribute('aria-expanded', 'false');
         document.body.classList.remove('sidebar-open');
         sessionStorage.setItem('lensNavOpen', '');
 

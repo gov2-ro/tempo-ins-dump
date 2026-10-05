@@ -63,6 +63,7 @@ class SiteChrome {
         if (filter) filter.placeholder = this.ui.sidebarFilter;
         const label = document.getElementById('lang-label');
         if (label) label.textContent = this.lang === 'ro' ? 'EN' : 'RO';
+        localizeChrome(this.lang);
         const flag = document.getElementById('lang-flag');
         if (flag) flag.remove();  // standalone pages skip the flag asset
     }
@@ -200,6 +201,7 @@ class SiteChrome {
     openSidebar() {
         document.getElementById('lens-sidebar').classList.remove('hidden');
         document.getElementById('sidebar-toggle').classList.add('active');
+        document.getElementById('sidebar-toggle').setAttribute('aria-expanded', 'true');
         document.body.classList.add('sidebar-open');
         sessionStorage.setItem('lensNavOpen', '1');
         if (!this._sidebarLoaded) this.renderSidebar();
@@ -209,6 +211,7 @@ class SiteChrome {
     closeSidebar() {
         document.getElementById('lens-sidebar').classList.add('hidden');
         document.getElementById('sidebar-toggle').classList.remove('active');
+        document.getElementById('sidebar-toggle').setAttribute('aria-expanded', 'false');
         document.body.classList.remove('sidebar-open');
         sessionStorage.setItem('lensNavOpen', '');
         requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
