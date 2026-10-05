@@ -1,5 +1,17 @@
 # Activity History
 
+## 2026-10-05 — FIX-03 phase 2b: generation manifest and repair dry-run
+
+Tooling only; the live corpus was read, never written. Added a deterministic
+generation manifest that `release-check.py` now requires (and cross-checks against
+the staged files), a dry-run repair planner with copy-only quarantine, and a
+structure-backfill measurement on a temp copy. Findings are in CURRENT_STATE.md
+and the backlog's corpus repair queue. Key decisions: no county child may be
+summed because no locality dimension has verified disjointness; KPIs restored by
+the backfill that rest only on `profile_flat` verification need an independent
+additivity check before publishing. The 257 KB plan JSON is not tracked;
+`reports/fix03c/repair-plan.md` keeps the summary.
+
 ## 2026-10-05 — Audit remediation wave 2: FIX-04, FIX-06, FIX-07, FIX-08 (items 1–6)
 
 Merged into `audit-fixes` after review; 346 tests pass with the corpus, 323 + 23

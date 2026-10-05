@@ -83,6 +83,19 @@ deterministic read-only audit: file categories (served canonical, noncanonical
 parent, registered split, leftover, invalid), NULL dims, TIME_PERIOD validity,
 grain uniqueness, mapping/profile coverage and registration.
 
+Generation and repair tooling (FIX-03 phase 2b; nothing applied to the corpus):
+`scripts/build-generation-manifest.py --out F` writes a deterministic manifest
+(id = hash of DB, parquet digest, view-profile digest and search index; per-file
+sha256/rows/category; table row counts; audit violations). `prepare-deploy-data.sh`
+stages `corpus/generation-manifest.json` and `release-check.py` fails when it is
+missing or inconsistent with the staged files (`--allow-missing-generation` to
+bypass, `--require-clean-audit` to make audit violations fatal).
+`scripts/repair-corpus.py` is a dry-run planner (quarantine, metadata-only,
+time-shift and grain reports); `--apply --target-dir` works only on a copy and
+only quarantines. Stage 13 honours `TEMPO_STRUCTURE_DB` /
+`TEMPO_STRUCTURE_PARQUET_DIR` for profiling a copy. Summary of the 2026-10-05 plan:
+`reports/fix03c/repair-plan.md`.
+
 ## Local app and checks
 
 Maintainer environment: `source ~/devbox/envs/240826/bin/activate`. Then:
@@ -224,6 +237,18 @@ headline KPI went from 2,551 to 1,602 (963 lost, 14 gained); 91 lose all compose
 tiles. Reasons: unverified_structure 885, overlapping_levels 58, mixed_units 27,
 missing_weights 22, label_hierarchy 17. Most losses lack `dimension_structure`
 rows (mainly split children); FIX-03 structure backfill should restore most.
+
+Repair plan 2026-10-05 (dry run): the 7 metadata-only matrices are 2 empty at
+source (EXP101F, EXP102F) and 5 never fetched (ECC103B, LMV101E, LMV102E, TNZ1211,
+TPG1346, added after the last CSV batch). The 149 served time-invalid files all
+have TIME_PERIOD 100% invalid and TIME_PERIOD_2 valid (110 constant indicator
+titles, 24 hours-worked bands, 4 base-year labels, 9 other, 2 month names). Of
+160 conflicting-grain files, 95 are county splits that dropped locality (no
+locality disjointness is verified, so none may be summed), 32 source label
+collisions, 18 inherited, 15 dropped another dimension. Backfilling
+`dimension_structure` on a copy for 1,926 unprofiled served matrices restores 749
+latest KPIs (1,525 → 2,274 of 3,368), all on split children; 584 of those rest only
+on `profile_flat` verification and need an independent additivity check.
 
 Tests on 2026-10-03: 38 passing, 3 warnings. Chart eval: 1,986 baseline cases unchanged, 2,116
 added. Search: 17 top sets unchanged, 2 order changes. These results establish
