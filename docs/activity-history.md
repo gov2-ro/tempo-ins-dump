@@ -1,5 +1,35 @@
 # Activity History
 
+## 2026-10-05 — FIX-03 repair on a copy; summed KPIs checked against INS
+
+Repair applied step by step on a copied generation (`~/devbox/gov2/tempo-gen-20261005`),
+nothing published. While reading the docs, `--help` on three argument-less scripts
+rebuilt `dataset_coverage`/`dataset_value_profiles`/`dataset_trends` in the live DB;
+restored from `deploy-data/corpus/metadata.duckdb` (identical to a copy taken that
+morning) and verified table by table. Gotcha added to AGENTS.md.
+
+- EXP101F/EXP102F were not empty at source: INS answers a 1,261-option dimension
+  with a header-only CSV. Stage 6 now retries such answers in chunks of 100 options
+  (the R TEMPO package's rule) and fails a matrix on any failed chunk instead of
+  publishing a partial CSV. Both checked cell by cell against the website export.
+- Stored `parquet_path` values are absolute (3,349 into the deleted `parquet-v3/`):
+  the global profilers had been profiling missing files, and stage 12 would have
+  moved live parquets during a run on the copy. Files are now resolved by code.
+- INT109* stage-13 crash: several CAEN dimensions shared `ECON_ACTIVITY` because
+  `sdmx_column_map` is keyed on truncated legacy names; repaired on the copy.
+- Structure backfill alone would have published 779 more summed KPIs.
+  `scripts/check-kpi-totals.py` asked INS for the matching total cell (~830
+  requests, cached): of the KPIs it could compare, ~40% disagreed — averages and
+  rates summed (split children had no unit type, read as a count), overlapping
+  categories, double-counted hierarchy levels. The live site's summed KPIs: 385 of
+  936 disagree. FIX-02 phase 3 (separate branch): unknown units judged by name,
+  children profiled with their split unit, and a gate that publishes a summed KPI
+  only when INS agrees. Copy: 1,084 latest KPIs, all summed ones confirmed.
+
+Verified: tests pass on each branch (fix/03 452+, fix/02 452), chart-selector eval
+1,986/1,986 unchanged, spot checks against INS. Not done: time-shift remap, view
+profiles/search, manifest/release gate, publish; tiles still sum (backlog).
+
 ## 2026-10-05 — FIX-02 phase 2 + FIX-08 item 7: every consumer on the aggregation policy
 
 Grouped `/datasets/{code}/data` runs `decide()` on the collapsed dimensions (pins

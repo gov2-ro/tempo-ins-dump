@@ -1,6 +1,6 @@
 # FIX-02 — Verified aggregation and KPI provenance
 
-Status: phases 1 and 2 merged to audit-fixes (composer, insights, headlines, grouped API, Ask agent, v1/v2 disclosure). Open: structure backfill on a published generation (FIX-03 repair queue); metadata-only axis overlap and unfiltered time collapse only warn. Priority: P0. Owner: shared statistical services.
+Status: phases 1 and 2 on main. Phase 3 on `fix/02-measure-classification` (not merged): unknown unit types judged by indicator name; summed KPIs published only when INS's total agrees (`kpi_total_checks`). Open: same gate for tiles/grouped API; unfiltered time collapse and metadata-only overlap still only warn. Priority: P0. Owner: shared statistical services.
 Dependencies: FIX-03 repairs and expands profiles; immediate suppression can ship
 first. FIX-06 and FIX-08 consume this contract.
 

@@ -377,6 +377,10 @@ def parse_unit(label: str) -> dict:
 
 # ── Dimension type detection (from dim_label) ─────────────────────────────────
 
+PERIOD_LABELS = frozenset({'perioade', 'perioade de referinta', 'ani', 'luni', 'luni calendaristice',
+                           'trimestre', 'trimestru', 'semestre', 'semestru', 'saptamani'})
+
+
 def detect_dim_type(dim_label: str) -> str:
     sn = norm(dim_label)
 
@@ -384,15 +388,12 @@ def detect_dim_type(dim_label: str) -> str:
     if sn.startswith('um:') or sn.startswith('um ') or sn == 'um':
         return 'unit'
 
-    # Time indicators
-    TIME_KEYWORDS = ('perioade', 'trimestre', 'trimestru', 'semestre', 'semestru',
-                     'saptamani', 'luni calendaristice')
-    if any(k in sn for k in TIME_KEYWORDS):
-        return 'time'
-    if sn in ('ani', 'perioade', 'luni', 'trimestre', 'semestre', 'perioade de referinta'):
-        return 'time'
-    # "ani" appearing alone or as suffix in multi-word label
-    if re.search(r'\bani\b', sn) and 'grupe de varsta' not in sn and 'varst' not in sn:
+    # Time: only the labels INS uses for the observation period. Substring and
+    # "\bani\b" matches typed 'Durata ... saptamanii de lucru' (hours bands),
+    # 'Ani de baza', 'Ani de creare', 'ANI/UM' (the indicator's title) and
+    # 'Victime sub 18 ani ...' as time; stage 11 then gave one of them
+    # TIME_PERIOD and pushed the real 'Perioade' to TIME_PERIOD_2 (149 files).
+    if sn in PERIOD_LABELS:
         return 'time'
 
     # Gender — must check before geo (some dim labels mix both)
@@ -590,8 +591,18 @@ def main(argv=None):
     unknown_units: dict[str, int] = defaultdict(int)
     unknown_geo:   dict[str, int]  = defaultdict(int)
 
+    # A period-labelled dimension none of whose options carries a year is not the
+    # observation period: CNF101F/CNF102C pair 'Luni' (bare month names) with
+    # 'Perioade' (years). Keep it categorical so it is never read as the time axis.
+    dated: set = set()
+    for nom_item_id, option_label, dim_label, matrix_code, dim_code in rows:
+        if detect_dim_type(dim_label) == 'time' and parse_time(option_label or '').get('year'):
+            dated.add((matrix_code, dim_code))
+
     for nom_item_id, option_label, dim_label, matrix_code, dim_code in rows:
         dim_type = detect_dim_type(dim_label)
+        if dim_type == 'time' and (matrix_code, dim_code) not in dated:
+            dim_type = 'indicator'
 
         # Track per-matrix dimension info
         if dim_code not in matrix_dims[matrix_code]:

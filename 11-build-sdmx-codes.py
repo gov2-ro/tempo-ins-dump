@@ -53,6 +53,11 @@ DIM_TYPE_TO_SDMX = {
 # Semantic rules for indicator dimensions → descriptive SDMX names
 # (substring in dim_label_lower → SDMX column name)
 _INDICATOR_RULES = [
+    # Dimensions once mistyped as time (see 10-classify-dimensions PERIOD_LABELS)
+    ("durata efectiva a saptamanii de lucru", "ACTUAL_WEEKLY_HOURS"),
+    ("durata obisnuita a saptamanii de lucru", "USUAL_WEEKLY_HOURS"),
+    ("ani de baza", "BASE_YEAR"),
+    ("ani de creare", "CREATION_YEAR"),
     ("nivel de educatie", "EDU_LEVEL"),
     ("nivel educational", "EDU_LEVEL"),
     ("nivel instructie", "EDU_LEVEL"),
@@ -88,6 +93,10 @@ def classify_dim_to_sdmx(dim_type: str, dim_label: str, used_names: set) -> str:
 
     # Indicator type: try semantic rules on dim_label
     if dim_type == "indicator":
+        exact = {"luni": "MONTH",        # bare month names beside a 'Perioade' dim
+                 "ani/um": "INDICATOR"}  # single option holding the indicator's title
+        if label_lower in exact:
+            return _unique_name(exact[label_lower], used_names)
         for substr, name in _INDICATOR_RULES:
             if substr in label_lower:
                 return _unique_name(name, used_names)

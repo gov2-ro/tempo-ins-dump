@@ -139,6 +139,17 @@ bash scripts/prepare-deploy-data.sh                # stage deploy data
   and network tab. `npx playwright` is available; see `scripts/dbv2-screenshot.mjs`.
 
 ## Gotchas
+- **Don't probe scripts with `--help`:** `11-coverage-profiler.py`,
+  `scripts/profile-values.py` and `detect_trends.py` take no arguments and rebuild
+  their tables in the live DB. Read the argparse block first. `3-fetch-metas.py`
+  writes the repo's `data/2-metas` regardless of env; `6-fetch-csv.py` resolves
+  `data/` from the cwd; `9-csv-to-parquet.py --matrix` takes one code.
+- **Stored `parquet_path` values are absolute and stale** (some point at the deleted
+  `parquet-v3/`). Resolve files by code (`duckdb_config.corpus_parquet`), never by
+  the stored path — following it from a copied corpus touches the live one.
+- **A summed total needs the source's agreement:** `profile_flat` only means no
+  hierarchy was detected. `scripts/check-kpi-totals.py` compares summed KPIs with
+  the cell INS publishes; ~40% of the live summed KPIs disagreed (2026-10-05).
 - **DuckDB write lock:** one writer at a time. Stop the dev server before running
   pipeline scripts. Parallel jobs that need to write should each use a separate
   `.duckdb` file and merge afterwards.
