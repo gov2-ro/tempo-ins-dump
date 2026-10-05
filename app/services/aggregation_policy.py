@@ -32,6 +32,9 @@ Reasons (`reason`, machine-readable)
     ambiguous_slice         (headlines) more rows than the declared method allows
     no_data                 (headlines) slice returned nothing
     comparator_missing / comparator_zero   (changes) no usable comparison base
+    arbitrary_pin           (insights) the composer had to hold a dimension at one
+                            non-aggregate option, so the number is a slice, not
+                            the dataset
 
 Methods (`method`): aggregate_row, sum_partition, single_row, weighted_mean,
 unweighted_mean, none.
@@ -54,7 +57,8 @@ FIX-07 and FIX-08 consume these exact names — see `provenance()`):
     outcome          valid_total | valid_slice | approximation | unavailable
     reason           reason code or None
     comparison       None or {basis, from_period, to_period, unit, status,
-                     reason} — basis is yoy | qoq | mom | previous_period;
+                     reason} — basis is yoy | qoq | mom | previous_period |
+                     since_first (overall change since the first period);
                      unit is percent | points; status ok | unavailable
     dimensions       [{column, treatment, verification}] per-dimension audit
                      (treatment: grouped, pinned_aggregate, pinned_value,
@@ -186,7 +190,9 @@ def compute_change(series, unit: str = 'percent', prefer_yoy: bool = True) -> di
         base = pts[-2]
         m = _PERIOD_RE.match(latest_p)
         sub = m.group(2) if m else None
-        basis = ('yoy' if m and not sub else
+        annual_gap = (m and not sub and int(m.group(1)) - int(base[0][:4]) != 1)
+        basis = ('previous_period' if annual_gap else
+                 'yoy' if m and not sub else
                  'qoq' if sub and 'Q' in sub.upper() else
                  'mom' if sub else 'previous_period')
     return compute_change_against(latest_p, latest_v, base[0], base[1], basis, unit)
@@ -395,18 +401,18 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
                     slice_like = True
                     note(col, 'pinned_value', 'user_selected')
                 continue
+            if _equals_level(struct, col, matched):
+                # exactly one verified level: a complete partition, not a slice
+                summed = True
+                out_levels[col] = _applied_level(struct, col, sel)
+                note(col, 'level', 'verified')
+                continue
             bad = _explicit_set_problem(dim, matched, struct)
             if bad:
                 return _unavailable(bad, col, audit, out_filters)
-            if _equals_level(struct, col, matched):
-                summed = True
-                lvl = _applied_level(struct, col, sel)
-                out_levels[col] = lvl
-                note(col, 'level', 'verified')
-            else:
-                summed = True
-                slice_like = True
-                note(col, 'explicit_set', 'user_selected')
+            summed = True
+            slice_like = True
+            note(col, 'explicit_set', 'user_selected')
             continue
 
         # ---- unfiltered, several options: needs structure ----

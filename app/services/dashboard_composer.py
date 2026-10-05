@@ -19,6 +19,8 @@ import re
 
 from app.services.chart_selector import TOTAL_RE
 from app.services import dimension_structure as dstruct
+from app.services import aggregation_policy as ap
+from app.services.aggregation_policy import NON_ADDITIVE_UNIT_TYPES  # noqa: F401  (re-exported)
 
 # "Taurine - total" style aggregate options inside hierarchical dims
 _TOTAL_SUFFIX_RE = re.compile(r'-\s*total\s*$', re.I)
@@ -47,11 +49,8 @@ COMPANION_AXES = {
     'temporal': ['ranking'],
 }
 
-# Unit types whose values cannot be SUMmed across an unpinned dimension
-# (means, shares, rates, base-100 indices; currency datasets are
-# predominantly per-capita/monthly averages in TEMPO).
-NON_ADDITIVE_UNIT_TYPES = {'currency', 'percentage', 'rate', 'ratio',
-                           'index', 'time_unit'}
+# Non-additive unit policy lives in aggregation_policy (single shared list);
+# NON_ADDITIVE_UNIT_TYPES is re-exported above for existing importers.
 
 # A categorical dim needs at least this many real options to make a
 # ranking bar worth a tile.
@@ -414,6 +413,34 @@ def _slice_id(group_by: list, filters: dict) -> str:
     return hashlib.md5(key.encode('utf-8')).hexdigest()[:10]
 
 
+def spec_decision(spec: dict, dimensions: list, actual_values: dict | None,
+                  struct: dict | None, non_additive: bool,
+                  levels: dict | None = None) -> 'ap.AggregationDecision':
+    """The shared aggregation verdict for one composed slice.
+
+    Composer tiles, insights and headlines all go through aggregation_policy.decide
+    with the same inputs, so they cannot disagree about the same slice.
+    """
+    effective = {_col(d): _effective(d, actual_values) for d in dimensions}
+    return ap.decide(
+        dimensions=dimensions, effective=effective,
+        group_by=spec['group_by'], filters=spec['filters'], struct=struct,
+        measure='non_additive' if non_additive else 'additive', levels=levels)
+
+
+def _suppressed(chart_id: str, axis: str, decision) -> dict:
+    return {'id': chart_id, 'axis': axis, 'outcome': decision.outcome,
+            'reason': decision.reason, 'column': decision.blocking_dimension}
+
+
+def _aggregation_block(decision) -> dict:
+    """Compact decision payload attached to tile specs (data.aggregation)."""
+    d = decision.to_dict()
+    d.pop('filters', None)       # already spec.filters
+    d.pop('agg_func', None)
+    return d
+
+
 # Chart modules with a built-in timeline browser; for any other chart a
 # 'timeline' role is dropped from the slice so time gets pinned to the
 # latest period instead (their renderers would otherwise sum across years).
@@ -641,6 +668,7 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
             axes_used.add(axis)
 
     charts = []
+    suppressed = []     # tiles whose aggregate the shared policy refused
     for entry in picked:
         chart_type = entry['chart_type']
         roles = entry.get('roles', {})
@@ -667,6 +695,11 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
                 roles = {**roles, 'series': _col(best)}
         spec = _build_slice(roles, dimensions, time_dim, chart_type,
                             actual_values, non_additive, struct)
+        decision = spec_decision(spec, dimensions, actual_values, struct, non_additive)
+        if not decision.available:
+            suppressed.append(_suppressed(entry['chart_type'], axis, decision))
+            continue
+        spec['aggregation'] = _aggregation_block(decision)
         charts.append({
             'id': entry['chart_type'],
             'chart_type': chart_type,
@@ -691,7 +724,14 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
                 roles['series'] = _col(best)
             spec = _build_slice(roles, dimensions, time_dim,
                                 actual_values=actual_values,
-                                non_additive=non_additive)
+                                non_additive=non_additive, struct=struct)
+            decision = spec_decision(spec, dimensions, actual_values, struct,
+                                     non_additive)
+            if not decision.available:
+                suppressed.append(_suppressed('trend', 'temporal', decision))
+                axes_used.add('temporal')
+                continue
+            spec['aggregation'] = _aggregation_block(decision)
             charts.append({
                 'id': 'trend',
                 'chart_type': 'line',
@@ -728,6 +768,13 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
             roles = {'x_axis': _col(rank_dim)}
             spec = _build_slice(roles, dimensions, time_dim, 'horizontal_bar',
                                 actual_values, non_additive, struct)
+            decision = spec_decision(spec, dimensions, actual_values, struct,
+                                     non_additive)
+            if not decision.available:
+                suppressed.append(_suppressed('ranking', 'ranking', decision))
+                axes_used.add('ranking')
+                continue
+            spec['aggregation'] = _aggregation_block(decision)
             charts.append({
                 'id': 'ranking',
                 'chart_type': 'horizontal_bar',
@@ -743,6 +790,13 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
             axes_used.add('ranking')
 
     n = min(len(charts), MAX_CHARTS)
+    if n == 0:
+        # Every tile would have shown an uncertain aggregate. Say so; the
+        # frontend already falls back to its no-composition path on empty
+        # `charts`, and raw table access is unaffected.
+        return {'layout': None, 'charts': [], 'default_filters': {},
+                'filter_dims': [], 'grain_dims': [], 'dim_levels': {},
+                'suppressed': suppressed}
     charts = charts[:n]
     wide = [c for c in charts if c['chart_type'] in WIDE_CHARTS]
     if wide and n >= 2:
@@ -825,6 +879,7 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
         'filter_dims': filter_dims,
         'grain_dims': grain_dims,
         'dim_levels': {g['column']: g.pop('_members') for g in grain_dims},
+        'suppressed': suppressed,
     }
 
 
