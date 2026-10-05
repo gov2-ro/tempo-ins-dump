@@ -464,11 +464,43 @@ def fetch_by_judet_split(matrix_code: str, matrix_def: Dict, output_dir: str,
     return True
 
 
-def generate_chunks(dims_options: list, cell_limit: int = 25000):
+# INS answers a header-only CSV (no error) when one dimension carries too many
+# options in a single /pivot request: EXP101F/EXP102F (1,261/1,274 NC groups) came
+# back "empty" this way. The R TEMPO package splits dimensions above 300 options
+# into chunks of 100; we do the same.
+MAX_DIM_OPTIONS = 300
+DIM_CHUNK = 100
+CHUNK_DELAY = 0.5  # seconds between chunk requests
+
+
+def query_dims_options(matrix_def: Dict) -> list:
+    """Per-dimension options as encode_query_parameters sends them (exact 'Total' dropped)."""
+    out = []
+    for dim in matrix_def.get('dimensionsMap', []):
+        opts = [o for o in dim['options'] if o['label'].strip().lower() != 'total']
+        out.append(opts if opts and len(dim['options']) > 1 else dim['options'])
+    return out
+
+
+def exceeds_dim_limit(matrix_def: Dict, max_dim_options: int = MAX_DIM_OPTIONS) -> bool:
+    return any(len(o) > max_dim_options for o in query_dims_options(matrix_def))
+
+
+def generate_chunks(dims_options: list, cell_limit: int = 25000,
+                    max_dim_options: int = MAX_DIM_OPTIONS, dim_chunk: int = DIM_CHUNK):
     """
-    Recursively yield option-subsets per dimension, each combination with ≤cell_limit total cells.
+    Recursively yield option-subsets per dimension, each combination with ≤cell_limit total
+    cells and no dimension above max_dim_options options.
     dims_options: list of option-lists, one per dimension (non-Total options already filtered).
     """
+    for i, opts in enumerate(dims_options):
+        if len(opts) > max_dim_options:
+            for start in range(0, len(opts), dim_chunk):
+                subset = list(dims_options)
+                subset[i] = opts[start:start + dim_chunk]
+                yield from generate_chunks(subset, cell_limit, max_dim_options, dim_chunk)
+            return
+
     total = 1
     for o in dims_options:
         total *= len(o)
@@ -486,7 +518,7 @@ def generate_chunks(dims_options: list, cell_limit: int = 25000):
     for start in range(0, len(max_opts), chunk_size):
         subset = list(dims_options)
         subset[max_idx] = max_opts[start:start + chunk_size]
-        yield from generate_chunks(subset, cell_limit)
+        yield from generate_chunks(subset, cell_limit, max_dim_options, dim_chunk)
 
 
 def fetch_by_generic_chunks(matrix_code: str, matrix_def: Dict, output_dir: str,
@@ -495,12 +527,7 @@ def fetch_by_generic_chunks(matrix_code: str, matrix_def: Dict, output_dir: str,
     Fetch oversized dataset by splitting large dimensions into chunks ≤cell_limit cells each.
     Returns False if dataset would need more than max_chunks requests (too large to recover).
     """
-    def get_opts(dim):
-        opts = [o for o in dim['options'] if o['label'].strip().lower() != 'total']
-        return opts if opts else dim['options']
-
-    dims = matrix_def['dimensionsMap']
-    dims_options = [get_opts(d) for d in dims]
+    dims_options = query_dims_options(matrix_def)
 
     # Pre-collect all chunks to check feasibility before making any requests
     chunk_list = []
@@ -528,11 +555,14 @@ def fetch_by_generic_chunks(matrix_code: str, matrix_def: Dict, output_dir: str,
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
     }
 
+    # All-or-nothing: a chunk that errors or hits the cell limit fails the whole
+    # matrix. Publishing the other chunks would be a silently partial dataset.
     header_row = None
     all_data_rows = []
-    skipped_chunks = 0
 
     for i, chunk_opts in enumerate(tqdm(chunk_list, desc=f"Chunks {matrix_code}", leave=False)):
+        if i and CHUNK_DELAY:
+            time.sleep(CHUNK_DELAY)
         modified = copy.deepcopy(matrix_def)
         for j, dim in enumerate(modified['dimensionsMap']):
             dim['options'] = chunk_opts[j]
@@ -543,41 +573,42 @@ def fetch_by_generic_chunks(matrix_code: str, matrix_def: Dict, output_dir: str,
             response = requests.post(url, json=payload, headers=headers, verify=False, timeout=60)
             response.raise_for_status()
             text = response.content.decode('utf-8', errors='ignore')
-
-            if ('celule' in text.lower() and '30000' in text) or \
-               ('pragul' in text.lower() and 'celule' in text.lower()):
-                logger.warning(f"{matrix_code} chunk {i} - API cell limit hit, skipping chunk")
-                skipped_chunks += 1
-                continue
-
-            lines = [l for l in text.splitlines(keepends=True) if l.strip()]
-            if not lines:
-                continue
-            if header_row is None:
-                header_row = lines[0]
-            all_data_rows.extend(lines[1:])
-
         except Exception as e:
             logger.error(f"{matrix_code} chunk {i} - request error: {e}")
+            tqdm.write(f"GENERIC-CHUNK FAILED: {matrix_code} chunk {i}: {e}")
+            return False
+
+        if ('celule' in text.lower() and '30000' in text) or \
+           ('pragul' in text.lower() and 'celule' in text.lower()):
+            logger.warning(f"{matrix_code} chunk {i} - API cell limit hit")
+            tqdm.write(f"GENERIC-CHUNK FAILED: {matrix_code} chunk {i} hit the API cell limit")
+            return False
+
+        lines = [l for l in text.splitlines(keepends=True) if l.strip()]
+        if not lines:
             continue
+        if header_row is None:
+            header_row = lines[0]
+        elif lines[0] != header_row:
+            logger.error(f"{matrix_code} chunk {i} - header differs: {lines[0]!r} vs {header_row!r}")
+            tqdm.write(f"GENERIC-CHUNK FAILED: {matrix_code} chunk {i} returned a different header")
+            return False
+        all_data_rows.extend(lines[1:])
 
     if not all_data_rows:
         tqdm.write(f"GENERIC-CHUNK FAILED: {matrix_code} - no data collected")
         return False
 
     output_file = os.path.join(output_dir, f"{matrix_code}.csv")
-    with open(output_file, 'w', encoding='utf-8') as f:
-        if header_row:
-            f.write(header_row)
+    tmp_file = output_file + ".part"
+    with open(tmp_file, 'w', encoding='utf-8') as f:
+        f.write(header_row)
         for row in all_data_rows:
             f.write(row)
+    os.replace(tmp_file, output_file)
 
-    msg = f"GENERIC-CHUNK SUCCESS: {matrix_code} - {len(all_data_rows)} rows from {len(chunk_list)} chunks"
-    if skipped_chunks:
-        msg += f" ({skipped_chunks} chunks skipped due to API limit)"
-    tqdm.write(msg)
-    generic_chunk_logger.info(f"{matrix_code} - {len(chunk_list)} chunks, {len(all_data_rows)} rows" +
-                               (f", {skipped_chunks} skipped" if skipped_chunks else ""))
+    tqdm.write(f"GENERIC-CHUNK SUCCESS: {matrix_code} - {len(all_data_rows)} rows from {len(chunk_list)} chunks")
+    generic_chunk_logger.info(f"{matrix_code} - {len(chunk_list)} chunks, {len(all_data_rows)} rows")
     return True
 
 
@@ -747,6 +778,16 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
 
             # Check if this dataset has both Judete and Localitati dimensions
             has_both, judete_dim, localitati_dim = has_judete_and_localitati(matrix_def)
+
+            if not has_both and exceeds_dim_limit(matrix_def):
+                # Header-only is how INS answers a dimension with too many options.
+                tqdm.write(f"{matrix_code}: a dimension has >{MAX_DIM_OPTIONS} options, retrying in chunks")
+                logger.info(f"{matrix_code} - header-only response, retrying with per-dimension chunks")
+                if fetch_by_generic_chunks(matrix_code, matrix_def, output_dir) and count_csv_rows(output_file) > 0:
+                    return
+                # Don't leave the header-only file behind: later runs would skip it as fetched.
+                os.remove(output_file)
+                raise FetchIncomplete(f"{matrix_code}: chunked retry failed (dimension above {MAX_DIM_OPTIONS} options)")
 
             if has_both:
                 # RETRY using Judet-split approach
