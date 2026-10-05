@@ -255,7 +255,9 @@ def _is_total_option(dim, opt, dv, struct) -> bool:
         return True
     if dim.get('dim_type') == 'geo' and (opt.get('parsed') or {}).get('geo_level') == 'national':
         return True
-    return bool(TOTAL_RE.match(_norm(opt.get('label') or dv or '')))
+    # Language-independent: judge the stored data value, not the display label
+    # (labels are translated, so en and ro would otherwise decide differently).
+    return bool(TOTAL_RE.match(_norm(dv if dv is not None else (opt.get('label') or ''))))
 
 
 # --- the decision ------------------------------------------------------------
@@ -439,7 +441,7 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
             return _unavailable('overlapping_levels', col, audit, out_filters)
 
         if col in declared:
-            labels = [o.get('label') or dv or '' for o, dv in eff]
+            labels = [dv if dv is not None else (o.get('label') or '') for o, dv in eff]
             if non_additive or label_hierarchy_cues(labels) \
                     or any(TOTAL_RE.match(_norm(l)) for l in labels):
                 return _unavailable('declared_partition_invalid', col, audit, out_filters)
@@ -559,7 +561,7 @@ def _unprofiled_partition(dim, eff, struct):
     col = dim['dim_column_name']
     dtype = dim.get('dim_type')
     opts = [o for o, _ in eff]
-    labels = [o.get('label') or dv or '' for o, dv in eff]
+    labels = [dv if dv is not None else (o.get('label') or '') for o, dv in eff]
     prof = (struct or {}).get(col)
 
     ov = _metadata_overlap(dim, opts)
