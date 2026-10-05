@@ -133,6 +133,7 @@ def ask(req: AskRequest) -> dict:
         "data": result.data,
         "chart_spec": result.chart_spec,
         "warnings": result.warnings,
+        "verification": result.verification,
         "stop_reason": result.stop_reason,
         "budget": result.budget,
     }

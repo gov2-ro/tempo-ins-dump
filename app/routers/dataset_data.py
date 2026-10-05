@@ -12,7 +12,7 @@ from app.config import MAX_DATA_ROWS, LARGE_DATASET_THRESHOLD, PARQUET_DIR
 
 from app.services.query_builder import (
     build_data_query_params, build_export_query_params, resolve_parquet_schema, adapt_to_parquet,
-    quote_ident)
+    quote_ident, to_sdmx_name)
 from app.services.request_validation import parse_filters, parse_group_by
 
 log = logging.getLogger(__name__)
@@ -108,16 +108,6 @@ def _resolve_time_column(conn, dimensions, schema, matrix_code: str) -> str | No
     if vals and all(_ANNUAL_LABEL_RE.match(str(v or '')) for v in vals):
         return legacy
     return None
-
-
-def _to_sdmx_name(schema, col: str) -> str:
-    """A request column name (SDMX, or the file's legacy *_nom_id spelling) as
-    the SDMX name the aggregation context uses."""
-    if schema.get("is_legacy"):
-        return (schema.get("to_sdmx") or {}).get(col, col)
-    if col.endswith("_nom_id"):
-        return (schema.get("to_file") or {}).get(col, col)
-    return col
 
 
 def _rows_per_period(dimensions, group_by_cols, filter_dict, time_dim,
@@ -263,7 +253,7 @@ def _dataset_data(conn, matrix_code: str, filters: str, limit: int, group_by: st
         from app.services.dataset_meta import get_aggregation_context, decide_grouped
         ctx = get_aggregation_context(conn, matrix_code)
         if ctx is not None:
-            to_sdmx = lambda c: _to_sdmx_name(schema, c)
+            to_sdmx = lambda c: to_sdmx_name(schema, c)
             sd_group = [to_sdmx(c) for c in group_by_cols]
             sd_filters = {to_sdmx(k): v for k, v in filter_dict.items()}
             decision = decide_grouped(ctx, sd_group, sd_filters,

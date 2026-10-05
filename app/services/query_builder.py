@@ -267,6 +267,16 @@ def resolve_parquet_schema(conn, matrix_code: str) -> dict:
             "columns": cols, "to_file": to_file, "to_sdmx": to_sdmx}
 
 
+def to_sdmx_name(schema: dict, col: str) -> str:
+    """A requested column name (SDMX, or the file's legacy *_nom_id spelling)
+    as the SDMX name — the inverse of `adapt_to_parquet`'s renaming."""
+    if schema.get("is_legacy"):
+        return (schema.get("to_sdmx") or {}).get(col, col)
+    if col.endswith("_nom_id"):
+        return (schema.get("to_file") or {}).get(col, col)
+    return col
+
+
 def adapt_to_parquet(schema: dict, dimensions: list,
                      group_by: list | None = None,
                      filters: dict | None = None) -> tuple:
