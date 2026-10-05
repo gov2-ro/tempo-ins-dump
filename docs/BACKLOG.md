@@ -37,17 +37,21 @@ mutation or paid Ask call was made. Implementation packages and dependency order
   - [ ] 95 county-split children dropped locality: preserve locality grain until disjointness is verified; rebuild the 15 children that dropped a non-locality dimension; investigate 50 source-duplicate files (do not dedupe).
   - [x] Stage 13 primary-key crash: 18 INT109* matrices had several CAEN dimensions all named ECON_ACTIVITY (`repair-corpus.py --step dim-columns`, 34 renames on the copy).
   - [x] Backfill `dimension_structure` (3,369 of 3,376 served on the copy) **and** check summed KPIs against INS (`scripts/check-kpi-totals.py`): 760 match, 326 mismatch, 363 no INS total. The live site's own summed KPIs disagree with INS in 385 of 936 comparable cases.
-  - [ ] Rebuild view profiles and `search.duckdb` (covers 1,225 of 3,368 canonical matrices); generation manifest and release gate on the copy.
+  - [x] Rebuild view profiles and `search.duckdb`; generation manifest `a6737a263a34`; release gate passes on the copy (strict mode blocks only on conflicting grain).
+  - [ ] Review before publishing: chart-selector diff (39 primary changes, incl. 7 choropleth→line and 2 population_pyramid→line) and search diff (13/17 top sets) — then rebuild both baselines.
+  - [ ] Decide whether to rebuild every trend/value-profile row (the copy keeps 8 Sep rows where they exist; the full rebuild moves 30 more primary charts).
   - [ ] Publish: stop server, `data/corpus` → `data/corpus.prev-20261005`, copy's `corpus/` in, `quarantine/` beside it; rebase stored `parquet_path` prefixes.
 
 - [ ] **Source totals: follow-ups from the INS check (2026-10-05)**:
   - Keep INS's own "Total" rows at fetch (stage 6 drops options labelled exactly "Total", like nothing else does — the R TEMPO package keeps them). With source totals in the data, "use the aggregate row" works almost everywhere and summing becomes the exception.
-  - The gate covers the headline KPI only; composer tiles and grouped `/data` still sum the same dimensions (ACC102B by county sums overlapping accident categories). Apply a `kpi_total_checks` mismatch to every collapse of those dimensions.
+  - The gate covers the headline (insights and the grouped time series v1 uses); composer tiles and other grouped `/data` queries still sum the same dimensions (ACC102B's stacked charts include the overlapping "In accidente colective" category). Needs per-dimension INS totals to decide which dimension is at fault.
   - Averages labelled with a count unit ("Numarul mediu de membri ai gospodariei", BUF103H/I) and stage-13 `additive` flags from coincidental sums (TKI0941, a percentage) still reach a sum; only the INS gate catches them.
   - `check-kpi-totals.py` unresolved: 82 split values not recovered, 24 options not found, 10 multi-value pins — extend before relying on `source_total_unchecked`.
   - Re-run the check whenever a generation is rebuilt; the gate trusts `kpi_total_checks` for the dataset, not per period.
 
 - [ ] **Pipeline path and CLI traps (found 2026-10-05)**: `11-coverage-profiler.py`, `scripts/profile-values.py`, `detect_trends.py` take no arguments (`--help` runs them and rebuilds their tables); `3-fetch-metas.py` has no `--matrix` and always writes the repo's `data/2-metas`; `6-fetch-csv.py` resolves `data/` from the cwd; stage 13's lock fallback DB is cwd-relative; `9-csv-to-parquet.py --matrix` takes one code (a comma list becomes one bogus code and an `unmapped_labels` row). Make them honour `TEMPO_PIPELINE_DATA_DIR`, add `--matrix`/argparse.
+- [ ] **ART124A has no matrix/view profile** (legacy-shaped `*_nom_id` parquet; same on live). Re-convert or profile it.
+- [ ] **Map unit pill on a split child**: v2 ACC102B_judete_numar_persoane shows "‰" on the territorial map although the child is "numar persoane" (seen on the repaired copy; not checked on live).
 - [ ] **Coverage profiler is legacy-only**: `11-coverage-profiler.py` matches values by `*_nom_id` ids, so on SDMX parquets it finds no years/geo; `dataset_coverage` (1,959 rows, 8 Sep) is stale. Rewrite against SDMX values before rebuilding it.
 - [ ] **`sdmx_column_map` keyed on truncated legacy names**: distinct dimensions whose labels truncate alike share one map row (root cause of the INT109 duplicates). Key by dimension id/position.
 - [ ] **Fetch lessons from the R TEMPO package** (RProjectRomania/TEMPO, 2026-09): it requests every option including Total; per-dimension chunking (>300 options, chunks of 100) adopted as a fallback; it no longer sends `matRegJ`/`lastUpdate` (so the `lastUpdate` incremental-fetch idea below is unlikely to work).

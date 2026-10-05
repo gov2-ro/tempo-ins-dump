@@ -1,6 +1,6 @@
 # FIX-03 — Retryable pipeline and validated corpus generations
 
-Status: phases 1, 2a and 2b on main. Repair applied step by step on a copied generation (2026-10-05, `fix/03-corpus-repair`, not merged or published): quarantine, 7 missing matrices, INT109 dimension names, structure backfill, INS total check (`scripts/check-kpi-totals.py`), time-column remap. Open: county-grain decisions, view profiles/search rebuild, manifest + release gate, publish. Priority: P1. Owner: ingestion and corpus tooling.
+Status: phases 1, 2a and 2b on main. Repair applied step by step on a copied generation (2026-10-05, `fix/03-corpus-repair`, not merged or published): quarantine, 7 missing matrices, INT109 dimension names, structure backfill, INS total check (`scripts/check-kpi-totals.py`), time-column remap, view profiles + search rebuild, generation manifest; release gate passes on the copy. Open: county-grain decisions (strict gate), chart/search diff review, publish. Priority: P1. Owner: ingestion and corpus tooling.
 Dependencies: agree on FIX-02's verified grain/additivity contract. Deliver control
 flow, refresh ordering, and corpus repair in independently reviewable steps.
 
