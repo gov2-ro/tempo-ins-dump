@@ -1,258 +1,470 @@
 {
   "_notes": {
-    "population_agg": "POP105A has AGE+SEX+RESIDENCE split with no Total rows. (AGE,SEX,RESIDENCE,REF_AREA,TIME_PERIOD) is unique, so SUM gives correct resident population.",
-    "unemployment_agg": "SOM103A has SEX split (Masculin/Feminin), no Total row. AVG of both sexes is an acceptable approximation for display.",
-    "net_wage_agg": "FOM106E has ECON_ACTIVITY+SEX split, no Total row. Rows with NULL ECON_ACTIVITY represent all-sectors totals. AVG across NULL-EA rows (both sexes) gives blended cross-sector avg net monthly wage (Lei). Covers 2008-2024.",
-    "live_births_agg": "POP201A has SEX+RESIDENCE split, no Total row. SUM of all rows gives total live births.",
-    "birth_death_rate_note": "Birth/mortality rate datasets only have Urban/Rural split; AVG of both is used as an approximation. County uses POP202A (1990–2024); region and macroregion use POP202B (2012–2024). Absolute counts (POP201A/POP206B) are preferred where available."
+    "schema": "Per KPI: key (stable id), label/label_en, aliases (old labels still accepted by the baselines route), parquet, unit/unit_en/unit_kind (count|percent_rate|per_mille_rate|currency), source_code/source_title(_en), definition(_en), measure additive|non_additive, partitions = columns collapsed (declared complete disjoint partitions, FIX-02 declared_partitions), weights = aligned weight parquet for non-additive measures, allow_approximation = permit a named unweighted mean when no weights exist, suppress = reason the KPI is not shown.",
+    "unemployment": "SOM103A has only Masculin/Feminin rows and no weights (labour force by sex is not available), so the combined figure is an unweighted mean of the two sex rates: a named approximation, never the official total.",
+    "wage": "FOM106E has no all-activities total row; the previous config filtered ECON_ACTIVITY IS NULL, which matches no rows, so the card never appeared. It is now explicitly suppressed.",
+    "rates": "Birth/death rates are published for Urban/Rural only; they are combined with POP105A resident-population weights per residence area and year (so periods before POP105A starts in 2012 are not shown)."
   },
   "county": [
     {
+      "key": "resident_population",
       "label": "Populație rezidentă",
+      "label_en": "Resident population",
       "parquet": "POP105A_judete_grupe.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "SUM",
       "unit": "pers.",
+      "unit_en": "persons",
+      "unit_kind": "count",
       "category": "Populație",
       "source_code": "POP105A",
-      "time_range": ["2012", "2025"]
+      "source_title": "Populația rezidentă la 1 ianuarie pe grupe de vârstă, sexe și medii de rezidență",
+      "source_title_en": "Resident population on 1 January by age group, sex and residence area",
+      "definition": "Populația rezidentă la 1 ianuarie, însumată pe grupe de vârstă, sexe și medii de rezidență.",
+      "definition_en": "Resident population on 1 January, summed over age groups, sexes and residence areas.",
+      "measure": "additive",
+      "partitions": [
+        "AGE",
+        "SEX",
+        "RESIDENCE"
+      ]
     },
     {
-      "label": "Rata șomajului BIM",
+      "key": "registered_unemployment_rate",
+      "label": "Rata șomajului înregistrat",
+      "label_en": "Registered unemployment rate",
+      "aliases": [
+        "Rata șomajului BIM"
+      ],
       "parquet": "SOM103A_judete.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "AVG",
       "unit": "%",
+      "unit_en": "%",
+      "unit_kind": "percent_rate",
       "category": "Muncă",
       "source_code": "SOM103A",
-      "time_range": ["1991", "2024"],
-      "_agg_note": "AVG of Masculin+Feminin rows"
+      "source_title": "Rata șomajului pe sexe, macroregiuni, regiuni de dezvoltare și județe",
+      "source_title_en": "Unemployment rate by gender, macroregions, development regions and counties",
+      "definition": "Rata șomajului înregistrat (șomeri înregistrați în evidența agențiilor de ocupare, față de populația activă civilă), publicată separat pe sexe. Nu există rând pentru ambele sexe.",
+      "definition_en": "Registered unemployment rate (unemployed persons registered with the employment agencies, relative to the civilian active population), published separately for males and females. There is no both-sexes row.",
+      "measure": "non_additive",
+      "partitions": [
+        "SEX"
+      ],
+      "allow_approximation": true
     },
     {
+      "key": "net_monthly_wage",
       "label": "Câștig salarial net mediu lunar",
+      "label_en": "Average net monthly wage",
       "parquet": "FOM106E_judete.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {"ECON_ACTIVITY": null},
-      "agg_func": "AVG",
       "unit": "lei",
+      "unit_en": "lei",
+      "unit_kind": "currency",
       "category": "Muncă",
       "source_code": "FOM106E",
-      "time_range": ["2008", "2024"],
-      "_agg_note": "AVG across all sectors (ECON_ACTIVITY IS NULL) and both sexes"
+      "suppress": "no_all_activities_total",
+      "suppress_note": "FOM106E has no all-activities total row (only CAEN sections/divisions by sex); averaging them would not be the average wage."
     },
     {
+      "key": "live_births",
       "label": "Născuți vii",
+      "label_en": "Live births",
       "parquet": "POP201A_judete.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "SUM",
       "unit": "pers.",
+      "unit_en": "persons",
+      "unit_kind": "count",
       "category": "Populație",
       "source_code": "POP201A",
-      "time_range": ["1990", "2024"]
+      "source_title": "Născuți vii pe sexe, medii de rezidență, macroregiuni, regiuni de dezvoltare și județe",
+      "source_title_en": "Live births by sex, residence area, macroregions, development regions and counties",
+      "definition": "Număr de născuți vii într-un an, însumat pe sexe și medii de rezidență.",
+      "definition_en": "Number of live births in a year, summed over sexes and residence areas.",
+      "measure": "additive",
+      "partitions": [
+        "SEX",
+        "RESIDENCE"
+      ]
     },
     {
+      "key": "birth_rate",
       "label": "Rata natalității",
+      "label_en": "Birth rate",
       "parquet": "POP202A_judete.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "AVG",
       "unit": "‰",
+      "unit_en": "‰",
+      "unit_kind": "per_mille_rate",
       "category": "Populație",
       "source_code": "POP202A",
-      "time_range": ["1990", "2024"],
-      "_agg_note": "AVG of Urban+Rural rows (approximation)"
+      "source_title": "Rata de natalitate pe medii de rezidență, macroregiuni, regiuni de dezvoltare și județe",
+      "source_title_en": "Birth rate by residence area, macroregions, development regions and counties",
+      "definition": "Născuți vii la 1000 de locuitori (populația la 1 iulie), publicați separat pe mediul urban și rural; combinați aici prin medie ponderată cu populația.",
+      "definition_en": "Live births per 1,000 inhabitants (1 July population), published separately for urban and rural areas; combined here as a population-weighted mean.",
+      "measure": "non_additive",
+      "partitions": [
+        "RESIDENCE"
+      ],
+      "weights": {
+        "parquet": "POP105A_judete_grupe.parquet",
+        "source_code": "POP105A",
+        "join": [
+          "RESIDENCE"
+        ],
+        "note": "resident population on 1 January of the same year, summed over age and sex"
+      },
+      "allow_approximation": false
     },
     {
+      "key": "death_rate",
       "label": "Rata mortalității",
+      "label_en": "Death rate",
       "parquet": "POP207A_judete.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "AVG",
       "unit": "‰",
+      "unit_en": "‰",
+      "unit_kind": "per_mille_rate",
       "category": "Populație",
       "source_code": "POP207A",
-      "time_range": ["1990", "2024"],
-      "_agg_note": "AVG of Urban+Rural rows (approximation)"
+      "source_title": "Rata mortalității pe medii de rezidență, macroregiuni, regiuni de dezvoltare și județe",
+      "source_title_en": "Death rate by residence area, macroregions, development regions and counties",
+      "definition": "Decedați la 1000 de locuitori (populația la 1 iulie), publicați separat pe mediul urban și rural; combinați aici prin medie ponderată cu populația.",
+      "definition_en": "Deaths per 1,000 inhabitants (1 July population), published separately for urban and rural areas; combined here as a population-weighted mean.",
+      "measure": "non_additive",
+      "partitions": [
+        "RESIDENCE"
+      ],
+      "weights": {
+        "parquet": "POP105A_judete_grupe.parquet",
+        "source_code": "POP105A",
+        "join": [
+          "RESIDENCE"
+        ],
+        "note": "resident population on 1 January of the same year, summed over age and sex"
+      },
+      "allow_approximation": false
     },
     {
+      "key": "deaths",
       "label": "Decedați",
+      "label_en": "Deaths",
       "parquet": "POP206B_judete.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "SUM",
       "unit": "pers.",
+      "unit_en": "persons",
+      "unit_kind": "count",
       "category": "Populație",
       "source_code": "POP206B",
-      "time_range": ["1990", "2024"]
+      "source_title": "Decedați pe medii de rezidență, macroregiuni, regiuni de dezvoltare și județe",
+      "source_title_en": "Deaths by residence area, macroregions, development regions and counties",
+      "definition": "Număr de decese într-un an, însumat pe medii de rezidență.",
+      "definition_en": "Number of deaths in a year, summed over residence areas.",
+      "measure": "additive",
+      "partitions": [
+        "RESIDENCE"
+      ]
     }
   ],
   "region": [
     {
+      "key": "resident_population",
       "label": "Populație rezidentă",
+      "label_en": "Resident population",
       "parquet": "POP105A_regiuni_grupe.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "SUM",
       "unit": "pers.",
+      "unit_en": "persons",
+      "unit_kind": "count",
       "category": "Populație",
       "source_code": "POP105A",
-      "time_range": ["2012", "2025"]
+      "source_title": "Populația rezidentă la 1 ianuarie pe grupe de vârstă, sexe și medii de rezidență",
+      "source_title_en": "Resident population on 1 January by age group, sex and residence area",
+      "definition": "Populația rezidentă la 1 ianuarie, însumată pe grupe de vârstă, sexe și medii de rezidență.",
+      "definition_en": "Resident population on 1 January, summed over age groups, sexes and residence areas.",
+      "measure": "additive",
+      "partitions": [
+        "AGE",
+        "SEX",
+        "RESIDENCE"
+      ]
     },
     {
-      "label": "Rata șomajului BIM",
+      "key": "registered_unemployment_rate",
+      "label": "Rata șomajului înregistrat",
+      "label_en": "Registered unemployment rate",
+      "aliases": [
+        "Rata șomajului BIM"
+      ],
       "parquet": "SOM103A_regiuni.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "AVG",
       "unit": "%",
+      "unit_en": "%",
+      "unit_kind": "percent_rate",
       "category": "Muncă",
       "source_code": "SOM103A",
-      "time_range": ["1991", "2024"],
-      "_agg_note": "AVG of Masculin+Feminin rows"
+      "source_title": "Rata șomajului pe sexe, macroregiuni, regiuni de dezvoltare și județe",
+      "source_title_en": "Unemployment rate by gender, macroregions, development regions and counties",
+      "definition": "Rata șomajului înregistrat (șomeri înregistrați în evidența agențiilor de ocupare, față de populația activă civilă), publicată separat pe sexe. Nu există rând pentru ambele sexe.",
+      "definition_en": "Registered unemployment rate (unemployed persons registered with the employment agencies, relative to the civilian active population), published separately for males and females. There is no both-sexes row.",
+      "measure": "non_additive",
+      "partitions": [
+        "SEX"
+      ],
+      "allow_approximation": true
     },
     {
+      "key": "net_monthly_wage",
       "label": "Câștig salarial net mediu lunar",
+      "label_en": "Average net monthly wage",
       "parquet": "FOM106E_regiuni.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {"ECON_ACTIVITY": null},
-      "agg_func": "AVG",
       "unit": "lei",
+      "unit_en": "lei",
+      "unit_kind": "currency",
       "category": "Muncă",
       "source_code": "FOM106E",
-      "time_range": ["2008", "2024"],
-      "_agg_note": "AVG across all sectors (ECON_ACTIVITY IS NULL) and both sexes"
+      "suppress": "no_all_activities_total",
+      "suppress_note": "FOM106E has no all-activities total row (only CAEN sections/divisions by sex); averaging them would not be the average wage."
     },
     {
+      "key": "live_births",
       "label": "Născuți vii",
+      "label_en": "Live births",
       "parquet": "POP201A_regiuni.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "SUM",
       "unit": "pers.",
+      "unit_en": "persons",
+      "unit_kind": "count",
       "category": "Populație",
       "source_code": "POP201A",
-      "time_range": ["1990", "2024"]
+      "source_title": "Născuți vii pe sexe, medii de rezidență, macroregiuni, regiuni de dezvoltare și județe",
+      "source_title_en": "Live births by sex, residence area, macroregions, development regions and counties",
+      "definition": "Număr de născuți vii într-un an, însumat pe sexe și medii de rezidență.",
+      "definition_en": "Number of live births in a year, summed over sexes and residence areas.",
+      "measure": "additive",
+      "partitions": [
+        "SEX",
+        "RESIDENCE"
+      ]
     },
     {
+      "key": "birth_rate",
       "label": "Rata natalității",
+      "label_en": "Birth rate",
       "parquet": "POP202B_regiuni.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "AVG",
       "unit": "‰",
+      "unit_en": "‰",
+      "unit_kind": "per_mille_rate",
       "category": "Populație",
       "source_code": "POP202B",
-      "time_range": ["2012", "2024"],
-      "_agg_note": "AVG of Urban+Rural rows (approximation)"
+      "source_title": "Rata de natalitate pe medii de rezidență, macroregiuni, regiuni de dezvoltare și județe",
+      "source_title_en": "Birth rate by residence area, macroregions, development regions and counties",
+      "definition": "Născuți vii la 1000 de locuitori (populația la 1 iulie), publicați separat pe mediul urban și rural; combinați aici prin medie ponderată cu populația.",
+      "definition_en": "Live births per 1,000 inhabitants (1 July population), published separately for urban and rural areas; combined here as a population-weighted mean.",
+      "measure": "non_additive",
+      "partitions": [
+        "RESIDENCE"
+      ],
+      "weights": {
+        "parquet": "POP105A_regiuni_grupe.parquet",
+        "source_code": "POP105A",
+        "join": [
+          "RESIDENCE"
+        ],
+        "note": "resident population on 1 January of the same year, summed over age and sex"
+      },
+      "allow_approximation": false
     },
     {
+      "key": "death_rate",
       "label": "Rata mortalității",
+      "label_en": "Death rate",
       "parquet": "POP207A_regiuni.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "AVG",
       "unit": "‰",
+      "unit_en": "‰",
+      "unit_kind": "per_mille_rate",
       "category": "Populație",
       "source_code": "POP207A",
-      "time_range": ["1990", "2024"],
-      "_agg_note": "AVG of Urban+Rural rows (approximation)"
+      "source_title": "Rata mortalității pe medii de rezidență, macroregiuni, regiuni de dezvoltare și județe",
+      "source_title_en": "Death rate by residence area, macroregions, development regions and counties",
+      "definition": "Decedați la 1000 de locuitori (populația la 1 iulie), publicați separat pe mediul urban și rural; combinați aici prin medie ponderată cu populația.",
+      "definition_en": "Deaths per 1,000 inhabitants (1 July population), published separately for urban and rural areas; combined here as a population-weighted mean.",
+      "measure": "non_additive",
+      "partitions": [
+        "RESIDENCE"
+      ],
+      "weights": {
+        "parquet": "POP105A_regiuni_grupe.parquet",
+        "source_code": "POP105A",
+        "join": [
+          "RESIDENCE"
+        ],
+        "note": "resident population on 1 January of the same year, summed over age and sex"
+      },
+      "allow_approximation": false
     },
     {
+      "key": "deaths",
       "label": "Decedați",
+      "label_en": "Deaths",
       "parquet": "POP206B_regiuni.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "SUM",
       "unit": "pers.",
+      "unit_en": "persons",
+      "unit_kind": "count",
       "category": "Populație",
       "source_code": "POP206B",
-      "time_range": ["1990", "2024"]
+      "source_title": "Decedați pe medii de rezidență, macroregiuni, regiuni de dezvoltare și județe",
+      "source_title_en": "Deaths by residence area, macroregions, development regions and counties",
+      "definition": "Număr de decese într-un an, însumat pe medii de rezidență.",
+      "definition_en": "Number of deaths in a year, summed over residence areas.",
+      "measure": "additive",
+      "partitions": [
+        "RESIDENCE"
+      ]
     }
   ],
   "macroregion": [
     {
+      "key": "resident_population",
       "label": "Populație rezidentă",
+      "label_en": "Resident population",
       "parquet": "POP105A_macroregiuni_grupe.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "SUM",
       "unit": "pers.",
+      "unit_en": "persons",
+      "unit_kind": "count",
       "category": "Populație",
       "source_code": "POP105A",
-      "time_range": ["2012", "2025"]
+      "source_title": "Populația rezidentă la 1 ianuarie pe grupe de vârstă, sexe și medii de rezidență",
+      "source_title_en": "Resident population on 1 January by age group, sex and residence area",
+      "definition": "Populația rezidentă la 1 ianuarie, însumată pe grupe de vârstă, sexe și medii de rezidență.",
+      "definition_en": "Resident population on 1 January, summed over age groups, sexes and residence areas.",
+      "measure": "additive",
+      "partitions": [
+        "AGE",
+        "SEX",
+        "RESIDENCE"
+      ]
     },
     {
-      "label": "Rata șomajului BIM",
+      "key": "registered_unemployment_rate",
+      "label": "Rata șomajului înregistrat",
+      "label_en": "Registered unemployment rate",
+      "aliases": [
+        "Rata șomajului BIM"
+      ],
       "parquet": "SOM103A_macroregiuni.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "AVG",
       "unit": "%",
+      "unit_en": "%",
+      "unit_kind": "percent_rate",
       "category": "Muncă",
       "source_code": "SOM103A",
-      "time_range": ["1991", "2024"],
-      "_agg_note": "AVG of Masculin+Feminin rows"
+      "source_title": "Rata șomajului pe sexe, macroregiuni, regiuni de dezvoltare și județe",
+      "source_title_en": "Unemployment rate by gender, macroregions, development regions and counties",
+      "definition": "Rata șomajului înregistrat (șomeri înregistrați în evidența agențiilor de ocupare, față de populația activă civilă), publicată separat pe sexe. Nu există rând pentru ambele sexe.",
+      "definition_en": "Registered unemployment rate (unemployed persons registered with the employment agencies, relative to the civilian active population), published separately for males and females. There is no both-sexes row.",
+      "measure": "non_additive",
+      "partitions": [
+        "SEX"
+      ],
+      "allow_approximation": true
     },
     {
+      "key": "net_monthly_wage",
       "label": "Câștig salarial net mediu lunar",
+      "label_en": "Average net monthly wage",
       "parquet": "FOM106E_macroregiuni.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {"ECON_ACTIVITY": null},
-      "agg_func": "AVG",
       "unit": "lei",
+      "unit_en": "lei",
+      "unit_kind": "currency",
       "category": "Muncă",
       "source_code": "FOM106E",
-      "time_range": ["2008", "2024"],
-      "_agg_note": "AVG across all sectors (ECON_ACTIVITY IS NULL) and both sexes"
+      "suppress": "no_all_activities_total",
+      "suppress_note": "FOM106E has no all-activities total row (only CAEN sections/divisions by sex); averaging them would not be the average wage."
     },
     {
-      "label": "Rata natalității",
-      "parquet": "POP202B_macroregiuni.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "AVG",
-      "unit": "‰",
-      "category": "Populație",
-      "source_code": "POP202B",
-      "time_range": ["2012", "2024"],
-      "_agg_note": "AVG of Urban+Rural rows (approximation)"
-    },
-    {
-      "label": "Rata mortalității",
-      "parquet": "POP207A_macroregiuni.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "AVG",
-      "unit": "‰",
-      "category": "Populație",
-      "source_code": "POP207A",
-      "time_range": ["1990", "2024"],
-      "_agg_note": "AVG of Urban+Rural rows (approximation)"
-    },
-    {
+      "key": "live_births",
       "label": "Născuți vii",
+      "label_en": "Live births",
       "parquet": "POP201A_macroregiuni.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "SUM",
       "unit": "pers.",
+      "unit_en": "persons",
+      "unit_kind": "count",
       "category": "Populație",
       "source_code": "POP201A",
-      "time_range": ["1990", "2024"]
+      "source_title": "Născuți vii pe sexe, medii de rezidență, macroregiuni, regiuni de dezvoltare și județe",
+      "source_title_en": "Live births by sex, residence area, macroregions, development regions and counties",
+      "definition": "Număr de născuți vii într-un an, însumat pe sexe și medii de rezidență.",
+      "definition_en": "Number of live births in a year, summed over sexes and residence areas.",
+      "measure": "additive",
+      "partitions": [
+        "SEX",
+        "RESIDENCE"
+      ]
     },
     {
+      "key": "birth_rate",
+      "label": "Rata natalității",
+      "label_en": "Birth rate",
+      "parquet": "POP202B_macroregiuni.parquet",
+      "unit": "‰",
+      "unit_en": "‰",
+      "unit_kind": "per_mille_rate",
+      "category": "Populație",
+      "source_code": "POP202B",
+      "source_title": "Rata de natalitate pe medii de rezidență, macroregiuni, regiuni de dezvoltare și județe",
+      "source_title_en": "Birth rate by residence area, macroregions, development regions and counties",
+      "definition": "Născuți vii la 1000 de locuitori (populația la 1 iulie), publicați separat pe mediul urban și rural; combinați aici prin medie ponderată cu populația.",
+      "definition_en": "Live births per 1,000 inhabitants (1 July population), published separately for urban and rural areas; combined here as a population-weighted mean.",
+      "measure": "non_additive",
+      "partitions": [
+        "RESIDENCE"
+      ],
+      "weights": {
+        "parquet": "POP105A_macroregiuni_grupe.parquet",
+        "source_code": "POP105A",
+        "join": [
+          "RESIDENCE"
+        ],
+        "note": "resident population on 1 January of the same year, summed over age and sex"
+      },
+      "allow_approximation": false
+    },
+    {
+      "key": "death_rate",
+      "label": "Rata mortalității",
+      "label_en": "Death rate",
+      "parquet": "POP207A_macroregiuni.parquet",
+      "unit": "‰",
+      "unit_en": "‰",
+      "unit_kind": "per_mille_rate",
+      "category": "Populație",
+      "source_code": "POP207A",
+      "source_title": "Rata mortalității pe medii de rezidență, macroregiuni, regiuni de dezvoltare și județe",
+      "source_title_en": "Death rate by residence area, macroregions, development regions and counties",
+      "definition": "Decedați la 1000 de locuitori (populația la 1 iulie), publicați separat pe mediul urban și rural; combinați aici prin medie ponderată cu populația.",
+      "definition_en": "Deaths per 1,000 inhabitants (1 July population), published separately for urban and rural areas; combined here as a population-weighted mean.",
+      "measure": "non_additive",
+      "partitions": [
+        "RESIDENCE"
+      ],
+      "weights": {
+        "parquet": "POP105A_macroregiuni_grupe.parquet",
+        "source_code": "POP105A",
+        "join": [
+          "RESIDENCE"
+        ],
+        "note": "resident population on 1 January of the same year, summed over age and sex"
+      },
+      "allow_approximation": false
+    },
+    {
+      "key": "deaths",
       "label": "Decedați",
+      "label_en": "Deaths",
       "parquet": "POP206B_macroregiuni.parquet",
-      "ref_area_col": "REF_AREA",
-      "extra_filters": {},
-      "agg_func": "SUM",
       "unit": "pers.",
+      "unit_en": "persons",
+      "unit_kind": "count",
       "category": "Populație",
       "source_code": "POP206B",
-      "time_range": ["1990", "2024"]
+      "source_title": "Decedați pe medii de rezidență, macroregiuni, regiuni de dezvoltare și județe",
+      "source_title_en": "Deaths by residence area, macroregions, development regions and counties",
+      "definition": "Număr de decese într-un an, însumat pe medii de rezidență.",
+      "definition_en": "Number of deaths in a year, summed over residence areas.",
+      "measure": "additive",
+      "partitions": [
+        "RESIDENCE"
+      ]
     }
   ],
   "locality": []
