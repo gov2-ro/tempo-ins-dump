@@ -1,5 +1,23 @@
 # Activity History
 
+## 2026-10-05 — FIX-02 phase 2 + FIX-08 item 7: every consumer on the aggregation policy
+
+Grouped `/datasets/{code}/data` runs `decide()` on the collapsed dimensions (pins
+Totals, applies verified levels, refuses unsafe collapses with HTTP 200 +
+`unavailable`, optional `approximate=1`) and returns `aggregation`.
+`dataset_meta.dataset_measure()` replaces `AVG_UNIT_TYPES` and the divergent client
+unit lists (93 datasets flip non-additive → additive, none the other way). The Ask
+agent gets structured tool outcomes; `answer_check.py` withholds figure claims
+made without a valid query and flags uncited numbers. v1/v2 show translated
+reasons where totals or tiles are withheld and use server-aggregated slices
+instead of summing rows client-side; POP107A's 129,072,774 appears nowhere.
+Chart-selector eval: 0 changes on the 1,986 baseline datasets.
+
+Final integration check on `audit-fixes`: 443 tests pass with the corpus (420 + 23
+skipped without); browser audits layout 64/64, interactions 71/71, aggregation
+4/4; Ask, compare, dimensions-explorer and places pages load with no console or
+request errors.
+
 ## 2026-10-05 — FIX-03 phase 2a: refresh ordering, targeted refresh, atomic splits
 
 The orchestrator now imports, classifies and builds code maps before conversion,

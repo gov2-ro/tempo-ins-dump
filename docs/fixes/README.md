@@ -1,8 +1,10 @@
 # Audit remediation specifications
 
-Status (2026-10-05): every package has work merged to the `audit-fixes` integration
-branch (not yet on main, not deployed): FIX-01, FIX-04, FIX-06, FIX-07 complete;
-FIX-02, FIX-03, FIX-05, FIX-08 partially. Each spec's Status line is authoritative. Based on the
+Status (2026-10-05): implementation for every package is merged to the `audit-fixes`
+integration branch (not yet on main, not deployed). FIX-01, FIX-02, FIX-04, FIX-06,
+FIX-07 and FIX-08 meet their acceptance tests. Open: FIX-03 corpus repair on a copied
+generation (tooling done, nothing applied) and FIX-05 Docker smoke + a release that
+passes the gate. Each spec's Status line is authoritative. Based on the
 2026-10-03 audit. Current behavior: [operating reference](../CURRENT_STATE.md).
 Priorities: [backlog](../BACKLOG.md). Historical evidence: [activity log](../activity-history.md).
 

@@ -169,18 +169,28 @@ tools in the session rather than assuming another checkout has the same setup.
   container via a ResizeObserver; chart type names are translated
   (`chartTypeLabel`). Browser checks: `tests/browser/audit_layout.py` and
   `audit_interactions.py` (`--base URL`, need Python Playwright and a running app).
-- Aggregation (FIX-02 phase 1): composed totals, insight KPIs and curated
-  headlines decide through `app/services/aggregation_policy.decide()`. A total row
-  is preferred; otherwise one verified or declared disjoint partition is summed.
-  Rates, indices and averages are never summed or averaged into a total. Unprofiled
-  indicator dimensions, overlapping age/geo levels, mixed units and missing weights
-  suppress the number with a reason code (`suppressed` in insights/composition).
-  Every KPI and headline card carries `provenance` (source_code, period, unit,
-  filters, levels, method, verification, approximation, outcome, reason,
-  comparison, dimensions). Headline cards are declared as slice + method in
-  `headline_config.json`; monthly/quarterly cards compare YoY. Grouped API queries
-  (`dataset_data.py`), the Ask agent and frontend disclosure are still phase 2;
-  place rates are FIX-06.
+- Aggregation (FIX-02 phases 1–2): one decision, `aggregation_policy.decide()`,
+  serves composed tiles, insight KPIs, curated headlines, grouped `/data` queries
+  and the Ask agent. Additivity comes from `dataset_measure()` (unit type,
+  indicator name/definition, verified `dimension_structure.additive`);
+  `AVG_UNIT_TYPES` is gone. A total row is preferred; otherwise one verified
+  disjoint partition is summed; rates/indices/averages are never summed or
+  averaged into a total. Every KPI and headline card carries `provenance`
+  (source_code, period, unit, filters, levels, method, verification,
+  approximation, outcome, reason, comparison, dimensions); headline cards are
+  declared as slice + method in `headline_config.json`.
+  Grouped `/data` responses include `aggregation`; Total rows are pinned and
+  verified levels applied (also to multi-level axes). A refused collapse returns
+  **HTTP 200** with `unavailable: true`, no rows and a reason code (chosen so
+  existing clients don't hit error paths); `approximate=1` allows a labelled
+  unweighted mean. Raw rows, exports and valid explicit slices are unaffected.
+  v1/v2 show a translated reason (`aggReasonText` in `utils.js`) where a total or
+  tile is withheld and use server-aggregated slices instead of client sums.
+  Ask: `query_dataset_data` returns status/aggregation/reason;
+  `app/services/answer_check.py` withholds answers that state figures without a
+  valid query, flags numbers absent from tool results, and notes unqualified
+  approximations. Known gaps: axes with only metadata-detected overlap warn rather
+  than refuse; grouping without a time filter still sums periods (warning only).
 
 ## Deployment today
 

@@ -1,6 +1,6 @@
 # FIX-02 — Verified aggregation and KPI provenance
 
-Status: phase 1 (shared aggregation_policy, composer/insights/headlines, provenance) merged to audit-fixes; phase 2 implemented on fix/02b-consumers (grouped /data queries return `aggregation` and refuse unsafe collapses, single non-additive policy via `dataset_measure`, Ask agent tool outcomes + deterministic answer check, v1/v2 disclosure of suppressed totals and no client-side re-summing; mocked + synthetic tests, browser audits). Not yet on main; FIX-03 profile backfill still pending. Priority: P0. Owner: shared statistical services.
+Status: phases 1 and 2 merged to audit-fixes (composer, insights, headlines, grouped API, Ask agent, v1/v2 disclosure). Open: structure backfill on a published generation (FIX-03 repair queue); metadata-only axis overlap and unfiltered time collapse only warn. Priority: P0. Owner: shared statistical services.
 Dependencies: FIX-03 repairs and expands profiles; immediate suppression can ship
 first. FIX-06 and FIX-08 consume this contract.
 
