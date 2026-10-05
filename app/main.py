@@ -1,7 +1,8 @@
 """INS TEMPO Data Explorer — FastAPI application."""
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+import logging
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 
@@ -9,6 +10,17 @@ from app.config import CORPUS_DIR
 from app.routers import categories, datasets, dataset_data, sdmx, ask, places
 
 app = FastAPI(title="INS TEMPO Explorer", version="0.1.0")
+
+log = logging.getLogger("app.api")
+
+
+@app.exception_handler(Exception)
+async def _unhandled(request, exc):
+    """Last-resort handler: log with context, never echo SQL or server paths."""
+    log.error("Unhandled error on %s %s", request.method, request.url.path,
+              exc_info=exc)
+    return JSONResponse({"detail": "Internal server error"}, status_code=500)
+
 
 # CORS for development
 app.add_middleware(

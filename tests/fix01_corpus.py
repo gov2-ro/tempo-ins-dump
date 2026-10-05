@@ -44,14 +44,17 @@ def build_corpus(tmp_path):
 
     db = duckdb.connect(str(corpus / "metadata.duckdb"))
     db.execute("""CREATE TABLE matrices (matrix_code VARCHAR, matrix_name VARCHAR,
-                  matrix_name_en VARCHAR, row_count BIGINT, parent_matrix_code VARCHAR)""")
+                  matrix_name_en VARCHAR, row_count BIGINT, parent_matrix_code VARCHAR,
+                  context_code VARCHAR, ancestor_codes VARCHAR[], definitie VARCHAR,
+                  metodologie VARCHAR, ultima_actualizare VARCHAR, observatii VARCHAR,
+                  mat_max_dim INTEGER, is_split BOOLEAN)""")
     db.execute("""CREATE TABLE dimensions (dimension_id BIGINT, matrix_code VARCHAR,
                   dim_code INTEGER, dim_label VARCHAR, dim_column_name VARCHAR,
                   option_count INTEGER)""")
     db.execute("""CREATE TABLE dimension_options (dimension_id BIGINT,
                   nom_item_id INTEGER, option_label VARCHAR)""")
     db.execute("""CREATE TABLE matrix_profiles (matrix_code VARCHAR,
-                  primary_unit_type VARCHAR, time_year_min INTEGER,
+                  primary_unit_type VARCHAR, archetype VARCHAR, time_year_min INTEGER,
                   time_year_max INTEGER)""")
     db.execute("""CREATE TABLE sdmx_column_map (matrix_code VARCHAR,
                   sdmx_column_name VARCHAR, old_column_name VARCHAR)""")
@@ -60,11 +63,14 @@ def build_corpus(tmp_path):
     db.execute("""CREATE TABLE dataset_relationships (matrix_a VARCHAR, matrix_b VARCHAR,
                   similarity_score DOUBLE, relationship_type VARCHAR,
                   shared_dim_types VARCHAR)""")
+    db.execute("""CREATE TABLE dataset_tags (matrix_code VARCHAR, tag_ro VARCHAR,
+                  tag_en VARCHAR, weight DOUBLE, source VARCHAR)""")
     did = 0
     for code, nrows in (("ANN1", len(ANNUAL_ROWS)), ("MIXED1", len(MIXED_ROWS))):
-        db.execute("INSERT INTO matrices VALUES (?, ?, ?, ?, NULL)",
+        db.execute("INSERT INTO matrices (matrix_code, matrix_name, matrix_name_en, row_count) "
+                   "VALUES (?, ?, ?, ?)",
                    [code, f"Test {code}", f"Test {code} en", nrows])
-        db.execute("INSERT INTO matrix_profiles VALUES (?, 'count', 2019, 2021)", [code])
+        db.execute("INSERT INTO matrix_profiles VALUES (?, 'count', 'x', 2019, 2021)", [code])
         for i, (label, col) in enumerate(
                 [("Category", "CATEGORY"), ("Area", "REF_AREA"), ("Time", "TIME_PERIOD")], 1):
             did += 1

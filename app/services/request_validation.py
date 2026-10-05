@@ -110,3 +110,67 @@ def period_span_sql(col_sql: str) -> tuple[str, str]:
 def quote_ident(name: str) -> str:
     """Quote a SQL identifier (double any embedded double quote)."""
     return '"' + str(name).replace('"', '""') + '"'
+
+
+# ---------------------------------------------------------------------------
+# Filters / group_by (JSON query parameters)
+# ---------------------------------------------------------------------------
+
+def _is_scalar(v) -> bool:
+    return isinstance(v, (str, int, float)) and not isinstance(v, bool)
+
+
+def parse_filters(raw: str | None, allowed_columns) -> dict[str, list]:
+    """Parse the ``filters`` query parameter.
+
+    Required shape: a JSON object mapping a known column name to an array of
+    scalars (string, integer or float). An empty array means "no constraint
+    on that column". Anything else is a 400 - never silently ignored:
+    malformed JSON, a non-object (null, array, number...), an unknown column,
+    a non-array value, or a non-scalar array member (null, bool, object,
+    array).
+    """
+    if raw is None or raw == "":
+        return {}
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, RecursionError):
+        raise bad_request("Invalid filters: not valid JSON")
+    if not isinstance(data, dict):
+        raise bad_request(
+            "Invalid filters: expected a JSON object {column: [values]}")
+    allowed = set(allowed_columns)
+    total = 0
+    out: dict[str, list] = {}
+    for col, vals in data.items():
+        if col not in allowed:
+            raise bad_request(f"Invalid filters: unknown column {col!r}")
+        if not isinstance(vals, list):
+            raise bad_request(
+                f"Invalid filters: values for {col!r} must be an array")
+        if not all(_is_scalar(v) for v in vals):
+            raise bad_request(
+                f"Invalid filters: values for {col!r} must be strings or numbers")
+        total += len(vals)
+        if total > MAX_FILTER_VALUES:
+            raise bad_request("Invalid filters: too many values")
+        out[col] = vals
+    return out
+
+
+def parse_group_by(raw: str | None, allowed_columns) -> list[str] | None:
+    """Parse the ``group_by`` query parameter: a JSON array of known column
+    names. Empty/absent -> None (no aggregation). Malformed -> 400."""
+    if raw is None or raw == "":
+        return None
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, RecursionError):
+        raise bad_request("Invalid group_by: not valid JSON")
+    if not isinstance(data, list) or not all(isinstance(c, str) for c in data):
+        raise bad_request("Invalid group_by: expected a JSON array of column names")
+    allowed = set(allowed_columns)
+    for c in data:
+        if c not in allowed:
+            raise bad_request(f"Invalid group_by: unknown column {c!r}")
+    return data or None
