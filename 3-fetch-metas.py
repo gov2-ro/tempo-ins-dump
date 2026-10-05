@@ -1,11 +1,13 @@
 
 import csv
+import json
 import requests
 import os
 import time
 import random
 from tqdm import tqdm
 import argparse
+import sys
 
 BASE_URL = 'http://statistici.insse.ro:8077/tempo-ins/matrix/'
 
@@ -29,11 +31,12 @@ INPUT_CSV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', '2-metas', lang) + '/'
 
 # --- Main Script ---
-def fetch_metas():
+def fetch_metas() -> int:
     """
     Reads matrix codes from a CSV, downloads corresponding JSON metadata,
-    and saves it to files.
+    and saves it to files. Returns the number of failed matrices.
     """
+    failures = []
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     try:
@@ -42,7 +45,7 @@ def fetch_metas():
             matrices = list(reader)
     except FileNotFoundError:
         print(f"Error: Input file not found at {INPUT_CSV_PATH}")
-        return
+        return 1
 
     print(f"Found {len(matrices)} matrices to process.")
 
@@ -63,6 +66,7 @@ def fetch_metas():
         try:
             response = requests.get(url, headers=HEADERS)
             response.raise_for_status()  # Raise an exception for bad status codes
+            json.loads(response.text)  # never persist a non-JSON body as metadata
 
             with open(output_filepath, 'w', encoding='utf-8') as outfile:
                 outfile.write(response.text)
@@ -72,10 +76,20 @@ def fetch_metas():
 
         except requests.exceptions.RequestException as e:
             tqdm.write(f"Error downloading {url}: {e}")
+            failures.append(code)
+        except ValueError as e:
+            tqdm.write(f"Invalid JSON for {url}: {e}")
+            failures.append(code)
         except IOError as e:
             tqdm.write(f"Error writing file {output_filepath}: {e}")
+            failures.append(code)
+
+    if failures:
+        print(f"ERROR: {len(failures)} metadata fetches failed: {', '.join(failures[:20])}")
+    return len(failures)
 
 
 if __name__ == '__main__':
-    fetch_metas()
-    print("Done.")
+    failed = fetch_metas()
+    print("Done." if not failed else f"Done with {failed} failure(s).")
+    sys.exit(1 if failed else 0)
