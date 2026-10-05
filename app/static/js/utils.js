@@ -246,6 +246,9 @@ const AGG_I18N = {
         reasons: {
             overlapping_levels: dt => `niveluri ${dt === 'age' ? 'de vârstă ' : dt === 'geo' ? 'geografice ' : ''}suprapuse`,
             unverified_structure: () => 'structură neverificată',
+            source_total_mismatch: () => 'suma nu corespunde totalului publicat de INS',
+            no_source_total: () => 'INS nu publică un total pentru această dimensiune',
+            source_total_unchecked: () => 'totalul nu a fost verificat cu INS',
             contains_aggregate: () => 'totalul este amestecat cu componentele',
             label_hierarchy: () => 'ierarhie codificată în etichete',
             non_additive_measure: () => 'rată/indice fără ponderi',
@@ -272,6 +275,9 @@ const AGG_I18N = {
         reasons: {
             overlapping_levels: dt => `overlapping ${dt === 'age' ? 'age ' : dt === 'geo' ? 'geographic ' : ''}levels`,
             unverified_structure: () => 'unverified structure',
+            source_total_mismatch: () => 'the sum does not match the total INS publishes',
+            no_source_total: () => 'INS publishes no total for this dimension',
+            source_total_unchecked: () => 'total not checked against INS',
             contains_aggregate: () => 'total mixed with its components',
             label_hierarchy: () => 'hierarchy encoded in labels',
             non_additive_measure: () => 'rate/index without weights',
