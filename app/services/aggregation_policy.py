@@ -313,7 +313,7 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
            struct: dict | None = None, unit_type: str | None = None,
            measure: str | None = None, levels: dict | None = None,
            weights: WeightSpec | None = None, allow_approximation: bool = False,
-           declared_partitions=None) -> AggregationDecision:
+           declared_partitions=None, declared_aggregates=None) -> AggregationDecision:
     """Decide how (and whether) the slice can be reduced to one number per
     group_by cell.
 
@@ -328,11 +328,14 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
     levels       {column: level_id} caller-chosen grains.
     declared_partitions  iterable of columns a curator declares as one complete,
                  disjoint partition (headline_config `sum_over`).
+    declared_aggregates  columns whose pinned filter value a curator declares to
+                 be a real aggregate row (headline_config `aggregates`).
     """
     struct = struct or {}
     filters = {k: list(v) for k, v in (filters or {}).items()}
     levels = levels or {}
     declared = set(declared_partitions or ())
+    declared_agg = set(declared_aggregates or ())
     group_by = set(group_by)
     if measure is None:
         measure = classify_measure(unit_type)
@@ -384,7 +387,9 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
                 return _unavailable('slice_value_missing', col, audit, out_filters)
             if len(matched) == 1:
                 o, dv = matched[0]
-                if _is_total_option(dim, o, dv, struct):
+                if col in declared_agg:
+                    note(col, 'pinned_aggregate', 'curated')
+                elif _is_total_option(dim, o, dv, struct):
                     note(col, 'pinned_aggregate', _total_verif(dim, struct))
                 else:
                     slice_like = True
@@ -572,6 +577,14 @@ def _unprofiled_partition(dim, eff, struct):
 
 
 # --- provenance --------------------------------------------------------------
+
+def comparison_of(change: dict | None) -> dict | None:
+    """provenance.comparison: a change dict without its value."""
+    if not change:
+        return None
+    return {k: change.get(k) for k in
+            ('basis', 'from_period', 'to_period', 'unit', 'status', 'reason')}
+
 
 def provenance(decision: AggregationDecision, *, source_code: str,
                period=None, unit=None, comparison: dict | None = None) -> dict:

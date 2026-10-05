@@ -10,28 +10,63 @@
         "code": "FOM106F",
         "label_ro": "Salariul mediu net",
         "label_en": "Avg. net salary",
-        "sql": "SELECT TIME_PERIOD, AVG(OBS_VALUE) as val FROM read_parquet('{parquet_dir}/FOM106F.parquet') WHERE ECON_ACTIVITY = 'TOTAL' AND CATEGORY = 'Total' AND FORME_DE_PROPRIETATE = 'Total' GROUP BY TIME_PERIOD ORDER BY TIME_PERIOD DESC",
         "format": "currency",
         "unit_ro": "lei/lună",
-        "unit_en": "RON/month"
+        "unit_en": "RON/month",
+        "measure": "average",
+        "method": "aggregate_row",
+        "slice": {
+          "SEX": [
+            "Total"
+          ],
+          "CATEGORY": [
+            "Total"
+          ],
+          "FORME_DE_PROPRIETATE": [
+            "Total"
+          ],
+          "ECON_ACTIVITY": [
+            "TOTAL"
+          ]
+        },
+        "aggregates": [
+          "SEX",
+          "CATEGORY",
+          "FORME_DE_PROPRIETATE",
+          "ECON_ACTIVITY"
+        ],
+        "verification": "Source rows 2024: Total/Total/Total/TOTAL=4959; the old AVG over SEX {Total,F,M} gave 4954.67 (mean of 4959, 4815, 5090)."
       },
       {
         "code": "AMG130M",
         "label_ro": "Șomeri BIM",
         "label_en": "ILO unemployed",
-        "sql": "SELECT TIME_PERIOD, SUM(OBS_VALUE) as val FROM read_parquet('{parquet_dir}/AMG130M.parquet') WHERE AGE = '15 - 74 ani' GROUP BY TIME_PERIOD ORDER BY TIME_PERIOD DESC",
         "format": "number",
         "unit_ro": "persoane",
-        "unit_en": "people"
+        "unit_en": "people",
+        "measure": "additive",
+        "method": "sum_partition",
+        "slice": {
+          "AGE": [
+            "15 - 74 ani"
+          ]
+        },
+        "aggregates": [
+          "AGE"
+        ],
+        "sum_over": [
+          "SEX"
+        ],
+        "verification": "Source has no total-sex row; SEX {Feminin, Masculin} is a complete binary partition. AGE pinned to the 15-74 band (the other bands are sub-ranges of it)."
       },
       {
         "code": "AMG157G",
         "label_ro": "Rata șomajului BIM",
         "label_en": "ILO unemployment rate",
-        "sql": "SELECT TIME_PERIOD, AVG(OBS_VALUE) as val FROM read_parquet('{parquet_dir}/AMG157G.parquet') WHERE AGE = '15 - 74 ani' GROUP BY TIME_PERIOD ORDER BY TIME_PERIOD DESC",
         "format": "percent",
         "unit_ro": "% (15–74 ani)",
-        "unit_en": "% (15–74 yrs)"
+        "unit_en": "% (15–74 yrs)",
+        "omitted": "Unemployment rate is published only by sex (F/M); there is no total-sex series and no aligned labour-force weights, so an unweighted mean would be a misleading national rate (was 6.15 for 2026-06 as the mean of F and M)."
       }
     ]
   },
@@ -46,19 +81,31 @@
         "code": "CON104S",
         "label_ro": "PIB trimestrial",
         "label_en": "Quarterly GDP",
-        "sql": "SELECT TIME_PERIOD, OBS_VALUE FROM read_parquet('{parquet_dir}/CON104S.parquet') WHERE CATEGORY = 'PRODUS INTERN BRUT' ORDER BY TIME_PERIOD DESC",
         "format": "percent",
         "unit_ro": "% față de trim. ant.",
-        "unit_en": "% vs prev. quarter"
+        "unit_en": "% vs prev. quarter",
+        "measure": "rate",
+        "method": "aggregate_row",
+        "slice": {
+          "CATEGORY": [
+            "PRODUS INTERN BRUT"
+          ]
+        },
+        "aggregates": [
+          "CATEGORY"
+        ],
+        "comparison": "previous_period",
+        "transform": "minus_100",
+        "verification": "Source value is a seasonally-adjusted price index with previous quarter = 100 (101.0 = +1.0%); the card now shows the growth rate (index - 100) its unit label always claimed."
       },
       {
         "code": "IPC102A",
         "label_ro": "Prețuri de consum",
         "label_en": "Consumer prices",
-        "sql": "SELECT TIME_PERIOD, AVG(OBS_VALUE) as val FROM read_parquet('{parquet_dir}/IPC102A.parquet') GROUP BY TIME_PERIOD ORDER BY TIME_PERIOD DESC",
         "format": "percent",
         "unit_ro": "% față de luna ant.",
-        "unit_en": "% vs prev. month"
+        "unit_en": "% vs prev. month",
+        "omitted": "Only three unweighted category indices (food, non-food, services) and no CPI aggregate or basket weights; averaging them is not a consumer-price index. Omitted rather than inventing weights."
       }
     ]
   },
@@ -73,10 +120,17 @@
         "code": "POP201A_judete",
         "label_ro": "Născuți vii",
         "label_en": "Live births",
-        "sql": "SELECT TIME_PERIOD, SUM(OBS_VALUE) as val FROM read_parquet('{parquet_dir}/POP201A_judete.parquet') GROUP BY TIME_PERIOD ORDER BY TIME_PERIOD DESC",
         "format": "number",
         "unit_ro": "persoane",
-        "unit_en": "people"
+        "unit_en": "people",
+        "measure": "additive",
+        "method": "sum_partition",
+        "sum_over": [
+          "SEX",
+          "RESIDENCE",
+          "REF_AREA"
+        ],
+        "verification": "Counties partition the country at one level; 2024 sum 148,916 equals the sum of the 8 development regions in POP201A. Bucharest has two labels that never share a period."
       }
     ]
   },
@@ -91,19 +145,33 @@
         "code": "TUR104G",
         "label_ro": "Sosiri turiști",
         "label_en": "Tourist arrivals",
-        "sql": "SELECT TIME_PERIOD, SUM(OBS_VALUE) as val FROM read_parquet('{parquet_dir}/TUR104G.parquet') GROUP BY TIME_PERIOD ORDER BY TIME_PERIOD DESC",
         "format": "number",
         "unit_ro": "persoane/lună",
-        "unit_en": "people/month"
+        "unit_en": "people/month",
+        "measure": "additive",
+        "method": "sum_partition",
+        "sum_over": [
+          "TYPE",
+          "CATEGORY",
+          "TYPE_2"
+        ],
+        "verification": "Cells are (accommodation type x comfort category x Romanian/foreign): disjoint, no total-like labels. No national total row exists to reconcile against."
       },
       {
         "code": "TUR105F",
         "label_ro": "Înnoptări",
         "label_en": "Overnight stays",
-        "sql": "SELECT TIME_PERIOD, SUM(OBS_VALUE) as val FROM read_parquet('{parquet_dir}/TUR105F.parquet') GROUP BY TIME_PERIOD ORDER BY TIME_PERIOD DESC",
         "format": "number",
         "unit_ro": "înnoptări/lună",
-        "unit_en": "nights/month"
+        "unit_en": "nights/month",
+        "measure": "additive",
+        "method": "sum_partition",
+        "sum_over": [
+          "TYPE",
+          "CATEGORY",
+          "TYPE_2"
+        ],
+        "verification": "Same grid as TUR104G; no national total row exists to reconcile against."
       }
     ]
   },
@@ -116,12 +184,19 @@
     "indicators": [
       {
         "code": "SAN102A",
-        "label_ro": "Medici activi",
-        "label_en": "Active physicians",
-        "sql": "SELECT TIME_PERIOD, OBS_VALUE as val FROM read_parquet('{parquet_dir}/SAN102A.parquet') WHERE SPECIALITATI_MEDICALE = 'Total (inclusiv in centre de sanatate)' ORDER BY TIME_PERIOD DESC",
+        "label_ro": "Paturi de spital",
+        "label_en": "Hospital beds",
         "format": "number",
-        "unit_ro": "medici",
-        "unit_en": "physicians"
+        "unit_ro": "paturi",
+        "unit_en": "beds",
+        "measure": "additive",
+        "method": "aggregate_row",
+        "slice": {
+          "SPECIALITATI_MEDICALE": [
+            "Total (inclusiv in centre de sanatate)"
+          ]
+        },
+        "verification": "Dataset is hospital beds by specialty, not physicians (the old label was wrong). The Total row 2025=137,269 equals the sum of the 16 specialties."
       }
     ]
   },
@@ -134,21 +209,43 @@
     "indicators": [
       {
         "code": "SCL103A",
-        "label_ro": "Elevi (preuniversitar)",
-        "label_en": "Pre-university pupils",
-        "sql": "SELECT TIME_PERIOD, SUM(OBS_VALUE) as val FROM read_parquet('{parquet_dir}/SCL103A.parquet') WHERE NIVELURI_DE_EDUCATIE = 'Invatamant preuniversitar' GROUP BY TIME_PERIOD ORDER BY TIME_PERIOD DESC",
+        "label_ro": "Elevi (primar–postliceal)",
+        "label_en": "Pupils (primary to post-secondary)",
         "format": "number",
         "unit_ro": "elevi",
-        "unit_en": "pupils"
+        "unit_en": "pupils",
+        "measure": "additive",
+        "method": "sum_partition",
+        "slice": {
+          "NIVELURI_DE_EDUCATIE": [
+            "Invatamant preuniversitar"
+          ]
+        },
+        "sum_over": [
+          "AGE",
+          "SEX"
+        ],
+        "verification": "2024=2,368,057 equals primar+gimnazial+liceal+profesional+postliceal+special; pre-school is NOT in this row, so the label no longer claims all pre-university pupils."
       },
       {
         "code": "SCL103A",
         "label_ro": "Studenți licență",
         "label_en": "University students",
-        "sql": "SELECT TIME_PERIOD, SUM(OBS_VALUE) as val FROM read_parquet('{parquet_dir}/SCL103A.parquet') WHERE NIVELURI_DE_EDUCATIE = 'Invatamant universitar de licenta' GROUP BY TIME_PERIOD ORDER BY TIME_PERIOD DESC",
         "format": "number",
         "unit_ro": "studenți",
-        "unit_en": "students"
+        "unit_en": "students",
+        "measure": "additive",
+        "method": "sum_partition",
+        "slice": {
+          "NIVELURI_DE_EDUCATIE": [
+            "Invatamant universitar de licenta"
+          ]
+        },
+        "sum_over": [
+          "AGE",
+          "SEX"
+        ],
+        "verification": "2024=432,907; licenta + master (114,878) + doctorat (20,823) equals the published university total 568,608."
       }
     ]
   },
@@ -163,19 +260,29 @@
         "code": "AGR209C_mii_tone",
         "label_ro": "Producție cereale",
         "label_en": "Cereal production",
-        "sql": "SELECT TIME_PERIOD, SUM(OBS_VALUE) as val FROM read_parquet('{parquet_dir}/AGR209C_mii_tone.parquet') GROUP BY TIME_PERIOD ORDER BY TIME_PERIOD DESC",
         "format": "number",
         "unit_ro": "mii tone",
-        "unit_en": "thousand tons"
+        "unit_en": "thousand tons",
+        "omitted": "Dataset is unit-value statistics (marketed quantities) for 31 heterogeneous products (milk, eggs, apples, wheat, wool); summing them was not 'cereal production' and the series ends in 2022."
       },
       {
         "code": "AGR201E",
         "label_ro": "Bovine",
         "label_en": "Cattle",
-        "sql": "SELECT TIME_PERIOD, OBS_VALUE as val FROM read_parquet('{parquet_dir}/AGR201E.parquet') WHERE AGE = 'Bovine - total' ORDER BY TIME_PERIOD DESC",
         "format": "number",
         "unit_ro": "capete",
-        "unit_en": "head"
+        "unit_en": "head",
+        "measure": "additive",
+        "method": "aggregate_row",
+        "slice": {
+          "AGE": [
+            "Bovine - total"
+          ]
+        },
+        "aggregates": [
+          "AGE"
+        ],
+        "verification": "2025: Bovine - total 1,847,951 = Taurine - total 1,830,467 + Bubaline - total 17,484."
       }
     ]
   },
@@ -188,21 +295,38 @@
     "indicators": [
       {
         "code": "IND101M",
-        "label_ro": "Ind. producție (prelucrare)",
-        "label_en": "Manufacturing index",
-        "sql": "SELECT TIME_PERIOD, OBS_VALUE as val FROM read_parquet('{parquet_dir}/IND101M.parquet') WHERE DIVIZIUNI_ALE_INDUSTRIEI = 'INDUSTRIA PRELUCRATOARE' ORDER BY TIME_PERIOD DESC",
+        "label_ro": "Cifra de afaceri externă, ind. prelucrătoare",
+        "label_en": "Manufacturing export turnover index",
         "format": "number",
-        "unit_ro": "indice",
-        "unit_en": "index"
+        "unit_ro": "indice (2021=100)",
+        "unit_en": "index (2021=100)",
+        "measure": "index",
+        "method": "aggregate_row",
+        "slice": {
+          "DIVIZIUNI_ALE_INDUSTRIEI": [
+            "INDUSTRIA PRELUCRATOARE"
+          ]
+        },
+        "aggregates": [
+          "DIVIZIUNI_ALE_INDUSTRIEI"
+        ],
+        "verification": "Dataset is the value index of turnover on the external market (base 2021), not an industrial-production index; the card is the published manufacturing aggregate row and is now labelled as such."
       },
       {
         "code": "IND118A",
         "label_ro": "Producție electricitate",
         "label_en": "Electricity production",
-        "sql": "SELECT TIME_PERIOD, SUM(OBS_VALUE) as val FROM read_parquet('{parquet_dir}/IND118A.parquet') GROUP BY TIME_PERIOD ORDER BY TIME_PERIOD DESC",
         "format": "number",
         "unit_ro": "mil. kWh",
-        "unit_en": "M kWh"
+        "unit_en": "M kWh",
+        "measure": "additive",
+        "method": "aggregate_row",
+        "slice": {
+          "CATEGORY": [
+            "Total, din care:"
+          ]
+        },
+        "verification": "2023: published 'Total, din care:' = 57,981 = Eoliana 7,547 + Hidro 18,649 + Nuclear 11,191 + Solara 2,227 + Termo 18,367. The old SUM added the total to its components (115,962)."
       }
     ]
   }
