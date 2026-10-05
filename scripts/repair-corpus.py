@@ -216,19 +216,25 @@ def classify_time(pconn, path: Path, cols: list, time_re: str) -> dict:
             f'SELECT CAST("{t}" AS VARCHAR) v FROM read_parquet(?) WHERE "{t}" IS NOT NULL '
             f'AND NOT regexp_matches(CAST("{t}" AS VARCHAR), ?) GROUP BY 1 ORDER BY count(*) DESC, 1 LIMIT 6',
             [str(path), time_re]).fetchall()]
-        stats[t] = {"invalid_share": round(inv / total, 4) if total else 0.0, "distinct": dist, "invalid_samples": samples}
+        distinct_invalid = [r[0] for r in pconn.execute(
+            f'SELECT DISTINCT CAST("{t}" AS VARCHAR) FROM read_parquet(?) WHERE "{t}" IS NOT NULL '
+            f'AND NOT regexp_matches(CAST("{t}" AS VARCHAR), ?) LIMIT 500', [str(path), time_re]).fetchall()]
+        stats[t] = {"invalid_share": round(inv / total, 4) if total else 0.0, "distinct": dist,
+                    "invalid_samples": samples, "_distinct_invalid": distinct_invalid}
     main = stats.get("TIME_PERIOD")
     alts = sorted(t for t, s in stats.items() if t != "TIME_PERIOD" and s["invalid_share"] <= 0.02)
     out = {"time_columns": stats}
     if main is None:
         return {**out, "class": "no_time_period_column"}
     if main["invalid_share"] >= 0.98 and alts:
-        samples = main["invalid_samples"]
-        norm = [_strip(s) for s in samples]
+        norm = [_strip(s) for s in main["_distinct_invalid"]]
+        ore = sum(1 for s in norm if HOURS_RE.search(s))
         if main["distinct"] == 1:
             sub, new = "constant_indicator_label", "INDICATOR"
-        elif norm and all(HOURS_RE.search(s) for s in norm):
+        elif norm and ore / len(norm) >= 0.6:  # most labels are hour bands; a few qualifiers ("Nu poate fi indicata...") ride along
             sub, new = "hours_worked_bands", "HOURS_WORKED"
+        elif norm and all(re.match(r"^an(ul)? baza\b", s) for s in norm):
+            sub, new = "base_year_labels", "BASE_YEAR"
         elif norm and all(s.strip() in MONTHS for s in norm):
             sub, new = "month_names", "MONTH_OF_YEAR"
         else:
@@ -244,6 +250,8 @@ def classify_time(pconn, path: Path, cols: list, time_re: str) -> dict:
             out["class"] = "partial_invalid/year_with_qualifier"
         else:
             out["class"] = "partial_invalid/mixed_values"
+    for st in stats.values():
+        st.pop("_distinct_invalid", None)
     return out
 
 
@@ -322,7 +330,7 @@ def classify_grain(conn, rep: dict, data_dir: Path) -> dict:
                     rec["decision"] = "preserve_locality_grain_or_mark_county_aggregate_unavailable"
             elif dropped:
                 rec["cause"] = "split_dropped_other_dimension"
-                rec["decision"] = "regenerate_child_with_full_grain"
+                rec["decision"] = "restore_dropped_dimension_or_split_finer"
             else:
                 rec["cause"] = "inherited_from_parent_source_duplicates" if rec["parent_also_conflicting"] \
                     else "split_introduced_collision_no_dropped_dimension"
