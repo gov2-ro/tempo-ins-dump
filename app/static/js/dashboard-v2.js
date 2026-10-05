@@ -18,6 +18,9 @@ const UI_STRINGS = {
         all: 'Toate',
         brief: 'Pe scurt:',
         noDataTile: 'Fără date pentru această selecție',
+        latest: 'Ultima valoare', yoy: 'Față de perioada anterioară', overall: 'Schimbare totală',
+        unavailAria: 'Valoare indisponibilă',
+        unavailNote: 'Tabelul brut rămâne disponibil.',
         noDataGrid: 'Nicio vizualizare nu are date pentru filtrele curente',
         renderError: 'Eroare la randare',
         insightsError: 'Indicatorii nu au putut fi încărcați.',
@@ -74,6 +77,9 @@ const UI_STRINGS = {
         all: 'All',
         brief: 'In brief:',
         noDataTile: 'No data for this selection',
+        latest: 'Latest value', yoy: 'vs. previous period', overall: 'Overall change',
+        unavailAria: 'Value unavailable',
+        unavailNote: 'The raw table is still available.',
         noDataGrid: 'No visualization has data for the current filters',
         renderError: 'Render error',
         insightsError: 'Indicators could not be loaded.',
@@ -216,6 +222,14 @@ class DashboardV2 {
             // sub-datasets instead of dead-ending on an error.
             if (this.metadata.splits?.length) {
                 this.renderSplits();
+            } else if (this.composition?.suppressed?.length) {
+                // Every tile's aggregate was refused by the shared policy
+                // (FIX-02): say why, keep KPIs/raw table, never an empty "no config".
+                document.getElementById('dbv2-loader').classList.add('hidden');
+                this.renderUnavailable([]);
+                API.fetch(`/datasets/${this.code}/insights`, { lang: this.lang })
+                    .then(ins => this.renderInsights(ins))
+                    .catch(e => console.warn('Insights unavailable:', e));
             } else {
                 this.showError(this.ui.noComposition);
             }
@@ -362,6 +376,7 @@ class DashboardV2 {
             return keepAll || (d && d.rows?.length);
         });
         this.renderGrid(alive);
+        this.renderUnavailable(alive);
         if (alive.length) await this.renderTiles(alive, slices);
         if (this.tableOpen) this.renderTable();
     }
@@ -521,6 +536,7 @@ class DashboardV2 {
                 // context = non-total pins ("Masculin") — without them the
                 // number reads as the dataset-wide value, which it isn't
                 sub = [k.unit, k.period, ...(k.context || [])].filter(Boolean).join(' · ');
+                sub += aggBadgeHTML(k.provenance, this.lang);
             } else if (k.format === 'pct') {
                 const up = k.direction === 'up';
                 value = `<span class="${up ? 'dbv2-up' : 'dbv2-down'}">${up ? '▲' : '▼'} ${Math.abs(k.value).toFixed(1)}%</span>`;
@@ -533,15 +549,34 @@ class DashboardV2 {
                 // dataset shape (e.g. split parent) — hide it rather than show 5156%
                 if (k.fill_rate != null && k.fill_rate <= 1) sub = `${this.ui.fillRate}: ${Math.round(k.fill_rate * 100)}%`;
             }
-            return `<div class="dbv2-kpi">
+            return `<div class="dbv2-kpi" ${k.provenance ? `title="${_escHtml(aggMethodTitle(k.provenance, this.lang))}"` : ''}>
                 <div class="dbv2-kpi-label">${k.label}</div>
                 <div class="dbv2-kpi-value">${value}</div>
                 ${sub ? `<div class="dbv2-kpi-sub">${sub}</div>` : ''}
             </div>`;
         });
-        if (cards.length) {
-            kpiEl.innerHTML = cards.join('');
+        // A total the policy withheld shows its reason where the card would
+        // have been (never re-summed client-side). comparator_missing on the
+        // change cards is routine (single period) and stays quiet.
+        const keyLabel = { latest: this.ui.latest, yoy: this.ui.yoy, prev: this.ui.yoy, overall: this.ui.overall };
+        const have = new Set((ins.kpis || []).map(k => k.key));
+        const unavail = (ins.suppressed || []).filter(x => keyLabel[x.key] && !have.has(x.key)
+            && !(x.key !== 'latest' && x.reason === 'comparator_missing'));
+        const unavailCards = unavail.map(x => `<div class="dbv2-kpi dbv2-kpi-unavail" role="note">
+                <div class="dbv2-kpi-label">${keyLabel[x.key]}</div>
+                <div class="dbv2-kpi-reason">${_escHtml(this.reasonText(x, x.key === 'latest' ? 'total' : 'change'))}</div>
+            </div>`);
+        const lead = unavailCards.filter((_, i) => unavail[i].key === 'latest');
+        const rest = unavailCards.filter((_, i) => unavail[i].key !== 'latest');
+        if (cards.length || unavailCards.length) {
+            kpiEl.innerHTML = [...lead, ...cards, ...rest].join('');
             kpiEl.classList.remove('hidden');
+        }
+        const ranking = (ins.suppressed || []).find(x => x.key === 'ranking');
+        if (ranking && !ins.sentences?.length) {
+            const sEl = document.getElementById('dbv2-sentences');
+            sEl.innerHTML = `<span class="dbv2-sentence dbv2-sentence-unavail">${_escHtml(this.reasonText(ranking, 'tile'))}</span>`;
+            sEl.classList.remove('hidden');
         }
 
         if (ins.sentences?.length) {
@@ -688,7 +723,7 @@ class DashboardV2 {
                        ['yoy', 'Δ%', this.ui.yoyTooltip]];
         // Seasonal overlay only makes sense for sub-annual series
         const gran = this.metadata.profile?.time_granularity;
-        if (gran === 'monthly' || gran === 'quarterly') {
+        if ((gran === 'monthly' || gran === 'quarterly') && chart.data.group_by.length === 1) {
             modes.push(['seasonal', this.ui.seasonal, this.ui.seasonalTooltip]);
         }
         for (const [mode, label, tip] of modes) {
@@ -738,6 +773,54 @@ class DashboardV2 {
         }
     }
 
+    /** Dimension type of a column (refines the translated reason). */
+    dimType(col) {
+        return (this.metadata.dimensions || []).find(d => d.dim_column_name === col)?.dim_type || null;
+    }
+
+    reasonText(src, kind = 'total') {
+        const col = src?.column || src?.blocking_dimension;
+        return aggReasonText(src, this.lang, { kind, dimType: this.dimType(col) });
+    }
+
+    /** Tiles the composer withheld (composition.suppressed): a short reason
+     *  where each chart would have been, never a silently smaller dashboard. */
+    renderUnavailable(alive) {
+        let host = document.getElementById('dbv2-unavail');
+        if (!host) {
+            host = document.createElement('section');
+            host.id = 'dbv2-unavail';
+            host.className = 'dbv2-unavail';
+            const grid = document.getElementById('dbv2-grid');
+            grid.insertAdjacentElement('afterend', host);
+        }
+        const shown = new Set((alive || []).map(c => c.id));
+        const items = (this.composition?.suppressed || []).filter(x => !shown.has(x.id));
+        if (!items.length) {
+            host.innerHTML = '';
+            host.classList.add('hidden');
+            return;
+        }
+        host.innerHTML = items.map(x => {
+            const title = this.ui.axis[x.axis] || x.axis || x.id;
+            return `<div class="dbv2-unavail-tile" role="note" aria-label="${this.ui.unavailAria}: ${_escHtml(title)}">
+                <span class="dbv2-unavail-title">${_escHtml(title)}</span>
+                <span class="dbv2-unavail-reason">${_escHtml(this.reasonText(x, 'tile'))}</span>
+            </div>`;
+        }).join('') + `<div class="dbv2-unavail-note">${this.ui.unavailNote}</div>`;
+        host.classList.remove('hidden');
+    }
+
+    /** Badge for a live slice (reflects the user's filters, unlike the
+     *  composition-time decision). */
+    sliceBadge(data) {
+        const html = aggBadgeHTML(data?.aggregation, this.lang);
+        if (!html) return null;
+        const tmp = document.createElement('span');
+        tmp.innerHTML = html;
+        return tmp.firstElementChild;
+    }
+
     /** (Re)build the tile grid for the given charts. Called on every
      *  refresh — filter changes can empty or revive individual slices. */
     renderGrid(activeCharts) {
@@ -781,6 +864,12 @@ class DashboardV2 {
             const container = document.getElementById(`dbv2-chart-${chart.id}`);
             container.innerHTML = '';
             const data = slices.get(chart.id);
+            if (data?.unavailable) {
+                // The policy refused this selection (e.g. the user filtered a
+                // dim into overlapping levels): say why instead of "no data".
+                container.innerHTML = `<div class="dbv2-empty dbv2-empty-unavail" role="note">${_escHtml(this.reasonText(data.aggregation, 'tile'))}</div>`;
+                continue;
+            }
             if (!data || !data.rows?.length) {
                 // Empty under the current (user-set) filters — same message
                 // regardless of which control caused it
@@ -805,17 +894,17 @@ class DashboardV2 {
             const timeDim = sliceDim('time');
 
             const note = this.coverageNote(data);
-            if (note) {
-                const bar = container.parentNode.querySelector('.dbv2-tile-bar');
-                bar?.insertBefore(note, bar.querySelector('.dbv2-tile-type'));
-            }
+            const bar0 = container.parentNode.querySelector('.dbv2-tile-bar');
+            if (note) bar0?.insertBefore(note, bar0.querySelector('.dbv2-tile-type'));
+            const badge = this.sliceBadge(data);
+            if (badge) bar0?.insertBefore(badge, bar0.querySelector('.dbv2-tile-type'));
 
             let tileData = data;
             let valueFormat = null;
             let seasonalMode = false;
             if (transform === 'seasonal') {
-                const useAvg = ['percentage', 'time_unit', 'index', 'rate', 'ratio']
-                    .includes(this.metadata.chart_config?.primary_unit_type);
+                // one shared verdict: the dataset's additivity (server policy)
+                const useAvg = this.metadata.measure === 'non_additive';
                 const s = seasonalOverlay(data, timeDim, useAvg);
                 if (s) { tileData = s; seasonalMode = true; }
             } else if (transform) {

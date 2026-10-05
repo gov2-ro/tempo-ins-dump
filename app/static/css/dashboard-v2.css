@@ -750,3 +750,34 @@ body.sidebar-open .dbv2-main {
     .dbv2-rel-card { padding: 10px 12px; }
     .dbv2-related-row { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ------------------------------------------------- FIX-02 disclosure */
+.dbv2-kpi-unavail { border-style: dashed; }
+.dbv2-kpi-reason {
+    font-size: 0.8rem;
+    line-height: 1.35;
+    color: var(--amber, #b45309);
+}
+.dbv2-unavail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin: 12px 0;
+}
+.dbv2-unavail.hidden { display: none; }
+.dbv2-unavail-tile {
+    flex: 1 1 220px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px dashed var(--border, #d4d4d8);
+    border-radius: 8px;
+    background: var(--bg-1, transparent);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.dbv2-unavail-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-2); }
+.dbv2-unavail-reason { font-size: 0.85rem; color: var(--amber, #b45309); overflow-wrap: anywhere; }
+.dbv2-unavail-note { flex-basis: 100%; font-size: 0.75rem; color: var(--text-2); }
+.dbv2-empty-unavail { color: var(--amber, #b45309); text-align: center; padding: 0 12px; }
+.dbv2-sentence-unavail { color: var(--amber, #b45309); }

@@ -115,7 +115,10 @@ function applyTimeTransform(data, timeDim, seriesDim, mode) {
 /**
  * Seasonal overlay transform: sub-annual series → one line per year over a
  * month/quarter x-axis. Only rows with "YYYY-<sub>" periods participate.
- * Extra dims are aggregated (AVG when useAvg — rates/shares — else SUM).
+ * Only a time-only slice is folded: any other dim would be summed/averaged
+ * across its options here (FIX-02 — a total the server's aggregation policy
+ * never approved), so the overlay returns null instead. `useAvg` averages
+ * repeated sub-periods of a non-additive measure.
  * Returns null when the data has no sub-annual structure.
  */
 function seasonalOverlay(data, timeDim, useAvg) {
@@ -124,6 +127,7 @@ function seasonalOverlay(data, timeDim, useAvg) {
     const ti = cols.indexOf(timeDim);
     const vi = cols.length - 1;
     if (ti === -1) return null;
+    if (cols.length > 2) return null;   // time + value only; see above
 
     const agg = new Map();  // "year sub" → {sum, n}
     for (const r of data.rows) {
@@ -228,3 +232,106 @@ function currentLang() {
 }
 /** Value-axis tick label: compact, locale-aware. Tooltips keep formatNumber's full value. */
 function axisNumber(v) { return formatCompact(v, currentLang()); }
+
+
+// ------------------------------------------------------------- FIX-02 --
+// Aggregation disclosure shared by v1, v2 and Ask. The server's shared policy
+// (app/services/aggregation_policy.py) decides whether a total exists; the
+// client only *shows* its verdict and never re-derives a suppressed total.
+
+const AGG_I18N = {
+    ro: {
+        prefix: { total: 'Total indisponibil', change: 'Variație indisponibilă',
+                  tile: 'Date indisponibile' },
+        reasons: {
+            overlapping_levels: dt => `niveluri ${dt === 'age' ? 'de vârstă ' : dt === 'geo' ? 'geografice ' : ''}suprapuse`,
+            unverified_structure: () => 'structură neverificată',
+            contains_aggregate: () => 'totalul este amestecat cu componentele',
+            label_hierarchy: () => 'ierarhie codificată în etichete',
+            non_additive_measure: () => 'rată/indice fără ponderi',
+            missing_weights: () => 'rată/indice fără ponderi',
+            mixed_units: () => 'unități de măsură diferite',
+            slice_value_missing: () => 'valoare de filtrare inexistentă',
+            declared_partition_invalid: () => 'partiție nevalidă',
+            arbitrary_pin: () => 'doar o selecție parțială, nu totalul',
+            comparator_missing: () => 'fără perioadă de comparație',
+            comparator_zero: () => 'baza de comparație este zero',
+            ambiguous_slice: () => 'selecție ambiguă',
+            no_data: () => 'fără date',
+        },
+        fallback: 'verificare statistică eșuată',
+        badges: { approximation: 'aproximare', weighted: 'medie ponderată', slice: 'selecție parțială',
+                  approximationTip: 'Medie neponderată — nu este o rată oficială',
+                  methods: { aggregate_row: 'rând total din sursă', sum_partition: 'sumă pe o partiție verificată',
+                             single_row: 'selecție explicită', weighted_mean: 'medie ponderată',
+                             unweighted_mean: 'medie neponderată', none: '' } },
+    },
+    en: {
+        prefix: { total: 'Total unavailable', change: 'Change unavailable',
+                  tile: 'Data unavailable' },
+        reasons: {
+            overlapping_levels: dt => `overlapping ${dt === 'age' ? 'age ' : dt === 'geo' ? 'geographic ' : ''}levels`,
+            unverified_structure: () => 'unverified structure',
+            contains_aggregate: () => 'total mixed with its components',
+            label_hierarchy: () => 'hierarchy encoded in labels',
+            non_additive_measure: () => 'rate/index without weights',
+            missing_weights: () => 'rate/index without weights',
+            mixed_units: () => 'mixed units',
+            slice_value_missing: () => 'filter value not in the data',
+            declared_partition_invalid: () => 'invalid partition',
+            arbitrary_pin: () => 'only a partial selection, not the total',
+            comparator_missing: () => 'no comparison period',
+            comparator_zero: () => 'comparison base is zero',
+            ambiguous_slice: () => 'ambiguous selection',
+            no_data: () => 'no data',
+        },
+        fallback: 'statistical check failed',
+        badges: { approximation: 'approximation', weighted: 'weighted mean', slice: 'partial selection',
+                  approximationTip: 'Unweighted mean — not an official rate',
+                  methods: { aggregate_row: 'source total row', sum_partition: 'sum over a verified partition',
+                             single_row: 'explicit selection', weighted_mean: 'weighted mean',
+                             unweighted_mean: 'unweighted mean', none: '' } },
+    },
+};
+
+function _escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/** Short translated reason for an unavailable aggregate, e.g.
+ *  "Total indisponibil: niveluri de vârstă suprapuse".
+ *  `src` is a decision/suppressed entry ({reason, ...}); `kind` picks the
+ *  prefix (total | change | tile); `dimType` ('age' | 'geo' | ...) refines
+ *  overlapping_levels. */
+function aggReasonText(src, lang = 'ro', { kind = 'total', dimType = null } = {}) {
+    const t = AGG_I18N[lang] || AGG_I18N.ro;
+    const fn = t.reasons[src && src.reason];
+    const why = fn ? fn(dimType) : t.fallback;
+    return `${t.prefix[kind] || t.prefix.total}: ${why}`;
+}
+
+/** Badge descriptor from a decision / provenance object: approximation,
+ *  weighted mean or partial selection; null for a plain verified total. */
+function aggBadge(src, lang = 'ro') {
+    if (!src) return null;
+    const b = (AGG_I18N[lang] || AGG_I18N.ro).badges;
+    const tip = aggMethodTitle(src, lang);
+    if (src.approximation || src.outcome === 'approximation') {
+        return { cls: 'approx', label: b.approximation, title: b.approximationTip };
+    }
+    if (src.method === 'weighted_mean') return { cls: 'weighted', label: b.weighted, title: tip };
+    if (src.outcome === 'valid_slice') return { cls: 'slice', label: b.slice, title: tip };
+    return null;
+}
+
+function aggBadgeHTML(src, lang = 'ro') {
+    const b = aggBadge(src, lang);
+    return b ? `<span class="agg-badge agg-badge-${b.cls}" title="${_escHtml(b.title)}">${_escHtml(b.label)}</span>` : '';
+}
+
+/** Method + verification as a tooltip, for plain totals too. */
+function aggMethodTitle(src, lang = 'ro') {
+    if (!src) return '';
+    const b = (AGG_I18N[lang] || AGG_I18N.ro).badges;
+    return [b.methods[src.method], src.verification].filter(Boolean).join(' · ');
+}

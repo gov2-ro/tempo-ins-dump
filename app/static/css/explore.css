@@ -2059,3 +2059,22 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 }
 .filter-select:focus-visible, .col-filter:focus-visible, .sidebar-search input:focus-visible,
 .search-input-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* FIX-02: aggregation method/approximation badges (v1, v2, Ask) */
+.agg-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    line-height: 1.5;
+    vertical-align: middle;
+    white-space: nowrap;
+    background: var(--bg-2, #eee);
+    color: var(--text-1);
+}
+.agg-badge-approx { background: #fef3c7; color: #92400e; }
+:root[data-theme="dark"] .agg-badge-approx { background: #4a3410; color: #fcd34d; }
+.insight-unavail { font-size: 0.85rem; line-height: 1.35; color: var(--amber, #b45309); }
+.chat-unverified { margin-top: 6px; font-size: 0.78rem; color: var(--amber, #b45309); }
