@@ -11,3 +11,11 @@ __pycache__/
 .venv/
 *.log
 *.tar.gz
+deploy-data.prev/
+deploy-data.tmp.*/
+deploy-data.tar.gz.tmp
+deploy-data.tar.gz
+.github/
+tests/
+requirements-*.txt
+scripts/
