@@ -4,6 +4,7 @@ Thin wrappers around app/services/dataset_search.py and
 app/services/dataset_meta.py — all logic lives in the service layer.
 """
 from fastapi import APIRouter, Query, HTTPException
+from app.db import get_conn
 from app.config import DEFAULT_PAGE_SIZE
 from app.services.dataset_search import search_datasets, get_related
 from app.services.dataset_meta import get_dataset_meta
@@ -25,10 +26,13 @@ def list_datasets(
     dim: str = Query(None, description="Filter by dimension label"),
     lang: str = Query("ro", description="Language: ro|en"),
     sort: str = Query("updated", description="Sort: updated|name|rows|dims|options"),
-    limit: int = Query(DEFAULT_PAGE_SIZE, le=200),
+    limit: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
-    """List datasets with search and filters."""
+    """List datasets with search and filters.
+
+    4xx: 422 for limit outside 1..200 or a negative offset.
+    """
     return search_datasets(
         q, context=context, ancestor=ancestor, archetype=archetype,
         has_geo=has_geo, granularity=granularity, has_gender=has_gender,
@@ -41,9 +45,20 @@ def list_datasets(
 def related_datasets(
     matrix_code: str,
     lang: str = Query("ro", description="Language: ro|en"),
-    limit: int = Query(5, le=12),
+    limit: int = Query(5, ge=1, le=12),
 ):
-    """Related datasets (dataset_relationships + split siblings) and tag chips."""
+    """Related datasets (dataset_relationships + split siblings) and tag chips.
+
+    4xx: 404 unknown dataset; 422 limit outside 1..12.
+    """
+    conn = get_conn()
+    try:
+        known = conn.execute(
+            "SELECT 1 FROM matrices WHERE matrix_code = ?", [matrix_code]).fetchone()
+    finally:
+        conn.close()
+    if not known:
+        raise HTTPException(404, f"Dataset {matrix_code} not found")
     return get_related(matrix_code, lang=lang, limit=limit)
 
 

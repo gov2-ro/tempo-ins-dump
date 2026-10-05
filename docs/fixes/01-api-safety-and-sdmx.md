@@ -1,6 +1,6 @@
 # FIX-01 — Safe request boundaries and consistent SDMX
 
-Status: not started. Priority: P0 SQL injection; P1 SDMX consistency; P2 malformed
+Status: phase 1 (safety, items 1-4) implemented on fix/01-api-safety and merged to audit-fixes; phase 2 (items 5-7, SDMX code registry/DSD consistency) implemented on branch fix/01b-sdmx-registry, pending review/merge. Export completeness stays with FIX-04. Priority: P0 SQL injection; P1 SDMX consistency; P2 malformed
 request handling. Owner: backend API. Dependencies: coordinate export policy with
 FIX-04. Deliver safety and SDMX contract work as separate commits if needed.
 

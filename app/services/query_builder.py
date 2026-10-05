@@ -13,12 +13,73 @@ def _resolve_parquet_path(matrix_code: str):
     return PARQUET_DIR / f"{matrix_code}.parquet"
 
 
+_AGG_FUNCS = {"SUM", "AVG", "MIN", "MAX", "COUNT"}
+
+
+def quote_ident(name: str) -> str:
+    """Quote a SQL identifier, doubling any embedded double quote."""
+    return '"' + str(name).replace('"', '""') + '"'
+
+
+def sql_literal(value) -> str:
+    """Render a Python value as a safe SQL string literal (quotes doubled).
+
+    Only for contexts that cannot take bound parameters (DESCRIBE, the
+    legacy string-returning `build_data_query`). Prefer parameters.
+    """
+    return "'" + str(value).replace("'", "''") + "'"
+
+
 def build_data_query(matrix_code: str, dimensions: list, filters: dict,
                      limit: int = MAX_DATA_ROWS,
                      group_by: list[str] | None = None,
                      agg_func: str = "SUM",
                      value_column: str = "OBS_VALUE",
                      time_column: str | None = "TIME_PERIOD") -> str:
+    """String-returning form of `build_data_query_params`.
+
+    Values are rendered as properly escaped literals (an apostrophe in a
+    filter value is a literal apostrophe). Callers that execute the SQL
+    themselves should prefer `build_data_query_params` and bind parameters.
+    """
+    return _build(matrix_code, dimensions, filters, limit, group_by, agg_func,
+                  value_column, time_column, None)[0]
+
+
+def build_data_query_params(matrix_code: str, dimensions: list, filters: dict,
+                            limit: int = MAX_DATA_ROWS,
+                            group_by: list[str] | None = None,
+                            agg_func: str = "SUM",
+                            value_column: str = "OBS_VALUE",
+                            time_column: str | None = "TIME_PERIOD"):
+    """Like `build_data_query` but returns ``(sql, params)``.
+
+    The parquet path and every filter value are bound `?` parameters;
+    identifiers come from `dimensions` (the resolved schema) and are quoted.
+    Execute with ``conn.execute(sql, params)``.
+    """
+    return _build(matrix_code, dimensions, filters, limit, group_by, agg_func,
+                  value_column, time_column, [])
+
+
+def _build(matrix_code, dimensions, filters, limit, group_by, agg_func,
+           value_column, time_column, params):
+    """Shared implementation. ``params`` is a list to bind into, or None to
+    render escaped literals inline."""
+    def bind(v) -> str:
+        if params is None:
+            return sql_literal(v)
+        params.append(v)
+        return "?"
+
+    result = _build_sql(matrix_code, dimensions, filters, limit, group_by,
+                        agg_func, value_column, time_column, bind)
+    return result, params
+
+
+def _build_sql(matrix_code: str, dimensions: list, filters: dict,
+               limit: int, group_by, agg_func: str, value_column: str,
+               time_column, bind) -> str:
     """Build a DuckDB query against a parquet file for this matrix.
 
     Most parquets are SDMX-canonical (OBS_VALUE + string dim values), but
@@ -50,7 +111,11 @@ def build_data_query(matrix_code: str, dimensions: list, filters: dict,
         SQL query string. The output value column is always aliased to
         OBS_VALUE for downstream consistency.
     """
-    parquet_path = _resolve_parquet_path(matrix_code)
+    agg_func = str(agg_func).upper()
+    if agg_func not in _AGG_FUNCS:
+        raise ValueError(f"Unsupported aggregate: {agg_func!r}")
+    # Bound first: the path is the first placeholder in the final SQL text.
+    path_sql = bind(str(_resolve_parquet_path(matrix_code)))
     vc = value_column
 
     all_dim_cols = [d['dim_column_name'] for d in dimensions]
@@ -61,15 +126,15 @@ def build_data_query(matrix_code: str, dimensions: list, filters: dict,
         keep_cols = [c for c in group_by if c in valid_cols]
         if not keep_cols:
             keep_cols = all_dim_cols  # fallback to all
-        dim_select = ", ".join(f'"{c}"' for c in keep_cols)
-        select_clause = f'{dim_select}, {agg_func}("{vc}") AS "OBS_VALUE"'
+        dim_select = ", ".join(quote_ident(c) for c in keep_cols)
+        select_clause = f'{dim_select}, {agg_func}({quote_ident(vc)}) AS "OBS_VALUE"'
         group_clause = f'GROUP BY {dim_select}'
         output_cols = keep_cols
     else:
-        dim_select = ", ".join(f'"{c}"' for c in all_dim_cols)
+        dim_select = ", ".join(quote_ident(c) for c in all_dim_cols)
         # Alias to OBS_VALUE so the response shape is uniform regardless
         # of the parquet's underlying value-column name.
-        select_clause = f'{dim_select}, "{vc}" AS "OBS_VALUE"' if vc != "OBS_VALUE" else f'{dim_select}, "OBS_VALUE"'
+        select_clause = f'{dim_select}, {quote_ident(vc)} AS "OBS_VALUE"' if vc != "OBS_VALUE" else f'{dim_select}, "OBS_VALUE"'
         group_clause = ""
         output_cols = all_dim_cols
 
@@ -77,7 +142,7 @@ def build_data_query(matrix_code: str, dimensions: list, filters: dict,
     if group_by:
         # Some parquets carry NULL dim values (unmapped SDMX codes); grouping
         # them produces a meaningless summed "null" bucket in charts.
-        where_parts = [f'"{c}" IS NOT NULL' for c in keep_cols]
+        where_parts = [f'{quote_ident(c)} IS NOT NULL' for c in keep_cols]
     for col_name, values in filters.items():
         if col_name not in valid_cols or not values:
             continue
@@ -86,14 +151,14 @@ def build_data_query(matrix_code: str, dimensions: list, filters: dict,
         if not safe_values:
             continue
 
-        placeholders = ", ".join(f"'{_escape_sql(v)}'" for v in safe_values)
-        where_parts.append(f'CAST("{col_name}" AS VARCHAR) IN ({placeholders})')
+        placeholders = ", ".join(bind(v) for v in safe_values)
+        where_parts.append(f'CAST({quote_ident(col_name)} AS VARCHAR) IN ({placeholders})')
 
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
 
     body = f"""
         SELECT {select_clause}
-        FROM read_parquet('{parquet_path}')
+        FROM read_parquet({path_sql})
         {where_sql}
         {group_clause}
     """
@@ -109,10 +174,10 @@ def build_data_query(matrix_code: str, dimensions: list, filters: dict,
     return f"""
         SELECT * FROM (
             {body}
-            ORDER BY "{time_column}" DESC
+            ORDER BY {quote_ident(time_column)} DESC
             LIMIT {int(limit)}
         )
-        ORDER BY "{time_column}" ASC
+        ORDER BY {quote_ident(time_column)} ASC
     """
 
 
@@ -140,7 +205,7 @@ def resolve_parquet_schema(conn, matrix_code: str) -> dict:
     path = _resolve_parquet_path(matrix_code)
     try:
         cols = [r[0] for r in conn.execute(
-            f"DESCRIBE SELECT * FROM read_parquet('{path}') LIMIT 0").fetchall()]
+            f"DESCRIBE SELECT * FROM read_parquet({sql_literal(path)}) LIMIT 0").fetchall()]
     except Exception:
         return {"is_legacy": False, "value_column": "OBS_VALUE", "columns": [],
                 "to_file": {}, "to_sdmx": {}}

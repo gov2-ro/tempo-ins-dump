@@ -31,7 +31,7 @@ app/
   main.py             — FastAPI entry, mounts API routers + static files
   config.py           — DB_PATH, PARQUET_DIR (corpus/parquet), MAX_DATA_ROWS=50000
   db.py               — DuckDB cursor-per-request (concurrency-safe)
-  routers/            — /api/categories, /api/datasets, /api/datasets/{id}/data, /api/datasets/{id}/download, /sdmx/
+  routers/            — /api/categories, /api/datasets, /api/datasets/{id}/data, /api/datasets/{id}/download, /sdmx/, /api/ask, /places
 ```
 
 #### SDMX 2.1 REST API
@@ -49,9 +49,11 @@ The current endpoint silently caps results at 50,000 observations; see
 [SDMX limitations](docs/SDMX-API.md) and [complete-export spec](docs/fixes/04-complete-exports.md).
 
 ```
-  services/           — dataset_search, dataset_meta, chart_selector, query_builder, agent, headlines, llm_client
-  static/js/          — dataset-page, chart-factory, chart-geo, chart-demographic, filter-panel, ask, dims-explorer
-  static/css/         — dataset.css, datasets.css, main.css
+  services/           — dataset_search, dataset_meta, query_builder, chart_selector, dashboard_composer, insights,
+                        headlines, dimension_structure, place_service, agent, llm_client
+  static/             — dataset-v2.html + js/dashboard-v2.js (main dataset page), index.html + js/explore-app.js (v1
+                        explorer), places/place, compare, ask, dimensions-explorer pages
+  static/js/          — chart-factory → chart-geo, chart-demographic, chart-new-types; site-chrome, filter-panel, …
   static/geo/         — romania-counties/regions/macroregions.geojson
 ```
 
@@ -60,6 +62,7 @@ The current endpoint silently caps results at 50,000 observations; see
 
 Script numbers are historical, **not execution order**: import metadata → classify
 dimensions → build stage-11 SDMX mappings → stage-9 conversion → split/profile.
+The full run order by phase is in [AGENTS.md](AGENTS.md#data-pipeline).
 Fetching scripts accept `--lang`; other scripts have different options and/or
 use `TEMPO_LANG`. Canonical output is shared across languages; the incremental
 `--lang en` path is not a verified safe refresh. See [CURRENT_STATE.md](docs/CURRENT_STATE.md)
@@ -71,39 +74,59 @@ and [BILINGUAL.md](docs/BILINGUAL.md) before running writers.
 | 2 | `2-fetch-matrices.py` | `data/1-indexes/{lang}/matrices.csv` | Fetches dataset list |
 | 3 | `3-fetch-metas.py` | `data/2-metas/{lang}/{id}.json` | Downloads metadata per dataset |
 | 4 | `4-build-meta-index.py` | `data/1-indexes/{lang}/matrices-list.csv` | Builds summary index from metadata |
-| 5 | `5-varstats-db.py` | `data/3-db/{lang}/tempo-indexes.db` | Creates SQLite DB from metadata (legacy) |
+| 5 | `5-varstats-db.py` | `data/3-db/{lang}/tempo-indexes.db` | *(legacy)* Creates SQLite DB from metadata |
 | 6 | `6-fetch-csv.py` | `data/4-datasets/{lang}/` | Downloads raw CSV data from TEMPO API |
-| 7 | `7-data-compactor.py` | `data/5-compact-datasets/{lang}/` | Replaces text labels with numeric IDs |
+| 7 | `7-data-compactor.py` | `data/5-compact-datasets/{lang}/` | *(legacy)* Replaces text labels with numeric IDs |
 | 8 | `8-setup-duckdb-schema.py` | `data/corpus/metadata.duckdb` | Creates DuckDB schema (contexts, matrices, dimensions) |
 | 9 | `9-csv-to-parquet.py` | `data/corpus/parquet/` | Converts CSVs directly to canonical SDMX parquet — maps values via `sdmx_codes`, renames columns via `sdmx_column_map`, never writes NULL |
 | 10 | `10-import-metadata.py` | DuckDB tables | Imports all metadata into DuckDB |
 | 10 | `10-classify-dimensions.py` | `dimension_options_parsed`, `matrix_profiles` | Parses/classifies dimensions, detects archetypes |
-| 10 | `10-sdmx-export.py` | `data/6-sdmx-csv/ro/` | Converts to SDMX-CSV 2.0 |
+| 10 | `10-sdmx-export.py` | `data/6-sdmx-csv/ro/` | *(legacy)* Converts to SDMX-CSV 2.0 |
 | 11 | `11-build-sdmx-codes.py` | DuckDB code mapping tables | Builds SDMX code mappings (`sdmx_codes`, `sdmx_column_map` — stage 9 depends on these) |
 | 11 | `11-coverage-profiler.py` | `dataset_coverage` DuckDB table | Analyzes data completeness |
 | 12 | `12-parquet-to-sdmx.py` | *(deprecated, not run)* | Read a dead `parquet-v2/` snapshot; stage 9 writes SDMX directly now (2026-09-05) — see `docs/reports/stage9-sdmx-migration.md` |
 | 12 | `12-split-datasets.py` | `data/corpus/parquet/` | Splits inconsistent datasets into clean sub-datasets |
+| 13 | `13-dimension-structure.py` | `dimension_structure` DuckDB table | Verifies each dimension's levels, real aggregates, additivity and nesting |
 
 ### Incremental Update (`update-pipeline.py`)
 
-Orchestrates incremental updates from the INS news feed — processes only datasets updated since the last run. Every matrix it touches was either named explicitly or flagged by INS as changed, so it force-refreshes (re-fetches metadata, CSV, parquet, SDMX) by default — a locally-cached file is never a reason to skip a matrix INS says is stale.
+Orchestrates incremental updates from the INS news feed. Every matrix it touches was named explicitly (`--matrix`), flagged by INS as changed (feed) or owed from a previous failed run (retry set), so it force-refreshes (re-fetches metadata, CSV, parquet, SDMX) by default.
 
 ```bash
-python update-pipeline.py                        # auto-incremental (since last run), force-refreshed
+python update-pipeline.py                        # feed entries since the watermark + retry set
 python update-pipeline.py --refetch-news         # re-fetch news CSV first
-python update-pipeline.py --since 01.03.2026     # explicit date filter
-python update-pipeline.py --all                  # ignore last run, process all news currently in insse_news.csv
-python update-pipeline.py --matrix ACC101B       # single dataset
-python update-pipeline.py --skip-existing        # resume/debug: skip matrices whose local files already exist
-python update-pipeline.py --force-meta           # with --skip-existing, still re-sync metadata dates
-python update-pipeline.py --dry-run              # preview without executing
+python update-pipeline.py --since 01.03.2026     # feed entries dated >= this (inclusive); never lowers the watermark
+python update-pipeline.py --all                  # whole feed, ignore the watermark
+python update-pipeline.py --matrix ACC101B       # exactly these codes; never moves the watermark
+python update-pipeline.py --skip-existing        # resume/debug: skip fetch/convert if files exist (partial run)
+python update-pipeline.py --dry-run              # plan only: writes no state, log, DB or file
+python update-pipeline.py --strict               # optional-stage failures also exit 1
 ```
 
-Current per-matrix steps: metadata → CSV → canonical SDMX parquet → split →
-dimension structure → view profile. Afterwards: meta index/import and date sync.
-It does not reliably refresh changed dimension mappings or all derived metadata,
-and may save `data/logs/last-pipeline-run.txt` despite failures. These are open
-[FIX-03](docs/fixes/03-pipeline-and-corpus.md) requirements, not success guarantees.
+Per-matrix steps: metadata → CSV → canonical SDMX parquet → split → dimension
+structure → view profile; afterwards meta index, metadata import and date sync.
+
+- **Required** (any failure: exit 1, matrix goes to the retry set, watermark frozen):
+  metadata, CSV (`6-fetch-csv`), conversion (`9`), split (`12`, unless `--no-split`),
+  and the batch index/import/date-sync. A failed `--fetch-context` aborts the run.
+- **Optional** (recorded and printed, exit 0 unless `--strict`): `13-dimension-structure`,
+  `generate_view_profiles`. The matrix is marked `ok_degraded`; derived features are not verified.
+- **Empty at source** (`6-fetch-csv` exit 3) is recorded as `empty`: not retried, not a failure.
+- Nothing is deleted on failure; the previous parquet/profile artifacts stay.
+- **State**: `data/logs/update-pipeline-state.json` (`--state-file`) holds the watermark,
+  retry set and per-matrix/per-stage outcomes with reasons and source update dates.
+  `last-pipeline-run.txt` mirrors the watermark for legacy readers.
+- **Watermark** = newest feed date of a fully successful run (not wall-clock today). It is
+  inclusive, so the latest day is reprocessed next run. Partial runs (`--skip-existing`,
+  `--no-split`, `--skip-duckdb`) and `--matrix` runs never advance it.
+- **Language**: only `ro`. `--lang en` / `TEMPO_LANG=en` are rejected (exit 2) because the
+  processing stages write shared canonical output; children always get `TEMPO_LANG=ro`.
+- Exit codes: 0 ok, 1 required failure, 2 usage / unsafe mode.
+
+Still open under [FIX-03](docs/fixes/03-pipeline-and-corpus.md): mapping/classification
+refresh and import ordering in the incremental run, targeted refresh paths, generation
+manifests. `scripts/audit-corpus.py --data-dir DIR [--json-out F]` is a read-only,
+deterministic corpus audit (categories, schema, NULL dims, time validity, grain, coverage).
 
 ### Other root-level scripts
 
@@ -114,11 +137,12 @@ and may save `data/logs/last-pipeline-run.txt` despite failures. These are open
 | `build-geo-regions.py` | Dissolves county GeoJSON into regions + macroregions |
 | `build-static-site.py` | Builds static HTML site from corpus |
 | `split_rules.py` | Split rules engine — classifies datasets needing structural splits |
+| `sdmx_labels.py` | Shared `norm_label`/`parse_time_period` used by stages 9 and 11 so their label matching agrees |
 | `detect_trends.py` | Detects trends, YoY growth, seasonality → `dataset_trends` DuckDB table |
 | `duckdb_config.py` | Central config: paths for all DuckDB/Parquet processing |
 | `duckdb-browser.py` | Flask browser for exploring DuckDB + Parquet data |
 | `get-news.py` | Scrapes INS news/press releases → `data/insse_news.csv` |
-| `test_chart_selector.py` | Tests chart selection engine across all datasets |
+| `test_chart_selector.py` | Reports chart-selection results across all datasets (a report, not a test — tests live in `tests/`) |
 
 ### scripts/
 
@@ -134,7 +158,8 @@ and may save `data/logs/last-pipeline-run.txt` despite failures. These are open
 | `cleanup-view-profiles.py` | Removes orphan view-profiles |
 | `detect-totals.py` | Detects "Total" rows for stripping |
 | `normalize-labels.py` | Normalizes dimension option labels |
-| `prepare-deploy-data.sh` | Stages corpus + DuckDB + view-profiles into `deploy-data/` |
+| `prepare-deploy-data.sh` | Atomically stages corpus + DuckDB + `search.duckdb` + view-profiles + `MANIFEST.json` into `deploy-data/` |
+| `release-check.py` | Validates staged data (manifest/hashes, FTS, index generation, parquet coverage), runs tests, optional docker smoke, `--deploy` only on request, `--rollback` |
 | `profile-values.py` | Computes per-dataset value profiles → `dataset_value_profiles` |
 | `strip-totals-from-parquet.py` | Strips precomputed "Total" rows from canonical parquets |
 
@@ -171,7 +196,23 @@ data/
 ## Deployment
 
 - **Dockerfile** + **fly.toml** — Fly.io deployment (shared-cpu-1x, 512MB, Amsterdam region)
-- `scripts/prepare-deploy-data.sh` — Stages corpus parquet + DuckDB + view profiles into `deploy-data/`; currently omits search index and is not an automatic build prerequisite
+- `scripts/prepare-deploy-data.sh` — stages `metadata.duckdb`, `search.duckdb`, parquets, view profiles and a `MANIFEST.json` (file sizes + sha256, source build times, latest source observation date; the generation block is a placeholder until FIX-03)
+- `scripts/release-check.py` — the release gate
+
+Release flow (staging must precede the image build; `fly deploy` never runs implicitly):
+
+```bash
+source ~/devbox/envs/240826/bin/activate
+python scripts/build-search-index.py                 # if metadata changed (index must cover all canonical matrices)
+bash scripts/prepare-deploy-data.sh                  # builds in deploy-data.tmp.*, validates, swaps atomically; previous kept as deploy-data.prev
+python scripts/release-check.py --docker             # manifest/hashes, FTS, tests, image build + smoke on :8095
+python scripts/release-check.py --docker --deploy    # same gates, then `fly deploy`
+python scripts/release-check.py --rollback           # swap deploy-data <-> deploy-data.prev (then rebuild/redeploy the image)
+```
+
+A failed staging leaves the previous `deploy-data/` untouched. The image installs the DuckDB `fts` extension at build time and fails the build if `search.duckdb` can't be opened. `GET /api/health` reports `search.mode` (`fts` or `fallback`; production fallback to name matching is also logged at ERROR) and the staged generation/observation dates.
+
+Clean checkout (no corpus, no secrets): `pip install -r requirements-dev.txt && python -m pytest tests -q`. Tests marked `corpus` are skipped without `data/corpus/`; a skip is not a pass. Dependency sets: `requirements.txt` (runtime/image), `requirements-pipeline.txt`, `requirements-dev.txt`. CI: `.github/workflows/ci.yml` (synthetic tests only; the local `fly-deploy.yml` stays untracked).
 - `scripts/deploy/oracle/` — Oracle Cloud deployment (systemd + nginx)
 - `scripts/deploy/hf-spaces/` — Hugging Face Spaces deployment
 

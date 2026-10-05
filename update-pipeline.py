@@ -3,13 +3,38 @@
 Incremental dataset update orchestrator.
 
 Reads the INS TEMPO news page (data/insse_news.csv) to get updated matrix codes,
-then runs the full pipeline for only those matrices. Every matrix processed here
-was either named explicitly (--matrix) or flagged by INS as changed (news feed),
-so the default is to always force-refresh it end to end — a locally-cached file
-is never a reason to skip a matrix INS says is stale.
+then runs the pipeline for only those matrices. Every matrix processed here was
+either named explicitly (--matrix), flagged by INS as changed (news feed) or owed
+from a previous failed run (retry set), so by default it is force-refreshed.
+
+Success semantics (FIX-03 phase 1)
+    Required stages: metadata fetch, 6-fetch-csv, 9-csv-to-parquet, 12-split
+    (unless --no-split), and the run-level 4-build-meta-index / 10-import-metadata
+    / date sync. Any required failure => exit 1, matrix goes to the persisted
+    retry set, the watermark is NOT advanced. Optional stages (13-dimension-
+    structure, generate_view_profiles) are recorded and printed but do not block
+    (--strict makes them exit 1). An empty dataset at source (6-fetch-csv exit 3)
+    is recorded as "empty": not a failure, not retried. Exit 2 = usage/unsafe mode.
+    Nothing is deleted on failure; earlier artifacts stay in place.
+
+State: data/logs/update-pipeline-state.json (--state-file): watermark, retry set,
+per-matrix/per-stage outcome + reason + source update date. The watermark is the
+newest feed date of a fully successful feed run (never wall-clock today); it is
+inclusive, so the latest day is re-fetched next time (several updates may share
+one date). Retry matrices are merged into every feed/--all run.
+
+Modes
+    (default)        feed entries since the watermark (all, if none) + retry set
+    --since D        feed entries dated >= D + retry set; never lowers the watermark
+    --all            whole feed + retry set
+    --matrix A,B     exactly these codes; retry set and watermark untouched by the
+                     selection (their own state/retry entries are updated)
+    --skip-existing, --no-split, --skip-duckdb   partial runs: never advance watermark
+    --dry-run        no subprocess, fetch, DB, log, state or watermark writes
+    --lang           only 'ro'; 'en' is rejected (would clobber canonical output)
 
 Usage:
-    python update-pipeline.py                          # process all news entries (force-refreshed)
+    python update-pipeline.py                          # feed since watermark + retries
     python update-pipeline.py --since 06.04.2026       # only entries from this date
     python update-pipeline.py --matrix TMI1163         # specific matrix, bypass news
     python update-pipeline.py --matrix A,B --dry-run   # preview without running
@@ -27,7 +52,7 @@ import re
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import duckdb
@@ -42,7 +67,8 @@ NEWS_CSV = BASE_DIR / "data" / "insse_news.csv"
 NEWS_URL = "http://statistici.insse.ro:8077/tempo-ins/news/"
 META_BASE_URL = "http://statistici.insse.ro:8077/tempo-ins/matrix/"
 LOG_DIR = BASE_DIR / "data" / "logs"
-LAST_RUN_FILE = LOG_DIR / "last-pipeline-run.txt"
+LAST_RUN_FILE = LOG_DIR / "last-pipeline-run.txt"   # legacy mirror of the watermark
+STATE_FILE = LOG_DIR / "update-pipeline-state.json"  # outcomes, retry set, watermark
 
 # INS matrix codes are short alphanumeric tokens (e.g. INT113D, PPI1035).
 # The news page occasionally emits a summary/footer row (e.g. "113 Matrice" —
@@ -102,10 +128,10 @@ def sync_ultima_actualizare(codes: list[str], lang: str, dry_run: bool = False) 
                 raw = meta.get("ultimaActualizare", "")
                 if not raw:
                     continue
-                date = datetime.strptime(raw.strip(), "%d-%m-%Y").date()
+                synced = datetime.strptime(raw.strip(), "%d-%m-%Y").date()
                 conn.execute(
                     "UPDATE matrices SET ultima_actualizare = ? WHERE matrix_code = ?",
-                    [date, code]
+                    [synced, code]
                 )
                 updated += 1
             except Exception as e:
@@ -168,38 +194,180 @@ def propagate_split_metadata(db_path, dry_run: bool = False) -> int:
         conn.close()
 
 
-def run(cmd: list[str], dry_run: bool = False, label: str = "") -> bool:
-    """Run a subprocess. Returns True on success."""
+# ---------------------------------------------------------------------------
+# Outcome / retry state (FIX-03)
+# ---------------------------------------------------------------------------
+DATE_FMT = "%d.%m.%Y"
+STATE_VERSION = 1
+EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
+EXIT_CSV_EMPTY = 3  # 6-fetch-csv.py: INS returned a header-only CSV (not retryable)
+
+# Per-matrix stage keys, in run order. Required failures -> matrix recorded as
+# failed, retried next run, exit != 0, watermark frozen. Optional failures are
+# recorded + printed but do not block.
+STAGE_META = "meta"
+STAGE_CSV = "6-fetch-csv"
+STAGE_CONVERT = "9-csv-to-parquet"
+STAGE_SPLIT = "12-split"
+STAGE_DIMS = "13-dimension-structure"
+STAGE_VIEWS = "generate_view_profiles"
+OPTIONAL_STAGES = {STAGE_DIMS, STAGE_VIEWS}
+# Run-level (batch) stages, all required.
+BATCH_INDEX = "4-build-meta-index"
+BATCH_IMPORT = "10-import-metadata"
+BATCH_SYNC = "sync-ultima-actualizare"
+
+
+def now_iso() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def parse_date(raw) -> date | None:
+    try:
+        return datetime.strptime(str(raw).strip(), DATE_FMT).date()
+    except (ValueError, TypeError):
+        return None
+
+
+def fmt_date(d: date) -> str:
+    return d.strftime(DATE_FMT)
+
+
+class PipelineState:
+    """Small JSON checkpoint: watermark, retry set, per-matrix/per-stage outcomes.
+
+    Layout (version 1)::
+
+        {"version": 1,
+         "watermark": "DD.MM.YYYY" | null,     # max feed date of fully handled runs
+         "retry": {CODE: {"stage", "reason", "source_update", "attempts",
+                          "first_failed", "last_failed"}},
+         "matrices": {CODE: {"source_update", "outcome", "updated_at",
+                             "stages": {STAGE: {"outcome", "reason", "at"}}}},
+         "last_run": {"started", "finished", "exit_code", "processed", "failed", ...}}
+
+    Stage outcomes: ok | failed | empty | skipped. Writes are atomic (tmp + rename).
+    """
+
+    def __init__(self, path: Path):
+        self.path = Path(path)
+        self.data = {"version": STATE_VERSION, "watermark": None,
+                     "retry": {}, "matrices": {}, "last_run": {}}
+        if self.path.exists():
+            try:
+                loaded = json.loads(self.path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as e:
+                # Never silently reset: that would drop the retry set.
+                raise RuntimeError(f"Corrupt pipeline state {self.path}: {e}") from e
+            self.data.update(loaded)
+
+    @property
+    def watermark(self) -> str | None:
+        return self.data.get("watermark")
+
+    @property
+    def retry(self) -> dict:
+        return self.data["retry"]
+
+    def save(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
+        tmp.write_text(json.dumps(self.data, indent=2, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, self.path)
+
+    def record_matrix(self, code: str, outcome: str, stages: dict, source_update: str | None) -> None:
+        self.data["matrices"][code] = {
+            "source_update": source_update, "outcome": outcome,
+            "updated_at": now_iso(), "stages": stages,
+        }
+
+    def add_retry(self, code: str, stage: str, reason: str, source_update: str | None) -> None:
+        prev = self.retry.get(code, {})
+        self.retry[code] = {
+            "stage": stage, "reason": reason,
+            "source_update": source_update or prev.get("source_update"),
+            "attempts": int(prev.get("attempts", 0)) + 1,
+            "first_failed": prev.get("first_failed", now_iso()),
+            "last_failed": now_iso(),
+        }
+
+    def clear_retry(self, code: str) -> None:
+        self.retry.pop(code, None)
+
+
+# ---------------------------------------------------------------------------
+# Language safety
+# ---------------------------------------------------------------------------
+def enforce_language(lang: str) -> None:
+    """Refuse unsafe language modes (exit 2).
+
+    Processing stages (9/11/12/13/profiles) write *shared canonical* outputs
+    (data/corpus/parquet, metadata.duckdb) and take their inputs from TEMPO_LANG
+    paths that this orchestrator cannot point at --lang. Running them over an
+    English fetch would either convert stale Romanian CSVs or overwrite Romanian
+    canonical data. English enrichment-only ingestion is not implemented, so it is
+    rejected rather than half-supported (FIX-03 item 6).
+    """
+    env_lang = os.environ.get("TEMPO_LANG")
+    if lang != "ro" or env_lang not in (None, "", "ro"):
+        log.error("Only Romanian ('ro') is supported by update-pipeline.py. "
+                  f"Got --lang={lang!r}, TEMPO_LANG={env_lang!r}. English label ingestion "
+                  "must not overwrite canonical Romanian output and has no enrichment-only "
+                  "mode yet; use the per-language fetch scripts (1-6 --lang en) directly.")
+        raise SystemExit(EXIT_USAGE)
+
+
+def child_env() -> dict:
+    """Explicit language at every subprocess boundary."""
+    env = dict(os.environ)
+    env["TEMPO_LANG"] = "ro"
+    return env
+
+
+# ---------------------------------------------------------------------------
+# Subprocess helpers
+# ---------------------------------------------------------------------------
+def run_cmd(cmd: list[str], dry_run: bool = False, label: str = "") -> int:
+    """Run a subprocess and return its exit code (0 in dry-run)."""
     display = " ".join(cmd)
     if dry_run:
         log.info(f"[DRY-RUN] {label or display}")
-        return True
+        return 0
     log.info(f"Running: {display}")
-    result = subprocess.run(cmd, cwd=BASE_DIR)
+    result = subprocess.run(cmd, cwd=BASE_DIR, env=child_env())
     if result.returncode != 0:
         log.error(f"FAILED (exit {result.returncode}): {display}")
-        return False
-    return True
+    return result.returncode
+
+
+def run(cmd: list[str], dry_run: bool = False, label: str = "") -> bool:
+    """Run a subprocess. Returns True on success."""
+    return run_cmd(cmd, dry_run=dry_run, label=label) == 0
+
+
+def python_rc(script: str, args: list[str], dry_run: bool = False) -> int:
+    return run_cmd([sys.executable, script] + args, dry_run=dry_run,
+                   label=f"{script} {' '.join(args)}")
 
 
 def python(script: str, args: list[str], dry_run: bool = False) -> bool:
-    return run([sys.executable, script] + args, dry_run=dry_run, label=f"{script} {' '.join(args)}")
+    return python_rc(script, args, dry_run=dry_run) == 0
 
 
 def read_last_run() -> str | None:
-    """Return the date of the last successful run in DD.MM.YYYY format, or None."""
+    """Legacy watermark file (DD.MM.YYYY); the state file takes precedence."""
     if LAST_RUN_FILE.exists():
-        return LAST_RUN_FILE.read_text().strip()
+        return LAST_RUN_FILE.read_text().strip() or None
     return None
 
 
-def write_last_run() -> None:
-    """Record today as the last successful run date."""
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    LAST_RUN_FILE.write_text(datetime.now().strftime("%d.%m.%Y"))
+def write_last_run(day: str) -> None:
+    """Record the watermark (a feed date, never wall-clock today) for legacy readers."""
+    LAST_RUN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    LAST_RUN_FILE.write_text(day)
 
 
-def fetch_news() -> None:
+def fetch_news() -> bool:
     log.info(f"Fetching news from {NEWS_URL}...")
     try:
         resp = requests.get(NEWS_URL, headers=NEWS_HEADERS, timeout=20)
@@ -207,46 +375,57 @@ def fetch_news() -> None:
         tables = pd.read_html(resp.text, flavor="bs4")
         if not tables:
             log.error("No tables found in news page")
-            return
+            return False
         df = tables[0]
-        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        NEWS_CSV.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(NEWS_CSV, index=False, encoding="utf-8-sig")
         log.info(f"Saved {len(df)} rows to {NEWS_CSV}")
+        return True
     except Exception as e:
         log.error(f"Failed to fetch news: {e}")
+        return False
 
 
-def parse_news(since: str | None) -> list[str]:
-    """Read news CSV and return list of matrix codes, optionally filtered by date."""
+def parse_news(since: str | None) -> dict[str, str | None]:
+    """Read the news CSV -> {matrix code: latest feed date (DD.MM.YYYY) or None}.
+
+    A matrix with several updates in the window maps to its newest date.
+    `since` is inclusive.
+    """
     if not NEWS_CSV.exists():
         log.error(f"News CSV not found: {NEWS_CSV}. Run with --refetch-news first.")
-        sys.exit(1)
+        sys.exit(EXIT_USAGE)
 
     df = pd.read_csv(NEWS_CSV, encoding="utf-8-sig", skiprows=1,
                      names=["Activitatea", "Data", "Domeniu", "Cod matrice",
-                             "Denumire matrice", "Perioada", "Date", "Metadate", "Nomenclatoare"])
+                            "Denumire matrice", "Perioada", "Date", "Metadate", "Nomenclatoare"])
 
     # Drop header row if it leaked in
     df = df[df["Cod matrice"] != "Cod matrice"]
     df = df.dropna(subset=["Cod matrice"])
+    df["_date"] = pd.to_datetime(df["Data"], format=DATE_FMT, errors="coerce")
 
     if since:
-        try:
-            since_dt = datetime.strptime(since, "%d.%m.%Y")
-            df["_date"] = pd.to_datetime(df["Data"], format="%d.%m.%Y", errors="coerce")
-            df = df[df["_date"] >= since_dt]
-            log.info(f"Filtered to {len(df)} entries since {since}")
-        except ValueError:
+        since_dt = parse_date(since)
+        if since_dt is None:
             log.error(f"Invalid --since date format: {since}. Use DD.MM.YYYY")
-            sys.exit(1)
+            sys.exit(EXIT_USAGE)
+        df = df[df["_date"] >= pd.Timestamp(since_dt)]
+        log.info(f"Filtered to {len(df)} entries since {since}")
 
-    raw_codes = df["Cod matrice"].str.strip().unique().tolist()
-    codes = [c for c in raw_codes if MATRIX_CODE_RE.match(c)]
-    skipped = [c for c in raw_codes if c not in codes]
+    df = df.assign(_code=df["Cod matrice"].astype(str).str.strip())
+    result: dict[str, str | None] = {}
+    skipped = []
+    for code, grp in df.groupby("_code", sort=False):
+        if not MATRIX_CODE_RE.match(code):
+            skipped.append(code)
+            continue
+        latest = grp["_date"].max()
+        result[code] = None if pd.isna(latest) else latest.strftime(DATE_FMT)
     if skipped:
         log.warning(f"Skipped {len(skipped)} non-matrix-code rows from news: {skipped}")
-    log.info(f"Found {len(codes)} unique matrix codes in news")
-    return codes
+    log.info(f"Found {len(result)} unique matrix codes in news")
+    return result
 
 
 def fetch_meta(code: str, lang: str, force: bool) -> bool:
@@ -273,168 +452,328 @@ def fetch_meta(code: str, lang: str, force: bool) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Main
+# Per-matrix pipeline
 # ---------------------------------------------------------------------------
-def main():
-    parser = argparse.ArgumentParser(
-        description="Incremental INS TEMPO dataset update pipeline."
-    )
-    parser.add_argument("--fetch-context", action="store_true",
-                        help="Also run scripts 1+2 (context + matrices index) first")
-    parser.add_argument("--since", metavar="DD.MM.YYYY",
-                        help="Only process matrices updated on/after this date")
-    parser.add_argument("--matrix", metavar="CODE[,CODE,...]",
-                        help="Bypass news, process specific matrix codes (comma-separated)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Print steps without executing")
-    parser.add_argument("--skip-existing", action="store_true",
-                        help="Resume/debug mode: skip a matrix's fetch/convert steps if local files already exist, instead of the default force-refresh. Rarely what you want for a real update.")
-    parser.add_argument("--force-meta", action="store_true",
-                        help="With --skip-existing, still re-fetch metadata JSONs (to sync ultima_actualizare) even though CSV/parquet steps are skipped")
-    parser.add_argument("--lang", default="ro", choices=["ro", "en"],
-                        help="Language (default: ro)")
-    parser.add_argument("--no-split", action="store_true",
-                        help="Skip 12-split-datasets.py")
-    parser.add_argument("--no-view-profiles", action="store_true",
-                        help="Skip generate_view_profiles.py")
-    parser.add_argument("--no-dim-structure", action="store_true",
-                        help="Skip 13-dimension-structure.py")
-    parser.add_argument("--skip-duckdb", action="store_true",
-                        help="Skip scripts 4 + 10 (meta-index rebuild + DuckDB import)")
-    parser.add_argument("--refetch-news", action="store_true",
-                        help="Re-fetch news from INS before processing")
-    parser.add_argument("--all", action="store_true",
-                        help="Process all news entries, ignoring last run date")
-    parser.add_argument("--propagate-splits", action="store_true",
-                        help="Propagate parent metadata (ultima_actualizare, definitie, etc.) to split children, then exit")
-    args = parser.parse_args()
+def _stage(stages: dict, name: str, outcome: str, reason: str | None = None) -> None:
+    stages[name] = {"outcome": outcome, "reason": reason, "at": now_iso()}
 
-    lang = args.lang
-    # Every matrix reaching the per-matrix loop was either named explicitly (--matrix)
-    # or flagged by INS as changed (news feed) — a locally-cached file is never a
-    # reason to skip it, so force-refresh unless the caller opted into --skip-existing.
+
+def process_matrix(code: str, args, lang: str) -> tuple[str, dict, tuple[str, str] | None]:
+    """Run all per-matrix stages. Returns (outcome, stages, first_required_failure).
+
+    outcome: ok | ok_degraded (optional stage failed) | empty | failed.
+    Nothing is ever deleted here: on failure earlier artifacts stay in place.
+    """
+    dry = args.dry_run
     force_flag = [] if args.skip_existing else ["--force"]
     meta_force = args.force_meta or not args.skip_existing
+    stages: dict = {}
+    ok_or_dry = ("skipped", "dry-run") if dry else ("ok", None)
 
-    # ---- Setup log file ----
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    log_file = LOG_DIR / f"update-pipeline-{ts}.log"
-    file_handler = logging.FileHandler(log_file, encoding="utf-8")
-    file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-    logging.getLogger().addHandler(file_handler)
-    log.info(f"Logging to {log_file}")
+    # a. metadata (required)
+    if dry:
+        log.info(f"[DRY-RUN] fetch_meta({code})")
+        _stage(stages, STAGE_META, "skipped", "dry-run")
+    elif fetch_meta(code, lang, force=meta_force):
+        _stage(stages, STAGE_META, "ok")
+    else:
+        _stage(stages, STAGE_META, "failed", "metadata fetch failed")
+        return "failed", stages, (STAGE_META, "metadata fetch failed")
+
+    # b. CSV (required; exit 3 = INS answered with no data rows)
+    rc = python_rc("6-fetch-csv.py", ["--matrix", code, "--lang", lang] + force_flag, dry_run=dry)
+    if rc == EXIT_CSV_EMPTY:
+        _stage(stages, STAGE_CSV, "empty", "INS returned no data rows")
+        log.warning(f"{code}: empty dataset at source; convert/split/profile skipped")
+        return "empty", stages, None
+    if rc != 0:
+        reason = f"6-fetch-csv exit {rc}"
+        _stage(stages, STAGE_CSV, "failed", reason)
+        return "failed", stages, (STAGE_CSV, reason)
+    _stage(stages, STAGE_CSV, *ok_or_dry)
+
+    # c. CSV -> canonical SDMX parquet (required)
+    rc = python_rc("9-csv-to-parquet.py", ["--matrix", code] + force_flag, dry_run=dry)
+    if rc != 0:
+        reason = f"9-csv-to-parquet exit {rc}"
+        _stage(stages, STAGE_CONVERT, "failed", reason)
+        return "failed", stages, (STAGE_CONVERT, reason)
+    _stage(stages, STAGE_CONVERT, *ok_or_dry)
+
+    # d. split + register children (required when enabled)
+    if not args.no_split:
+        rc = python_rc("12-split-datasets.py", ["--matrix", code], dry_run=dry)
+        if rc != 0:
+            reason = f"12-split exit {rc}"
+            _stage(stages, STAGE_SPLIT, "failed", reason)
+            return "failed", stages, (STAGE_SPLIT, reason)
+        _stage(stages, STAGE_SPLIT, *ok_or_dry)
+    else:
+        _stage(stages, STAGE_SPLIT, "skipped", "--no-split")
+
+    # e/f. optional profiling: visible, never blocking
+    degraded = False
+    for key, script, disabled, flag in (
+        (STAGE_DIMS, "13-dimension-structure.py", args.no_dim_structure, "--no-dim-structure"),
+        (STAGE_VIEWS, "generate_view_profiles.py", args.no_view_profiles, "--no-view-profiles"),
+    ):
+        if disabled:
+            _stage(stages, key, "skipped", flag)
+            continue
+        rc = python_rc(script, ["--matrix", code], dry_run=dry)
+        if rc != 0:
+            reason = f"{script} exit {rc}"
+            _stage(stages, key, "failed", reason)
+            log.warning(f"{code}: {key} failed (optional; derived features for this matrix "
+                        "are not verified)")
+            degraded = True
+        else:
+            _stage(stages, key, *ok_or_dry)
+
+    return ("ok_degraded" if degraded else "ok"), stages, None
+
+
+# ---------------------------------------------------------------------------
+# Orchestration
+# ---------------------------------------------------------------------------
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Incremental INS TEMPO dataset update pipeline.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    parser.add_argument("--fetch-context", action="store_true",
+                        help="Also run scripts 1+2 (context + matrices index) first; failure aborts the run")
+    parser.add_argument("--since", metavar="DD.MM.YYYY",
+                        help="Only feed entries dated on/after this (inclusive). Overrides the stored watermark; never lowers it")
+    parser.add_argument("--matrix", metavar="CODE[,CODE,...]",
+                        help="Bypass the feed and retry set; process exactly these codes. Updates per-matrix state "
+                             "and retry entries for them but never moves the watermark")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Print the plan only: no subprocess, fetch, DB write, state/log file or watermark change")
+    parser.add_argument("--skip-existing", action="store_true",
+                        help="Resume/debug mode: skip a matrix's fetch/convert steps if local files already exist. "
+                             "Results are not verified fresh, so this never advances the watermark")
+    parser.add_argument("--force-meta", action="store_true",
+                        help="With --skip-existing, still re-fetch metadata JSONs even though CSV/parquet steps are skipped")
+    parser.add_argument("--lang", default="ro",
+                        help="Only 'ro' is supported; 'en' is rejected (no enrichment-only mode, would clobber canonical data)")
+    parser.add_argument("--no-split", action="store_true", help="Skip 12-split-datasets.py (partial run: no watermark advance)")
+    parser.add_argument("--no-view-profiles", action="store_true", help="Skip generate_view_profiles.py")
+    parser.add_argument("--no-dim-structure", action="store_true", help="Skip 13-dimension-structure.py")
+    parser.add_argument("--skip-duckdb", action="store_true",
+                        help="Skip scripts 4 + 10 (meta-index rebuild + DuckDB import); partial run: no watermark advance")
+    parser.add_argument("--refetch-news", action="store_true", help="Re-fetch news from INS before processing")
+    parser.add_argument("--all", action="store_true",
+                        help="Process every feed entry, ignoring the watermark (retries are merged too)")
+    parser.add_argument("--strict", action="store_true",
+                        help="Also exit nonzero when an optional (profiling) stage failed")
+    parser.add_argument("--state-file", metavar="PATH", default=None,
+                        help=f"Checkpoint JSON (default: {STATE_FILE})")
+    parser.add_argument("--propagate-splits", action="store_true",
+                        help="Propagate parent metadata (ultima_actualizare, definitie, etc.) to split children, then exit")
+    return parser
+
+
+def run_pipeline(argv: list[str] | None = None) -> int:
+    """Run the orchestrator. Returns the process exit code (0 ok, 1 required failure, 2 usage)."""
+    args = build_parser().parse_args(argv)
+    lang = args.lang
+    enforce_language(lang)
+    if args.matrix and (args.since or args.all):
+        log.error("--matrix cannot be combined with --since/--all")
+        return EXIT_USAGE
+    if args.since and parse_date(args.since) is None:
+        log.error(f"Invalid --since date format: {args.since}. Use DD.MM.YYYY")
+        return EXIT_USAGE
+    if args.since and args.all:
+        log.error("--since and --all are mutually exclusive")
+        return EXIT_USAGE
+
+    dry = args.dry_run
+    started = now_iso()
+    handler = None
+    if not dry:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        log_file = LOG_DIR / f"update-pipeline-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
+        handler = logging.FileHandler(log_file, encoding="utf-8")
+        handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+        logging.getLogger().addHandler(handler)
+        log.info(f"Logging to {log_file}")
+
+    try:
+        return _run_pipeline(args, lang, started, dry)
+    finally:
+        if handler is not None:
+            logging.getLogger().removeHandler(handler)
+            handler.close()
+
+
+def _run_pipeline(args, lang: str, started: str, dry: bool) -> int:
+    state_path = Path(args.state_file) if args.state_file else STATE_FILE
+    try:
+        state = PipelineState(state_path)
+    except RuntimeError as e:
+        log.error(str(e))
+        return EXIT_FAILED
 
     # ---- 0. Standalone propagate-splits shortcut ----
     if args.propagate_splits:
-        db_path = BASE_DIR / "data" / "corpus" / "metadata.duckdb"
-        propagate_split_metadata(db_path, dry_run=args.dry_run)
-        return
+        propagate_split_metadata(BASE_DIR / "data" / "corpus" / "metadata.duckdb", dry_run=dry)
+        return EXIT_OK
 
     # ---- 1. Optionally re-fetch news ----
     if args.refetch_news:
-        fetch_news()
+        if dry:
+            log.info("[DRY-RUN] fetch_news()")
+        elif not fetch_news():
+            log.error("News refresh failed; aborting (watermark and retry set untouched)")
+            return EXIT_FAILED
 
-    # ---- 2. Resolve matrix codes ----
+    # ---- 2. Resolve work list: {code: feed date} ----
+    feed_dates: dict[str, str | None] = {}
     if args.matrix:
-        matrix_codes = [c.strip() for c in args.matrix.split(",") if c.strip()]
-        log.info(f"Using provided matrix codes: {matrix_codes}")
+        work = {c.strip(): None for c in args.matrix.split(",") if c.strip()}
+        log.info(f"Using provided matrix codes: {list(work)}")
     else:
         since = args.since
         if not since and not args.all:
-            since = read_last_run()
+            since = state.watermark or read_last_run()
             if since:
-                log.info(f"Auto-applying --since {since} (from last run)")
+                log.info(f"Auto-applying --since {since} (stored watermark)")
             else:
-                log.info("No last run recorded — processing all news entries (use --all to suppress this warning)")
-        matrix_codes = parse_news(since)
+                log.info("No watermark recorded — processing all news entries")
+        feed_dates = parse_news(since)
+        work = dict(feed_dates)
+        merged = [c for c in state.retry if c not in work]
+        for c in merged:
+            work[c] = state.retry[c].get("source_update")
+        if merged:
+            log.info(f"Merged {len(merged)} retry matrices from previous failed runs: {merged}")
 
-    if not matrix_codes:
+    if not work:
         log.info("No matrices to process. Done.")
-        return
+        return EXIT_OK
 
-    # ---- 3. Optional context + index refresh ----
+    # ---- 3. Optional context + index refresh (prerequisite: abort on failure) ----
     if args.fetch_context:
         log.info("=== Fetching context + matrices index ===")
-        python("1-fetch-context.py", ["--lang", lang], dry_run=args.dry_run)
-        python("2-fetch-matrices.py", ["--lang", lang], dry_run=args.dry_run)
+        for script in ("1-fetch-context.py", "2-fetch-matrices.py"):
+            if python_rc(script, ["--lang", lang], dry_run=dry) != 0:
+                log.error(f"{script} failed; aborting before touching any matrix "
+                          "(watermark and retry set untouched)")
+                return EXIT_FAILED
 
     # ---- 4. Per-matrix pipeline ----
-    succeeded = []
-    failed = []  # list of (code, step)
+    results: dict[str, str] = {}
+    failures: list[tuple[str, str, str]] = []   # required: (code, stage, reason)
+    degraded: list[tuple[str, str, str]] = []   # optional stage failures
+    empties: list[str] = []
+    log.info(f"=== Processing {len(work)} matrices ===")
+    for i, (code, src_date) in enumerate(work.items(), 1):
+        log.info(f"[{i}/{len(work)}] {code}")
+        outcome, stages, fail = process_matrix(code, args, lang)
+        results[code] = outcome
+        if dry:
+            continue
+        state.record_matrix(code, outcome, stages, src_date)
+        if fail:
+            failures.append((code, fail[0], fail[1]))
+            state.add_retry(code, fail[0], fail[1], src_date)
+        for key, st in stages.items():
+            if st["outcome"] == "failed" and key in OPTIONAL_STAGES:
+                degraded.append((code, key, st["reason"]))
+        if outcome == "empty":
+            empties.append(code)
+        state.save()  # crash-safe: retry entries are durable before the next matrix
 
-    log.info(f"=== Processing {len(matrix_codes)} matrices ===")
-    for i, code in enumerate(matrix_codes, 1):
-        log.info(f"[{i}/{len(matrix_codes)}] {code}")
-        matrix_ok = True
+    handled = [c for c, o in results.items() if o in ("ok", "ok_degraded", "empty")]
 
-        # a. Fetch metadata
-        if args.dry_run:
-            log.info(f"[DRY-RUN] fetch_meta({code})")
-        else:
-            if not fetch_meta(code, lang, force=meta_force):
-                log.warning(f"{code}: meta fetch failed, continuing anyway")
-
-        # b. Fetch CSV
-        if not python("6-fetch-csv.py", ["--matrix", code, "--lang", lang] + force_flag, dry_run=args.dry_run):
-            failed.append((code, "6-fetch-csv"))
-            matrix_ok = False
-
-        # c. Compact data
-        # if matrix_ok:
-        #     if not python("7-data-compactor.py", ["--matrix", code, "--lang", lang], dry_run=args.dry_run):
-        #         failed.append((code, "7-compact"))
-        #         matrix_ok = False
-
-        # d. CSV → canonical SDMX parquet (stage 9 writes SDMX directly since
-        #    2026-09-05; 12-parquet-to-sdmx.py is deprecated, see its docstring)
-        if matrix_ok:
-            if not python("9-csv-to-parquet.py", ["--matrix", code] + force_flag, dry_run=args.dry_run):
-                failed.append((code, "9-csv-to-parquet"))
-                matrix_ok = False
-
-        # e. Split datasets
-        if matrix_ok and not args.no_split:
-            if not python("12-split-datasets.py", ["--matrix", code], dry_run=args.dry_run):
-                failed.append((code, "12-split"))
-                matrix_ok = False
-
-        # f. Dimension structure (verified levels / aggregates / nesting)
-        if matrix_ok and not args.no_dim_structure:
-            if not python("13-dimension-structure.py", ["--matrix", code], dry_run=args.dry_run):
-                log.warning(f"{code}: dimension structure profiling failed (non-fatal)")
-
-        # g. View profiles
-        if matrix_ok and not args.no_view_profiles:
-            if not python("generate_view_profiles.py", ["--matrix", code], dry_run=args.dry_run):
-                log.warning(f"{code}: view profile generation failed (non-fatal)")
-
-        if matrix_ok:
-            succeeded.append(code)
-
-    # ---- 5. Full DuckDB rebuild ----
+    # ---- 5. Batch stage: meta index + DuckDB import (required) ----
+    batch_failures: list[tuple[str, str]] = []
     if not args.skip_duckdb:
         log.info("=== Rebuilding meta index + DuckDB ===")
-        python("4-build-meta-index.py", ["--lang", lang], dry_run=args.dry_run)
-        python("10-import-metadata.py", [], dry_run=args.dry_run)  # may fail (lang schema issue — see backlog)
-        sync_ultima_actualizare(succeeded, lang, dry_run=args.dry_run)
-
-    # ---- 6. Summary ----
-    log.info("=" * 50)
-    log.info(f"Done. Processed: {len(matrix_codes)}  |  OK: {len(succeeded)}  |  Failed: {len(failed)}")
-    if failed:
-        log.warning("Failed matrices:")
-        for code, step in failed:
-            log.warning(f"  {code} (step: {step})")
+        for script, key, a in (("4-build-meta-index.py", BATCH_INDEX, ["--lang", lang]),
+                               ("10-import-metadata.py", BATCH_IMPORT, [])):
+            rc = python_rc(script, a, dry_run=dry)
+            if rc != 0:
+                batch_failures.append((key, f"{script} exit {rc}"))
+        if not batch_failures:
+            try:
+                sync_ultima_actualizare(handled, lang, dry_run=dry)
+            except Exception as e:
+                log.error(f"sync_ultima_actualizare failed: {e}")
+                batch_failures.append((BATCH_SYNC, str(e)))
     else:
-        log.info("All matrices processed successfully.")
+        log.info("--skip-duckdb: metadata import skipped (partial run)")
 
-    # Record last run date so next run auto-applies --since
-    if not args.dry_run and not args.matrix:
-        write_last_run()
-        log.info(f"Last run date saved ({datetime.now().strftime('%d.%m.%Y')})")
+    if batch_failures and not dry:
+        # The import is global: every matrix handled this run lacks DB metadata.
+        key, reason = batch_failures[0]
+        for code in handled:
+            failures.append((code, key, reason))
+            state.add_retry(code, key, reason, work.get(code))
+            rec = state.data["matrices"][code]
+            rec["outcome"] = "failed"
+            rec["stages"][key] = {"outcome": "failed", "reason": reason, "at": now_iso()}
+    elif batch_failures:
+        failures.extend(("(batch)", k, r) for k, r in batch_failures)
 
-    log.info(f"Log written to {log_file}")
+    required_failed = bool(failures)
+
+    # ---- 6. Retry bookkeeping + watermark ----
+    advanced = False
+    partial = args.skip_existing or args.no_split or args.skip_duckdb
+    if not dry and not batch_failures:
+        for code in handled:  # fully handled: no longer owed a retry
+            state.clear_retry(code)
+    if not dry and not required_failed:
+        feed_max = [d for d in (parse_date(v) for v in feed_dates.values()) if d]
+        old = parse_date(state.watermark or read_last_run())
+        if feed_max and not args.matrix and not partial:
+            new_wm = fmt_date(max(feed_max + ([old] if old else [])))
+            advanced = new_wm != state.watermark
+            state.data["watermark"] = new_wm
+            write_last_run(new_wm)
+        elif partial and not args.matrix:
+            log.warning("Partial run (--skip-existing/--no-split/--skip-duckdb): watermark not advanced")
+
+    exit_code = EXIT_FAILED if required_failed else EXIT_OK
+    if degraded and args.strict and exit_code == EXIT_OK:
+        exit_code = EXIT_FAILED
+
+    failed_codes = sorted({c for c, _, _ in failures})
+    if not dry:
+        state.data["last_run"] = {
+            "started": started, "finished": now_iso(), "exit_code": exit_code,
+            "processed": len(work), "failed": failed_codes, "empty": empties,
+            "optional_failed": sorted({c for c, _, _ in degraded}),
+            "watermark": state.watermark,
+        }
+        state.save()
+
+    # ---- 7. Summary ----
+    log.info("=" * 50)
+    log.info(f"Done{' (dry-run)' if dry else ''}. Processed: {len(work)}  |  "
+             f"Handled: {len(handled)}  |  Failed: {len(failed_codes)}")
+    for code, stage, reason in failures:
+        log.error(f"  FAILED {code} (stage: {stage}) — {reason}")
+    for code, stage, reason in degraded:
+        log.warning(f"  OPTIONAL FAILED {code} (stage: {stage}) — {reason}")
+    for code in empties:
+        log.warning(f"  EMPTY {code}: no data rows at source")
+    if required_failed:
+        log.error(f"Watermark NOT advanced (stays {state.watermark}); failures kept in the "
+                  f"retry set at {state_path}")
+    elif not dry:
+        log.info(f"Watermark: {state.watermark}" + (" (advanced)" if advanced else " (unchanged)"))
+        if not degraded:
+            log.info("All matrices processed successfully.")
+    return exit_code
+
+
+def main():
+    sys.exit(run_pipeline())
 
 
 if __name__ == "__main__":

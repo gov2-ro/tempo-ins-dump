@@ -1,10 +1,10 @@
 # SDMX 2.1 REST API
 
-> Current caveats (2026-10-03): period SQL injection, DSD/data code mismatch and
-> silent 50,000-observation limits remain unresolved. See [FIX-01](fixes/01-api-safety-and-sdmx.md)
-> and [FIX-04](fixes/04-complete-exports.md). This document describes existing routes,
-> not verified standards compliance or complete exports. Omit the data key for
-> wildcard requests when a client normalizes trailing dot-path segments.
+> Status (FIX-01 phase 2): the DSD, data and key parsing share one code registry
+> (`app/services/sdmx_registry.py`) and XML is built with an XML serializer. The
+> 50,000-observation limit remains and exports are not complete; see
+> [FIX-04](fixes/04-complete-exports.md). Structural validity is tested with a
+> hand-written SDMX 2.1 structure checker, not the official XSDs.
 
 The FastAPI app (`app/`) exposes a minimal SDMX 2.1 REST API that makes INS TEMPO datasets consumable by SDMX-aware tools — in particular the [SDMX Dashboard Generator](https://bis-med-it.github.io/SDMX-dashboard-generator/).
 
@@ -25,11 +25,47 @@ Returns observations in **SDMX-ML 2.1 GenericData XML** format (flat `AllDimensi
 | `agency` | path | Must be `INS` |
 | `flow` | path | Dataset code (e.g. `ACC102B`) |
 | `key` | path | Dot-separated dimension filter (SDMX key syntax). Use `.` or omit for wildcard. |
-| `lastNObservations` | query | Return only the last N distinct TIME_PERIOD values |
-| `startPeriod` | query | Filter TIME_PERIOD ≥ value (e.g. `2010`) |
-| `endPeriod` | query | Filter TIME_PERIOD ≤ value |
+| `lastNObservations` | query | Return only the last N distinct TIME_PERIOD values (integer 1..10000) |
+| `startPeriod` | query | Lower period bound: `YYYY`, `YYYY-Q1`..`YYYY-Q4` or `YYYY-MM` |
+| `endPeriod` | query | Upper period bound, same formats |
 
-**Key syntax:** dots separate dimensions in declaration order. An empty segment means "all values". `+` is an OR separator within a segment.
+**Period bounds.** Only the three formats above are accepted (month `01`..`12`,
+quarter `Q1`..`Q4`). Each period is a span of months: `startPeriod` means the first
+month it covers, `endPeriod` the last. A row is returned when its own period lies
+wholly inside `[startPeriod, endPeriod]`. Granularities may be mixed:
+`startPeriod=2020` on monthly data starts at 2020-01 and `endPeriod=2020` ends at
+2020-12; an annual row is *not* returned for `startPeriod=2020-Q2` (it starts before
+the bound). Rows whose TIME_PERIOD is not in one of the three formats (legacy labels
+such as `Anul 2020`) never match a bound, but are returned when no bound is given.
+All user values are bound SQL parameters.
+
+**Error responses** (`{"detail": "..."}`):
+
+| Status | Cause |
+|---|---|
+| 400 | malformed `startPeriod`/`endPeriod`; `startPeriod` later than `endPeriod`; key with more non-empty segments than the dataset has dimensions; ambiguous key segment; period parameters on a dataset without TIME_PERIOD |
+| 404 | unknown dataset, or a flow code that is not `[A-Za-z0-9_]{1,64}` |
+| 422 | `lastNObservations` not an integer >= 1 |
+| 500 | internal query failure — body is only `{"detail": "Query failed"}`; details are in the server log |
+
+**Key syntax:** dots separate dimensions in declaration order (the `position` attribute
+of the DSD). An empty segment means "all values". `+` is an OR separator within a segment.
+
+**Codes and keys (canonical vs legacy).** Prefer *canonical* keys: the code IDs published in
+the DSD codelists. A stored value that is already a valid SDMX ID (`[A-Za-z0-9_@$-]+`, up to
+64 characters; e.g. `Total`) is its own code; any other value (spaces, punctuation, accents,
+quotes) gets `<ascii slug>_<12 hex of sha1(full value)>`. IDs never depend on truncated
+labels, are stable across rebuilds and are collision-free. Labels are separate (`common:Name`,
+`xml:lang="ro"`, plus `en` when available). *Legacy* keys, the raw stored value (what the API
+accepted before), still work when unambiguous. A segment that matches two different values (one
+by code ID, another verbatim) is rejected with 400 `Ambiguous key segment ...`; use the code ID.
+A segment that matches nothing returns no observations. Raw values that contain `.`, `+` or `/`
+can only be addressed by code ID.
+
+**TIME_PERIOD** is a `TimeDimension` (no codelist, `ObservationalTimePeriod`). Emitted periods are
+normalized (`2004-03`, `2020-Q2`, `2020`; INS labels such as `Luna martie 2004` are parsed).
+In a key, a period segment matches either the normalized or the stored form. Period parameters
+apply to the stored values (legacy labels never match a bound).
 
 ```bash
 # All data
@@ -44,9 +80,15 @@ curl 'http://localhost:8080/sdmx/2.1/data/INS,ACC102B?startPeriod=2015&endPeriod
 
 ### DSD — `GET /sdmx/2.1/datastructure/INS/{flow}/1.0`
 
-Returns an **SDMX-ML 2.1 XML** DataStructure Definition with:
-- All dimensions + their codelists (values from `dimension_options`)
-- Primary measure `OBS_VALUE`
+Returns an **SDMX-ML 2.1 XML** `Structure` message (with `Header`) containing:
+- one `Codelist` (`CL_{dimension}`) per enumerated dimension with **all** codes: metadata options
+  plus every value present in the data (no size cutoff), so every value emitted by the data
+  endpoint is declared
+- a `ConceptScheme` (`{flow}_CS`) for dimensions and `OBS_VALUE`
+- the `DataStructure`: `Dimension` elements (codelist-enumerated), `TimeDimension` TIME_PERIOD, primary measure `OBS_VALUE`
+
+Dimension IDs are the canonical names (stale `*_nom_id` metadata names are mapped through
+`sdmx_column_map` / `resolve_parquet_schema`).
 
 ```bash
 curl 'http://localhost:8080/sdmx/2.1/datastructure/INS/ACC102B/1.0'
@@ -54,7 +96,7 @@ curl 'http://localhost:8080/sdmx/2.1/datastructure/INS/ACC102B/1.0'
 
 ### Dataflow — `GET /sdmx/2.1/dataflow/INS/{flow}/1.0`
 
-Returns an **SDMX-ML 2.1 XML** Dataflow definition with the dataset name and a reference to its DSD.
+Unknown datasets return 404. A `version` that is not a valid SDMX version is answered as `1.0`. Returns an **SDMX-ML 2.1 XML** Dataflow definition with the dataset name and a reference to its DSD.
 
 ```bash
 curl 'http://localhost:8080/sdmx/2.1/dataflow/INS/ACC102B/1.0'

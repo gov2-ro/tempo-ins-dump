@@ -10,58 +10,117 @@ Search strategy:
   2. Fallback to LIKE-based search if sidecar is missing or FTS returns nothing.
 """
 import logging
+import threading
 
 from app.db import get_conn
-from app.config import DEFAULT_PAGE_SIZE, CORPUS_DIR
+from app.config import DEFAULT_PAGE_SIZE, CORPUS_DIR, DEBUG
 
 log = logging.getLogger(__name__)
 
 SEARCH_DB_PATH = CORPUS_DIR / "search.duckdb"
 
-# Cache the sidecar connection (read-only, safe to reuse)
+# Totals semantics: when FTS is used, `total` counts every canonical dataset
+# that matches the query (any term, BM25 score not NULL) AND all filters. There
+# is no ranked cutoff. Pagination (limit/offset) is applied after ranking.
+TOTAL_BASIS = "all_matches"
+
+# One read-only base connection; every search uses its own cursor() so threads
+# never share a statement/result state.
 _search_conn = None
+_search_lock = threading.Lock()
+_status = {"mode": "unknown", "reason": None}
+
+
+def _set_status(mode: str, reason: str | None):
+    """Record FTS availability. Production fallback is logged once per change."""
+    changed = _status["mode"] != mode or _status["reason"] != reason
+    _status["mode"], _status["reason"] = mode, reason
+    if mode == "fallback" and changed:
+        if DEBUG:
+            log.warning("FTS unavailable (dev fallback to name matching): %s", reason)
+        else:
+            log.error("FTS UNAVAILABLE IN PRODUCTION, falling back to name "
+                      "matching: %s", reason)
+
+
+def search_status() -> dict:
+    """Observable FTS state: {'mode': 'fts'|'fallback'|'unknown', 'reason', 'production'}.
+
+    Probes the sidecar if no search has run yet.
+    """
+    if _status["mode"] == "unknown":
+        _get_search_conn()
+    return {**_status, "production": not DEBUG, "path": str(SEARCH_DB_PATH),
+            "total_basis": TOTAL_BASIS}
+
+
+def _reset_for_tests():
+    global _search_conn
+    with _search_lock:
+        if _search_conn is not None:
+            try:
+                _search_conn.close()
+            except Exception:
+                pass
+        _search_conn = None
+        _status.update(mode="unknown", reason=None)
 
 
 def _get_search_conn():
-    """Lazy singleton for the FTS sidecar connection."""
+    """Lazy singleton for the base FTS sidecar connection (use .cursor())."""
     global _search_conn
     if _search_conn is not None:
         return _search_conn
-    if not SEARCH_DB_PATH.exists():
-        return None
-    try:
-        import duckdb
-        _search_conn = duckdb.connect(str(SEARCH_DB_PATH), read_only=True)
-        _search_conn.execute("LOAD fts;")
-        return _search_conn
-    except Exception as e:
-        log.warning("Failed to open FTS sidecar: %s", e)
-        return None
+    with _search_lock:
+        if _search_conn is not None:
+            return _search_conn
+        if not SEARCH_DB_PATH.exists():
+            _set_status("fallback", f"{SEARCH_DB_PATH} missing")
+            return None
+        try:
+            import duckdb
+            conn = duckdb.connect(str(SEARCH_DB_PATH), read_only=True)
+            conn.execute("LOAD fts;")
+            _search_conn = conn
+            _set_status("fts", None)
+            return conn
+        except Exception as e:
+            _set_status("fallback", f"open/LOAD fts failed: {e}")
+            return None
 
 
-def _fts_search(query: str, max_results: int = 200) -> list[str] | None:
+def _fts_search(query: str, max_results: int | None = None) -> list[str] | None:
     """Return relevance-ranked matrix_codes from the FTS sidecar, or None if unavailable.
 
-    BM25 scores are higher for more relevant docs, so we sort DESC. The
-    secondary sort on matrix_code breaks score ties deterministically —
-    without it, the same query returns different orderings across runs.
+    All matches are returned unless `max_results` is given. BM25 scores are
+    higher for more relevant docs, so we sort DESC; the secondary sort on
+    matrix_code breaks ties deterministically.
     """
-    sconn = _get_search_conn()
-    if sconn is None:
+    base = _get_search_conn()
+    if base is None:
         return None
+    sconn = base.cursor()  # per-request cursor
     try:
-        rows = sconn.execute("""
+        sql = """
             SELECT sd.matrix_code,
                    fts_main_search_docs.match_bm25(sd.matrix_code, ?) AS score
             FROM search_docs sd
             WHERE score IS NOT NULL
             ORDER BY score DESC, sd.matrix_code ASC
-            LIMIT ?
-        """, [query, max_results]).fetchall()
-        return [r[0] for r in rows] if rows else None
+        """
+        params: list = [query]
+        if max_results is not None:
+            sql += " LIMIT ?"
+            params.append(max_results)
+        return [r[0] for r in sconn.execute(sql, params).fetchall()]
     except Exception as e:
-        log.warning("FTS search failed: %s", e)
+        _set_status("fallback", f"FTS query failed: {e}")
         return None
+    finally:
+        try:
+            sconn.close()
+        except Exception:
+            pass
 
 
 def search_datasets(
@@ -97,7 +156,9 @@ def search_datasets(
         conn:      Optional DuckDB cursor; defaults to `get_conn()`
 
     Returns:
-        {'total': int, 'datasets': [DatasetCard, ...]}
+        {'total': int, 'datasets': [...], 'total_basis': 'all_matches',
+         'search_mode': 'fts'|'name_like'|None}. `total` is the full match count
+         (query + filters), not a ranked-candidate cutoff.
     """
     if conn is None:
         conn = get_conn()
@@ -110,12 +171,13 @@ def search_datasets(
     # FTS-first search: try sidecar, fallback to LIKE
     _used_fts = False
     fts_codes: list[str] = []
+    order_params: list = []
     if q:
         fts_codes = _fts_search(q) or []
         if fts_codes:
             _used_fts = True
-            safe_codes = ", ".join(f"'{c}'" for c in fts_codes)
-            where.append(f"m.matrix_code IN ({safe_codes})")
+            where.append("list_contains(?, m.matrix_code)")
+            params.append(fts_codes)
         else:
             # Fallback: LIKE on name + code
             where.append(f"(LOWER({name_col}) LIKE LOWER(?) OR LOWER(m.matrix_code) LIKE LOWER(?))")
@@ -170,8 +232,8 @@ def search_datasets(
     # order. The fts_codes list is already ranked by score DESC; list_position()
     # maps each code to its 1-based rank so the SQL ORDER BY mirrors it exactly.
     if _used_fts and sort == 'updated':
-        arr_literal = "ARRAY[" + ", ".join(f"'{c}'" for c in fts_codes) + "]"
-        order_by = f"list_position({arr_literal}, m.matrix_code) ASC, m.matrix_code ASC"
+        order_by = "list_position(?, m.matrix_code) ASC, m.matrix_code ASC"
+        order_params = [fts_codes]
 
     where_sql = " AND ".join(where)
 
@@ -219,7 +281,7 @@ def search_datasets(
         ORDER BY {order_by}
         LIMIT ? OFFSET ?
     """
-    rows = conn.execute(data_sql, params + [limit, offset]).fetchall()
+    rows = conn.execute(data_sql, params + order_params + [limit, offset]).fetchall()
 
     datasets = []
     for r in rows:
@@ -245,7 +307,9 @@ def search_datasets(
             'option_count': r[16] or 0,
         })
 
-    return {'total': total, 'datasets': datasets}
+    return {'total': total, 'datasets': datasets,
+            'total_basis': TOTAL_BASIS,
+            'search_mode': ('fts' if _used_fts else 'name_like') if q else None}
 
 
 # ------------------------------------------------------------------ related

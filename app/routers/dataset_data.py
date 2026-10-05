@@ -2,6 +2,7 @@
 import csv
 import io
 import json
+import logging
 import re
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import Response
@@ -9,7 +10,11 @@ from app.db import get_conn
 from app.config import MAX_DATA_ROWS, LARGE_DATASET_THRESHOLD, PARQUET_DIR
 
 from app.services.query_builder import (
-    build_data_query, resolve_parquet_schema, adapt_to_parquet, AVG_UNIT_TYPES)
+    build_data_query_params, resolve_parquet_schema, adapt_to_parquet,
+    AVG_UNIT_TYPES, quote_ident)
+from app.services.request_validation import parse_filters, parse_group_by
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -21,7 +26,11 @@ def get_dataset_insights(
 ):
     """KPI headline values + template-based insight sentences (cached)."""
     from app.services.insights import compute_insights
-    result = compute_insights(matrix_code, lang=lang)
+    try:
+        result = compute_insights(matrix_code, lang=lang)
+    except Exception:
+        log.exception("insights failed matrix=%s", matrix_code)
+        raise HTTPException(500, "Insights unavailable")
     if result is None:
         raise HTTPException(404, f"Dataset {matrix_code} not found")
     return result
@@ -50,10 +59,13 @@ def get_population_reference(level: str = Query("county", pattern="^(county|regi
     if not path.exists():
         raise HTTPException(404, "Population reference unavailable")
     conn = get_conn()
-    rows = conn.execute(
-        'SELECT "REF_AREA", "TIME_PERIOD", SUM("OBS_VALUE") '
-        "FROM read_parquet(?) GROUP BY 1, 2", [str(path)]
-    ).fetchall()
+    try:
+        rows = conn.execute(
+            'SELECT "REF_AREA", "TIME_PERIOD", SUM("OBS_VALUE") '
+            "FROM read_parquet(?) GROUP BY 1, 2", [str(path)]
+        ).fetchall()
+    finally:
+        conn.close()
     pop: dict = {}
     for area, period, v in rows:
         if area is None or period is None or v is None:
@@ -87,7 +99,8 @@ def _resolve_time_column(conn, dimensions, schema, matrix_code: str) -> str | No
     path = PARQUET_DIR / f"{matrix_code}.parquet"
     try:
         vals = [r[0] for r in conn.execute(
-            f'SELECT DISTINCT "{legacy}" FROM read_parquet(\'{path}\') LIMIT 500'
+            f'SELECT DISTINCT {quote_ident(legacy)} FROM read_parquet(?) LIMIT 500',
+            [str(path)]
         ).fetchall()]
     except Exception:
         return None
@@ -131,11 +144,24 @@ def _rows_per_period(dimensions, group_by_cols, filter_dict, time_dim,
     return float(cells)
 
 
+def _allowed_columns(dimensions, schema) -> set:
+    """Every column name a request may legitimately mention for this dataset:
+    the recorded dimension names plus both spellings from the schema maps
+    (SDMX and legacy file names). The value column is excluded."""
+    cols = {d['dim_column_name'] for d in dimensions}
+    for m in (schema.get("to_file") or {}, schema.get("to_sdmx") or {}):
+        cols.update(m.keys())
+        cols.update(m.values())
+    cols.discard(schema.get("value_column"))
+    cols.discard("OBS_VALUE")
+    return cols
+
+
 @router.get("/datasets/{matrix_code}/data")
 def get_dataset_data(
     matrix_code: str,
-    filters: str = Query("{}", description="JSON: {column_name: [value, ...]}"),
-    limit: int = Query(MAX_DATA_ROWS, le=MAX_DATA_ROWS),
+    filters: str = Query("{}", description="JSON object: {column_name: [scalar, ...]}"),
+    limit: int = Query(MAX_DATA_ROWS, ge=1, le=MAX_DATA_ROWS),
     group_by: str = Query("", description="JSON array of dim columns to GROUP BY, e.g. [\"TIME_PERIOD\",\"SEX\"]. "
                           "Other dims are summed. Empty = no aggregation (raw rows)."),
 ):
@@ -143,15 +169,19 @@ def get_dataset_data(
 
     Returns compact format: rows as value arrays + column_labels dict.
     Parquet-v3 values are human-readable strings (SDMX format).
+
+    4xx: 404 unknown dataset / no data file; 400 malformed filters or group_by
+    (not JSON, wrong shape, unknown column, non-scalar value) or an unbounded
+    request on a large dataset; 422 limit < 1 or > MAX rows.
     """
     conn = get_conn()
-
-    # Parse filters
     try:
-        filter_dict = json.loads(filters)
-    except json.JSONDecodeError:
-        raise HTTPException(400, "Invalid filters JSON")
+        return _dataset_data(conn, matrix_code, filters, limit, group_by)
+    finally:
+        conn.close()
 
+
+def _dataset_data(conn, matrix_code: str, filters: str, limit: int, group_by: str):
     # Get matrix info
     matrix = conn.execute(
         "SELECT row_count FROM matrices WHERE matrix_code = ?", [matrix_code]
@@ -169,16 +199,6 @@ def get_dataset_data(
             404, f"Dataset {matrix_code} has no data file — it may be "
                  f"published as sub-datasets."
         )
-
-    # Parse group_by early (needed for large dataset check)
-    group_by_cols = None
-    if group_by:
-        try:
-            group_by_cols = json.loads(group_by)
-            if not isinstance(group_by_cols, list):
-                group_by_cols = None
-        except json.JSONDecodeError:
-            pass
 
     # Get dimensions for this matrix
     dims = conn.execute("""
@@ -203,6 +223,9 @@ def get_dataset_data(
     # datasets published a single KPI.
     schema = resolve_parquet_schema(conn, matrix_code)
     legacy_to_sdmx = schema["to_sdmx"]
+    allowed = _allowed_columns(dimensions, schema)
+    filter_dict = parse_filters(filters, allowed)
+    group_by_cols = parse_group_by(group_by, allowed)
     dimensions, group_by_cols, filter_dict = adapt_to_parquet(
         schema, dimensions, group_by_cols, filter_dict)
 
@@ -232,10 +255,10 @@ def get_dataset_data(
             time_vals = []
             try:
                 time_vals = [r[0] for r in conn.execute(f"""
-                    SELECT DISTINCT "{time_dim}"
-                    FROM read_parquet('{parquet_path}')
-                    ORDER BY "{time_dim}" DESC
-                """).fetchall()]
+                    SELECT DISTINCT {quote_ident(time_dim)}
+                    FROM read_parquet(?)
+                    ORDER BY {quote_ident(time_dim)} DESC
+                """, [str(parquet_path)]).fetchall()]
             except Exception:
                 pass
             # Fallback: generate year strings from metadata year range
@@ -286,15 +309,16 @@ def get_dataset_data(
             agg_func = "AVG"
 
     # Build and execute query
-    sql = build_data_query(matrix_code, dimensions, filter_dict, limit + 1,
-                           group_by=group_by_cols, agg_func=agg_func,
-                           value_column=schema["value_column"],
-                           time_column=time_col)
+    sql, params = build_data_query_params(
+        matrix_code, dimensions, filter_dict, limit + 1,
+        group_by=group_by_cols, agg_func=agg_func,
+        value_column=schema["value_column"], time_column=time_col)
 
     try:
-        result = conn.execute(sql).fetchall()
-    except Exception as e:
-        raise HTTPException(500, f"Query error: {e}")
+        result = conn.execute(sql, params).fetchall()
+    except Exception:
+        log.exception("data query failed matrix=%s", matrix_code)
+        raise HTTPException(500, "Query failed")
 
     truncated = len(result) > limit
     rows = result[:limit]
@@ -385,17 +409,22 @@ def get_dataset_data(
 def download_dataset(
     matrix_code: str,
     format: str = Query("csv", pattern="^(csv|xlsx)$"),
-    filters: str = Query("{}", description="JSON: {column_name: [value, ...]}"),
+    filters: str = Query("{}", description="JSON object: {column_name: [scalar, ...]}"),
     lang: str = Query("ro", pattern="^(ro|en)$"),
 ):
-    """Download dataset as CSV or XLSX, respecting active filters and language."""
+    """Download dataset as CSV or XLSX, respecting active filters and language.
+
+    4xx: 404 unknown dataset / no data file; 400 malformed filters (same
+    rules as /data); 422 bad format or lang.
+    """
     conn = get_conn()
-
     try:
-        filter_dict = json.loads(filters)
-    except json.JSONDecodeError:
-        raise HTTPException(400, "Invalid filters JSON")
+        return _download(conn, matrix_code, format, filters, lang)
+    finally:
+        conn.close()
 
+
+def _download(conn, matrix_code: str, format: str, filters: str, lang: str):
     matrix = conn.execute(
         "SELECT row_count FROM matrices WHERE matrix_code = ?", [matrix_code]
     ).fetchone()
@@ -417,16 +446,19 @@ def download_dataset(
 
     # Same parquet-schema reconciliation as /data endpoint
     schema = resolve_parquet_schema(conn, matrix_code)
+    filter_dict = parse_filters(filters, _allowed_columns(dimensions, schema))
     dimensions, _, filter_dict = adapt_to_parquet(
         schema, dimensions, None, filter_dict)
 
-    sql = build_data_query(matrix_code, dimensions, filter_dict, MAX_DATA_ROWS,
-                           value_column=schema["value_column"])
+    sql, params = build_data_query_params(
+        matrix_code, dimensions, filter_dict, MAX_DATA_ROWS,
+        value_column=schema["value_column"])
 
     try:
-        rows = conn.execute(sql).fetchall()
-    except Exception as e:
-        raise HTTPException(500, f"Query error: {e}")
+        rows = conn.execute(sql, params).fetchall()
+    except Exception:
+        log.exception("download query failed matrix=%s", matrix_code)
+        raise HTTPException(500, "Query failed")
 
     col_names = [d['dim_column_name'] for d in dimensions] + ['OBS_VALUE']
 

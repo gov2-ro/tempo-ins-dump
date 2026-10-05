@@ -1,6 +1,7 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+Canonical guidance for coding agents (Codex, Claude Code, others) working in this
+repository. `CLAUDE.md` imports this file — edit here, not there.
 
 <!-- CODEGRAPH_START -->
 ## CodeGraph
@@ -17,204 +18,173 @@ maintainer's decision.
 <!-- CODEGRAPH_END -->
 
 ## Project Overview
-Romanian National Institute of Statistics (INS) data scraper and explorer. Fetches, processes, and visualizes a catalog of Romanian statistical datasets (counts vary by source, canonical status and split generation) from TEMPO Online. Two main components: a data pipeline (numbered Python scripts) and a FastAPI + DuckDB web application (`app/`).
+Romanian National Institute of Statistics (INS) data scraper and explorer for
+TEMPO Online. Two parts: a data pipeline (root Python scripts) that produces a
+DuckDB metadata DB + one SDMX parquet per dataset, and a FastAPI + DuckDB web app
+(`app/`) that serves it. Live: https://ins.gov2.ro
 
-## Architecture
+**Start here for current state:** [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md)
+(how things actually work today, dated inventory) and
+[docs/fixes/README.md](docs/fixes/README.md) (FIX-01…FIX-08 remediation packages
+from the 2026-10-03 audit — specs, not completed work).
 
-### Data Pipeline (Numbered Scripts)
-Numbers are historical filenames, not execution order. Fetching scripts accept
-`--lang`; processing flags differ and some use `TEMPO_LANG`. Import/classify/build
-stage-11 mappings **before** stage 9. Canonical outputs are shared; do not assume
-`--lang en` or `TEMPO_DATA_DIR` isolates pipeline writes. Read
-[CURRENT_STATE.md](docs/CURRENT_STATE.md) and [fix specifications](docs/fixes/README.md).
+Don't hard-code corpus counts (files, tables, profiles) in docs — they rot within
+weeks. Query them: `scripts/audit-corpus.py`, the dev MCP's `tempo_pipeline_status`,
+or `information_schema` in `data/corpus/metadata.duckdb`.
 
-| # | Script | Purpose |
+## Data Pipeline
+
+Script numbers are **historical filenames, not run order**. They stay as-is
+because `update-pipeline.py`, the dev MCP, docs and history reference them.
+Full rebuild order:
+
+| Phase | Scripts, in order | Writes |
 |---|---|---|
-| 1 | `1-fetch-context.py` | Fetch category hierarchy from TEMPO API |
-| 2 | `2-fetch-matrices.py` | Fetch dataset list |
-| 3 | `3-fetch-metas.py` | Download metadata per dataset |
-| 4 | `4-build-meta-index.py` | Build summary index from metadata |
-| 5 | `5-varstats-db.py` | Create SQLite DB from metadata (legacy) |
-| 6 | `6-fetch-csv.py` | Download raw CSV data |
-| 7 | `7-data-compactor.py` | Replace text labels with numeric IDs |
-| 8 | `8-setup-duckdb-schema.py` | Create DuckDB schema (`corpus/metadata.duckdb`) |
-| 9 | `9-csv-to-parquet.py` | Convert CSVs directly to canonical SDMX parquet (`corpus/parquet/`) — maps values via `sdmx_codes`, renames columns via `sdmx_column_map`, never writes NULL |
-| 10 | `10-import-metadata.py` | Import metadata into DuckDB |
-| 10 | `10-classify-dimensions.py` | Parse/classify dimensions, detect archetypes |
-| 10 | `10-sdmx-export.py` | Convert to SDMX-CSV 2.0 |
-| 11 | `11-build-sdmx-codes.py` | Build SDMX code mappings (`sdmx_codes`, `sdmx_column_map` — stage 9 depends on these) |
-| 11 | `11-coverage-profiler.py` | Analyze data completeness → `dataset_coverage` |
-| 12 | `12-parquet-to-sdmx.py` | **Deprecated** (2026-09-05) — stage 9 now writes SDMX directly; this read a dead `parquet-v2/` snapshot. Kept for reference only, not run |
-| 12 | `12-split-datasets.py` | Split inconsistent datasets into clean sub-datasets |
-| 13 | `13-dimension-structure.py` | Verify each dimension's internal structure → `dimension_structure` (levels, real aggregates, additivity, nesting) |
+| A. Fetch | `1-fetch-context` → `2-fetch-matrices` → `3-fetch-metas` → `6-fetch-csv`; `4-build-meta-index` | `data/1-indexes/`, `data/2-metas/`, `data/4-datasets/` (per lang) |
+| B. Metadata DB | `8-setup-duckdb-schema` (new scratch DB only) → `10-import-metadata` → `10-classify-dimensions` → `11-build-sdmx-codes`; then `scripts/build-i18n-dictionary.py` | `matrices`, `dimensions`, `dimension_options`, `dimension_options_parsed`, `matrix_profiles`, `sdmx_codes`, `sdmx_column_map`, `labels_i18n` |
+| C. Convert | `9-csv-to-parquet` (**needs B's mappings**) → `12-split-datasets` | `data/corpus/parquet/`, `dataset_splits` |
+| D. Profile | `13-dimension-structure`, `11-coverage-profiler`, `scripts/profile-values.py`, `detect_trends.py` → `generate_view_profiles.py` → `scripts/build-search-index.py` | `dimension_structure`, `dataset_coverage`, `dataset_value_profiles`, `dataset_trends`, `data/corpus/view-profiles/`, `data/corpus/search.duckdb` |
+| E. Stage | `scripts/prepare-deploy-data.sh` | `deploy-data/` |
 
-A matrix with no `sdmx_column_map` rows yet (a handful — see `docs/BACKLOG.md`)
-gets its original `*_nom_id`/`value` column shape from stage 9 instead of
-invented names the app doesn't recognize; it canonicalizes automatically once
-stage 11 gains coverage for it, no code change needed.
+- **Legacy, not on the current path:** `5-varstats-db.py` (SQLite),
+  `7-data-compactor.py` (label → ID compaction), `10-sdmx-export.py` (SDMX-CSV).
+- **Deprecated — never run against the corpus:** `12-parquet-to-sdmx.py` (read a
+  dead, lossy `parquet-v2/` snapshot; stage 9 has written SDMX directly since 2026-09-05).
+- Stage 9 never writes NULL. A matrix with no `sdmx_column_map` rows keeps its
+  original `*_nom_id`/`value` column shape; it canonicalizes once stage 11 covers it.
+- `12-split-datasets.py` still falls back to `data/parquet-v2/` for v2-sourced splits.
+- **Language:** only fetch scripts (1–7) and `update-pipeline.py` take `--lang ro|en`.
+  Processing scripts read `TEMPO_LANG` (via `duckdb_config.py`) for *inputs* but
+  write the same canonical outputs. Neither `--lang en`, `TEMPO_LANG` nor
+  `TEMPO_DATA_DIR` isolates pipeline writes — use a copied checkout for experiments.
+- Most processing scripts accept `--matrix CODE`; flags differ, check `--help`.
 
-**Orchestrator**: `update-pipeline.py` — incremental runs from INS news feed (per-matrix: meta → CSV → SDMX parquet → split → dim structure → view profile).
+**Orchestrator** `update-pipeline.py`: incremental runs from the INS news feed
+(`get-news.py` → `data/insse_news.csv`). Per matrix: meta → CSV → stage 9 → split →
+dim structure → view profile; then meta index + import + date sync. It does **not**
+re-run phase B mappings or all of phase D, and may record a successful run despite
+failures (FIX-03).
 
-### Other Root Scripts
-`generate_view_profiles.py` (per-dataset JSON view profiles), `generate_sdmx_yaml.py`, `build-geo-regions.py` (county GeoJSON → regions/macroregions), `build-static-site.py`, `split_rules.py`, `detect_trends.py`, `duckdb_config.py` (path config), `duckdb-browser.py`, `get-news.py`, `test_chart_selector.py`. See readme.md for descriptions. Helper scripts (audit, baselines, search index, canonicalize, normalize) are in `scripts/`.
+**Shared pipeline modules:** `duckdb_config.py` (paths, `TEMPO_LANG`),
+`sdmx_labels.py` (`norm_label`/`parse_time_period`, shared by stages 9 and 11 so
+their label matching agrees), `split_rules.py` (split-rule engine for stage 12).
 
-### FastAPI Application (`app/`)
-Primary web application — FastAPI + DuckDB + Parquet backend, Vanilla JS + ECharts frontend.
+Other root scripts: `generate_sdmx_yaml.py`, `build-geo-regions.py`,
+`build-static-site.py`, `duckdb-browser.py` (Flask DB/parquet explorer, :5000),
+`test_chart_selector.py` (a report, not a test). Helpers live in `scripts/`
+(audit, eval baselines, search index, canonicalize, normalize); one-offs in
+`scripts/utils/`. Details in [readme.md](readme.md).
 
-```
-app/
-  main.py              — FastAPI entry point, mounts routers + static files
-  config.py            — DB_PATH (corpus/metadata.duckdb), PARQUET_DIR (corpus/parquet), MAX_DATA_ROWS=50000
-  db.py                — DuckDB cursor-per-request (critical for concurrency)
-  routers/
-    ask.py             — /api/ask LLM-backed Q&A
-    categories.py      — /api/categories endpoints
-    datasets.py        — /api/datasets list + search
-    dataset_data.py    — /api/datasets/{id}/data + metadata
-    sdmx.py            — SDMX 2.1 REST endpoints (/sdmx/2.1/data, /datastructure, /dataflow)
-  services/
-    agent.py                — LLM agent wiring (search + answer)
-    dataset_search.py       — search/list datasets (shared by route, MCP, agent)
-    dataset_meta.py         — full dataset metadata + chart config (shared by route, MCP, agent)
-    chart_selector.py       — chart type selection engine
-    dimension_structure.py  — access layer for the `dimension_structure` table
-                              (verified levels, aggregates, nesting, additivity)
-    chart_selector_eval.py  — bulk re-score + diff-against-baseline (MCP eval harness)
-    agent_eval.py           — search-quality regression harness (MCP eval harness)
-    headlines.py            — KPI/headline extraction (driven by headline_config.json)
-    llm_client.py           — shared LLM client wrapper
-    query_builder.py        — DuckDB query construction
-  static/
-    js/
-      explore-app.js  — live v1 controller (index.html)
-      dashboard-v2.js — live v2 controller (dataset-v2.html)
-      place-page.js   — geographic profiles
-      chart-factory.js — dispatches to chart modules
-      chart-geo.js     — choropleth map (geo_time archetype)
-      chart-demographic.js — grouped bar (demographic archetype)
-      filter-panel.js  — dynamic filter UI
-      api.js, utils.js, data-table.js, view-controls.js, period-browser.js
-    css/               — dataset.css, datasets.css, main.css, dataset-v2.css
-    geo/               — romania-counties.geojson, romania-regions.geojson, romania-macroregions.geojson
-```
+## FastAPI Application (`app/`)
 
+`main.py` mounts routers, `/view-profiles`, and `static/` at `/`. `config.py`
+reads env: `TEMPO_DATA_DIR`, `TEMPO_MAX_ROWS` (50,000), `TEMPO_DEBUG`,
+`TEMPO_ASK_ENABLED` (off by default) and other `TEMPO_ASK_*`/`TEMPO_LLM_*`.
 
-### Dev MCP Server (`tools/tempo-dev-mcp/`)
-Codex introspection tools for this repo. Registered in `.mcp.json` (repo-local), auto-loaded every session. Full docs: `tools/tempo-dev-mcp/README.md`.
+- **Routers:** `datasets` (catalog/search/detail), `dataset_data` (data, insights,
+  CSV/XLSX download), `categories`, `sdmx` (SDMX 2.1 data/datastructure/dataflow),
+  `places`, `ask` (LLM Q&A).
+- **Services:** `dataset_search` + `dataset_meta` (shared by routes, dev MCP and
+  Ask agent), `query_builder`, `chart_selector` (+ `chart_selector_eval`),
+  `dashboard_composer` (tile composition), `insights` (KPIs, sentences),
+  `headlines` (+ `headline_config.json`), `dimension_structure`,
+  `place_service`, `agent` + `llm_client`, `agent_eval`.
+- **Pages** (`static/`):
+  - `dataset-v2.html` + `js/dashboard-v2.js` — main dataset page
+  - `index.html` + `js/explore-app.js` — v1 explorer: home, catalog, legacy
+    dataset view (`/?code=`). Still served and maintained
+  - `places.html`/`place.html` + `places-page.js`/`place-page.js` (KPI config
+    in `static/data/place_kpi_config.json`), `compare.html` + `compare.js`,
+    `ask.html` + `ask.js`, `dimensions-explorer.html` + `dims-explorer.js`
+  - `js/site-chrome.js` — shared topbar for standalone pages. `chart-factory.js`
+    dispatches to `chart-geo.js`, `chart-demographic.js`, `chart-new-types.js`
+  - `static/geo/` — county/region/macroregion GeoJSON (ASCII county names)
+- `_obsolete/` folders are archived. Don't edit or import from them.
 
-| Tool | Parameters | Returns |
-|---|---|---|
-| `tempo_dataset_info` | `matrix_code: str` | Full metadata + dims (options capped 50/dim) + chart scores + coverage/trends + 10 sample rows |
-| `tempo_search_datasets` | `query: str, has_geo?: bool, archetype?: str, limit?: int(10)` | `{total, datasets[]}` — catalog cards with archetype, time_range, unit_type |
-| `tempo_chart_signature` | `matrix_code: str` | `{archetype, signature, ranked_charts[]}` — chart scores + roles per type |
-| `tempo_sample` | `matrix_code: str, n?: int(10), filters?: json_str` | `{rows[]}` — labelled SDMX rows from parquet |
-| `tempo_query` | `matrix_code: str, filters?: json_str, group_by?: json_str, limit?: int(1000)` | `{columns, rows, row_count}` — aggregated data via query_builder |
-| `tempo_catalog_stats` | `group_by?: str("archetype")` | Corpus-level breakdowns by archetype/category/unit_type/geo |
-| `tempo_routes` | — | All FastAPI routes: `{total, routes[{methods, path, name, endpoint, tags}]}` |
-| `tempo_call_endpoint` | `method: str, path: str, params_json?: str, body_json?: str` | In-process TestClient call: `{status_code, content_type, body, json?}` (body capped 8k) |
-| `tempo_outdated` | `days?: int(180), limit?: int(50)` | Stale/null `ultima_actualizare` lists with reliability caveat |
-| `tempo_pipeline_status` | `recent_log_count?: int(10)` | `last-pipeline-run.txt` + corpus audit summary + recent logs with err/warn counts |
-| `tempo_dataset_lineage` | `matrix_code: str` | Per-stage artifact presence (5 stages) + DuckDB row presence + splits/parent |
-| `tempo_check_view_profiles` | — | Audits `corpus/view-profiles/` vs parquets + DB: `{summary, missing_vps, orphan_vps, version_drift, archetype_mismatches, top_warnings, …}` |
-| `tempo_eval_chart_selector` | `score_threshold?: float(0.05)` | Diffs `chart_selector` vs `data/eval/chart_selector_baseline.json`: `{summary, primary_changes, top_set_changes, confidence_changes, score_drifts, missing, added}` |
-| `tempo_eval_agent` | — | Diffs `search_datasets` quality vs `data/eval/agent_search_baseline.json` for questions in `agent_questions.yaml`: `{summary, top_set_changes, order_changes, total_hit_drifts, missing, added}` |
+## Dev MCP Server (`tools/tempo-dev-mcp/`)
+Introspection tools: dataset info/sample/query, chart signatures, catalog stats,
+routes, in-process endpoint calls, lineage, pipeline status, view-profile audit,
+chart-selector and search evals. Tool reference: `tools/tempo-dev-mcp/README.md`.
+It's registered in `.mcp.json`, which is **gitignored** (it holds absolute paths),
+so a fresh clone has to add it.
 
-All tools import from the shared service layer: `app/services/dataset_search.py`, `app/services/dataset_meta.py`, `app/services/chart_selector_eval.py`, and `app/services/agent_eval.py`.
+## Commands
 
-## Development Commands
-
-### Python Environment
-Always activate: `source ~/devbox/envs/240826/bin/activate`
-
-### Main App (FastAPI)
 ```bash
-uvicorn app.main:app --reload --port 8080
-# http://localhost:8080
+source ~/devbox/envs/240826/bin/activate          # always
+uvicorn app.main:app --reload --port 8080          # app → http://localhost:8080
+python -m pytest tests -q                          # tests (fast, ~2s)
+python 9-csv-to-parquet.py --matrix ACC101B        # single-matrix pipeline run
+python 12-split-datasets.py --matrix ACC101B --dry-run
+python update-pipeline.py --matrix ACC101B --dry-run
+bash scripts/prepare-deploy-data.sh                # stage deploy data
 ```
 
+## Verification before committing
+- `python -m pytest tests -q` must pass. Add numerical tests on small temporary
+  DuckDB/parquet fixtures. An HTTP 200 or a rendered chart doesn't prove a total is right.
+- Chart/search changes: run the chart-selector and search evals (dev MCP
+  `tempo_eval_chart_selector` / `tempo_eval_agent`). Explain expected diffs before
+  rebuilding baselines (`scripts/build_*_baseline.py`, output in `data/eval/`).
+- Frontend: smoke the affected pages (v1, v2, place, Ask) in a browser — console
+  and network tab. `npx playwright` is available; see `scripts/dbv2-screenshot.mjs`.
 
-### DuckDB Browser
-```bash
-python duckdb-browser.py
-# Flask-based DuckDB + Parquet explorer
-```
+## Gotchas
+- **DuckDB write lock:** one writer at a time. Stop the dev server before running
+  pipeline scripts. Parallel jobs that need to write should each use a separate
+  `.duckdb` file and merge afterwards.
+- **DuckDB concurrency:** `get_conn()` returns `_conn.cursor()`, not `_conn` —
+  parallel requests need separate cursors.
+- **Dimension levels:** a dim's options may tile the same domain more than once
+  (POP107D's AGE has 85 single years AND 17 five-year bands). Never SUM or chart
+  such a dim whole — restrict it to one level via `dimension_structure`. Accessors
+  return empty when nothing was *verified*. That fallback is **unsafe** for
+  overlapping totals (POP107A): don't assume unprofiled means additive (FIX-02).
+- **Label-encoded hierarchies:** INS encodes trees with leading-space indentation
+  and "- total" suffixes, so summing all options double-counts.
+- **Legacy-shaped parquets** (`*_nom_id` columns, label-string values):
+  `dataset_data.py` remaps SDMX ↔ legacy names in both directions.
+- **Row caps:** `MAX_DATA_ROWS` also caps CSV/XLSX/SDMX exports without proper
+  disclosure. Don't call them complete exports (FIX-04).
+- Choropleth queries need `limit=50000` (all years × counties).
+- `dataset_relationships` predates splitting, so split children have no rows.
+  `get_related` falls back to parent + siblings.
+- `is_composition` is a runtime-only parquet probe, so it scores `None` in the chart eval.
+- `do` is a reserved word in DuckDB SQL — alias `dimension_options` as `dopt`.
+- Initialize the schema only for a new scratch DB. Never force-recreate
+  `data/corpus/metadata.duckdb`.
 
-### Data Pipeline Examples
-```bash
-python 7-data-compactor.py --matrix ZDP1321     # Single matrix debug
-python 12-split-datasets.py --matrix ACC101B    # Split single dataset
-python generate_view_profiles.py                 # Regenerate view profiles
-```
-
-### Deployment
-```bash
-bash scripts/prepare-deploy-data.sh   # Stage data for deployment
-# Dockerfile + fly.toml for Fly.io (shared-cpu-1x, 512MB, Amsterdam)
-# scripts/deploy/oracle/ and scripts/deploy/hf-spaces/ contain templates
-```
-
-**Live URL**: https://ins.gov2.ro (Fly.io, app: `tempo-ins-explorer`)
-
-## Data Structure
-
+## Data layout
 ```
 data/
-  # Pipeline stages (scripts write here)
-  1-indexes/{lang}/          context.csv, matrices.csv
-  2-metas/{lang}/            {dataset-id}.json — metadata per dataset
-  4-datasets/{lang}/         raw CSVs from TEMPO API
-  4-datasets-slim-samples/   50/ and 100/ row samples for LLM analysis
-  parquet-v2/ro/             Parquet (numeric IDs) — dead since 2026-09-05 (stage 9 no longer
-                             reads it); still read by 12-split-datasets.py for v2-sourced splits
-  meta/                      Reference data (judet CSVs, SIRUTA)
-  logs/                      Pipeline execution logs
-  sdmx-dashboards/           SDMX dashboard YAML configs (generate_sdmx_yaml.py)
-
-  # Final output — app reads from here
-  corpus/
-    metadata.duckdb          Main DuckDB metadata (inspect actual schema)
-    search.duckdb            Search index DB
-    parquet/                 SDMX-format files — 4,274 on disk (2026-10-03; includes leftovers)
-    view-profiles/           Per-dataset JSON view profiles — 3,679 files (2026-10-03)
-  eval/                      Eval baselines (chart_selector, agent_search)
-
-  # Archived (not needed for app or pipeline)
-  _obsolete/                 Legacy intermediates: parquet-v3, 5-compact-datasets, 6-sdmx-csv, 3-db, etc.
+  1-indexes/{lang}/   2-metas/{lang}/   4-datasets/{lang}/     source catalogs, metadata, CSVs
+  4-datasets-slim-samples/{50,100}/                            small samples for LLM analysis
+  parquet-v2/ro/      legacy snapshot (stage-12 fallback only)
+  meta/               reference data (judet CSVs, SIRUTA)
+  logs/               pipeline logs, last-pipeline-run.txt
+  eval/               chart/search eval baselines (tracked)
+  corpus/             ← what the app reads
+    metadata.duckdb   inspect the actual schema; it is authoritative
+    search.duckdb     bilingual FTS sidecar
+    parquet/          one SDMX parquet per dataset + split children (includes leftovers)
+    view-profiles/    per-dataset JSON
+  _obsolete/          archived intermediates
 ```
+Most of `data/` is gitignored, except `data/eval/`.
 
-### Data Flow
-1. Fetch catalogs, source metadata and original CSVs as needed.
-2. Initialize a new scratch schema; import/refresh metadata and dimension options.
-3. Classify dimensions and build stage-11 SDMX mappings.
-4. Stage 9 writes SDMX parquet directly; split/register child datasets.
-5. Profile parent/children, generate views and rebuild FTS; validate generation.
-6. Stage and build deployment only after validation. The current orchestrator
-   does not guarantee this full order or successful checkpoints (FIX-03/FIX-05).
-
-## Technology Stack
-- **Backend**: FastAPI + DuckDB + Parquet
-- **Frontend**: Vanilla HTML5/CSS3/JS (ES6+), ECharts for visualization
-- **Database**: DuckDB (`data/corpus/metadata.duckdb`; actual schema is authoritative)
-- **Data**: Parquet files (`data/corpus/parquet/`; 4,274 files on 2026-10-03, including leftovers)
-- **GeoJSON**: County/region/macroregion polygons for choropleth maps
-- **Deployment**: Docker + Fly.io (also Oracle Cloud, HF Spaces)
-
-## Development Best Practices
-- **DuckDB concurrency**: `get_conn()` returns `_conn.cursor()` not `_conn` — parallel requests need separate cursors
-- **Dimension levels**: a dim's options may tile the same domain more than once (POP107D's AGE = 85 single years AND 17 five-year bands). Never SUM or chart such a dim whole — restrict to one level via `dimension_structure`. Accessors currently return empty when nothing was *verified*. This fallback is unsafe for overlapping totals (POP107A); implement FIX-02 rather than assuming unprofiled means additive
-- **DuckDB write lock**: Only ONE process can write at a time. Stop dev server before running pipeline scripts
-- Test locally before committing; verify via browser dev tools (console + network tab) for frontend changes
-- Use `npx playwright` (already installed) to test/debug final UI results
-- For complex changes, add a debug-mode flag with verbose logging
+## Deployment
+Fly.io app `tempo-ins-explorer` (shared-cpu-1x, 512MB, Amsterdam, 1 worker):
+`Dockerfile` + `fly.toml` bake a `deploy-data/` snapshot from
+`scripts/prepare-deploy-data.sh` (currently omits `search.duckdb`; not wired into
+the Fly build). `.github/` is gitignored, so a clean checkout has no CI.
+Oracle/HF Spaces templates live in `scripts/deploy/`. Validated release gates: FIX-05.
 
 ## Audit remediation handoff
-
-- Start at [docs/fixes/README.md](docs/fixes/README.md); one scoped package per implementation.
+- Start at [docs/fixes/README.md](docs/fixes/README.md). Implement one scoped package at a time.
 - Specs describe intended behavior, not completed fixes. Update status only after acceptance checks.
-- Use synthetic/copy-based fixtures for numerical and pipeline tests; do not mutate the live corpus as a test.
-- Preserve the current generation and provide explicit migration/rollback evidence for data repairs.
-- Never run deprecated `12-parquet-to-sdmx.py` against the corpus.
-- Commit code/docs only within the requested scope; implementation does not imply deployment or global repair.
+- Use synthetic/copy-based fixtures for numerical and pipeline tests. Don't mutate the live corpus as a test.
+- Preserve the current generation, and provide explicit migration/rollback evidence for data repairs.
+- Commit code/docs only within the requested scope. Implementing a fix doesn't mean deploying it or repairing the corpus.
 
 ## Working Style
 - Act as a senior full-stack developer; suggest improvements/optimizations proactively
@@ -222,11 +192,11 @@ data/
 - If a request is ambiguous, ask follow-up questions before working
 - For large files (>300 lines) or complex changes, plan BEFORE editing; break refactors into independently functional chunks
 - Less code = less debt — make minimal, targeted changes; do not add files unless necessary
+- For complex changes, add a debug-mode flag with verbose logging
 - If unsure, say so instead of guessing
 
-# Notes
-
+## Notes
 - **Backlog**: When detecting things to address later, add a `- [ ]` entry with title + enough context to `docs/BACKLOG.md`
-- **Activity log**: After meaningful work, add an entry to `docs/activity-history.md` under `## YYYY-MM-DD — Short Title` (what + why + non-obvious decisions)
+- **Activity log**: After meaningful work, add an entry at the top of `docs/activity-history.md` under `## YYYY-MM-DD — Short Title` (what + why + non-obvious decisions)
 - **Slim samples**: When sampling datasets, prefer `data/4-datasets-slim-samples/50` (or `/100`) for smaller records and lower context use
 - **Repo**: https://github.com/gov2-ro/tempo-ins-dump/

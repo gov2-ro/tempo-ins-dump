@@ -1,5 +1,31 @@
 # Activity History
 
+## 2026-10-05 — AGENTS.md becomes canonical agent guidance; doc cleanup
+
+CLAUDE.md and AGENTS.md were near-duplicates that had drifted: the Oct 3
+reconciliation fixed AGENTS.md but left CLAUDE.md stale (`--lang` claims, wrong
+counts, missing places/v2 files, an outdated dimension-level fallback note).
+AGENTS.md is now the single source; CLAUDE.md only imports it (`@AGENTS.md`) and
+adds Claude Code tooling notes. AGENTS.md was rewritten to be agent-neutral. Its
+pipeline section is now a phase table in real dependency order, checked against
+the tables each script reads and writes. It has no hard-coded corpus counts
+(they went stale within a month twice) and replaces the 14-row MCP tool table
+with a pointer to the README. It gains a verification checklist and a gotchas
+section that absorbs facts previously kept only in private agent memory.
+
+Decision: **keep the numbered script filenames.** About 40 tracked files, the
+orchestrator, the dev MCP and this log reference them. Renaming is deferred to
+the FIX-03 orchestrator rework (BACKLOG entry added).
+
+Cleanup:
+- Archived `7-data-compactor-1.py` (old hardcoded-lang compactor) and
+  `build-dataset-metadata.py` (wrote to the removed `ui/`) to gitignored `_obsolete/`.
+- readme: added stage 13, `sdmx_labels.py`, legacy markers and the current app
+  pages/services.
+- llms.txt: dropped the stale count.
+- BACKLOG: fixed the `dataset-page.js` reference and added stale Ask default
+  model and llms.txt count items.
+
 ## 2026-10-03 — Agent-ready remediation specs and documentation reconciliation
 
 Created eight scoped implementation specs under docs/fixes with dependency order,

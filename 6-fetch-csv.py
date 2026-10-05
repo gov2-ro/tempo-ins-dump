@@ -44,6 +44,7 @@ from typing import Dict, List, Any, Optional
 import os
 import pathlib
 import argparse
+import sys
 from tqdm import tqdm
 import csv
 import copy
@@ -580,6 +581,20 @@ def fetch_by_generic_chunks(matrix_code: str, matrix_def: Dict, output_dir: str,
     return True
 
 
+EXIT_FETCH_FAILED = 1
+EXIT_EMPTY_DATASET = 3  # INS returned only a header row even after retries (not retryable)
+
+
+class FetchIncomplete(Exception):
+    """A matrix could not be fetched; the process must exit nonzero."""
+    exit_code = EXIT_FETCH_FAILED
+
+
+class EmptyDataset(FetchIncomplete):
+    """The API answered but the dataset has no data rows (even with Totals)."""
+    exit_code = EXIT_EMPTY_DATASET
+
+
 def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, force_overwrite: bool = False) -> None:
     """
     Fetch data from INSSE Pivot API using the matrix definition.
@@ -657,7 +672,7 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
         tqdm.write(warning_msg)
         oversized_logger.warning(f"{matrix_code} - {cell_count:,} cells (limit: {cell_limit:,})")
         logger.warning(warning_msg)
-        return
+        raise FetchIncomplete(warning_msg)
 
     tqdm.write(f"Estimated cells: {cell_count:,}")
 
@@ -700,7 +715,7 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
             tqdm.write(error_msg)
             logger.warning(f"{matrix_code}.csv - {error_msg} | Response: {response_text[:500]}")
             # Don't save the error response as a CSV file
-            return
+            raise FetchIncomplete(error_msg)
 
         # Save CSV response
         with open(output_file, 'wb') as f:
@@ -799,6 +814,7 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
                         success_msg = f"RETRY SUCCESS: {matrix_code} now has {retry_row_count} rows with 'Total' options included"
                         tqdm.write(success_msg)
                         logger.info(f"{matrix_code}.csv - {success_msg}")
+                        return
                     else:
                         fail_msg = f"RETRY FAILED: {matrix_code} still has no data even with 'Total' options"
                         tqdm.write(fail_msg)
@@ -818,9 +834,13 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
                 tqdm.write(f"RETRY EXCEPTION: Failed to retry {matrix_code} with Totals: {e}")
                 logger.error(f"{matrix_code}.csv - Retry with Totals failed: {e}")
 
+            raise EmptyDataset(f"{matrix_code}: no data rows after all retries")
+
         elif row_count > 0:
             tqdm.write(f"Dataset has {row_count} data rows")
         
+    except FetchIncomplete:
+        raise
     except requests.exceptions.RequestException as e:
         tqdm.write(f"Error making pivot request for {matrix_code}: {e}")
         if hasattr(e.response, 'text'):
@@ -886,7 +906,7 @@ def fetch_insse_excel_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
         tqdm.write(f"Unexpected error processing {matrix_code} excel: {e}")
         raise
 
-def process_matrices_folder(input_folder: str, output_folder: str, xls_output_folder: str, force_overwrite: bool = False, download_xls: bool = False) -> None:
+def process_matrices_folder(input_folder: str, output_folder: str, xls_output_folder: str, force_overwrite: bool = False, download_xls: bool = False) -> int:
     """
     Process all JSON files in the input folder and fetch their pivot data (CSV and optionally Excel).
     
@@ -907,11 +927,12 @@ def process_matrices_folder(input_folder: str, output_folder: str, xls_output_fo
     json_files = list(input_path.glob('*.json'))
     
     if not json_files:
-        logger.warning(f"No JSON files found in {input_folder}")
-        return
+        logger.error(f"No JSON files found in {input_folder}")
+        return 1
     
     logger.info(f"Found {len(json_files)} JSON files to process")
     
+    failures = []
     # Add progress bar for batch processing
     with tqdm(json_files, desc="Processing matrices", unit="matrix") as pbar:
         for json_file in pbar:
@@ -935,9 +956,14 @@ def process_matrices_folder(input_folder: str, output_folder: str, xls_output_fo
                 
             except Exception as e:
                 tqdm.write(f"Error processing {json_file.name}: {e}")
+                failures.append(json_file.stem)
                 continue
-    
+
     logger.info("Finished processing all matrix files")
+    if failures:
+        logger.error(f"{len(failures)} matrices failed: {', '.join(failures[:20])}")
+        return EXIT_FETCH_FAILED
+    return 0
 
 def process_single_matrix(matrix_code: str, input_folder: str, output_folder: str, xls_output_folder: str, force_overwrite: bool = False, download_xls: bool = False) -> None:
     """
@@ -961,8 +987,7 @@ def process_single_matrix(matrix_code: str, input_folder: str, output_folder: st
     json_files = list(input_path.glob(f'{matrix_code}*.json'))
     
     if not json_files:
-        logger.error(f"No JSON file found for matrix code '{matrix_code}' in {input_folder}")
-        return
+        raise FileNotFoundError(f"No JSON file found for matrix code '{matrix_code}' in {input_folder}")
     
     if len(json_files) > 1:
         logger.warning(f"Multiple files found for matrix code '{matrix_code}', using first one: {json_files[0].name}")
@@ -999,14 +1024,15 @@ def process_single_matrix(matrix_code: str, input_folder: str, output_folder: st
         tqdm.write(f"Error processing matrix {matrix_code}: {e}")
         raise
 
-if __name__ == "__main__":
+def main(argv=None) -> int:
+    """CLI entry. Exit codes: 0 ok, 1 fetch failure, 3 empty dataset (see EmptyDataset)."""
     parser = argparse.ArgumentParser(description='Fetch CSV data from INSSE for matrices (Excel/HTML optional with --xls flag)')
     parser.add_argument('--matrix', '-m', type=str, help='Process a single matrix by code (e.g., POP107D)')
     parser.add_argument('--force', '-f', action='store_true', help='Force overwrite existing files')
     parser.add_argument('--xls', '-x', action='store_true', help='Also download Excel/HTML files (disabled by default)')
     parser.add_argument('--lang', '-l', default='ro', choices=['ro', 'en'], help='Language (default: ro)')
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     lang = args.lang
     input_folder = "data/2-metas/" + lang
     output_folder = "data/4-datasets/" + lang
@@ -1014,7 +1040,18 @@ if __name__ == "__main__":
 
     if args.matrix:
         logger.info(f"Processing single matrix: {args.matrix}")
-        process_single_matrix(args.matrix, input_folder, output_folder, xls_output_folder, args.force, args.xls)
-    else:
-        logger.info("Processing all matrices in folder")
-        process_matrices_folder(input_folder, output_folder, xls_output_folder, args.force, args.xls)
+        try:
+            process_single_matrix(args.matrix, input_folder, output_folder, xls_output_folder, args.force, args.xls)
+        except FetchIncomplete as e:
+            logger.error(f"{args.matrix}: {e}")
+            return e.exit_code
+        except Exception as e:
+            logger.error(f"{args.matrix}: {e}")
+            return EXIT_FETCH_FAILED
+        return 0
+    logger.info("Processing all matrices in folder")
+    return process_matrices_folder(input_folder, output_folder, xls_output_folder, args.force, args.xls)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

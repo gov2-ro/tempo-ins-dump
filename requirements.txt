@@ -1,7 +1,11 @@
+# Runtime dependencies (installed in the Docker image). Pinned to the versions
+# validated in the dev environment (Python 3.12). Pipeline: requirements-pipeline.txt,
+# tests/CI: requirements-dev.txt.
 fastapi==0.133.1
-uvicorn[standard]==0.30.6
+starlette==0.52.1
+uvicorn[standard]==0.44.0
 duckdb==1.4.2
-pydantic==2.8.2
-openpyxl
-anthropic
-openai
+pydantic==2.12.5
+openpyxl==3.1.2
+anthropic==0.112.0
+openai==2.52.0
