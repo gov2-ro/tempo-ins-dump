@@ -1,6 +1,8 @@
 # Audit remediation specifications
 
-Status: ready for delegation; implementation has not started. Based on the
+Status (2026-10-05): FIX-01 phases 1–2, FIX-03 phase 1 and FIX-05 phase 1 merged to the
+`audit-fixes` integration branch (not yet on main, not deployed); the rest are in progress
+or not started. Each spec's Status line is authoritative. Based on the
 2026-10-03 audit. Current behavior: [operating reference](../CURRENT_STATE.md).
 Priorities: [backlog](../BACKLOG.md). Historical evidence: [activity log](../activity-history.md).
 

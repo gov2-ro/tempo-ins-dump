@@ -62,11 +62,26 @@ for the current raw-CSV-to-SDMX-parquet conversion. `12-parquet-to-sdmx.py` is
 deprecated; do not run it against the corpus. September's migration was executed
 and the remaining no-map cases were backfilled by September 8.
 
-`update-pipeline.py` currently does per-matrix metadata → CSV → stage 9 → split →
-structure → view profile, then index/import/date synchronization. It does **not**
-implement the complete dependency order above, and failure/checkpoint guarantees
-remain unresolved. Its --lang flag does not propagate uniformly to subprocess
-TEMPO_LANG inputs. See FIX-03; do not advertise a safe bilingual refresh procedure.
+`update-pipeline.py` does per-matrix metadata → CSV → stage 9 → split → structure
+→ view profile, then index/import/date synchronization. It does **not** yet
+implement the complete dependency order above (FIX-03 phase 2). Since FIX-03
+phase 1 it records per-matrix/per-stage outcomes in
+`data/logs/update-pipeline-state.json` (`--state-file`). Required stages are
+metadata, CSV, conversion, registered split and the batch index/import/date sync.
+A required failure exits 1, puts the matrix in a persisted retry set (merged into
+the next run) and freezes the watermark. Optional profiling failures exit 0 but
+are listed (`--strict` makes them fatal). The watermark is the newest feed date of
+a fully successful run (inclusive), never today's date, and is not moved by
+`--matrix` or partial runs. `last-pipeline-run.txt` mirrors it. `--lang en` and
+`TEMPO_LANG=en` are rejected (exit 2) because canonical outputs are shared;
+children always get `TEMPO_LANG=ro`. `3-fetch-metas`, `6-fetch-csv` (exit 3 =
+empty dataset, not retried), `12-split-datasets` and `13-dimension-structure` exit
+nonzero on handled errors; scripts 1, 2 and 4 still always exit 0.
+
+`scripts/audit-corpus.py --data-dir DIR [--json-out F] [--hashes]` is a
+deterministic read-only audit: file categories (served canonical, noncanonical
+parent, registered split, leftover, invalid), NULL dims, TIME_PERIOD validity,
+grain uniqueness, mapping/profile coverage and registration.
 
 ## Local app and checks
 
@@ -77,10 +92,12 @@ uvicorn app.main:app --reload --port 8080
 python -m pytest tests -q
 ```
 
-requirements.txt covers app dependencies, not a complete reproducible pipeline/
-test setup. Existing place tests read the local corpus; clean-checkout synthetic
-CI and dependency sets are specified in FIX-05. Root `test_chart_selector.py` is a
-reporting script, not a substitute for numerical regression tests.
+Dependencies: `requirements.txt` (runtime, pinned), `requirements-pipeline.txt`,
+`requirements-dev.txt` (adds pytest/httpx). Tests marked `corpus` need
+`data/corpus/metadata.duckdb` (or `TEMPO_DATA_DIR`) and are skipped, not passed,
+on a clean checkout. Tracked CI (`.github/workflows/ci.yml`) runs the synthetic
+suite only. Root `test_chart_selector.py` is a reporting script, not a substitute
+for numerical regression tests.
 
 The repo-local dev MCP exposes metadata/sample/query/lineage/profile and chart/
 search eval tools; registration is local and .mcp.json is ignored. Check available
@@ -93,7 +110,19 @@ tools in the session rather than assuming another checkout has the same setup.
 - Home summary: `/api/corpus/summary`; places: `/places`, `/place/{type}/{slug}`.
 - SDMX: `/sdmx/2.1/data/INS,{flow}`, `/datastructure/INS/{flow}/1.0`,
   `/dataflow/INS/{flow}/1.0`. Omitting the data key avoids HTTP dot-path
-  normalization in clients. Contract and security fixes are pending FIX-01.
+  normalization in clients. FIX-01: all values and parquet paths are bound
+  parameters on a request-owned cursor. `startPeriod`/`endPeriod` accept only
+  `YYYY`, `YYYY-Qn`, `YYYY-MM` and compare as month spans (annual `endPeriod=2020`
+  includes 2020-12); malformed/reversed → 400. DSD, data and keys share one code
+  registry (`app/services/sdmx_registry.py`): code ID = stored value when it is a
+  valid SDMX ID, else `<slug>_<sha1[:12]>`; codelists cover all metadata options
+  plus values present in the data, no cutoff; TIME_PERIOD is a TimeDimension;
+  XML is built with ElementTree. Canonical code keys preferred; legacy raw-value
+  keys work when unambiguous, otherwise 400. Details: `docs/SDMX-API.md`.
+- Request validation (`app/services/request_validation.py`): limits ≥1 (422);
+  `filters` must be an object of known column → array of scalars and `group_by`
+  an array of known columns, else 400 (unknown columns are rejected, not ignored);
+  unknown datasets 404; query failures return `{"detail":"Query failed"}`.
 - Charts use MAX_DATA_ROWS (50,000 by default) with grouping/time-window behavior.
   Current CSV/XLSX and SDMX also cap observations without adequate disclosure.
   They must not be described as complete exports until FIX-04 lands.
@@ -107,13 +136,19 @@ Amsterdam, one uvicorn worker. Main DuckDB connection is read-only with a 400MB
 limit; get_conn returns a cursor per request. Other services open independent
 connections, so this is not a global process memory cap.
 
-`bash scripts/prepare-deploy-data.sh` copies metadata/parquets/profiles into
-deploy-data and rebuilds the tarball; Docker copies this snapshot. Preparation
-currently removes/recreates old staging and omits search.duckdb. It is not wired
-automatically into Fly build. The locally present workflow is not tracked, so a
-clean checkout has no established CI/release gate. Oracle/HF templates live under
-`scripts/deploy/`; their historical availability does not prove active deployments.
-FIX-05 defines validated staging, image checks and rollback before deployment.
+`bash scripts/prepare-deploy-data.sh` stages metadata, `search.duckdb`, parquets
+and view profiles: it builds in a temp dir, rejects source changes mid-copy,
+validates, then swaps into `deploy-data/`, keeping the previous staging as
+`deploy-data.prev`. It writes `MANIFEST.json` (sizes, sha256, source build times,
+latest observation date; the generation block is a placeholder until FIX-03).
+`scripts/release-check.py` validates manifest/hashes, FTS loading, index coverage
+of canonical matrices, parquet coverage and pytest; `--docker` adds image build +
+smoke, `--rollback` swaps staging back, and `--deploy` runs `fly deploy` only when
+explicitly passed. The Dockerfile installs the DuckDB `fts` extension and refuses
+to build without a staged manifest and search index. `GET /api/health` reports
+FTS mode (`degraded` = name-matching fallback, also logged at ERROR). Search uses
+per-request FTS cursors and `total` counts the full match set. The Docker smoke
+has not been run yet. Oracle/HF templates live under `scripts/deploy/`.
 
 Ask is disabled by default in app config and can accept BYOK. Fly config enables
 chat content logging. Key persistence and request/tool budgets need FIX-08.
@@ -133,6 +168,15 @@ pattern. Directory counts include leftovers/noncanonical parents. Classify befor
 publication or deletion. Live catalog count was 3,368; local file/metadata/canonical
 counts measure different sets and should not be conflated.
 
-Tests: 38 passing, 3 warnings. Chart eval: 1,986 baseline cases unchanged, 2,116
+Local 2026-10-05 audit (`scripts/audit-corpus.py`, read-only): served_canonical
+1,178; noncanonical_parent 734; registered_split 2,183; leftover 164; invalid 15
+(zero-row, unregistered). The 7 metadata-only matrices: ECC103B, EXP101F, EXP102F,
+LMV101E, LMV102E, TNZ1211, TPG1346. All 57 NULL-dimension files are leftovers.
+Of the 162 files with >20% invalid TIME_PERIOD, 149 are served. 241 files have
+duplicate keys with conflicting values (160 served); 225 `matrices.row_count`
+values differ from actual rows. The release check found `search.duckdb` covering
+1,225 of 3,368 canonical matrices (built April 2026).
+
+Tests on 2026-10-03: 38 passing, 3 warnings. Chart eval: 1,986 baseline cases unchanged, 2,116
 added. Search: 17 top sets unchanged, 2 order changes. These results establish
 regression stability within their scope, not accuracy of published totals.

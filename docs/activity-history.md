@@ -1,5 +1,34 @@
 # Activity History
 
+## 2026-10-05 — Audit remediation wave 1: FIX-01, FIX-03 phase 1, FIX-05 phase 1
+
+Implemented by parallel agents in separate worktrees/branches, reviewed and merged
+into the `audit-fixes` integration branch (not main, not deployed). Tests: 220
+pass with the corpus; clean checkout skips the corpus-marked place tests.
+
+- **FIX-01 phase 1 (API safety):** SDMX period SQL injection fixed (AMG157G test
+  payload 1,614 obs → 400). Values and parquet paths are bound parameters;
+  periods validated and compared as month spans, so `endPeriod=2021` on monthly
+  data now includes all of 2021 (AMG157G 2019–2021: 144 → 216 obs, intended).
+  `request_validation.py`: limits ≥1, typed filters/group_by — unknown filter
+  columns are now rejected rather than silently ignored. Stable error bodies.
+- **FIX-01 phase 2 (SDMX registry):** one code registry for DSD, data and keys;
+  hashed IDs for non-ID values, no codelist cutoff, TimeDimension, ElementTree XML.
+  Out-of-codelist values went from thousands to 0 (AMG157G, POP105A); ART124A and
+  CON103J (stale column names) no longer 500. Legacy keys work when unambiguous.
+  Cost: `lastNObservations=1` on POP105A/POP107A ≈0.75s, ~8.8MB XML.
+- **FIX-03 phase 1 (pipeline success):** per-matrix/per-stage state file, persisted
+  retry set, watermark from handled feed dates and frozen on required failure,
+  child scripts 3/6/12/13 exit nonzero, `--lang en` rejected. Expect the next real
+  run to surface failures that were previously silent. `audit-corpus.py` rewritten
+  as a deterministic read-only audit; first results in CURRENT_STATE.md.
+- **FIX-05 phase 1 (release gates):** atomic staging with `search.duckdb` and a
+  manifest, `release-check.py` (`--deploy` explicit only), FTS installed in the
+  image, per-request FTS cursors with full-match totals, `/api/health`, split and
+  pinned requirements (uvicorn 0.30→0.44, pydantic 2.8→2.12 in production), tracked
+  CI. The first gate run blocks: the local search index is from April and covers
+  1,225 of 3,368 canonical matrices, so production has been on name matching.
+
 ## 2026-10-05 — AGENTS.md becomes canonical agent guidance; doc cleanup
 
 CLAUDE.md and AGENTS.md were near-duplicates that had drifted: the Oct 3

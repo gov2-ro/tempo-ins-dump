@@ -53,7 +53,8 @@ Full rebuild order:
 - Stage 9 never writes NULL. A matrix with no `sdmx_column_map` rows keeps its
   original `*_nom_id`/`value` column shape; it canonicalizes once stage 11 covers it.
 - `12-split-datasets.py` still falls back to `data/parquet-v2/` for v2-sourced splits.
-- **Language:** only fetch scripts (1–7) and `update-pipeline.py` take `--lang ro|en`.
+- **Language:** only fetch scripts (1–7) take `--lang ro|en`; `update-pipeline.py`
+  rejects `--lang en`/`TEMPO_LANG=en` (exit 2) until an enrichment-only mode exists.
   Processing scripts read `TEMPO_LANG` (via `duckdb_config.py`) for *inputs* but
   write the same canonical outputs. Neither `--lang en`, `TEMPO_LANG` nor
   `TEMPO_DATA_DIR` isolates pipeline writes — use a copied checkout for experiments.
@@ -62,8 +63,11 @@ Full rebuild order:
 **Orchestrator** `update-pipeline.py`: incremental runs from the INS news feed
 (`get-news.py` → `data/insse_news.csv`). Per matrix: meta → CSV → stage 9 → split →
 dim structure → view profile; then meta index + import + date sync. It does **not**
-re-run phase B mappings or all of phase D, and may record a successful run despite
-failures (FIX-03).
+re-run phase B mappings or all of phase D (FIX-03 phase 2). Outcomes and the retry
+set live in `data/logs/update-pipeline-state.json`; a required failure exits 1 and
+freezes the watermark. Child scripts 3/6/12/13 exit nonzero on handled errors
+(`6-fetch-csv` exit 3 = empty dataset); 1/2/4 still always exit 0.
+Read-only corpus audit: `python scripts/audit-corpus.py --data-dir data`.
 
 **Shared pipeline modules:** `duckdb_config.py` (paths, `TEMPO_LANG`),
 `sdmx_labels.py` (`norm_label`/`parse_time_period`, shared by stages 9 and 11 so
@@ -113,7 +117,8 @@ so a fresh clone has to add it.
 ```bash
 source ~/devbox/envs/240826/bin/activate          # always
 uvicorn app.main:app --reload --port 8080          # app → http://localhost:8080
-python -m pytest tests -q                          # tests (fast, ~2s)
+python -m pytest tests -q                          # tests; `corpus`-marked ones skip without data/
+pip install -r requirements-dev.txt                # runtime + pytest/httpx (pipeline: requirements-pipeline.txt)
 python 9-csv-to-parquet.py --matrix ACC101B        # single-matrix pipeline run
 python 12-split-datasets.py --matrix ACC101B --dry-run
 python update-pipeline.py --matrix ACC101B --dry-run
@@ -175,8 +180,11 @@ Most of `data/` is gitignored, except `data/eval/`.
 ## Deployment
 Fly.io app `tempo-ins-explorer` (shared-cpu-1x, 512MB, Amsterdam, 1 worker):
 `Dockerfile` + `fly.toml` bake a `deploy-data/` snapshot from
-`scripts/prepare-deploy-data.sh` (currently omits `search.duckdb`; not wired into
-the Fly build). `.github/` is gitignored, so a clean checkout has no CI.
+`scripts/prepare-deploy-data.sh` (atomic staging incl. `search.duckdb` +
+`MANIFEST.json`, previous kept as `deploy-data.prev`). Gate with
+`python scripts/release-check.py [--docker] [--rollback]`; it deploys only with an
+explicit `--deploy`. The image won't build without a staged manifest and search
+index. Only `.github/workflows/ci.yml` is tracked (synthetic tests).
 Oracle/HF Spaces templates live in `scripts/deploy/`. Validated release gates: FIX-05.
 
 ## Audit remediation handoff
