@@ -259,6 +259,23 @@ def _dataset_data(conn, matrix_code: str, filters: str, limit: int, group_by: st
             decision = decide_grouped(ctx, sd_group, sd_filters,
                                       allow_approximation=approximate)
             aggregation = decision.to_dict()
+            # The headline series (every non-time dim collapsed, no caller
+            # filter) is the insights KPI's query: same source-total gate, so
+            # v1's headline card cannot show a sum INS contradicts.
+            time_cols = {d['dim_column_name'] for d in ctx['dimensions']
+                         if d.get('dim_type') == 'time'}
+            if decision.available and not sd_filters and len(sd_group) == 1 \
+                    and sd_group[0] in time_cols:
+                from app.services.dataset_meta import source_total_gate
+                reason, _ = source_total_gate(conn, matrix_code, decision)
+                if reason:
+                    aggregation.update(outcome='unavailable', reason=reason)
+                    return {
+                        'columns': sd_group + ['OBS_VALUE'], 'column_labels': {},
+                        'rows': [], 'total_rows': row_count, 'returned_rows': 0,
+                        'truncated': False, 'unavailable': True,
+                        'aggregation': aggregation,
+                    }
             if not decision.available:
                 return {
                     'columns': sd_group + ['OBS_VALUE'], 'column_labels': {},
