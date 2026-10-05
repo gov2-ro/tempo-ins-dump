@@ -1,6 +1,6 @@
 # Corpus repair plan (dry run)
 
-Data dir: `/Users/pax/devbox/gov2/tempo-ins-dump/data`
+Data dir: `data/` (2026-10-05 snapshot; regenerate with `python scripts/repair-corpus.py --report-md … --report-json …`)
 
 ## Quarantine plan: 179 files {'leftover': 164, 'invalid': 15}
 
