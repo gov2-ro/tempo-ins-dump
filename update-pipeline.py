@@ -7,15 +7,28 @@ then runs the pipeline for only those matrices. Every matrix processed here was
 either named explicitly (--matrix), flagged by INS as changed (news feed) or owed
 from a previous failed run (retry set), so by default it is force-refreshed.
 
+Stage order per changed matrix (FIX-03 phase 2a; each return code is checked and a
+failure stops that matrix, later matrices still run)
+    meta fetch -> 6-fetch-csv -> 10-import-metadata --matrix -> 10-classify-dimensions
+    --matrix -> 11-build-sdmx-codes --matrix -> 9-csv-to-parquet -> 12-split-datasets
+    --matrix (children replaced as an atomic set) -> 10-import-metadata --stats-only
+    -> [13-dimension-structure, generate_view_profiles: parent + children] -> validate
+    Run level afterwards: 4-build-meta-index, date sync, then (--global-profiles only)
+    11-coverage-profiler, detect_trends, profile-values, search index. Without that
+    flag the touched matrices are recorded under "stale" in the state file.
+    The DB refresh runs before conversion because stage 9 resolves labels and column
+    names through the DB maps.
+
 Success semantics (FIX-03 phase 1)
-    Required stages: metadata fetch, 6-fetch-csv, 9-csv-to-parquet, 12-split
-    (unless --no-split), and the run-level 4-build-meta-index / 10-import-metadata
-    / date sync. Any required failure => exit 1, matrix goes to the persisted
+    Required stages: metadata fetch, 6-fetch-csv, 10-import-metadata, 10-classify-
+    dimensions, 11-build-sdmx-codes, 9-csv-to-parquet, 12-split (unless --no-split),
+    the stats refresh, validation, and the run-level 4-build-meta-index / date sync.
+    Any required failure => exit 1, matrix goes to the persisted
     retry set, the watermark is NOT advanced. Optional stages (13-dimension-
-    structure, generate_view_profiles) are recorded and printed but do not block
-    (--strict makes them exit 1). An empty dataset at source (6-fetch-csv exit 3)
-    is recorded as "empty": not a failure, not retried. Exit 2 = usage/unsafe mode.
-    Nothing is deleted on failure; earlier artifacts stay in place.
+    structure, generate_view_profiles, --global-profiles) are recorded and printed but
+    do not block (--strict makes them exit 1). An empty dataset at source (6-fetch-csv
+    exit 3) is recorded as "empty": not a failure, not retried. Exit 2 = usage/unsafe
+    mode. Nothing is deleted on failure; earlier artifacts stay in place.
 
 State: data/logs/update-pipeline-state.json (--state-file): watermark, retry set,
 per-matrix/per-stage outcome + reason + source update date. The watermark is the
@@ -30,6 +43,7 @@ Modes
     --matrix A,B     exactly these codes; retry set and watermark untouched by the
                      selection (their own state/retry entries are updated)
     --skip-existing, --no-split, --skip-duckdb   partial runs: never advance watermark
+    --global-profiles  also rebuild coverage/trends/value profiles/search index (optional)
     --dry-run        no subprocess, fetch, DB, log, state or watermark writes
     --lang           only 'ro'; 'en' is rejected (would clobber canonical output)
 
@@ -202,20 +216,43 @@ STATE_VERSION = 1
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 EXIT_CSV_EMPTY = 3  # 6-fetch-csv.py: INS returned a header-only CSV (not retryable)
 
-# Per-matrix stage keys, in run order. Required failures -> matrix recorded as
-# failed, retried next run, exit != 0, watermark frozen. Optional failures are
-# recorded + printed but do not block.
+# Per-matrix stage keys, in run order (FIX-03 phase 2a). Required failures -> matrix
+# recorded as failed, retried next run, exit != 0, watermark frozen; later stages are
+# skipped. Optional failures are recorded + printed but do not block.
+#
+#   meta -> 6-fetch-csv -> 10-import-metadata -> 10-classify-dimensions
+#        -> 11-build-sdmx-codes -> 9-csv-to-parquet -> 12-split -> 10-import-stats
+#        -> [13-dimension-structure, generate_view_profiles for parent + children]
+#        -> validate
+#
+# Import/classify/codes come BEFORE conversion because stage 9 resolves every label and
+# column name through the DB (dimension options, sdmx_codes, sdmx_column_map); a
+# refreshed dataset converted against stale maps would keep stale labels.
 STAGE_META = "meta"
 STAGE_CSV = "6-fetch-csv"
+STAGE_IMPORT = "10-import-metadata"
+STAGE_CLASSIFY = "10-classify-dimensions"
+STAGE_CODES = "11-build-sdmx-codes"
 STAGE_CONVERT = "9-csv-to-parquet"
 STAGE_SPLIT = "12-split"
+STAGE_STATS = "10-import-stats"
 STAGE_DIMS = "13-dimension-structure"
 STAGE_VIEWS = "generate_view_profiles"
+STAGE_VALIDATE = "validate"
 OPTIONAL_STAGES = {STAGE_DIMS, STAGE_VIEWS}
+# DB-refresh stages that --skip-duckdb leaves out (partial run).
+DB_STAGES = (STAGE_IMPORT, STAGE_CLASSIFY, STAGE_CODES)
 # Run-level (batch) stages, all required.
 BATCH_INDEX = "4-build-meta-index"
-BATCH_IMPORT = "10-import-metadata"
 BATCH_SYNC = "sync-ultima-actualizare"
+# Run-level optional stages (--global-profiles): scripts that rebuild whole tables and
+# have no per-matrix mode. Without the flag the touched matrices are recorded as stale.
+GLOBAL_PROFILE_STAGES = (
+    ("coverage", "11-coverage-profiler.py", []),
+    ("trends", "detect_trends.py", []),
+    ("value_profiles", "scripts/profile-values.py", []),
+    ("search_index", "scripts/build-search-index.py", []),
+)
 
 
 def now_iso() -> str:
@@ -244,6 +281,7 @@ class PipelineState:
                           "first_failed", "last_failed"}},
          "matrices": {CODE: {"source_update", "outcome", "updated_at",
                              "stages": {STAGE: {"outcome", "reason", "at"}}}},
+         "stale": {"coverage"|"trends"|"value_profiles"|"search_index": [CODE, ...]},
          "last_run": {"started", "finished", "exit_code", "processed", "failed", ...}}
 
     Stage outcomes: ok | failed | empty | skipped. Writes are atomic (tmp + rename).
@@ -458,11 +496,90 @@ def _stage(stages: dict, name: str, outcome: str, reason: str | None = None) -> 
     stages[name] = {"outcome": outcome, "reason": reason, "at": now_iso()}
 
 
-def process_matrix(code: str, args, lang: str) -> tuple[str, dict, tuple[str, str] | None]:
-    """Run all per-matrix stages. Returns (outcome, stages, first_required_failure).
+def corpus_db_path() -> Path:
+    return BASE_DIR / "data" / "corpus" / "metadata.duckdb"
 
-    outcome: ok | ok_degraded (optional stage failed) | empty | failed.
-    Nothing is ever deleted here: on failure earlier artifacts stay in place.
+
+CHILDREN_SEEN: dict[str, list[str]] = {}   # parent -> children profiled this run
+
+
+def fetch_children(code: str) -> list[str]:
+    """Registered split children of a parent (read-only DB lookup; [] when unavailable)."""
+    db = corpus_db_path()
+    if not db.exists():
+        return []
+    conn = duckdb.connect(str(db), read_only=True)
+    try:
+        return [r[0] for r in conn.execute(
+            "SELECT sub_matrix_code FROM dataset_splits WHERE parent_matrix_code = ? "
+            "ORDER BY sub_matrix_code", [code]).fetchall()]
+    except Exception as e:
+        log.warning(f"{code}: could not read children ({e})")
+        return []
+    finally:
+        conn.close()
+
+
+def validate_matrix(code: str, children: list[str], check_split: bool = True) -> str | None:
+    """Final required check before a matrix is checkpointed. None when consistent, else
+    the reason. Parent: parquet readable and non-empty, DB row_count equals the file,
+    dimensions registered. Children (when splitting ran): registered in dataset_splits
+    and matrices, file present with the registered row count."""
+    db = corpus_db_path()
+    pq_dir = BASE_DIR / "data" / "corpus" / "parquet"
+    conn = duckdb.connect(str(db), read_only=True)
+    try:
+        def rows_of(path: Path):
+            return conn.execute(f"SELECT COUNT(*) FROM read_parquet('{path}')").fetchone()[0]
+
+        parent_pq = pq_dir / f"{code}.parquet"
+        if not parent_pq.exists():
+            return f"parent parquet missing: {parent_pq.name}"
+        try:
+            n = rows_of(parent_pq)
+        except Exception as e:
+            return f"parent parquet unreadable: {e}"
+        if n <= 0:
+            return "parent parquet has no rows"
+        m = conn.execute("SELECT row_count FROM matrices WHERE matrix_code = ?", [code]).fetchone()
+        if m is None:
+            return "parent not registered in matrices"
+        if m[0] != n:
+            return f"matrices.row_count {m[0]} != parquet rows {n}"
+        if conn.execute("SELECT COUNT(*) FROM dimensions WHERE matrix_code = ?",
+                        [code]).fetchone()[0] == 0:
+            return "parent has no dimensions"
+        if check_split:
+            reg = conn.execute(
+                "SELECT sub_matrix_code, row_count, parquet_path FROM dataset_splits "
+                "WHERE parent_matrix_code = ?", [code]).fetchall()
+            if sorted(r[0] for r in reg) != sorted(children):
+                return "dataset_splits does not match the child set"
+            for sub, cnt, path in reg:
+                f = Path(path) if path else pq_dir / f"{sub}.parquet"
+                if not f.exists():
+                    return f"child parquet missing: {sub}"
+                try:
+                    got = rows_of(f)
+                except Exception as e:
+                    return f"child parquet unreadable: {sub}: {e}"
+                if got != cnt:
+                    return f"child {sub} rows {got} != registered {cnt}"
+                if not conn.execute(
+                        "SELECT 1 FROM matrices WHERE matrix_code = ? AND is_split", [sub]).fetchone():
+                    return f"child {sub} not registered in matrices"
+    finally:
+        conn.close()
+    return None
+
+
+def process_matrix(code: str, args, lang: str) -> tuple[str, dict, tuple[str, str] | None]:
+    """Run all per-matrix stages in dependency order (see the stage list above).
+
+    Returns (outcome, stages, first_required_failure); outcome: ok | ok_degraded
+    (optional stage failed) | empty | failed. Every prerequisite's return code is
+    checked and a failure stops the matrix right there. Nothing is ever deleted
+    here: on failure earlier artifacts stay in place.
     """
     dry = args.dry_run
     force_flag = [] if args.skip_existing else ["--force"]
@@ -470,7 +587,19 @@ def process_matrix(code: str, args, lang: str) -> tuple[str, dict, tuple[str, st
     stages: dict = {}
     ok_or_dry = ("skipped", "dry-run") if dry else ("ok", None)
 
-    # a. metadata (required)
+    def required(key: str, script: str, script_args: list[str]) -> tuple[str, str] | None:
+        rc = python_rc(script, script_args, dry_run=dry)
+        if rc != 0:
+            reason = f"{script} exit {rc}"
+            _stage(stages, key, "failed", reason)
+            return key, reason
+        _stage(stages, key, *ok_or_dry)
+        return None
+
+    def fail(f):
+        return "failed", stages, f
+
+    # 1. metadata (required)
     if dry:
         log.info(f"[DRY-RUN] fetch_meta({code})")
         _stage(stages, STAGE_META, "skipped", "dry-run")
@@ -478,57 +607,97 @@ def process_matrix(code: str, args, lang: str) -> tuple[str, dict, tuple[str, st
         _stage(stages, STAGE_META, "ok")
     else:
         _stage(stages, STAGE_META, "failed", "metadata fetch failed")
-        return "failed", stages, (STAGE_META, "metadata fetch failed")
+        return fail((STAGE_META, "metadata fetch failed"))
 
-    # b. CSV (required; exit 3 = INS answered with no data rows)
+    # 2. CSV (required; exit 3 = INS answered with no data rows)
     rc = python_rc("6-fetch-csv.py", ["--matrix", code, "--lang", lang] + force_flag, dry_run=dry)
     if rc == EXIT_CSV_EMPTY:
         _stage(stages, STAGE_CSV, "empty", "INS returned no data rows")
-        log.warning(f"{code}: empty dataset at source; convert/split/profile skipped")
+        log.warning(f"{code}: empty dataset at source; import/convert/split/profile skipped")
         return "empty", stages, None
     if rc != 0:
         reason = f"6-fetch-csv exit {rc}"
         _stage(stages, STAGE_CSV, "failed", reason)
-        return "failed", stages, (STAGE_CSV, reason)
+        return fail((STAGE_CSV, reason))
     _stage(stages, STAGE_CSV, *ok_or_dry)
 
-    # c. CSV -> canonical SDMX parquet (required)
-    rc = python_rc("9-csv-to-parquet.py", ["--matrix", code] + force_flag, dry_run=dry)
-    if rc != 0:
-        reason = f"9-csv-to-parquet exit {rc}"
-        _stage(stages, STAGE_CONVERT, "failed", reason)
-        return "failed", stages, (STAGE_CONVERT, reason)
-    _stage(stages, STAGE_CONVERT, *ok_or_dry)
+    # 3-5. DB refresh for this matrix only: reconcile metadata/options, classify them,
+    # rebuild its code maps (required; --skip-duckdb leaves them out: partial run)
+    for key, script, script_args in (
+        (STAGE_IMPORT, "10-import-metadata.py", ["--matrix", code]),
+        (STAGE_CLASSIFY, "10-classify-dimensions.py", ["--matrix", code]),
+        (STAGE_CODES, "11-build-sdmx-codes.py", ["--matrix", code]),
+    ):
+        if args.skip_duckdb:
+            _stage(stages, key, "skipped", "--skip-duckdb")
+            continue
+        f = required(key, script, script_args)
+        if f:
+            return fail(f)
 
-    # d. split + register children (required when enabled)
+    # 6. CSV -> canonical SDMX parquet against the refreshed maps (required)
+    f = required(STAGE_CONVERT, "9-csv-to-parquet.py", ["--matrix", code] + force_flag)
+    if f:
+        return fail(f)
+
+    # 7. split + register children as one set (required when enabled)
     if not args.no_split:
-        rc = python_rc("12-split-datasets.py", ["--matrix", code], dry_run=dry)
-        if rc != 0:
-            reason = f"12-split exit {rc}"
-            _stage(stages, STAGE_SPLIT, "failed", reason)
-            return "failed", stages, (STAGE_SPLIT, reason)
-        _stage(stages, STAGE_SPLIT, *ok_or_dry)
+        f = required(STAGE_SPLIT, "12-split-datasets.py", ["--matrix", code])
+        if f:
+            return fail(f)
     else:
         _stage(stages, STAGE_SPLIT, "skipped", "--no-split")
 
-    # e/f. optional profiling: visible, never blocking
+    # 8. row_count/size/path of the new parquet (the import above saw the old file)
+    if args.skip_duckdb:
+        _stage(stages, STAGE_STATS, "skipped", "--skip-duckdb")
+    else:
+        f = required(STAGE_STATS, "10-import-metadata.py", ["--matrix", code, "--stats-only"])
+        if f:
+            return fail(f)
+
+    # 9. optional profiling of the parent and its children: visible, never blocking
+    children = [] if (dry or args.no_split) else fetch_children(code)
+    CHILDREN_SEEN[code] = children
+    targets = [code] + children
     degraded = False
-    for key, script, disabled, flag in (
-        (STAGE_DIMS, "13-dimension-structure.py", args.no_dim_structure, "--no-dim-structure"),
-        (STAGE_VIEWS, "generate_view_profiles.py", args.no_view_profiles, "--no-view-profiles"),
-    ):
+    for key, disabled, flag in ((STAGE_DIMS, args.no_dim_structure, "--no-dim-structure"),
+                                (STAGE_VIEWS, args.no_view_profiles, "--no-view-profiles")):
         if disabled:
             _stage(stages, key, "skipped", flag)
             continue
-        rc = python_rc(script, ["--matrix", code], dry_run=dry)
-        if rc != 0:
-            reason = f"{script} exit {rc}"
-            _stage(stages, key, "failed", reason)
+        if key == STAGE_DIMS:
+            runs = [("13-dimension-structure.py", ["--matrix", ",".join(targets)])]
+        else:
+            runs = [("generate_view_profiles.py", ["--matrix", t]) for t in targets]
+        bad = []
+        for script, script_args in runs:
+            rc = python_rc(script, script_args, dry_run=dry)
+            if rc != 0:
+                bad.append(f"{script} {' '.join(script_args)} exit {rc}")
+        if bad:
+            _stage(stages, key, "failed", "; ".join(bad))
             log.warning(f"{code}: {key} failed (optional; derived features for this matrix "
                         "are not verified)")
             degraded = True
         else:
             _stage(stages, key, *ok_or_dry)
+
+    # 10. validate the artifacts (required) before the matrix may be checkpointed
+    if dry:
+        _stage(stages, STAGE_VALIDATE, "skipped", "dry-run")
+    elif args.skip_duckdb:
+        _stage(stages, STAGE_VALIDATE, "skipped", "--skip-duckdb")
+    else:
+        try:
+            reason = validate_matrix(code, children, check_split=not args.no_split)
+        except Exception as e:  # unreadable DB etc. is a validation failure, not a crash
+            reason = f"validation error: {e}"
+        if reason:
+            log.error(f"{code}: validation failed: {reason}")
+            _stage(stages, STAGE_VALIDATE, "failed", reason)
+            return fail((STAGE_VALIDATE, reason))
+        _stage(stages, STAGE_VALIDATE, "ok")
 
     return ("ok_degraded" if degraded else "ok"), stages, None
 
@@ -562,7 +731,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-view-profiles", action="store_true", help="Skip generate_view_profiles.py")
     parser.add_argument("--no-dim-structure", action="store_true", help="Skip 13-dimension-structure.py")
     parser.add_argument("--skip-duckdb", action="store_true",
-                        help="Skip scripts 4 + 10 (meta-index rebuild + DuckDB import); partial run: no watermark advance")
+                        help="Skip the DB refresh stages (4 meta index, 10 import/classify, 11 code maps, "
+                             "stats refresh, validation); partial run: no watermark advance")
+    parser.add_argument("--global-profiles", action="store_true",
+                        help="After the run, rebuild the whole-corpus profiles that have no per-matrix mode "
+                             "(11-coverage-profiler, detect_trends, profile-values, search index). Optional "
+                             "stages. Without it the touched matrices are recorded as stale in the state file")
     parser.add_argument("--refetch-news", action="store_true", help="Re-fetch news from INS before processing")
     parser.add_argument("--all", action="store_true",
                         help="Process every feed entry, ignoring the watermark (retries are merged too)")
@@ -592,6 +766,7 @@ def run_pipeline(argv: list[str] | None = None) -> int:
 
     dry = args.dry_run
     started = now_iso()
+    CHILDREN_SEEN.clear()
     handler = None
     if not dry:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -689,26 +864,26 @@ def _run_pipeline(args, lang: str, started: str, dry: bool) -> int:
 
     handled = [c for c, o in results.items() if o in ("ok", "ok_degraded", "empty")]
 
-    # ---- 5. Batch stage: meta index + DuckDB import (required) ----
+    # ---- 5. Batch stage: meta index + date sync (required) ----
+    # The per-matrix DB refresh (import/classify/code maps/stats) already ran inside
+    # process_matrix, ahead of conversion.
     batch_failures: list[tuple[str, str]] = []
     if not args.skip_duckdb:
-        log.info("=== Rebuilding meta index + DuckDB ===")
-        for script, key, a in (("4-build-meta-index.py", BATCH_INDEX, ["--lang", lang]),
-                               ("10-import-metadata.py", BATCH_IMPORT, [])):
-            rc = python_rc(script, a, dry_run=dry)
-            if rc != 0:
-                batch_failures.append((key, f"{script} exit {rc}"))
-        if not batch_failures:
+        log.info("=== Rebuilding meta index ===")
+        rc = python_rc("4-build-meta-index.py", ["--lang", lang], dry_run=dry)
+        if rc != 0:
+            batch_failures.append((BATCH_INDEX, f"4-build-meta-index.py exit {rc}"))
+        else:
             try:
                 sync_ultima_actualizare(handled, lang, dry_run=dry)
             except Exception as e:
                 log.error(f"sync_ultima_actualizare failed: {e}")
                 batch_failures.append((BATCH_SYNC, str(e)))
     else:
-        log.info("--skip-duckdb: metadata import skipped (partial run)")
+        log.info("--skip-duckdb: DB refresh stages skipped (partial run)")
 
     if batch_failures and not dry:
-        # The import is global: every matrix handled this run lacks DB metadata.
+        # The index/sync are global: every matrix handled this run lacks them.
         key, reason = batch_failures[0]
         for code in handled:
             failures.append((code, key, reason))
@@ -718,6 +893,23 @@ def _run_pipeline(args, lang: str, started: str, dry: bool) -> int:
             rec["stages"][key] = {"outcome": "failed", "reason": reason, "at": now_iso()}
     elif batch_failures:
         failures.extend(("(batch)", k, r) for k, r in batch_failures)
+
+    # ---- 5b. Whole-corpus profiles with no per-matrix mode (optional) ----
+    if not dry:
+        touched = sorted({c for c in handled if results.get(c) in ("ok", "ok_degraded")}
+                         | {k for c in handled for k in CHILDREN_SEEN.get(c, [])})
+        stale = state.data.setdefault("stale", {})
+        for key, _, _ in GLOBAL_PROFILE_STAGES:
+            stale[key] = sorted(set(stale.get(key, [])) | set(touched))
+        if args.global_profiles:
+            log.info("=== Whole-corpus profiles (optional) ===")
+            for key, script, script_args in GLOBAL_PROFILE_STAGES:
+                rc = python_rc(script, script_args)
+                if rc != 0:
+                    degraded.append(("(batch)", key, f"{script} exit {rc}"))
+                else:
+                    stale[key] = []
+        state.save()
 
     required_failed = bool(failures)
 
@@ -762,6 +954,10 @@ def _run_pipeline(args, lang: str, started: str, dry: bool) -> int:
         log.warning(f"  OPTIONAL FAILED {code} (stage: {stage}) — {reason}")
     for code in empties:
         log.warning(f"  EMPTY {code}: no data rows at source")
+    for key, codes in sorted(state.data.get("stale", {}).items()):
+        if codes and not dry:
+            log.warning(f"  STALE {key}: {len(codes)} matrices need a whole-corpus refresh "
+                        f"(rerun with --global-profiles)")
     if required_failed:
         log.error(f"Watermark NOT advanced (stays {state.watermark}); failures kept in the "
                   f"retry set at {state_path}")

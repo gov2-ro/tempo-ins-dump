@@ -36,6 +36,7 @@ def pipe(tmp_path, monkeypatch):
     ctl = SimpleNamespace(
         mod=mod, tmp=tmp_path, parquet=parquet, calls=[], envs=[], meta_calls=[],
         rcs={}, meta_fail=set(), sync_calls=[], sync_error=None, raise_on=None,
+        children={}, validate_fail={},
         state_path=logs / "update-pipeline-state.json",
         legacy=logs / "last-pipeline-run.txt",
     )
@@ -61,6 +62,14 @@ def pipe(tmp_path, monkeypatch):
             raise ctl.sync_error
         return len(codes)
 
+    def fake_children(code):
+        return list(ctl.children.get(code, []))
+
+    def fake_validate(code, children, check_split=True):
+        return ctl.validate_fail.get(code)
+
+    monkeypatch.setattr(mod, "fetch_children", fake_children)
+    monkeypatch.setattr(mod, "validate_matrix", fake_validate)
     monkeypatch.setattr(mod.subprocess, "run", fake_run)
     monkeypatch.setattr(mod, "fetch_meta", fake_meta)
     monkeypatch.setattr(mod, "sync_ultima_actualizare", fake_sync)
@@ -116,7 +125,8 @@ def test_watermark_never_regresses_with_older_since(pipe):
 # ---------------------------------------------------------------- failures
 @pytest.mark.parametrize("failing", [
     ("meta", None), ("6-fetch-csv.py", "AAA1"), ("9-csv-to-parquet.py", "AAA1"),
-    ("12-split-datasets.py", "AAA1"), ("10-import-metadata.py", None),
+    ("12-split-datasets.py", "AAA1"), ("10-import-metadata.py", "AAA1"),
+    ("10-classify-dimensions.py", "AAA1"), ("11-build-sdmx-codes.py", "AAA1"),
     ("4-build-meta-index.py", None), ("sync", None),
 ])
 def test_required_failure_exit_retry_watermark_artifacts(pipe, failing):

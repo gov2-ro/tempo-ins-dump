@@ -29,6 +29,8 @@ Usage:
 import argparse
 import json
 import logging
+import os
+import shutil
 import sys
 import time
 from itertools import product as iterproduct
@@ -93,46 +95,217 @@ def ensure_schema(conn):
     logger.info("Schema ready (dataset_splits table created)")
 
 
-def clean_previous_splits(conn, parent_matrix_code: str = None):
-    """Remove previously generated split entries from matrices, dimensions, dimension_options.
+# ---------------------------------------------------------------------------
+# Atomic child-set regeneration (FIX-03 phase 2a)
+#
+# Children of one parent are regenerated as a SET:
+#   1. stage    - every child is written to <corpus>/.split-staging-<PARENT>/ ; live
+#                 files and DB rows are not touched. Any failure here changes nothing.
+#   2. validate - staged files readable and non-empty, >=2 children, codes registrable.
+#   3. swap     - old child files move to <corpus>/.split-backup-<PARENT>/, the old DB
+#                 rows (snapshotted in memory) are deleted, staged files move into place
+#                 and the new rows are registered. Any error in this window triggers a
+#                 compensating rollback: new rows/files removed, old files moved back,
+#                 snapshot rows re-inserted. The last usable generation survives.
+# One DuckDB transaction cannot do step 3 (deleting FK-referenced dimensions after their
+# options inside the same transaction is rejected), hence the explicit compensation.
+# A hard kill inside step 3 leaves .split-backup-<PARENT>/ behind with the old files;
+# re-running the parent regenerates the set.
+# ---------------------------------------------------------------------------
 
-    If parent_matrix_code is given, only remove splits for that parent.
+STAGING_PREFIX = ".split-staging-"
+BACKUP_PREFIX = ".split-backup-"
+
+
+class SwapError(RuntimeError):
+    """A child set could not be installed (the previous generation was restored)."""
+
+
+def child_codes(conn, parent_matrix_code: str) -> list[str]:
+    """Codes of the registered children of a parent (dataset_splits + matrices)."""
+    codes = {r[0] for r in conn.execute(
+        "SELECT sub_matrix_code FROM dataset_splits WHERE parent_matrix_code = ?",
+        [parent_matrix_code]).fetchall()}
+    try:
+        codes |= {r[0] for r in conn.execute(
+            "SELECT matrix_code FROM matrices WHERE parent_matrix_code = ?",
+            [parent_matrix_code]).fetchall()}
+    except Exception:
+        pass
+    return sorted(codes)
+
+
+def _marks(items) -> str:
+    return ", ".join("?" for _ in items)
+
+
+def snapshot_children(conn, parent: str, codes: list[str]) -> dict:
+    """In-memory copy of every DB row that belongs to the parent's current children."""
+    def grab(sql, params):
+        cur = conn.execute(sql, params)
+        return [d[0] for d in cur.description], cur.fetchall()
+
+    snap = {}
+    if codes:
+        m = _marks(codes)
+        snap["matrices"] = grab(f"SELECT * FROM matrices WHERE matrix_code IN ({m})", codes)
+        snap["dimensions"] = grab(f"SELECT * FROM dimensions WHERE matrix_code IN ({m})", codes)
+        snap["dimension_options"] = grab(
+            "SELECT * FROM dimension_options WHERE dimension_id IN "
+            f"(SELECT dimension_id FROM dimensions WHERE matrix_code IN ({m}))", codes)
+    snap["dataset_splits"] = grab(
+        "SELECT * FROM dataset_splits WHERE parent_matrix_code = ?", [parent])
+    return snap
+
+
+def delete_children_rows(conn, parent: str, codes: list[str]) -> None:
+    """Delete child rows leaf-first, one autocommit statement each (FK order)."""
+    conn.execute("DELETE FROM dataset_splits WHERE parent_matrix_code = ?", [parent])
+    if not codes:
+        return
+    m = _marks(codes)
+    conn.execute("DELETE FROM dimension_options WHERE dimension_id IN "
+                 f"(SELECT dimension_id FROM dimensions WHERE matrix_code IN ({m}))", codes)
+    conn.execute(f"DELETE FROM dimensions WHERE matrix_code IN ({m})", codes)
+    conn.execute(f"DELETE FROM matrices WHERE matrix_code IN ({m})", codes)
+
+
+def restore_children_rows(conn, snap: dict) -> None:
+    for table in ("matrices", "dimensions", "dimension_options", "dataset_splits"):
+        if table not in snap:
+            continue
+        cols, rows = snap[table]
+        if rows:
+            conn.executemany(
+                f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({_marks(cols)})", rows)
+
+
+def _init_id_counters(conn) -> None:
+    """Fix the id counters BEFORE old rows are deleted, so a rollback that re-inserts the
+    old ids cannot collide with ids handed out in between."""
+    _next_dim_id(conn)
+    _next_option_id(conn, 0)
+
+
+def validate_staged(conn, parent: str, subs: list[dict]) -> None:
+    """Raise SwapError unless the staged set is a complete, readable generation."""
+    if len(subs) < 2:
+        raise SwapError(f"{parent}: need at least 2 children, got {len(subs)}")
+    codes = [s["sub_code"] for s in subs]
+    if len(set(codes)) != len(codes):
+        raise SwapError(f"{parent}: duplicate child codes in the new set")
+    for sub in subs:
+        staged = Path(sub["staged_path"])
+        if sub["row_count"] <= 0:
+            raise SwapError(f"{sub['sub_code']}: empty child")
+        if not staged.exists():
+            raise SwapError(f"{sub['sub_code']}: staged file missing")
+        try:
+            n = conn.execute(f"SELECT COUNT(*) FROM read_parquet('{staged}')").fetchone()[0]
+        except Exception as e:
+            raise SwapError(f"{sub['sub_code']}: staged file unreadable: {e}") from e
+        if n != sub["row_count"]:
+            raise SwapError(f"{sub['sub_code']}: staged rows {n} != expected {sub['row_count']}")
+    parent_row = conn.execute(
+        "SELECT COALESCE(is_split, FALSE) FROM matrices WHERE matrix_code = ?", [parent]).fetchone()
+    if parent_row is None:
+        raise SwapError(f"parent {parent} not found in matrices")
+    if parent_row[0]:
+        raise SwapError(f"{parent} is itself a split child; recursive splitting refused")
+    old = set(child_codes(conn, parent))
+    clash = [c for c in codes if c not in old and conn.execute(
+        "SELECT 1 FROM matrices WHERE matrix_code = ?", [c]).fetchone()]
+    if clash:
+        raise SwapError(f"child codes collide with existing matrices: {clash}")
+
+
+def _verify_registered(conn, parent: str, subs: list[dict]) -> None:
+    n = len(subs)
+    got = conn.execute("SELECT COUNT(*), COUNT(DISTINCT sub_matrix_code) FROM dataset_splits "
+                       "WHERE parent_matrix_code = ?", [parent]).fetchone()
+    if tuple(got) != (n, n):
+        raise SwapError(f"dataset_splits has {got[0]} rows / {got[1]} codes for {parent}, expected {n}")
+    in_m = conn.execute("SELECT COUNT(*) FROM matrices WHERE parent_matrix_code = ? "
+                        "AND is_split", [parent]).fetchone()[0]
+    if in_m != n:
+        raise SwapError(f"matrices has {in_m} children for {parent}, expected {n}")
+    for sub in subs:
+        f = Path(sub["path"])
+        if not f.exists():
+            raise SwapError(f"{sub['sub_code']}: file missing after swap")
+        rows = conn.execute(f"SELECT COUNT(*) FROM read_parquet('{f}')").fetchone()[0]
+        if rows != sub["row_count"]:
+            raise SwapError(f"{sub['sub_code']}: {rows} rows on disk != {sub['row_count']}")
+
+
+def swap_children(conn, parent: str, subs: list[dict], register_one) -> None:
+    """Replace the parent's child files + DB rows with the staged set (see header).
+
+    register_one(sub_info) registers one child (matrices, dimensions, options,
+    dataset_splits). On any failure the previous generation is restored and SwapError
+    is raised; on success the staging and backup directories are removed.
     """
-    if parent_matrix_code:
-        existing = conn.execute("""
-            SELECT sub_matrix_code FROM dataset_splits WHERE parent_matrix_code = ?
-        """, [parent_matrix_code]).fetchall()
-        codes = [r[0] for r in existing]
+    validate_staged(conn, parent, subs)
 
-        if not codes:
-            # Fallback: check matrices table directly (handles dirty state from prior failures)
-            try:
-                existing2 = conn.execute(
-                    "SELECT matrix_code FROM matrices WHERE parent_matrix_code = ?",
-                    [parent_matrix_code]
-                ).fetchall()
-                codes = [r[0] for r in existing2]
-            except Exception:
-                pass
+    old_codes = child_codes(conn, parent)
+    snap = snapshot_children(conn, parent, old_codes)
+    new_codes = [s["sub_code"] for s in subs]
+    backup_dir = PARQUET_V3_DIR / f"{BACKUP_PREFIX}{parent}"
+    stage_dir = PARQUET_V3_DIR / f"{STAGING_PREFIX}{parent}"
+    if backup_dir.exists():
+        shutil.rmtree(backup_dir)  # stale from an interrupted swap; the staged set is newer
 
-        if not codes:
-            return
-        logger.info(f"Cleaning {len(codes)} previous splits for {parent_matrix_code}")
-        conn.execute("DELETE FROM dataset_splits WHERE parent_matrix_code = ?", [parent_matrix_code])
-    else:
-        existing = conn.execute("""
-            SELECT matrix_code FROM matrices WHERE is_split = TRUE
-        """).fetchall()
-        if not existing:
-            return
-        codes = [r[0] for r in existing]
-        logger.info(f"Cleaning {len(codes)} previous split entries from metadata")
-        conn.execute("DELETE FROM dataset_splits WHERE sub_matrix_code IN (" + ",".join(f"'{c}'" for c in codes) + ")")
+    # live files the swap displaces: registered old children + anything already sitting
+    # at a new child's final path
+    cols, rows = snap["dataset_splits"]
+    pi = cols.index("parquet_path")
+    candidates = {Path(r[pi]) for r in rows if r[pi]}
+    if "matrices" in snap:
+        mcols, mrows = snap["matrices"]
+        mi = mcols.index("parquet_path")
+        candidates |= {Path(r[mi]) for r in mrows if r[mi]}
+    candidates |= {PARQUET_V3_DIR / f"{c}.parquet" for c in old_codes}
+    candidates |= {Path(s["path"]) for s in subs}
+    displaced = {f: backup_dir / f"{i}-{f.name}"
+                 for i, f in enumerate(sorted(candidates)) if f.exists()}
 
-    placeholders = ",".join(f"'{c}'" for c in codes)
-    conn.execute(f"DELETE FROM dimension_options WHERE dimension_id IN (SELECT dimension_id FROM dimensions WHERE matrix_code IN ({placeholders}))")
-    conn.execute(f"DELETE FROM dimensions WHERE matrix_code IN ({placeholders})")
-    conn.execute(f"DELETE FROM matrices WHERE matrix_code IN ({placeholders})")
+    moved_old: list[tuple[Path, Path]] = []
+    moved_new: list[Path] = []
+    try:
+        _init_id_counters(conn)
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        for orig, bak in displaced.items():
+            os.replace(orig, bak)
+            moved_old.append((orig, bak))
+        delete_children_rows(conn, parent, old_codes)
+        for sub in subs:
+            final = Path(sub["path"])
+            final.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(sub["staged_path"], final)
+            moved_new.append(final)
+        for sub in subs:
+            register_one(sub)
+        _verify_registered(conn, parent, subs)
+    except BaseException as e:
+        logger.error(f"{parent}: child swap failed ({e}); restoring previous generation")
+        try:
+            delete_children_rows(conn, parent, sorted(set(old_codes) | set(new_codes)))
+            for f in moved_new:
+                if f.exists():
+                    f.unlink()
+            for orig, bak in reversed(moved_old):
+                os.replace(bak, orig)
+            restore_children_rows(conn, snap)
+        except BaseException as e2:
+            logger.critical(f"{parent}: ROLLBACK FAILED ({e2}); old files are in {backup_dir}")
+            raise SwapError(f"{parent}: swap failed and rollback failed: {e2}") from e
+        shutil.rmtree(backup_dir, ignore_errors=True)
+        shutil.rmtree(stage_dir, ignore_errors=True)
+        if isinstance(e, (KeyboardInterrupt, SystemExit)):
+            raise
+        raise SwapError(f"{parent}: {e}") from e
+    shutil.rmtree(backup_dir, ignore_errors=True)
+    shutil.rmtree(stage_dir, ignore_errors=True)
 
 
 def generate_sub_matrix_code(matrix_code: str, suffix: str) -> str:
@@ -175,8 +348,14 @@ def _resolve_v3_column(conn, matrix_code: str, name: str, dim_cols: list) -> str
     return row[0] if row else name
 
 
-def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> list[dict]:
-    """Split a parquet file based on a SplitRule. Returns list of sub-dataset info dicts."""
+def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False,
+                            stage_dir: Path | None = None) -> list[dict]:
+    """Split a parquet file based on a SplitRule. Returns list of sub-dataset info dicts.
+
+    With stage_dir the children are written there and nothing under the corpus
+    directory is created or deleted; each result's "path" stays the FINAL location
+    and "staged_path" is where the file really is (swap_children() moves it).
+    """
     # Prefer v3 SDMX source if available; fall back to v2
     v3_src = PARQUET_V3_DIR / f"{rule.matrix_code}.parquet"
     v2_src = PARQUET_V2_DIR / f"{rule.matrix_code}.parquet"
@@ -205,13 +384,14 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> lis
 
     for group in rule.groups:
         sub_code = generate_sub_matrix_code(rule.matrix_code, group.label)
-        dst = (PARQUET_V3_DIR if is_src_v3 else PARQUET_V2_DIR) / f"{sub_code}.parquet"
+        final_dst = (PARQUET_V3_DIR if is_src_v3 else PARQUET_V2_DIR) / f"{sub_code}.parquet"
+        dst = (stage_dir / final_dst.name) if stage_dir is not None else final_dst
 
         if dry_run:
             logger.info(f"  [DRY-RUN] {rule.matrix_code} -> {sub_code} "
                         f"({len(group.option_ids)} options in '{group.label}')")
             results.append({
-                "sub_code": sub_code, "path": str(dst),
+                "sub_code": sub_code, "path": str(final_dst), "staged_path": str(dst),
                 "row_count": 0, "group": group,
             })
             continue
@@ -275,7 +455,7 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> lis
 
         logger.debug(f"  {sub_code}: {row_count} rows -> {dst.name}")
         results.append({
-            "sub_code": sub_code, "path": str(dst),
+            "sub_code": sub_code, "path": str(final_dst), "staged_path": str(dst),
             "row_count": row_count, "group": group,
         })
 
@@ -287,7 +467,7 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> lis
             f"only {len(results)} group(s) produced data. Aborting split."
         )
         for r in results:
-            p = Path(r["path"])
+            p = Path(r["staged_path"])
             if p.exists():
                 p.unlink()
                 logger.warning(f"  Deleted: {p.name}")
@@ -299,7 +479,7 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> lis
     # equivalent step. Left them as permanent, unregistered orphans.
     for r in results:
         if r["row_count"] == 0:
-            p = Path(r["path"])
+            p = Path(r["staged_path"])
             if p.exists():
                 p.unlink()
 
@@ -557,7 +737,8 @@ _PATTERN_ORDER = [
 ]
 
 
-def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bool = False) -> list[dict]:
+def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bool = False,
+                                stage_dir: Path | None = None) -> list[dict]:
     """Split a parquet on multiple dimensions simultaneously (cross-product).
 
     Prefers the canonical v3 (SDMX) source, same as split_parquet_by_filter —
@@ -567,7 +748,8 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
     must be translated to SDMX string values before they can appear in a
     v3 WHERE clause.
 
-    Returns list of dicts with keys: sub_code, path, row_count, combo, rules.
+    Returns list of dicts with keys: sub_code, path, staged_path, row_count, combo,
+    rules. With stage_dir the files are written there (see split_parquet_by_filter).
     """
     v3_src = PARQUET_V3_DIR / f"{matrix_code}.parquet"
     v2_src = PARQUET_V2_DIR / f"{matrix_code}.parquet"
@@ -608,12 +790,13 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
             sub_code = f"{sub_code}_{seen_codes[sub_code]}"
         else:
             seen_codes[sub_code] = 1
-        dst = (PARQUET_V3_DIR if is_src_v3 else PARQUET_V2_DIR) / f"{sub_code}.parquet"
+        final_dst = (PARQUET_V3_DIR if is_src_v3 else PARQUET_V2_DIR) / f"{sub_code}.parquet"
+        dst = (stage_dir / final_dst.name) if stage_dir is not None else final_dst
 
         if dry_run:
             logger.info(f"  [DRY-RUN] {matrix_code} -> {sub_code}")
             results.append({
-                "sub_code": sub_code, "path": str(dst),
+                "sub_code": sub_code, "path": str(final_dst), "staged_path": str(dst),
                 "row_count": 0, "combo": combo, "rules": sorted_rules,
             })
             continue
@@ -704,7 +887,7 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
 
         logger.debug(f"  {sub_code}: {row_count} rows -> {dst.name}")
         results.append({
-            "sub_code": sub_code, "path": str(dst),
+            "sub_code": sub_code, "path": str(final_dst), "staged_path": str(dst),
             "row_count": row_count, "combo": combo, "rules": sorted_rules,
         })
 
@@ -716,7 +899,7 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
             f"only {len(results_with_data)} combo(s) produced data. Aborting split."
         )
         for r in results:
-            p = Path(r["path"])
+            p = Path(r["staged_path"])
             if p.exists():
                 p.unlink()
         return []
@@ -724,7 +907,7 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
     # Clean up 0-row parquet files from combos that had no data
     for r in results:
         if r["row_count"] == 0:
-            p = Path(r["path"])
+            p = Path(r["staged_path"])
             if p.exists():
                 p.unlink()
 
@@ -895,22 +1078,65 @@ def _next_option_id(conn, count: int = 1) -> int:
     return start
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Split inconsistent datasets into sub-datasets")
-    parser.add_argument("--matrix", help="Process a single matrix code")
+    parser.add_argument("--matrix", metavar="CODE[,CODE,...]",
+                        help="Process only these parents (comma-separated)")
     parser.add_argument("--pattern", choices=["multi_um", "mixed_metrics", "slash_dims", "hierarchy",
                                               "age_granularity", "geo_hierarchy", "mixed_time_granularity"],
-                        help="Process only one pattern type")
+                        help="Only parents with a rule of this pattern (their full rule set is still used)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be done without writing")
     parser.add_argument("--debug", action="store_true", help="Verbose logging")
-    args = parser.parse_args()
+    return parser
+
+
+def process_parent(conn, matrix_code: str, mrules: list) -> tuple[int, int] | None:
+    """Regenerate one parent's child set atomically.
+
+    Returns (children, rows) on success, None when the previous generation was kept
+    (failure recorded in SPLIT_FAILURES, or no usable new set was produced).
+    """
+    stage_dir = PARQUET_V3_DIR / f"{STAGING_PREFIX}{matrix_code}"
+    shutil.rmtree(stage_dir, ignore_errors=True)
+    stage_dir.mkdir(parents=True, exist_ok=True)
+    failures_before = len(SPLIT_FAILURES)
+    try:
+        if len(mrules) == 1:
+            rule = mrules[0]
+            subs = split_parquet_by_filter(conn, rule, stage_dir=stage_dir)
+            register = lambda sub: register_sub_dataset(conn, rule, sub)  # noqa: E731
+        else:
+            subs = split_parquet_cross_product(conn, matrix_code, mrules, stage_dir=stage_dir)
+            register = lambda sub: register_cross_product_sub_dataset(conn, matrix_code, sub)  # noqa: E731
+
+        empty = [s["sub_code"] for s in subs if s["row_count"] <= 0]
+        if empty:
+            record_failure(f"{matrix_code}: empty sub-dataset(s) {empty}; previous children kept")
+        if len(SPLIT_FAILURES) > failures_before:
+            logger.error(f"{matrix_code}: staging failed; previous children (if any) are unchanged")
+            return None
+        if not subs:
+            logger.warning(f"{matrix_code}: no usable split produced; previous children (if any) kept")
+            return None
+        try:
+            swap_children(conn, matrix_code, subs, register)
+        except SwapError as e:
+            record_failure(f"{matrix_code}: {e}; previous children restored")
+            return None
+        return len(subs), sum(s["row_count"] for s in subs)
+    finally:
+        shutil.rmtree(stage_dir, ignore_errors=True)
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
 
     setup_logging(args.debug)
     logger.debug("=" * 60)
     logger.debug("12-split-datasets.py — Dataset Splitter")
     logger.debug("=" * 60)
 
-    # Create output directory
+    # --dry-run must be side-effect free: no directories, no DB writes.
     if not args.dry_run:
         PARQUET_V3_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -924,9 +1150,11 @@ def main():
 
         # Filter by CLI args
         if args.matrix:
-            rules = [r for r in rules if r.matrix_code == args.matrix]
+            wanted = {c.strip() for c in args.matrix.split(",") if c.strip()}
+            rules = [r for r in rules if r.matrix_code in wanted]
         if args.pattern:
-            rules = [r for r in rules if r.pattern == args.pattern]
+            keep = {r.matrix_code for r in rules if r.pattern == args.pattern}
+            rules = [r for r in rules if r.matrix_code in keep]
 
         if not rules:
             logger.info("No datasets matched. Nothing to do.")
@@ -942,50 +1170,34 @@ def main():
             logger.debug(f"  {pat}: {len(codes)} datasets")
 
         if not args.dry_run:
-            # Prepare schema
             ensure_schema(conn)
-            clean_previous_splits(conn, parent_matrix_code=args.matrix)
 
         # Group rules by matrix_code — multi-rule datasets get cross-product treatment
         matrix_rules = defaultdict(list)
         for rule in rules:
             matrix_rules[rule.matrix_code].append(rule)
 
-        # Process each matrix
         t0 = time.time()
         total_sub = 0
         total_rows = 0
-        errors = 0
+        kept = 0
         matrix_list = list(matrix_rules.items())
 
         for i, (matrix_code, mrules) in enumerate(matrix_list, 1):
-            if len(mrules) == 1:
-                rule = mrules[0]
-                logger.debug(f"\n[{i}/{len(matrix_list)}] {rule.matrix_code} ({rule.pattern}) "
-                             f"-> {len(rule.groups)} sub-datasets")
-                sub_results = split_parquet_by_filter(conn, rule, dry_run=args.dry_run)
-                if not args.dry_run:
-                    for sub in sub_results:
-                        if sub["row_count"] > 0:
-                            register_sub_dataset(conn, rule, sub)
-                            total_sub += 1
-                            total_rows += sub["row_count"]
-                        else:
-                            errors += 1
-                            SPLIT_FAILURES.append(f"{matrix_code}: empty sub-dataset {sub.get('sub_code')}")
+            patterns = "+".join(r.pattern for r in mrules)
+            logger.debug(f"\n[{i}/{len(matrix_list)}] {matrix_code} ({patterns})")
+            if args.dry_run:
+                if len(mrules) == 1:
+                    split_parquet_by_filter(conn, mrules[0], dry_run=True)
+                else:
+                    split_parquet_cross_product(conn, matrix_code, mrules, dry_run=True)
+                continue
+            done = process_parent(conn, matrix_code, mrules)
+            if done is None:
+                kept += 1
             else:
-                patterns = "+".join(r.pattern for r in mrules)
-                logger.debug(f"\n[{i}/{len(matrix_list)}] {matrix_code} (cross-product: {patterns})")
-                sub_results = split_parquet_cross_product(conn, matrix_code, mrules, dry_run=args.dry_run)
-                if not args.dry_run:
-                    for sub in sub_results:
-                        if sub["row_count"] > 0:
-                            register_cross_product_sub_dataset(conn, matrix_code, sub)
-                            total_sub += 1
-                            total_rows += sub["row_count"]
-                        else:
-                            errors += 1
-                            SPLIT_FAILURES.append(f"{matrix_code}: empty sub-dataset {sub.get('sub_code')}")
+                total_sub += done[0]
+                total_rows += done[1]
 
         elapsed = time.time() - t0
 
@@ -1003,7 +1215,7 @@ def main():
             logger.info(f"Done in {elapsed:.1f}s")
             logger.info(f"  Sub-datasets created: {total_sub}")
             logger.info(f"  Total rows: {total_rows:,}")
-            logger.info(f"  Errors: {errors}")
+            logger.info(f"  Parents whose previous children were kept: {kept}")
             logger.info(f"  Output: {PARQUET_V3_DIR}")
 
             # Verify
