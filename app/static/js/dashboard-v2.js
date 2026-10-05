@@ -220,9 +220,9 @@ class DashboardV2 {
         if (!this.composition || !this.composition.charts?.length) {
             // Split parents have no parquet of their own — route to the
             // sub-datasets instead of dead-ending on an error.
-            if (this.metadata.splits?.length) {
-                this.renderSplits();
-            } else if (this.composition?.suppressed?.length) {
+            const suppressed = this.composition?.suppressed?.length;
+            if (this.metadata.splits?.length) this.renderSplits();
+            if (suppressed) {
                 // Every tile's aggregate was refused by the shared policy
                 // (FIX-02): say why, keep KPIs/raw table, never an empty "no config".
                 document.getElementById('dbv2-loader').classList.add('hidden');
@@ -230,7 +230,7 @@ class DashboardV2 {
                 API.fetch(`/datasets/${this.code}/insights`, { lang: this.lang })
                     .then(ins => this.renderInsights(ins))
                     .catch(e => console.warn('Insights unavailable:', e));
-            } else {
+            } else if (!this.metadata.splits?.length) {
                 this.showError(this.ui.noComposition);
             }
             return;

@@ -2349,12 +2349,33 @@ class LensApp {
     /** Server-validated total per period for the current filters:
      *  {kind:'ok', totals:[{period,total}], aggregation} | {kind:'unavailable', aggregation}
      *  | {kind:'none'} (no time dimension) | {kind:'error'}. */
+    /** Server-aggregated rows for the given axis columns under the current
+     *  filters. Charts used to sum `this.data` (every dimension at full
+     *  granularity) in the browser, which double-counts totals and
+     *  overlapping grains; the server applies the aggregation policy once.
+     *  Returns the /data payload (check `.unavailable`) or null on error. */
+    _serverAgg(cols, extra = {}) {
+        const gb = [...new Set((cols || []).filter(Boolean))];
+        if (!gb.length || !this.metadata) return Promise.resolve(null);
+        if (!this._aggStore || this._aggStore.ref !== this.data) {
+            this._aggStore = { ref: this.data, map: new Map() };
+        }
+        const key = JSON.stringify([gb, extra]);
+        const { map } = this._aggStore;
+        if (!map.has(key)) {
+            map.set(key, API.getDatasetData(this.metadata.matrix_code,
+                { ...this.getFilters(), ...extra }, 50000, { groupBy: gb })
+                .catch(e => { console.warn('Aggregated slice failed:', e); return null; }));
+        }
+        return map.get(key);
+    }
+
     async _headlineSeries() {
         const timeDim = this.panelSetup?.timeDim;
         if (!timeDim) return { kind: 'none' };
         try {
-            const res = await API.getDatasetData(this.metadata.matrix_code, this.getFilters(), 5000,
-                                                 { groupBy: [timeDim] });
+            const res = await this._serverAgg([timeDim]);
+            if (!res) return { kind: 'error' };
             if (res.unavailable) return { kind: 'unavailable', aggregation: res.aggregation };
             const ti = res.columns.indexOf(timeDim), vi = res.columns.length - 1;
             const totals = res.rows
@@ -2705,7 +2726,14 @@ class LensApp {
                 _yearlyAgg: this.yearlyAgg,
                 _timeGranularity: this.timeGranularity,
             };
-            const translated = this._translateData(this.data);
+            // Aggregated by the server's policy, never summed from raw cells here.
+            const agg = await this._serverAgg([setup.timeDim, facetDim || setup.timeSeriesDim]);
+            if (agg?.unavailable) {
+                container.innerHTML = `<div class="chart-loading" role="note">${_escHtml(aggReasonText(agg.aggregation, this.lang,
+                    { kind: 'tile', dimType: this._dimType(agg.aggregation?.blocking_dimension) }))}</div>`;
+                return;
+            }
+            const translated = this._translateData(agg || this.data);
             // Yearly aggregation (default ON for monthly/quarterly; user can toggle)
             const aggregated = this.yearlyAgg
                 ? this._aggregateByYear(translated, setup.timeDim, setup.timeSeriesDim)
@@ -2747,8 +2775,21 @@ class LensApp {
         const periodIdx = this.selectedPeriodIdx < 0 ? periods.length - 1 : this.selectedPeriodIdx;
         const selectedPeriod = periods[periodIdx];
 
-        let filteredData = this.data;
-        if (selectedPeriod && setup.timeDim) {
+        const isChoroplethSnap = this.snapshotChartType === 'choropleth';
+        const aggSnap = await this._serverAgg(
+            isChoroplethSnap ? [setup.geoDim, setup.timeDim] : [setup.snapXDim, setup.snapSeriesDim],
+            (!isChoroplethSnap && selectedPeriod && setup.timeDim)
+                ? { [setup.timeDim]: [selectedPeriod.id] } : {});
+        if (aggSnap?.unavailable) {
+            container.innerHTML = `<div class="chart-loading" role="note">${_escHtml(aggReasonText(aggSnap.aggregation, this.lang,
+                { kind: 'tile', dimType: this._dimType(aggSnap.aggregation?.blocking_dimension) }))}</div>`;
+            document.getElementById('distribution-strip')?.classList.add('hidden');
+            return;
+        }
+        // The server already pinned the period (non-choropleth) and collapsed
+        // other dims under the policy; fall back to raw rows only on a failed call.
+        let filteredData = aggSnap || this.data;
+        if (!aggSnap && selectedPeriod && setup.timeDim) {
             const timeCol = this.data.columns.indexOf(setup.timeDim);
             if (timeCol !== -1) {
                 const periodId = selectedPeriod.id;
@@ -2792,7 +2833,7 @@ class LensApp {
             };
             // Choropleth needs all time periods for its internal timeline
             // Also: choropleth must use untranslated data — geo names must match GeoJSON features
-            const chartData = isChoropleth ? this.data : filteredData;
+            const chartData = isChoropleth ? (aggSnap || this.data) : filteredData;
 
             const chart = await createChart(container, cfg, isChoropleth ? chartData : this._translateData(chartData), this.metadata);
             if (chart) {
@@ -2802,7 +2843,7 @@ class LensApp {
                 if (btn) { btn.classList.remove('hidden'); btn.onclick = () => _exportPng(chart, `${this.metadata.matrix_code}-snapshot`); }
             }
             // Distribution strip: auto-shown below choropleth
-            this._renderDistribution(this.data, setup);
+            this._renderDistribution(isChoropleth ? (aggSnap || this.data) : this.data, setup);
         } catch (err) {
             container.innerHTML = `<div class="chart-loading" style="color:var(--red)">Chart error: ${err.message}</div>`;
         }
