@@ -128,7 +128,8 @@ function createDemographicChart(container, config, data, metadata) {
             textStyle: { fontSize: 11 },
         },
         grid: {
-            left: 60,
+            left: 16,
+            containLabel: true,
             right: 20,
             top: seriesIds.length > 1 ? 36 : 16,
             bottom: timeIds.length > 1 ? 80 : (ageCats.length > 8 ? 80 : 36),
@@ -146,7 +147,7 @@ function createDemographicChart(container, config, data, metadata) {
         },
         yAxis: {
             type: 'value',
-            axisLabel: { fontSize: 11, formatter: v => formatNumber(v) },
+            axisLabel: { fontSize: 11, formatter: v => axisNumber(v) },
         },
         series: buildSeriesForTime(defaultTimeId),
         animationDurationUpdate: 300,

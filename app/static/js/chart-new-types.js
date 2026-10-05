@@ -168,7 +168,7 @@ function createPopulationPyramidChart(container, config, data, metadata) {
             max:  maxVal * 1.05,
             axisLabel: {
                 fontSize: 11,
-                formatter: v => formatNumber(Math.abs(v)),
+                formatter: v => axisNumber(Math.abs(v)),
             },
         },
         yAxis: {
@@ -240,7 +240,7 @@ function createHorizontalBarChart(container, config, data, metadata) {
                 formatter: params => `${params[0].name}<br/>${params[0].marker} <b>${formatNumber(params[0].value)}</b>` },
             grid: { left: 160, right: 20, top: 10, bottom: 30 },
             xAxis: { type: (config._logScale && items.every(d => d.value > 0)) ? 'log' : 'value',
-                     axisLabel: { fontSize: 11, formatter: v => formatNumber(v) } },
+                     axisLabel: { fontSize: 11, formatter: v => axisNumber(v) } },
             yAxis: { type: 'category', data: items.map(d => d.name), axisLabel: { fontSize: 11, width: 145, overflow: 'truncate' } },
             series: [{ type: 'bar', data: items.map(d => d.value), itemStyle: { color: '#1a56db' },
                 label: { show: items.length <= 20, position: 'right', fontSize: 10, formatter: p => formatNumber(p.value) } }],
@@ -298,7 +298,7 @@ function createHorizontalBarChart(container, config, data, metadata) {
             } },
         legend: { show: series.length > 1 && series.length <= 20, type: 'scroll', bottom: 0, textStyle: { fontSize: 11 } },
         grid: { left: 160, right: 20, top: 10, bottom: series.length > 1 ? 50 : 30 },
-        xAxis: { type: 'value', axisLabel: { fontSize: 11, formatter: v => formatNumber(v) } },
+        xAxis: { type: 'value', axisLabel: { fontSize: 11, formatter: v => axisNumber(v) } },
         yAxis: { type: 'category', data: yData, axisLabel: { fontSize: 11, width: 145, overflow: 'truncate' } },
         series,
         animationDuration: 300,
@@ -396,7 +396,7 @@ function createStackedBarChart(container, config, data, metadata) {
             },
         },
         legend: { type: 'scroll', bottom: 0, textStyle: { fontSize: 11 } },
-        grid: { left: 60, right: 20, top: 20, bottom: 50 },
+        grid: { left: 16, right: 20, top: 20, bottom: 50, containLabel: true },
         xAxis: {
             type: 'category',
             data: xData,
@@ -404,7 +404,7 @@ function createStackedBarChart(container, config, data, metadata) {
         },
         yAxis: {
             type: 'value',
-            axisLabel: { fontSize: 11, formatter: v => formatNumber(v) },
+            axisLabel: { fontSize: 11, formatter: v => axisNumber(v) },
         },
         dataZoom: [
             { type: 'inside', xAxisIndex: 0 },
@@ -782,9 +782,9 @@ function createBubbleChart(container, config, data, metadata) {
     chart.setOption({
         tooltip: { formatter: p => `<b>${xData[p.value[0]]}</b><br/>${p.seriesName}: <b>${formatNumber(p.value[1])}</b>` },
         legend: { type: 'scroll', bottom: 0, textStyle: { fontSize: 11 } },
-        grid: { left: 60, right: 20, top: 20, bottom: 50 },
+        grid: { left: 16, right: 20, top: 20, bottom: 50, containLabel: true },
         xAxis: { type: 'category', data: xData, axisLabel: { fontSize: 11, rotate: xData.length > 20 ? 45 : 0 } },
-        yAxis: { type: 'value', axisLabel: { fontSize: 11, formatter: v => formatNumber(v) } },
+        yAxis: { type: 'value', axisLabel: { fontSize: 11, formatter: v => axisNumber(v) } },
         series,
         animationDuration: 300,
     });
@@ -872,7 +872,7 @@ function createScatterChart(container, config, data, metadata) {
             nameLocation: 'center',
             nameGap: 35,
             nameTextStyle: { fontSize: 12 },
-            axisLabel: { fontSize: 11, formatter: v => formatNumber(v) },
+            axisLabel: { fontSize: 11, formatter: v => axisNumber(v) },
         },
         yAxis: {
             type: 'value',
@@ -880,7 +880,7 @@ function createScatterChart(container, config, data, metadata) {
             nameLocation: 'center',
             nameGap: 55,
             nameTextStyle: { fontSize: 12 },
-            axisLabel: { fontSize: 11, formatter: v => formatNumber(v) },
+            axisLabel: { fontSize: 11, formatter: v => axisNumber(v) },
         },
         series: [{
             type: 'scatter',
@@ -967,7 +967,7 @@ function createSmallMultiplesChart(container, config, data, metadata) {
         });
         yAxes.push({
             type: 'value', gridIndex: i,
-            axisLabel: { show: c === 0, fontSize: 9, formatter: v => formatNumber(v, 0) },
+            axisLabel: { show: c === 0, fontSize: 9, formatter: v => axisNumber(v) },
             splitLine: { lineStyle: { color: '#f0f0f0' } },
         });
 
@@ -1051,7 +1051,7 @@ function createDistributionChart(container, values, periodLabel) {
             nameLocation: 'middle',
             nameGap: 18,
             nameTextStyle: { fontSize: 10, opacity: 0.6 },
-            axisLabel: { fontSize: 10, formatter: v => formatNumber(v) },
+            axisLabel: { fontSize: 10, formatter: v => axisNumber(v) },
             splitLine: { show: false },
         },
         yAxis: {
