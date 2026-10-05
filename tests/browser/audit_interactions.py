@@ -166,10 +166,10 @@ if __name__ == "__main__":
         os.makedirs(a.shots, exist_ok=True)
     with sync_playwright() as p:
         b = p.chromium.launch()
-        for w in (320, 390, 1440):
+        for w in [int(x) for x in os.environ.get("WIDTHS", "320,390,1440").split(",")]:
             run_v1(b, w, a.shots)
             run_v2(b, w, a.shots)
-        run_zoom(b, a.shots)
+        if not os.environ.get("NOZOOM"): run_zoom(b, a.shots)
         b.close()
     print(f"\n{len(fails)} failure(s)")
     sys.exit(1 if fails else 0)
