@@ -38,9 +38,14 @@ from collections import defaultdict
 
 import duckdb
 
-from duckdb_config import DB_FILE, CORPUS_PARQUET_DIR
+from pathlib import Path
 
-DB_PATH = str(DB_FILE)
+from duckdb_config import DB_FILE, CORPUS_PARQUET_DIR as _CORPUS_PARQUET_DIR
+
+# Optional overrides so a COPY of the corpus can be profiled (FIX-03 backfill
+# measurement) without touching data/corpus. Unset = unchanged behaviour.
+DB_PATH = os.environ.get("TEMPO_STRUCTURE_DB") or str(DB_FILE)
+CORPUS_PARQUET_DIR = Path(os.environ.get("TEMPO_STRUCTURE_PARQUET_DIR") or _CORPUS_PARQUET_DIR)
 FALLBACK_DB = "data/dimension_structure.duckdb"
 PROGRESS_INTERVAL = 200
 

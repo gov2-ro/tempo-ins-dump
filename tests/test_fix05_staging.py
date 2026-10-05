@@ -72,12 +72,12 @@ def test_stage_success_manifest_and_search_included(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     assert (out / "corpus" / "search.duckdb").exists()
     m = json.loads((out / "MANIFEST.json").read_text())
-    assert m["generation"]["status"] == "placeholder"
+    assert m["generation"]["status"] == "absent"
     assert m["source"]["latest_observation_date"] == "2024-05-06"
     assert "metadata.duckdb" in str(m["source"]["generation_built_at"])
     assert m["files"]["corpus/search.duckdb"]["sha256"]
     assert m["counts"]["parquet"] == 2
-    assert check(out, "--source", str(src)).returncode == 0
+    assert check(out, "--source", str(src), "--allow-missing-generation").returncode == 0
     assert not list(tmp_path.glob("dd.tmp.*"))
 
 
@@ -93,7 +93,7 @@ def test_index_generation_mismatch_blocks_and_keeps_previous(tmp_path):
     assert r.returncode != 0 and "index generation mismatch" in r.stdout
     assert (out / "MANIFEST.json").read_text() == before  # previous staging untouched
     assert not list(tmp_path.glob("dd.tmp.*"))
-    assert check(out).returncode == 0
+    assert check(out, "--allow-missing-generation").returncode == 0
 
 
 def test_missing_search_db_blocks(tmp_path):
