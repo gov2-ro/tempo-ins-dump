@@ -899,6 +899,14 @@ kbd {
 }
 .dash-crumb-link:hover { color: var(--accent); }
 .dash-crumb-current { color: var(--text-1); white-space: nowrap; }
+/* A single long category name (EN labels) must wrap rather than widen the page. */
+@media (max-width: 600px) {
+    .dash-crumb-link, .dash-crumb-current {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        min-width: 0;
+    }
+}
 .dash-crumb-sep { color: var(--text-2); font-size: 14px; user-select: none; }
 
 /* Subcategory card grid */
