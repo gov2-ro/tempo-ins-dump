@@ -61,4 +61,31 @@ const API = {
         if (!resp.ok) return null;
         return resp.json();
     },
+
+    /**
+     * Download CSV/XLSX of the current selection (raw observations, not the
+     * chart sample). A preflight call first reports the matching row count or
+     * the rejection (e.g. XLSX over the sheet limit) so the browser never
+     * saves an error page as a file.
+     */
+    async download(code, fmt, lang, filters, btn) {
+        const qs = `format=${fmt}&lang=${lang}&filters=${encodeURIComponent(JSON.stringify(filters || {}))}`;
+        const label = btn ? btn.textContent : '';
+        try {
+            const resp = await fetch(`${this.base}/datasets/${code}/download?${qs}&preflight=1`);
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                alert(typeof err.detail === 'string' ? err.detail : `HTTP ${resp.status}`);
+                return;
+            }
+            const info = await resp.json();
+            if (btn) {
+                btn.textContent = `${info.matching_rows.toLocaleString()} ${lang === 'en' ? 'rows' : 'rânduri'}`;
+                setTimeout(() => { btn.textContent = label; }, 4000);
+            }
+            window.location.href = `${this.base}/datasets/${code}/download?${qs}`;
+        } catch (e) {
+            alert(lang === 'en' ? `Download failed: ${e.message}` : `Descărcarea a eșuat: ${e.message}`);
+        }
+    },
 };
