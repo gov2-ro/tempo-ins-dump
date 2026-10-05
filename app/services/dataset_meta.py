@@ -8,6 +8,8 @@ import json
 import logging
 from pathlib import Path
 
+import duckdb
+
 from app.config import PARQUET_DIR
 from app.db import get_conn
 from app.services.chart_selector import (
@@ -560,6 +562,43 @@ def _light_context(conn, matrix_code: str) -> dict | None:
 def clear_context_cache():
     with _CTX_LOCK:
         _CTX_CACHE.clear()
+
+
+# Verifications that only mean "no hierarchy was detected" — a sum resting on
+# them needs the source's own total to agree before it is published.
+_WEAK_VERIFICATIONS = frozenset({'profile_flat', 'metadata', 'label', 'unverified', None})
+
+
+def source_total_gate(conn, matrix_code, decision):
+    """(reason to withhold | None, source_check | None) for a summed KPI.
+
+    kpi_total_checks holds, per dataset, how its summed latest KPI compared with
+    the cell INS publishes for the same slice (Total on the summed dimensions).
+    Without that table the generation predates the check and nothing changes.
+    A mismatch always withholds; a sum resting on weak verification also needs
+    a match. Verified/curated sums stand unless INS disagrees.
+    """
+    summed = [d for d in (decision.dimensions if decision else [])
+              if d.get('treatment') in ('partition', 'level')]
+    if not summed:
+        return None, None
+    try:
+        cur = conn.execute("SELECT * FROM kpi_total_checks WHERE matrix_code = ?", [matrix_code])
+        r = cur.fetchone()
+        row = dict(zip([d[0] for d in cur.description], r)) if r else {}
+    except duckdb.CatalogException:
+        return None, None
+    status = row.get('status')
+    if status == 'mismatch':
+        return 'source_total_mismatch', None
+    if status == 'match':
+        return None, {'source': 'INS', 'period': row.get('period'), 'value': row.get('ins'),
+                      'relative_diff': row.get('rel')}
+    if any(d.get('verification') in _WEAK_VERIFICATIONS for d in summed):
+        if (row.get('reason') or '').startswith('no_total_option'):
+            return 'no_source_total', None
+        return 'source_total_unchecked', None
+    return None, None
 
 
 def decide_grouped(ctx: dict, group_by, filters, *,
