@@ -124,8 +124,32 @@ tools in the session rather than assuming another checkout has the same setup.
   an array of known columns, else 400 (unknown columns are rejected, not ignored);
   unknown datasets 404; query failures return `{"detail":"Query failed"}`.
 - Charts use MAX_DATA_ROWS (50,000 by default) with grouping/time-window behavior.
-  Current CSV/XLSX and SDMX also cap observations without adequate disclosure.
-  They must not be described as complete exports until FIX-04 lands.
+  Exports are separate (FIX-04): `/api/datasets/{code}/download` returns every raw
+  observation matching the validated filters. CSV streams in batches (UTF-8, no
+  BOM, ordered by all dimensions; formula-like labels get a `'` prefix unless
+  `safe=0`). XLSX is a write-only temp file, rejected with 413 above 1,048,575 data
+  rows. SDMX data streams the full selection or returns 413 above
+  `TEMPO_SDMX_MAX_OBS` (250,000). Headers: `X-Export-Matching-Rows`,
+  `X-Export-Rows`, `X-Export-Complete`; `preflight=1` returns the counts as JSON
+  and takes no slot. At most `TEMPO_EXPORT_MAX_CONCURRENT` (2) exports run at once,
+  XLSX limited to 1; otherwise 503 with `Retry-After`. Local POP107A (749,428
+  rows): CSV 3 s / ~290 MB peak RSS, XLSX 41 s / 317 MB, full SDMX 14 s / 229 MB.
+  Not yet measured under a real 512 MB cap.
+- Places (FIX-06): each KPI has a stable key, RO/EN labels, source, definition,
+  unit kind, period, `stale` flag, method and an explicit `change` object
+  (relative % for counts, percentage points for % rates, per-mille points for ‰).
+  Series take the newest 30 periods and return them ascending; periods with
+  missing groups or weights are dropped, not zero-filled. SOM103A is "registered
+  unemployment" (old BIM label kept only as an alias), shown as a named
+  unweighted-mean approximation. Birth/death rates are weighted by POP105A
+  residence population (1 January proxy, so from 2012). Net wage is omitted.
+- Dataset pages (FIX-07): v1/v2 fit 320–1440px without body overflow; the topbar
+  collapses to icons at ≤600px (`.tb-compact`, dataset pages only). Pills carry
+  `aria-pressed`, icon buttons localized `aria-label`s, global focus ring. Value
+  axes use compact numbers with full values in tooltips; charts follow their
+  container via a ResizeObserver; chart type names are translated
+  (`chartTypeLabel`). Browser checks: `tests/browser/audit_layout.py` and
+  `audit_interactions.py` (`--base URL`, need Python Playwright and a running app).
 - Aggregation (FIX-02 phase 1): composed totals, insight KPIs and curated
   headlines decide through `app/services/aggregation_policy.decide()`. A total row
   is preferred; otherwise one verified or declared disjoint partition is summed.
@@ -160,9 +184,17 @@ FTS mode (`degraded` = name-matching fallback, also logged at ERROR). Search use
 per-request FTS cursors and `total` counts the full match set. The Docker smoke
 has not been run yet. Oracle/HF templates live under `scripts/deploy/`.
 
-Ask is disabled by default in app config and can accept BYOK. Fly config enables
-chat content logging. Key persistence and request/tool budgets need FIX-08.
-No keys or paid model calls are needed for the prescribed mocked tests.
+Ask is disabled by default (`TEMPO_ASK_ENABLED`) and accepts BYOK. FIX-08: history
+is validated before any provider call (user/assistant text only, 20 turns, 8k
+chars per turn, 40k total). Providers/models come from an allowlist
+(`ask-models.json` for BYOK; only `TEMPO_LLM_PROVIDER:TEMPO_LLM_MODEL` for
+server-funded calls unless `TEMPO_ASK_SERVER_MODELS`). Independent budgets: 8 model
+calls, 12 dispatched tools, 90 s; exhausting one returns a 200 partial result
+with `stop_reason`. At most 2 concurrent Ask requests (else 503 + Retry-After).
+Provider errors are stable and secret-free. Chat content logging is off by
+default, including in `fly.toml`; `ASK_METRICS` lines carry no content. BYOK keys
+stay per-tab unless the user opts in to "remember"; Clear wipes both scopes; keys
+transit the server. `GET /api/ask/config` drives the disclosure banner.
 
 ## Dated inventory, not permanent constants
 

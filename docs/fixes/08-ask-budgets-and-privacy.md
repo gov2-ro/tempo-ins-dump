@@ -1,6 +1,6 @@
 # FIX-08 — Ask request budgets and explicit persistence
 
-Status: items 1-6 implemented on `fix/08-ask-budgets` (mocked tests, browser test); item 7 deferred until FIX-02 merges. Priority: P2; complete before enabling a funded public Ask
+Status: items 1-6 implemented on `fix/08-ask-budgets` and merged to audit-fixes (mocked tests, browser test); item 7 deferred until FIX-02 merges. Priority: P2; complete before enabling a funded public Ask
 service. Owner: Ask/agent/chat UI. Dependencies: FIX-01 validation and FIX-02 safe
 data-tool semantics. No paid model calls are needed to implement acceptance tests.
 

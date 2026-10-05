@@ -1,5 +1,34 @@
 # Activity History
 
+## 2026-10-05 — Audit remediation wave 2: FIX-04, FIX-06, FIX-07, FIX-08 (items 1–6)
+
+Merged into `audit-fixes` after review; 346 tests pass with the corpus, 323 + 23
+skipped without. Layout audit 56/56 (7 pages × 320/390/768/1440 × RO-light/EN-dark).
+
+- **FIX-04 exports:** CSV/XLSX/SDMX no longer stop silently at 50,000 rows. CSV
+  streams; XLSX rejects above the sheet limit with 413; SDMX is complete-or-413
+  (budget 250,000 obs, a sizing judgment). UI preflights and shows the row count.
+  Added at review: an export concurrency cap (2, XLSX 1) because one full XLSX
+  peaks ~317 MB on a 512 MB machine. Local POP107A has 749,428 rows, not the
+  audit's 485,825.
+- **FIX-06 places:** SOM103A renamed registered unemployment (alias keeps old
+  labels/bookmarks working); latest periods first; change units by indicator kind;
+  birth/death rates weighted by residence population (POP105A from 2012 — earlier
+  years dropped, not approximated); unemployment is a labelled unweighted mean;
+  net wage omitted (FOM106E has no all-activities total). Comparison charts now
+  reload baselines/peers when the KPI changes.
+- **FIX-07 responsive UI:** v2 `<main>` flex child needed `min-width:0`; pills wrap;
+  compact topbar scoped to `.tb-compact`; a11y labels and focus ring; compact axes
+  with ResizeObserver; translated chart names; favicon. Review found one EN/dark
+  320px breadcrumb overflow, fixed by wrapping crumbs under 600px.
+- **FIX-08 Ask:** `ask_guard.py` (history validation, allowlist, redaction,
+  concurrency gate); `TEMPO_ASK_MAX_TOOL_CALLS` now counts dispatched tools, not
+  loop iterations; chat logging off by default including `fly.toml`; keys per-tab
+  unless opted in, legacy localStorage keys surfaced rather than deleted.
+
+Merge note: FIX-04 and FIX-07 both bumped `?v=` cache-busters in `index.html` and
+`dataset-v2.html`; resolved to the higher version, bumping files both changed.
+
 ## 2026-10-05 — FIX-02 phase 1: verified aggregation and headline provenance
 
 New `app/services/aggregation_policy.py` is the one decision point for composer

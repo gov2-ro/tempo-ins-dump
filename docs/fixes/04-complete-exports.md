@@ -1,6 +1,6 @@
 # FIX-04 — Complete exports and explicit delivery limits
 
-Status: implemented on fix/04-complete-exports (CSV streaming, XLSX policy, SDMX complete-or-reject, UI preflight); not deployed. Priority: P1. Owner: download/SDMX endpoints.
+Status: implemented on fix/04-complete-exports and merged to audit-fixes (CSV streaming, XLSX policy, SDMX complete-or-reject, UI preflight); not deployed. Priority: P1. Owner: download/SDMX endpoints.
 Dependencies: FIX-01 request validation; coordinate common query-boundary changes.
 
 ## Problem

@@ -1,6 +1,6 @@
 # FIX-06 — Correct place indicators, dates and change units
 
-Status: implemented on fix/06-place-indicators (pending review/merge). Priority: P1. Owner: place service and UI.
+Status: implemented on fix/06-place-indicators and merged to audit-fixes (not yet on main). Priority: P1. Owner: place service and UI.
 Dependencies: FIX-02 policy for weighted/approximate aggregation; latest-period,
 identity and unit fixes can ship first without fabricating new weights.
 
