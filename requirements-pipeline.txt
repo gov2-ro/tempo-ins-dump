@@ -1,0 +1,10 @@
+# Data pipeline (root scripts 1-13, update-pipeline.py, scripts/) on top of runtime.
+-r requirements.txt
+pandas==2.1.3
+numpy==1.26.4
+pyarrow==22.0.0
+requests==2.33.1
+tqdm==4.66.5
+beautifulsoup4==4.12.2
+PyYAML==6.0.2
+Flask==3.0.3          # duckdb-browser.py

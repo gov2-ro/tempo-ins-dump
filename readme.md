@@ -139,7 +139,8 @@ and may save `data/logs/last-pipeline-run.txt` despite failures. These are open
 | `cleanup-view-profiles.py` | Removes orphan view-profiles |
 | `detect-totals.py` | Detects "Total" rows for stripping |
 | `normalize-labels.py` | Normalizes dimension option labels |
-| `prepare-deploy-data.sh` | Stages corpus + DuckDB + view-profiles into `deploy-data/` |
+| `prepare-deploy-data.sh` | Atomically stages corpus + DuckDB + `search.duckdb` + view-profiles + `MANIFEST.json` into `deploy-data/` |
+| `release-check.py` | Validates staged data (manifest/hashes, FTS, index generation, parquet coverage), runs tests, optional docker smoke, `--deploy` only on request, `--rollback` |
 | `profile-values.py` | Computes per-dataset value profiles → `dataset_value_profiles` |
 | `strip-totals-from-parquet.py` | Strips precomputed "Total" rows from canonical parquets |
 
@@ -176,7 +177,23 @@ data/
 ## Deployment
 
 - **Dockerfile** + **fly.toml** — Fly.io deployment (shared-cpu-1x, 512MB, Amsterdam region)
-- `scripts/prepare-deploy-data.sh` — Stages corpus parquet + DuckDB + view profiles into `deploy-data/`; currently omits search index and is not an automatic build prerequisite
+- `scripts/prepare-deploy-data.sh` — stages `metadata.duckdb`, `search.duckdb`, parquets, view profiles and a `MANIFEST.json` (file sizes + sha256, source build times, latest source observation date; the generation block is a placeholder until FIX-03)
+- `scripts/release-check.py` — the release gate
+
+Release flow (staging must precede the image build; `fly deploy` never runs implicitly):
+
+```bash
+source ~/devbox/envs/240826/bin/activate
+python scripts/build-search-index.py                 # if metadata changed (index must cover all canonical matrices)
+bash scripts/prepare-deploy-data.sh                  # builds in deploy-data.tmp.*, validates, swaps atomically; previous kept as deploy-data.prev
+python scripts/release-check.py --docker             # manifest/hashes, FTS, tests, image build + smoke on :8095
+python scripts/release-check.py --docker --deploy    # same gates, then `fly deploy`
+python scripts/release-check.py --rollback           # swap deploy-data <-> deploy-data.prev (then rebuild/redeploy the image)
+```
+
+A failed staging leaves the previous `deploy-data/` untouched. The image installs the DuckDB `fts` extension at build time and fails the build if `search.duckdb` can't be opened. `GET /api/health` reports `search.mode` (`fts` or `fallback`; production fallback to name matching is also logged at ERROR) and the staged generation/observation dates.
+
+Clean checkout (no corpus, no secrets): `pip install -r requirements-dev.txt && python -m pytest tests -q`. Tests marked `corpus` are skipped without `data/corpus/`; a skip is not a pass. Dependency sets: `requirements.txt` (runtime/image), `requirements-pipeline.txt`, `requirements-dev.txt`. CI: `.github/workflows/ci.yml` (synthetic tests only; the local `fly-deploy.yml` stays untracked).
 - `scripts/deploy/oracle/` — Oracle Cloud deployment (systemd + nginx)
 - `scripts/deploy/hf-spaces/` — Hugging Face Spaces deployment
 

@@ -44,6 +44,29 @@ _LLMS_TXT = Path(__file__).parent.parent / "llms.txt"
 async def llms_txt():
     return FileResponse(_LLMS_TXT, media_type="text/plain")
 
+@app.get("/api/health", include_in_schema=False)
+def health():
+    """Release/ops status: FTS mode (observable production fallback) + manifest."""
+    import json
+    from app.services.dataset_search import search_status
+    st = {k: v for k, v in search_status().items() if k != "path"}
+    manifest = None
+    mp = CORPUS_DIR.parent / "MANIFEST.json"
+    if mp.exists():
+        try:
+            m = json.loads(mp.read_text())
+            manifest = {
+                "generation_id": m.get("generation", {}).get("id"),
+                "generation_status": m.get("generation", {}).get("status"),
+                "staged_at": m.get("staged_at"),
+                "latest_observation_date": m.get("source", {}).get("latest_observation_date"),
+            }
+        except Exception:
+            manifest = {"error": "unreadable"}
+    return {"status": "ok" if st["mode"] == "fts" else "degraded",
+            "search": st, "manifest": manifest}
+
+
 # Serve view profiles (must come before catch-all static mount)
 view_profiles_dir = CORPUS_DIR / "view-profiles"
 if view_profiles_dir.exists():
