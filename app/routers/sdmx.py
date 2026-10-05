@@ -25,6 +25,7 @@ from app.config import PARQUET_DIR, SDMX_MAX_OBS, EXPORT_BATCH_ROWS as SDMX_BATC
 from app.services.request_validation import (
     parse_period_range, period_span_sql, quote_ident, valid_matrix_code)
 from app.services.sdmx_registry import build_registry
+from app.services.export import try_acquire, busy_error
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -209,12 +210,17 @@ def get_data(
                      f"startPeriod/endPeriod or lastNObservations, or download "
                      f"CSV (no row limit).")
 
+        # Concurrency slot: non-blocking, before any headers are sent.
+        slot = try_acquire("sdmx")
+        if slot is None:
+            raise busy_error()
         col_select = ", ".join(quote_ident(d.file_col) for d in reg.dims)
         col_select += f", {quote_ident(reg.value_col)}"
         sql = f"SELECT {col_select} FROM read_parquet(?) {where_sql}"
         try:
             cur = conn.execute(sql, [str(parquet), *params])
         except Exception:
+            slot()
             log.exception("sdmx data query failed flow=%s", flow)
             raise HTTPException(500, "Query failed")
     except BaseException:
@@ -252,6 +258,7 @@ def get_data(
                 yield "".join(out)
             yield tail
         finally:
+            slot()
             conn.close()
 
     return StreamingResponse(

@@ -497,6 +497,29 @@ def _download(conn, matrix_code: str, format: str, filters: str, lang: str,
                 "xlsx_row_limit": ex.xlsx_row_limit(),
                 "export_row_limit": cfg.EXPORT_MAX_ROWS or None}
 
+    # Concurrency slot (non-blocking, before any headers). Released with the
+    # cursor: when the stream ends, errors or the client disconnects.
+    slot = ex.try_acquire("xlsx" if format == "xlsx" else "csv")
+    if slot is None:
+        raise ex.busy_error()
+
+    def release_all():
+        slot()
+        release()
+
+    try:
+        return _stream_file(conn, matrix_code, format, lang, safe, dimensions,
+                            filter_dict, schema, total, release_all)
+    except BaseException:
+        release_all()
+        raise
+
+
+def _stream_file(conn, matrix_code, format, lang, safe, dimensions,
+                 filter_dict, schema, total, release):
+    import app.config as cfg
+    from app.services import export as ex
+
     col_names = [d['dim_column_name'] for d in dimensions] + ['OBS_VALUE']
     value_maps = ex.load_value_maps(conn, matrix_code, dimensions) if lang == "en" else {}
     transform = ex.make_row_transform(col_names, value_maps, safe, format == "csv")

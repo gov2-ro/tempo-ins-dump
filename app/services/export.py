@@ -25,6 +25,7 @@ import logging
 import os
 import re
 import tempfile
+import threading
 
 import app.config as cfg
 
@@ -43,6 +44,42 @@ def csv_safe(value):
             and not _PLAIN_NUMBER.match(value):
         return "'" + value
     return value
+
+
+_slot_lock = threading.Lock()
+_active = {"all": 0, "xlsx": 0}
+
+
+def try_acquire(kind: str):
+    """Non-blocking export slot. Returns an idempotent release callable, or
+    None when the pool (or, for xlsx, the xlsx pool) is full."""
+    xl = kind == "xlsx"
+    with _slot_lock:
+        if _active["all"] >= cfg.EXPORT_MAX_CONCURRENT:
+            return None
+        if xl and _active["xlsx"] >= cfg.EXPORT_XLSX_MAX_CONCURRENT:
+            return None
+        _active["all"] += 1
+        if xl:
+            _active["xlsx"] += 1
+    done = []
+
+    def release():
+        with _slot_lock:
+            if done:
+                return
+            done.append(1)
+            _active["all"] -= 1
+            if xl:
+                _active["xlsx"] -= 1
+    return release
+
+
+def busy_error():
+    from fastapi import HTTPException
+    return HTTPException(
+        503, "Too many exports are running. Retry shortly.",
+        headers={"Retry-After": "15"})
 
 
 def xlsx_row_limit() -> int:

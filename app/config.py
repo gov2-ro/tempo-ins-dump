@@ -20,6 +20,9 @@ EXPORT_XLSX_MAX_ROWS = int(os.environ.get("TEMPO_EXPORT_XLSX_MAX_ROWS", "1048575
 # SDMX-ML is verbose (~350 B/obs) and streamed; over this many observations the
 # request is rejected (413) rather than truncated.
 SDMX_MAX_OBS = int(os.environ.get("TEMPO_SDMX_MAX_OBS", "250000"))
+# Concurrent file exports (CSV+XLSX+SDMX share one pool); XLSX is further limited.
+EXPORT_MAX_CONCURRENT = int(os.environ.get("TEMPO_EXPORT_MAX_CONCURRENT", "2"))
+EXPORT_XLSX_MAX_CONCURRENT = int(os.environ.get("TEMPO_EXPORT_XLSX_MAX_CONCURRENT", "1"))
 EXPORT_BATCH_ROWS = int(os.environ.get("TEMPO_EXPORT_BATCH_ROWS", "5000"))
 LARGE_DATASET_THRESHOLD = 50_000  # Require filters above this row count
 

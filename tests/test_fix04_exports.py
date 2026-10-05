@@ -283,6 +283,65 @@ def test_generators_cleanup_on_early_close(tmp_path):
     assert not p.exists() and closed == [1]
 
 
+# ------------------------------------------------------- concurrency slots
+
+@pytest.fixture
+def slots(monkeypatch):
+    import app.config as cfg
+    from app.services import export
+    monkeypatch.setattr(cfg, "EXPORT_MAX_CONCURRENT", 2)
+    monkeypatch.setattr(cfg, "EXPORT_XLSX_MAX_CONCURRENT", 1)
+    assert export._active == {"all": 0, "xlsx": 0}
+    yield export
+    assert export._active == {"all": 0, "xlsx": 0}
+
+
+def test_held_pool_gives_503_with_retry_after(client, slots):
+    a, b = slots.try_acquire("csv"), slots.try_acquire("csv")
+    assert slots.try_acquire("csv") is None
+    for r in (dl(client), dl(client, format="xlsx"),
+              client.get("/sdmx/2.1/data/INS,BIG1/")):
+        assert r.status_code == 503
+        assert int(r.headers["retry-after"]) > 0
+        assert "Retry" in r.json()["detail"]
+    # preflight takes no slot and still works while the pool is full
+    assert dl(client, preflight=1).status_code == 200
+    a(); b()
+    assert dl(client, filters=json.dumps({"REF_AREA": ["Cluj"]})).status_code == 200
+
+
+def test_xlsx_pool_limited_to_one(client, slots):
+    x = slots.try_acquire("xlsx")
+    assert slots.try_acquire("xlsx") is None
+    assert dl(client, format="xlsx").status_code == 503
+    assert dl(client, filters=json.dumps({"REF_AREA": ["Cluj"]})).status_code == 200  # csv ok
+    x()
+
+
+def test_slot_released_after_completion_error_and_early_close(client, slots, monkeypatch):
+    f = json.dumps({"REF_AREA": ["Cluj"]})
+    for fmt in ("csv", "xlsx"):
+        assert dl(client, format=fmt, filters=f).status_code == 200
+        assert slots._active == {"all": 0, "xlsx": 0}
+    assert client.get("/sdmx/2.1/data/INS,BIG1/",
+                      params={"lastNObservations": 1}).status_code == 200
+    assert slots._active == {"all": 0, "xlsx": 0}
+    # error mid-export
+    with monkeypatch.context() as mp:
+        mp.setattr(slots, "make_row_transform", lambda *a, **k: (lambda row: 1 / 0))
+        assert dl(client, format="xlsx").status_code == 500
+    assert slots._active == {"all": 0, "xlsx": 0}
+    # early generator close (client disconnect)
+    rel = slots.try_acquire("csv")
+    con = duckdb.connect()
+    g = slots.iter_csv(con.execute("SELECT range AS a FROM range(10000)"),
+                       ["a"], lambda r: list(r), 10, rel)
+    next(g)
+    assert slots._active["all"] == 1
+    g.close()
+    assert slots._active == {"all": 0, "xlsx": 0}
+
+
 # ------------------------------------------------------------------ SDMX
 
 def _obs_count(content):
