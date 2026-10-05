@@ -128,3 +128,19 @@ def test_check_flags_a_double_counted_sum(ck, tree, tmp_path):
 def test_offline_without_cache_fetches_nothing(ck, tree, tmp_path):
     r = ck.check(tree, {"ACC1_numar": kpi(112.0, [SUM_CAT, TIME])}, tmp_path / "c", 0.005, 0, offline=True)
     assert r["ACC1_numar"]["status"] == "not_fetched"
+
+
+def test_write_db_stores_results_and_refuses_the_repo_corpus(ck, tree, tmp_path):
+    cache = tmp_path / "cache"
+    k = kpi(112.0, [SUM_CAT, TIME])
+    seed(ck, cache, ck.Resolver(tree).resolve("ACC1_numar", k),
+         "Categorii, Perioade, UM, Valoare\nTotal, Anul 2023, Numar persoane, 112\n")
+    res = ck.check(tree, {"ACC1_numar": k}, cache, 0.005, 0, offline=True)
+    db = tree / "corpus" / "metadata.duckdb"
+    assert ck.write_db(db, res) == 1
+    con = duckdb.connect(str(db), read_only=True)
+    assert con.execute("SELECT matrix_code, period, ins, status FROM kpi_total_checks").fetchall() == [
+        ("ACC1_numar", "2023", 112.0, "match")]
+    con.close()
+    with pytest.raises(SystemExit):
+        ck.write_db(ROOT / "data" / "corpus" / "metadata.duckdb", res)

@@ -21,6 +21,7 @@ cannot be determined; nothing is guessed.
   python scripts/check-kpi-totals.py collect --data-dir DIR --out kpis.json [--codes-file F]
   python scripts/check-kpi-totals.py check --data-dir DIR --kpis kpis.json --cache DIR \
       --out report.json [--md report.md] [--tol 0.005] [--delay 0.7] [--limit N] [--offline]
+      [--write-db COPY/corpus/metadata.duckdb]
 """
 import argparse
 import collections
@@ -303,6 +304,32 @@ def summarize(results: dict, tol: float) -> dict:
             "rel_quantiles": {q: rel[int(q * (len(rel) - 1))] for q in (0.5, 0.9, 0.95, 0.99)} if rel else {}}
 
 
+TABLE_DDL = """CREATE OR REPLACE TABLE kpi_total_checks (
+    matrix_code VARCHAR PRIMARY KEY, period VARCHAR, ours DOUBLE, ins DOUBLE, rel DOUBLE,
+    status VARCHAR, reason VARCHAR, source_matrix VARCHAR, cell VARCHAR, checked_at TIMESTAMP)"""
+
+
+def write_db(db: Path, results: dict) -> int:
+    """Store results as kpi_total_checks in a COPY's metadata.duckdb (the app's gate reads it)."""
+    import datetime
+    import duckdb
+    live = (REPO / "data" / "corpus").resolve()
+    if db.resolve() == live or live in db.resolve().parents:
+        raise SystemExit(f"refusing to write {db}: that is the repository's own corpus")
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    rows = [(c, r.get("period"), r.get("ours"), r.get("ins"),
+             r.get("rel") if r.get("rel") not in (float("inf"),) else None, r["status"], r.get("reason"),
+             r.get("matrix"), json.dumps(r.get("cell"), ensure_ascii=False) if r.get("cell") else None, now)
+            for c, r in sorted(results.items())]
+    con = duckdb.connect(str(db))
+    try:
+        con.execute(TABLE_DDL)
+        con.executemany("INSERT INTO kpi_total_checks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
+    finally:
+        con.close()
+    return len(rows)
+
+
 def render_md(summary, results, top=25):
     L = ["# KPI totals vs INS", "", f"Tolerance {summary['tolerance']:.2%} relative.", "",
          "| status | count |", "|---|---|"]
@@ -339,6 +366,8 @@ def main(argv=None):
     k.add_argument("--delay", type=float, default=0.7, help="seconds between INS requests")
     k.add_argument("--limit", type=int, help="at most N new INS requests (cached answers are free)")
     k.add_argument("--offline", action="store_true", help="use cached answers only")
+    k.add_argument("--write-db", help="store results as kpi_total_checks in this metadata.duckdb "
+                                      "(a copy; replaces the table)")
     a = ap.parse_args(argv)
     data_dir = Path(a.data_dir).resolve()
     corpus = data_dir / "corpus"
@@ -360,6 +389,9 @@ def main(argv=None):
     Path(a.out).write_text(json.dumps({"summary": summary, "results": results}, indent=1, sort_keys=True) + "\n")
     if a.md:
         Path(a.md).write_text(render_md(summary, results))
+    if a.write_db:
+        print(f"wrote {write_db(Path(a.write_db), results)} rows to kpi_total_checks in {a.write_db}",
+              file=sys.stderr)
     print(json.dumps(summary, indent=1))
     return 0
 
