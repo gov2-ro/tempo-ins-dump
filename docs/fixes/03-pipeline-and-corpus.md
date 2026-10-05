@@ -1,6 +1,6 @@
 # FIX-03 — Retryable pipeline and validated corpus generations
 
-Status: phase 1 (success semantics, retry state, read-only audit) and phase 2b (generation manifest, dry-run repair planner, structure-backfill measurement on a copy) merged to audit-fixes; phase 2a (refresh ordering, targeted refresh, atomic splits) merged too. Not yet exercised on the real DB. No corpus repair has been applied. Priority: P1. Owner: ingestion and corpus tooling.
+Status: phases 1, 2a and 2b on main. Repair applied step by step on a copied generation (2026-10-05, `fix/03-corpus-repair`, not merged or published): quarantine, 7 missing matrices, INT109 dimension names, structure backfill, INS total check (`scripts/check-kpi-totals.py`). Open: time-shift remap, county-grain decisions, view profiles/search rebuild, manifest + release gate, publish. Priority: P1. Owner: ingestion and corpus tooling.
 Dependencies: agree on FIX-02's verified grain/additivity contract. Deliver control
 flow, refresh ordering, and corpus repair in independently reviewable steps.
 

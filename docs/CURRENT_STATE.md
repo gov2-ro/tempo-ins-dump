@@ -191,6 +191,10 @@ tools in the session rather than assuming another checkout has the same setup.
   valid query, flags numbers absent from tool results, and notes unqualified
   approximations. Known gaps: axes with only metadata-detected overlap warn rather
   than refuse; grouping without a time filter still sums periods (warning only).
+  On `fix/02-measure-classification` (not merged): an unknown unit type is judged by
+  the indicator name instead of defaulting to an additive count, and insights
+  withholds a summed KPI unless `kpi_total_checks` shows INS agreeing
+  (`source_total_mismatch`, `no_source_total`, `source_total_unchecked`).
 
 ## Deployment today
 
@@ -265,6 +269,25 @@ collisions, 18 inherited, 15 dropped another dimension. Backfilling
 `dimension_structure` on a copy for 1,926 unprofiled served matrices restores 749
 latest KPIs (1,525 → 2,274 of 3,368), all on split children; 584 of those rest only
 on `profile_flat` verification and need an independent additivity check.
+
+Repair generation, 2026-10-05 (copy at `~/devbox/gov2/tempo-gen-20261005/data`,
+not published; branch `fix/03-corpus-repair`, FIX-02 changes on
+`fix/02-measure-classification`): 179 files quarantined; the 7 missing matrices
+fetched and loaded (EXP101F/EXP102F were a fetch bug, not empty at source); 34
+INT109* dimension names repaired; `dimension_structure` covers 3,369 of 3,376
+served datasets; split children profiled (unit type from the split value).
+`scripts/check-kpi-totals.py` compares each summed headline KPI with the cell INS
+publishes (Total on the summed dimensions): 760 match, 326 mismatch, 363 have no
+INS total. On the live corpus 385 of 936 comparable summed KPIs disagree with INS
+(e.g. ACC102B 4,960 vs 4,862; summed rates/averages off by orders of magnitude).
+With the measure fix and the gate (`kpi_total_checks` in the generation), the copy
+publishes 1,084 latest KPIs, every summed one confirmed by INS or by verified
+structure that INS does not contradict. Still open: time-shift remap, view
+profiles, search index, manifest and release gate.
+
+Stored `matrices/dataset_splits.parquet_path` values are absolute paths from
+whichever tree wrote them (3,349 still point at the deleted `parquet-v3/`); code
+resolves files by matrix code (`duckdb_config.corpus_parquet`).
 
 Tests on 2026-10-03: 38 passing, 3 warnings. Chart eval: 1,986 baseline cases unchanged, 2,116
 added. Search: 17 top sets unchanged, 2 order changes. These results establish
