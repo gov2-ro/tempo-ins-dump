@@ -48,7 +48,12 @@ TOTAL_RE = re.compile(r"^total(\s+din care:?)?$")
 def collect(data_dir: Path, codes=None) -> dict:
     os.environ["TEMPO_DATA_DIR"] = str(data_dir.resolve())
     import duckdb
+    from app.services import insights
     from app.services.insights import compute_insights
+    # Collect what the app would compute *before* the source-total gate, which is
+    # fed by this script's own results (a KPI it withholds was never checked).
+    if hasattr(insights, "_source_total_gate"):
+        insights._source_total_gate = lambda *a, **k: (None, None)
     con = duckdb.connect(str(data_dir / "corpus" / "metadata.duckdb"), read_only=True)
     if codes is None:
         codes = [r[0] for r in con.execute(
