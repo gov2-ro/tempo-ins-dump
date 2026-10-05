@@ -22,7 +22,7 @@ read-only) and produces a repair plan with five sections:
                       stage 9 actually wrote (ECON_ACTIVITY_2, ...).
 
 --apply --target-dir DIR performs ONE step (--step quarantine, the default, or
---step dim-columns), and only on an explicit
+--step dim-columns, --step time-columns), and only on an explicit
 COPY of the corpus: files are moved from <DIR>/corpus/parquet/ to <DIR>/quarantine/
 together with quarantine-manifest.json. It refuses when DIR (or any file it would
 move) resolves inside the source data dir, so it can never act in place or through a
@@ -33,6 +33,7 @@ Usage
                                   [--audit-json F] [--no-grain]
   python scripts/repair-corpus.py --apply --target-dir COPY_DIR [--data-dir DIR]
   python scripts/repair-corpus.py --apply --step dim-columns --target-dir COPY_DIR
+  python scripts/repair-corpus.py --apply --step time-columns --target-dir COPY_DIR
 Report files must not be inside <data-dir>/corpus.
 """
 import argparse
@@ -228,6 +229,106 @@ def apply_dim_columns(plan: dict, data_dir: Path, target: Path) -> dict:
     finally:
         conn.close()
     return {"renamed": len(plan["changes"]), "matrices": len(by_matrix), "duplicates_left": left}
+
+
+# ------------------------------------------------------------------ time columns
+def plan_time_columns(conn, time_report: dict) -> dict:
+    """Parents of the time-misclassified files, with what the reset will change.
+
+    The fix itself is in 10-classify-dimensions (period labels only) and stage 11
+    (names for the demoted concepts). Existing parents keep their resolved SDMX names
+    and map rows, which a targeted stage-11 run deliberately leaves alone, so the
+    reset puts each parent back in the state a fresh import leaves it: legacy
+    dim_column_name, no sdmx_column_map rows, no parsed rows or sdmx_codes for the
+    mistyped options.
+    Re-running classify -> 11 -> 9 -> 12 -> stats -> 13 then rebuilds it."""
+    parent = dict(conn.execute("SELECT sub_matrix_code, parent_matrix_code FROM dataset_splits").fetchall())
+    parents = sorted({parent.get(f, f) for f in time_report.get("files", {})})
+    items, problems = [], []
+    for mc in parents:
+        cmap = {s: o for o, s in conn.execute(
+            "SELECT old_column_name, sdmx_column_name FROM sdmx_column_map "
+            "WHERE matrix_code = ? AND old_column_name <> 'value'", [mc]).fetchall()}
+        dims = conn.execute("SELECT dimension_id, dim_label, dim_column_name FROM dimensions "
+                            "WHERE matrix_code = ? ORDER BY dim_code", [mc]).fetchall()
+        renames = {}
+        for did, label, col in dims:
+            if col.endswith("_nom_id"):
+                continue
+            if col not in cmap:
+                problems.append({"matrix_code": mc, "column": col, "reason": "no map row to restore"})
+                continue
+            renames[did] = cmap[col]
+        # Time-typed options of every dimension that is not the observation period:
+        # a non-period label, or a period label none of whose options has a year
+        # (CNF101F 'Luni' = bare month names). Same rule as 10-classify-dimensions.
+        retyped = sorted(r[0] for r in conn.execute("""
+            WITH t AS (
+                SELECT d.dimension_id, lower(trim(d.dim_label)) AS label, o.nom_item_id, p.year
+                FROM dimensions d JOIN dimension_options o USING (dimension_id)
+                JOIN dimension_options_parsed p USING (nom_item_id)
+                WHERE d.matrix_code = ? AND p.dim_type = 'time'),
+            period AS (
+                SELECT dimension_id FROM t WHERE label IN ('perioade', 'perioade de referinta', 'ani', 'luni',
+                    'luni calendaristice', 'trimestre', 'trimestru', 'semestre', 'semestru', 'saptamani')
+                GROUP BY 1 HAVING COUNT(year) > 0)
+            SELECT DISTINCT nom_item_id FROM t WHERE dimension_id NOT IN (SELECT dimension_id FROM period)
+            """, [mc]).fetchall())
+        items.append({"matrix_code": mc, "renames": renames, "map_rows": len(cmap), "retyped_options": retyped})
+    return {"parents": parents, "count": len(parents), "items": items, "problems": problems}
+
+
+def apply_time_columns(plan: dict, data_dir: Path, target: Path) -> dict:
+    """Reset the planned parents in the COPY (see plan_time_columns)."""
+    src_corpus = data_dir / "corpus"
+    db = target / "corpus" / "metadata.duckdb"
+    if inside(target, src_corpus) or inside(src_corpus, target) or target.resolve() == data_dir.resolve() \
+            or inside(db, src_corpus):
+        raise SystemExit(f"refusing: --target-dir {target} overlaps the source corpus {src_corpus}")
+    if plan["problems"]:
+        raise SystemExit(f"refusing: {plan['problems'][:3]}")
+    conn = duckdb.connect(str(db))
+    reset = 0
+    try:
+        cols = [r[0] for r in conn.execute("DESCRIBE dimensions").fetchall()]
+        ci = cols.index("dim_column_name")
+        dins = f"INSERT INTO dimensions VALUES ({', '.join('?' * len(cols))})"
+        for it in plan["items"]:
+            mc = it["matrix_code"]
+            renames = {int(k): v for k, v in it["renames"].items()}
+            if renames:
+                dims = conn.execute("SELECT * FROM dimensions WHERE matrix_code = ? ORDER BY dimension_id",
+                                    [mc]).fetchall()
+                opts = conn.execute("SELECT * FROM dimension_options WHERE dimension_id IN "
+                                    "(SELECT dimension_id FROM dimensions WHERE matrix_code = ?)", [mc]).fetchall()
+                oins = f"INSERT INTO dimension_options VALUES ({', '.join('?' * len(opts[0]))})" if opts else None
+                new_dims = [tuple(renames.get(d[0], v) if i == ci else v for i, v in enumerate(d)) for d in dims]
+                try:  # autocommit steps + compensating restore, as in apply_dim_columns
+                    conn.execute("DELETE FROM dimension_options WHERE dimension_id IN "
+                                 "(SELECT dimension_id FROM dimensions WHERE matrix_code = ?)", [mc])
+                    conn.execute("DELETE FROM dimensions WHERE matrix_code = ?", [mc])
+                    conn.executemany(dins, new_dims)
+                    if oins:
+                        conn.executemany(oins, opts)
+                except BaseException:
+                    conn.execute("DELETE FROM dimension_options WHERE dimension_id IN "
+                                 "(SELECT dimension_id FROM dimensions WHERE matrix_code = ?)", [mc])
+                    conn.execute("DELETE FROM dimensions WHERE matrix_code = ?", [mc])
+                    conn.executemany(dins, dims)
+                    if oins:
+                        conn.executemany(oins, opts)
+                    raise
+            conn.execute("DELETE FROM sdmx_column_map WHERE matrix_code = ? AND old_column_name <> 'value'", [mc])
+            if it["retyped_options"]:
+                # Targeted classify/stage 11 never overwrite a parsed option or code
+                # (nom_item_ids are global), so the mistyped ones go and get re-parsed.
+                for table in ("dimension_options_parsed", "sdmx_codes"):
+                    conn.execute(f"DELETE FROM {table} WHERE list_contains(?, nom_item_id)",
+                                 [it["retyped_options"]])
+            reset += 1
+    finally:
+        conn.close()
+    return {"reset": reset, "parents": plan["parents"]}
 
 
 # ------------------------------------------------------------------ metadata-only
@@ -518,7 +619,7 @@ def main(argv=None) -> int:
     ap.add_argument("--audit-json", help="reuse an audit-corpus.py --full --hashes JSON (skips the scan)")
     ap.add_argument("--no-grain", action="store_true")
     ap.add_argument("--apply", action="store_true", help="apply --step on --target-dir (a COPY)")
-    ap.add_argument("--step", choices=("quarantine", "dim-columns"), default="quarantine",
+    ap.add_argument("--step", choices=("quarantine", "dim-columns", "time-columns"), default="quarantine",
                     help="what --apply does (default: quarantine)")
     ap.add_argument("--target-dir", help="copy of the data dir to apply to; required with --apply")
     a = ap.parse_args(argv)
@@ -545,6 +646,25 @@ def main(argv=None) -> int:
             Path(a.report_json).write_text(json.dumps({"kind": "repair-dim-columns", "plan": dplan,
                                                        "applied": res}, indent=1, sort_keys=True) + "\n")
         return 0 if res["duplicates_left"] == 0 else 1
+
+    if a.apply and a.step == "time-columns":
+        # planned from the SOURCE's audit (read-only); the copy gets the reset
+        audit = _load_audit()
+        rep = json.loads(Path(a.audit_json).read_text()) if a.audit_json else \
+            audit.audit(data_dir, do_grain=False, do_hashes=False)
+        conn = duckdb.connect(str(data_dir / "corpus" / "metadata.duckdb"), read_only=True)
+        try:
+            tplan = plan_time_columns(conn, report_time(rep, data_dir, audit))
+        finally:
+            conn.close()
+        res = apply_time_columns(tplan, data_dir, Path(a.target_dir).resolve())
+        print(f"reset {res['reset']} parents; now run 10-classify -> 11 -> 9 -> 12 -> stats -> 13 for: "
+              + ",".join(res["parents"]))
+        if a.report_json:
+            Path(a.report_json).write_text(json.dumps({"kind": "repair-time-columns", "plan": tplan,
+                                                       "applied": res}, indent=1, sort_keys=True,
+                                                      default=str) + "\n")
+        return 0
 
     plan = build_plan(data_dir, do_grain=not a.no_grain, audit_json=a.audit_json)
     if a.apply:
