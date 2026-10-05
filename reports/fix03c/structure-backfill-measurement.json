@@ -1,0 +1,96 @@
+{
+ "after": {
+  "datasets": 3368,
+  "errors": 0,
+  "kpi_counts": {
+   "latest": 2274,
+   "overall": 2229,
+   "prev": 177,
+   "yoy": 2252
+  },
+  "suppressed_latest_reasons": {
+   "arbitrary_pin": 909,
+   "missing_weights": 28,
+   "mixed_units": 44,
+   "overlapping_levels": 81,
+   "unverified_structure": 3
+  },
+  "tiles_suppressed_reasons": {
+   "missing_weights": 24,
+   "mixed_units": 27,
+   "overlapping_levels": 55,
+   "unverified_structure": 3
+  },
+  "tiles_suppressed_total": 109,
+  "tiles_total": 7815,
+  "with_any_kpi": 2274
+ },
+ "backfill": {
+  "dimension_rows": 5302,
+  "duplicate_dim_columns_skipped": [
+   "INT109A_lei.ECON_ACTIVITY",
+   "INT109A_mii_lei.ECON_ACTIVITY",
+   "INT109A_numar.ECON_ACTIVITY",
+   "INT109A_numar_persoane.ECON_ACTIVITY",
+   "INT109B_lei.ECON_ACTIVITY",
+   "INT109B_mii_lei.ECON_ACTIVITY",
+   "INT109B_numar.ECON_ACTIVITY",
+   "INT109B_numar_persoane.ECON_ACTIVITY"
+  ],
+  "failed": [],
+  "matrices_with_structure_now": 3429,
+  "no_dimensions_or_no_rows": 7,
+  "profiled_matrices": 1919,
+  "requested": 1926
+ },
+ "before": {
+  "datasets": 3368,
+  "errors": 0,
+  "kpi_counts": {
+   "latest": 1525,
+   "overall": 1502,
+   "prev": 113,
+   "yoy": 1514
+  },
+  "suppressed_latest_reasons": {
+   "arbitrary_pin": 886,
+   "missing_weights": 27,
+   "mixed_units": 44,
+   "overlapping_levels": 80,
+   "unverified_structure": 785
+  },
+  "tiles_suppressed_reasons": {
+   "missing_weights": 22,
+   "mixed_units": 27,
+   "overlapping_levels": 58,
+   "unverified_structure": 743
+  },
+  "tiles_suppressed_total": 850,
+  "tiles_total": 7074,
+  "with_any_kpi": 1525
+ },
+ "compare": {
+  "compared": 3368,
+  "latest_lost": 0,
+  "latest_restored": 749,
+  "latest_still_missing": 1094,
+  "lost_examples": [],
+  "still_missing_reasons": {
+   "arbitrary_pin": 909,
+   "missing_weights": 28,
+   "mixed_units": 44,
+   "overlapping_levels": 81,
+   "unverified_structure": 3
+  }
+ },
+ "extra": {
+  "restored_canonical_nonsplit": 0,
+  "restored_latest_total": 749,
+  "restored_previous_reason": {
+   "arbitrary_pin": 46,
+   "unverified_structure": 703
+  },
+  "restored_split_children": 749,
+  "still_missing_without_any_suppression_record": 29
+ }
+}

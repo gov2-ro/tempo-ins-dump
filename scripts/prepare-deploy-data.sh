@@ -51,6 +51,13 @@ echo "Copying parquet files..."
 cp "$CORPUS_DIR/parquet/"*.parquet "$TMP_DIR/corpus/parquet/"
 echo "Copying metadata.duckdb + search.duckdb..."
 cp "$CORPUS_DIR/metadata.duckdb" "$CORPUS_DIR/search.duckdb" "$TMP_DIR/corpus/"
+if [ -f "$CORPUS_DIR/generation-manifest.json" ]; then
+    echo "Copying generation-manifest.json..."
+    cp "$CORPUS_DIR/generation-manifest.json" "$TMP_DIR/corpus/"
+else
+    echo "WARNING: no generation-manifest.json in $CORPUS_DIR (scripts/build-generation-manifest.py);" \
+        "staging proceeds but release-check.py will FAIL until one is staged"
+fi
 echo "Copying view profiles..."
 cp "$CORPUS_DIR/view-profiles/"*.json "$TMP_DIR/corpus/view-profiles/"
 
@@ -61,11 +68,12 @@ if [ "$SNAP_BEFORE" != "$SNAP_AFTER" ]; then
     exit 1
 fi
 
-# Manifest (placeholder for FIX-03 generation manifest) + validate the temp stage
+# Staging manifest (embeds the FIX-03 generation manifest summary) + validate the temp stage
 $RC manifest "$TMP_DIR" "$CORPUS_DIR"
 # release-check validates a dir containing corpus/..., so point it at the temp dir;
 # tests are the release gate's job, not the staging step's.
 $PY "$SCRIPT_DIR/release-check.py" --stage "$TMP_DIR" --skip-tests --source "$CORPUS_DIR" \
+    --allow-missing-generation \
     || { echo "ERROR: staged data failed validation; previous staging untouched"; exit 1; }
 
 # Atomic swap, keeping the previous staging for rollback

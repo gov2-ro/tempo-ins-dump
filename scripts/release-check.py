@@ -14,10 +14,14 @@ secrets. Exit code is non-zero on any failed gate.
 
 Also used by prepare-deploy-data.sh via the `snapshot` and `manifest` helpers.
 
-NOTE: the manifest written by `manifest` is a PLACEHOLDER for the FIX-03
-generation manifest. If <source>/generation-manifest.json exists it is embedded
-verbatim under `generation.manifest`; replace `placeholder_generation()` with a
-real consumer once FIX-03 defines the schema.
+Generation manifest (FIX-03, scripts/build-generation-manifest.py): if
+<source>/generation-manifest.json exists it is staged as
+corpus/generation-manifest.json and summarised under `generation` in MANIFEST.json.
+check_stage() FAILS when it is absent (unless --allow-missing-generation, which
+prepare-deploy-data.sh uses for its internal pre-swap validation so staging still
+works without one) and when it disagrees with the staged files: DB / search
+sha256, parquet set + hashes + categories, view-profile digest, generation id,
+DB row counts. Known audit violations are warnings (--require-clean-audit fails).
 """
 import argparse
 import hashlib
@@ -31,8 +35,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def digest_lines(pairs) -> str:
+    """Same recipe as build-generation-manifest.digest_lines."""
+    return hashlib.sha256("\n".join(f"{n}:{s}" for n, s in sorted(pairs)).encode()).hexdigest()
+
+
+def compute_generation_id(db_sha, parquet_digest, vp_digest, search_sha) -> str:
+    blob = json.dumps({"db_sha256": db_sha, "parquet_digest": parquet_digest,
+                       "view_profiles_digest": vp_digest, "search_sha256": search_sha},
+                      sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(blob.encode()).hexdigest()
+
 DB_FILES = ("metadata.duckdb", "search.duckdb")
 MANIFEST_NAME = "MANIFEST.json"
+GEN_NAME = "generation-manifest.json"
 SCHEMA = 1
 
 
@@ -62,11 +80,13 @@ def stage_files(root: Path):
 
 # ------------------------------------------------------------------ snapshot
 def source_files(corpus: Path):
-    """Only what gets staged: DBs, parquet/*.parquet, view-profiles/*.json."""
+    """Only what gets staged: DBs, generation manifest, parquet/*.parquet, view-profiles/*.json."""
     for n in DB_FILES:
         p = corpus / n
         if p.exists():
             yield n, p
+    if (corpus / GEN_NAME).exists():
+        yield GEN_NAME, corpus / GEN_NAME
     for sub, pat in (("parquet", "*.parquet"), ("view-profiles", "*.json")):
         for p in sorted((corpus / sub).glob(pat)):
             yield f"{sub}/{p.name}", p
@@ -87,22 +107,82 @@ def snapshot(corpus: Path) -> dict:
 
 
 # ------------------------------------------------------------------ manifest
-def placeholder_generation(corpus: Path, files: dict) -> dict:
-    """Placeholder until FIX-03 supplies a generation manifest."""
-    gm = corpus / "generation-manifest.json"
-    gen = {"status": "placeholder",
-           "note": "FIX-03 generation manifest not available; id derived from DB hashes",
-           "id": "staging-" + hashlib.sha256(
-               "".join(files["corpus/" + n]["sha256"] for n in DB_FILES if "corpus/" + n in files).encode()
-           ).hexdigest()[:12]}
-    if gm.exists():
-        try:
-            gen["manifest"] = json.loads(gm.read_text())
-            gen["status"] = "embedded"
-            gen["id"] = gen["manifest"].get("generation_id", gen["id"])
-        except Exception as e:  # unreadable manifest must not pass silently
-            gen["status"] = f"unreadable: {e}"
-    return gen
+def generation_summary(stage_corpus: Path, files: dict) -> dict:
+    """Summary of the staged generation manifest, or status 'absent'/'unreadable'."""
+    gm = stage_corpus / GEN_NAME
+    if not gm.exists():
+        return {"status": "absent",
+                "id": "staging-" + hashlib.sha256("".join(
+                    files["corpus/" + n]["sha256"] for n in DB_FILES if "corpus/" + n in files
+                ).encode()).hexdigest()[:12]}
+    try:
+        g = json.loads(gm.read_text())
+        return {"status": "present", "id": g["generation_id"], "built_at": g.get("built_at"),
+                "file": "corpus/" + GEN_NAME, "file_sha256": sha256(gm),
+                "violation_counts": g.get("audit", {}).get("violation_counts"),
+                "latest_observation_date": g.get("provenance", {}).get("latest_observation_date")}
+    except Exception as e:  # unreadable manifest must not pass silently
+        return {"status": f"unreadable: {e}", "id": "unreadable"}
+
+
+def check_generation(stage: Path, listed: dict, canon_db_counts: dict, rep: "Report",
+                     allow_missing: bool, require_clean: bool):
+    """Verify corpus/generation-manifest.json against the staged files."""
+    key = "corpus/" + GEN_NAME
+    gp = stage / "corpus" / GEN_NAME
+    if key not in listed or not gp.is_file():
+        msg = f"corpus/{GEN_NAME} missing: no generation manifest ties DB, parquets, profiles and index together"
+        (rep.warn if allow_missing else rep.fail)(msg + " (build with scripts/build-generation-manifest.py)")
+        return None
+    try:
+        g = json.loads(gp.read_text())
+        assert g["kind"] == "generation-manifest" and g["schema"] == 1
+        gdb, gpq, gvp = g["db"], g["parquet"], g["view_profiles"]
+        gsearch = g.get("search_index")
+    except Exception as e:
+        rep.fail(f"generation manifest unreadable/unsupported: {e!r}")
+        return None
+    problems = []
+    # DB + search index
+    if gdb["sha256"] != listed.get("corpus/metadata.duckdb", {}).get("sha256"):
+        problems.append("metadata.duckdb sha256 differs from generation manifest")
+    s_sha = listed.get("corpus/search.duckdb", {}).get("sha256")
+    if (gsearch or {}).get("sha256") != s_sha:
+        problems.append("search.duckdb sha256 differs from generation manifest")
+    # parquet set + hashes
+    staged_pq = {r.rsplit("/", 1)[1]: v["sha256"] for r, v in listed.items()
+                 if r.startswith("corpus/parquet/") and r.endswith(".parquet")}
+    want_pq = {c + ".parquet": f["sha256"] for c, f in gpq["files"].items()}
+    miss, extra = sorted(set(want_pq) - set(staged_pq)), sorted(set(staged_pq) - set(want_pq))
+    diff = sorted(n for n in set(want_pq) & set(staged_pq) if want_pq[n] != staged_pq[n])
+    if miss or extra or diff:
+        problems.append(f"parquet set differs: {len(miss)} missing, {len(extra)} unlisted, {len(diff)} hash "
+                        f"mismatches, e.g. {(miss + extra + diff)[:3]}")
+    if gpq["digest"] != digest_lines(staged_pq.items()) or gpq["count"] != len(gpq["files"]):
+        problems.append("parquet digest/count inconsistent")
+    # view profiles
+    staged_vp = {r.rsplit("/", 1)[1]: v["sha256"] for r, v in listed.items()
+                 if r.startswith("corpus/view-profiles/") and r.endswith(".json")}
+    if gvp["digest"] != digest_lines(staged_vp.items()) or gvp["count"] != len(staged_vp):
+        problems.append(f"view-profile digest/count differs ({len(staged_vp)} staged vs {gvp['count']})")
+    # generation id
+    gid = compute_generation_id(gdb["sha256"], gpq["digest"], gvp["digest"], (gsearch or {}).get("sha256"))
+    if gid != g["generation_id"]:
+        problems.append("generation_id does not match its component digests")
+    # DB row counts
+    bad_counts = sorted(t for t, n in gdb["row_counts"].items() if canon_db_counts.get(t) != n)
+    if bad_counts:
+        problems.append(f"DB table row counts differ for {bad_counts[:5]}")
+    if problems:
+        for p in problems:
+            rep.fail("generation manifest vs staged files: " + p)
+    else:
+        rep.ok(f"generation manifest {g['generation_id'][:12]} consistent with staged DB, "
+               f"{len(staged_pq)} parquets, {len(staged_vp)} profiles, search index")
+    viol = {k: n for k, n in g.get("audit", {}).get("violation_counts", {}).items() if n}
+    if viol:
+        (rep.fail if require_clean else rep.warn)(f"generation audit has violations: {viol}")
+    return g
 
 
 def cmd_manifest(stage: Path, corpus: Path):
@@ -118,7 +198,7 @@ def cmd_manifest(stage: Path, corpus: Path):
         "schema": SCHEMA,
         "kind": "staging-manifest",
         "staged_at": now_iso(),
-        "generation": placeholder_generation(corpus, files),
+        "generation": generation_summary(stage / "corpus", files),
         "source": {
             "dir": str(corpus),
             # file timestamps of the source generation (when it was BUILT),
@@ -156,7 +236,8 @@ class Report:
         print(f"  warn  {msg}")
 
 
-def check_stage(stage: Path, rep: Report, source: Path | None = None) -> dict | None:
+def check_stage(stage: Path, rep: Report, source: Path | None = None,
+                allow_missing_generation: bool = False, require_clean_audit: bool = False) -> dict | None:
     print(f"== staged artifacts: {stage}")
     mp = stage / MANIFEST_NAME
     if not mp.exists():
@@ -225,7 +306,11 @@ def check_stage(stage: Path, rep: Report, source: Path | None = None) -> dict | 
     if orphans:
         rep.warn(f"{len(orphans)} staged parquet files are not canonical/registered "
                  "(leftovers or split parents; copied for runtime fallbacks)")
+    counts = {t: meta.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] for t in {
+        r[0] for r in meta.execute("SELECT table_name FROM information_schema.tables "
+                                   "WHERE table_schema='main' AND table_type='BASE TABLE'").fetchall()}}
     meta.close()
+    check_generation(stage, listed, counts, rep, allow_missing_generation, require_clean_audit)
 
     if source is not None:
         cur = {n: sha256(source / n) for n in DB_FILES if (source / n).exists()}
@@ -306,7 +391,7 @@ def cmd_rollback(stage: Path):
     if not prev.is_dir():
         sys.exit(f"no previous staging at {prev}")
     rep = Report()
-    if check_stage(prev, rep) is None or rep.failures:
+    if check_stage(prev, rep, allow_missing_generation=True) is None or rep.failures:
         sys.exit("previous staging does not validate; refusing to roll back")
     tmp = stage.with_name(stage.name + ".swap")
     if tmp.exists():
@@ -328,6 +413,10 @@ def main():
     ap.add_argument("--stage", default=str(ROOT / "deploy-data"))
     ap.add_argument("--source", help="corpus dir; also checks staging is not stale vs it")
     ap.add_argument("--skip-tests", action="store_true")
+    ap.add_argument("--allow-missing-generation", action="store_true",
+                    help="downgrade a missing generation manifest to a warning (staging step only)")
+    ap.add_argument("--require-clean-audit", action="store_true",
+                    help="fail when the generation manifest records audit violations")
     ap.add_argument("--docker", action="store_true", help="build image and smoke it")
     ap.add_argument("--port", type=int, default=8095)
     ap.add_argument("--deploy", action="store_true",
@@ -344,7 +433,8 @@ def main():
         cmd_rollback(stage); return
 
     rep = Report()
-    check_stage(stage, rep, Path(a.source) if a.source else None)
+    check_stage(stage, rep, Path(a.source) if a.source else None,
+                a.allow_missing_generation, a.require_clean_audit)
     if not a.skip_tests:
         run_tests(rep)
     if a.docker and not rep.failures:
