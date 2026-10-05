@@ -11,6 +11,9 @@ import duckdb as _duckdb
 _KPI_CONFIG_PATH = Path(__file__).parent.parent / "static" / "data" / "place_kpi_config.json"
 _kpi_config: dict | None = None
 
+# Display cap: the most recent N periods are kept (then returned ascending).
+SERIES_CAP = 30
+
 # Stable mapping: county geo_name_clean → development region slug
 COUNTY_REGION = {
     "Alba": "centru", "Brasov": "centru", "Covasna": "centru",
@@ -129,8 +132,8 @@ def _query_kpi_series(parquet_path: Path, ref_area_values: list[str],
         WHERE {" AND ".join(where_parts)}
           AND TRY_CAST(LEFT(CAST(TIME_PERIOD AS VARCHAR), 4) AS INTEGER) IS NOT NULL
         GROUP BY 1
-        ORDER BY 1 ASC
-        LIMIT 30
+        ORDER BY 1 DESC
+        LIMIT {SERIES_CAP}
     """
     try:
         rows = con.execute(query).fetchall()
@@ -139,7 +142,8 @@ def _query_kpi_series(parquet_path: Path, ref_area_values: list[str],
     finally:
         con.close()
 
-    return [{"year": r[0], "value": r[1]} for r in rows if r[1] is not None]
+    # Newest periods were selected above; hand them back oldest-first.
+    return [{"year": r[0], "value": r[1]} for r in reversed(rows) if r[1] is not None]
 
 
 def get_place_kpis(place_type: str, slug: str, *, conn=None) -> list[dict]:
@@ -323,9 +327,9 @@ def get_kpi_baselines(place_type: str, slug: str, kpi_label: str) -> dict:
                        {agg_func}(OBS_VALUE) AS value
                 FROM read_parquet('{parquet_path}')
                 {full_where}
-                GROUP BY 1 ORDER BY 1 ASC LIMIT 30
+                GROUP BY 1 ORDER BY 1 DESC LIMIT {SERIES_CAP}
             """).fetchall()
-            national = [{"year": r[0], "value": r[1]} for r in rows if r[1] is not None]
+            national = [{"year": r[0], "value": r[1]} for r in reversed(rows) if r[1] is not None]
         except Exception:
             national = []
         finally:
