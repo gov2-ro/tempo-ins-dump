@@ -36,6 +36,10 @@ Reasons (`reason`, machine-readable)
                             non-aggregate option, so the number is a slice, not
                             the dataset
 
+Warnings (`warnings[].code`, non-blocking): mixed_grain_on_axis (an axis spans
+several grains and none was chosen), time_collapsed (api_mode: an unfiltered
+multi-period time dim is neither grouped nor pinned, so values sum across periods).
+
 Methods (`method`): aggregate_row, sum_partition, single_row, weighted_mean,
 unweighted_mean, none.
 Verification (`verification`): verified (dimension_structure), curated (declared
