@@ -422,6 +422,21 @@ function appendAssistantResponse(result) {
             a.className = 'chat-citation';
             a.textContent = `↗ ${code}${name ? ' — ' + name : ''}`;
             cites.appendChild(a);
+            // FIX-02/08: what the cited query was allowed to claim
+            const q = (c.queries || []);
+            const tag = q.some(x => x.approximation) ? 'approx'
+                : q.length && q.every(x => x.status === 'unavailable') ? 'unavail'
+                : q.some(x => x.outcome === 'valid_slice') ? 'slice' : null;
+            if (tag) {
+                const ro = (localStorage.getItem('lens_lang') || 'ro') !== 'en';
+                const label = { approx: ro ? 'aproximare' : 'approximation',
+                                unavail: ro ? 'indisponibil' : 'unavailable',
+                                slice: ro ? 'selecție parțială' : 'partial selection' }[tag];
+                const b = document.createElement('span');
+                b.className = 'agg-badge agg-badge-' + tag;
+                b.textContent = label;
+                cites.appendChild(b);
+            }
         });
         div.appendChild(cites);
     }
@@ -438,6 +453,17 @@ function appendAssistantResponse(result) {
             warn.appendChild(item);
         });
         div.appendChild(warn);
+    }
+
+    // Numbers the deterministic check could not find in any query result
+    const unc = (result.verification && result.verification.uncited_numbers) || [];
+    if (unc.length && result.verification.status === 'unverified_numbers') {
+        const ro = (localStorage.getItem('lens_lang') || 'ro') !== 'en';
+        const note = document.createElement('div');
+        note.className = 'chat-unverified';
+        note.textContent = (ro ? 'Cifre negăsite în rezultatele interogărilor: '
+                               : 'Numbers not found in the query results: ') + unc.slice(0, 8).join(', ');
+        div.appendChild(note);
     }
 
     // Data table

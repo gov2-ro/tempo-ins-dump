@@ -124,7 +124,7 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
     unit_type = cfg.get('primary_unit_type') or 'count'
     # One shared non-additive policy (aggregation_policy); the aggregate
     # function comes from the decision, never from a local unit list.
-    non_additive = ap.is_non_additive_unit(unit_type)
+    non_additive = (meta.get('measure') or ap.classify_measure(unit_type)) == 'non_additive'
     actual_values = _parquet_dim_values(conn, matrix_code, dimensions)
     # Same level/aggregate rules the tiles use, or the headline number and
     # the hero chart disagree about the same dataset.

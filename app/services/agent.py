@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 from app import config
 from app.db import get_conn
+from app.services import answer_check
 from app.services.ask_guard import RedactingFilter, redact_text
 from app.services.llm_client import LLMError, classify_provider_error, complete_with_tools
 
@@ -130,11 +131,13 @@ Reply in the user's language (RO or EN). Dataset names in the catalog are Romani
 - pe grupe de vârstă → by age (AGE)
 - IPC → CPI, PIB → GDP, salarii → wages, natalitate → births, mortalitate → deaths
 
-## Warnings on query results
-- "Auto-applied Total filters" → already corrected; trust numbers.
-- "POSSIBLE DOUBLE-COUNTING" → re-query with one explicit Total filter as suggested.
-- "Retried after removing Total" → your filter was empty; handler dropped it.
-If a Total-filtered query returns 0 rows, retry without the Total filter.
+## Query results: status, aggregation, warnings
+Every query_dataset_data result has `status`:
+- "ok" → numbers are valid for the filters/levels listed in `aggregation`. "Auto-applied aggregate/level filters" are already corrected; trust numbers.
+- "approximation" → an unweighted mean of rates/indices. State it is an approximation, never the official/national rate.
+- "unavailable" → NO numbers exist for this grouped query (`reason`, `blocking_dimension`, `suggestion`). Do not state any figure for it. Re-query as the suggestion says (pin or choose one level/value), or explain the limitation.
+Only cite numbers that appear in a result with status ok/approximation. If no query succeeded, say so instead of giving figures.
+"Retried after removing Total" → your filter was empty; handler dropped it.
 
 ## Answer format
 Plain-language summary in the user's language + cited matrix_code(s) in parentheses (e.g. AMG159E). Don't invent codes. Decline questions unrelated to Romanian statistics.
@@ -155,6 +158,10 @@ class AgentResult:
     # FIX-08 budgets: "end_turn" normally, else "iterations" | "tools" | "deadline" | "provider"
     stop_reason: str = "end_turn"
     budget: dict = field(default_factory=dict)
+    # FIX-08 item 7: deterministic check of the answer against tool results.
+    # {status: verified|unverified_numbers|values_withheld|no_values, valid_query,
+    #  uncited_numbers: [...], unavailable: [{matrix_code, reason}], approximations: [codes]}
+    verification: dict = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -221,8 +228,14 @@ def _handle_get_dataset_schema(inp: dict, conn) -> dict:
 
 
 def _handle_query_dataset_data(inp: dict, conn) -> dict:
+    """Query tool. Grouped requests go through the shared aggregation policy
+    (FIX-02): the result carries `status` ("ok" | "approximation" |
+    "unavailable"), the decision under `aggregation` and reason codes, so the
+    model — and the deterministic answer check — see exactly what was allowed.
+    Ungrouped requests return raw observations (`aggregation` is null)."""
     from app.services.query_builder import (
-        build_data_query, resolve_parquet_schema, adapt_to_parquet, AVG_UNIT_TYPES)
+        build_data_query, resolve_parquet_schema, adapt_to_parquet, to_sdmx_name)
+    from app.services.dataset_meta import get_aggregation_context, decide_grouped
     from app.config import LARGE_DATASET_THRESHOLD
 
     matrix_code = inp.get("matrix_code", "").strip()
@@ -257,74 +270,72 @@ def _handle_query_dataset_data(inp: dict, conn) -> dict:
     dimensions = [{"dim_code": d[0], "dim_label": d[1], "dim_column_name": d[2]} for d in dims]
 
     # Shared with dataset_data/insights: the file may be SDMX or legacy v2,
-    # and the recorded dim names may be either. This branch also used to
-    # forget value_column, so a legacy parquet's `value` was queried as
-    # OBS_VALUE and the tool errored.
+    # and the recorded dim names may be either.
     schema = resolve_parquet_schema(conn, matrix_code)
+
+    warnings: list[str] = []
+    aggregation = None
+    status = "ok"
+    if group_by:
+        # FIX-02: the same decision composer tiles, insights and the grouped
+        # API use. Unavailable => no rows, a reason code and a way forward;
+        # never an unsafe sum. Unweighted means come back labelled
+        # "approximation" so the answer cannot call them an official rate.
+        ctx = get_aggregation_context(conn, matrix_code)
+        if ctx is not None:
+            sd_group = [to_sdmx_name(schema, c) for c in group_by]
+            sd_filters = {to_sdmx_name(schema, k): v for k, v in filters.items()}
+            decision = decide_grouped(ctx, sd_group, sd_filters, allow_approximation=True)
+            aggregation = decision.to_dict()
+            if not decision.available:
+                return {
+                    "matrix_code": matrix_code, "status": "unavailable",
+                    "columns": sd_group + ["OBS_VALUE"], "rows": [], "row_count": 0,
+                    "truncated": False, "aggregation": aggregation,
+                    "reason": decision.reason,
+                    "blocking_dimension": decision.blocking_dimension,
+                    "warnings": [
+                        f"AGGREGATION UNAVAILABLE ({decision.reason}"
+                        + (f", dimension {decision.blocking_dimension}" if decision.blocking_dimension else "")
+                        + "): this grouped total cannot be computed safely. Do not state a figure for it."],
+                    "suggestion": _unavailable_hint(decision),
+                }
+            filters = {k: list(v) for k, v in decision.effective_filters.items()}
+            group_by = sd_group
+            pins = {c: v for c, v in decision.effective_filters.items()
+                    if c not in sd_filters and c not in sd_group}
+            if pins:
+                warnings.append(
+                    "Auto-applied aggregate/level filters to avoid double-counting: "
+                    + ", ".join(f"{c}={_short(vs)}" for c, vs in pins.items()))
+            if decision.outcome == "approximation":
+                status = "approximation"
+                warnings.append(
+                    "APPROXIMATION: unweighted mean of non-additive values (rate/index/average) "
+                    "because no aligned weights exist. Say it is an approximation; never call it "
+                    "the official/national rate.")
+            for w in decision.warnings:
+                if w.get("code") == "time_collapsed":
+                    warnings.append(f"Values are aggregated across all periods of {w['column']}; "
+                                    "filter or group by time for a single-period figure.")
+
     dimensions, group_by, filters = adapt_to_parquet(
         schema, dimensions, group_by, filters)
-
-    # Aggregation function
-    agg_func = "SUM"
-    if group_by:
-        unit_row = conn.execute(
-            "SELECT primary_unit_type FROM matrix_profiles WHERE matrix_code = ?", [matrix_code]
-        ).fetchone()
-        if unit_row and unit_row[0] in AVG_UNIT_TYPES:
-            agg_func = "AVG"
-
-    warnings = []
+    agg_func = (aggregation or {}).get("agg_func") or "SUM"
 
     def _execute_query(f):
         sql = build_data_query(matrix_code, dimensions, f, limit + 1, group_by=group_by,
                                agg_func=agg_func, value_column=schema['value_column'])
         return conn.execute(sql).fetchall()
 
-    # ----------------------------------------------------------------------
-    # Anti double-counting: when aggregating, dims that are neither grouped
-    # nor explicitly filtered will be SUM'd over. If such a dim publishes a
-    # marginal `Total` row alongside its breakdown rows, the SUM adds the
-    # aggregate + the components and double-counts. Detect those dims, lock
-    # them to their Total value, and warn. If locking returns 0 rows (the
-    # dataset uses non-cross-product marginals — see AMG1010), fall back to
-    # the unfiltered query but emit a loud warning so the LLM can re-query.
-    # ----------------------------------------------------------------------
-    rows = None
-    if group_by:
-        total_locks = _detect_total_locks(matrix_code, dimensions, filters, group_by, conn)
-        if total_locks:
-            locked_filters = {**filters, **total_locks}
-            try:
-                test_rows = _execute_query(locked_filters)
-            except Exception:
-                test_rows = None
-            if test_rows:
-                filters = locked_filters
-                rows = test_rows
-                warnings.append(
-                    "Auto-applied Total filters to prevent double-counting: "
-                    + ", ".join(f"{c}={vs[0]}" for c, vs in total_locks.items())
-                )
-            else:
-                first_dim = next(iter(total_locks))
-                first_val = total_locks[first_dim][0]
-                warnings.append(
-                    "POSSIBLE DOUBLE-COUNTING: dim(s) "
-                    + ", ".join(total_locks.keys())
-                    + " have 'Total' options. Locking them all returned 0 rows, so the "
-                    + "dataset publishes non-cross-product marginal totals. The current "
-                    + "result may sum aggregate + breakdown rows. Re-query with a single "
-                    + f"explicit Total filter, e.g. filters={{'{first_dim}': ['{first_val}']}}."
-                )
+    try:
+        rows = _execute_query(filters)
+    except Exception as e:
+        return {"error": f"Query failed: {e}"}
 
-    if rows is None:
-        try:
-            rows = _execute_query(filters)
-        except Exception as e:
-            return {"error": f"Query failed: {e}"}
-
-    # Auto-retry: strip "Total"/"TOTAL" filter values if 0 rows
-    if len(rows) == 0 and filters:
+    # Auto-retry: strip "Total"/"TOTAL" filter values if 0 rows (raw queries
+    # only: for grouped ones the policy already chose its pins).
+    if len(rows) == 0 and filters and not aggregation:
         stripped = {
             col: [v for v in vals if str(v).upper() != "TOTAL"]
             for col, vals in filters.items()
@@ -360,60 +371,40 @@ def _handle_query_dataset_data(inp: dict, conn) -> dict:
 
     return {
         "matrix_code": matrix_code,
+        "status": status,
         "columns": columns,
         "rows": data_rows,
         "row_count": len(data_rows),
         "truncated": truncated,
+        "aggregation": aggregation,
         "warnings": warnings,
     }
 
 
-def _detect_total_locks(
-    matrix_code: str,
-    dimensions: list[dict],
-    filters: dict,
-    group_by: list[str],
-    conn,
-) -> dict[str, list[str]]:
-    """Find dims eligible for auto-Total locking to prevent double-counting.
+def _short(vs, n=3) -> str:
+    vs = [str(v) for v in vs]
+    return ",".join(vs[:n]) + (f",... ({len(vs)})" if len(vs) > n else "")
 
-    A dim is eligible when, for the given query shape, it is neither in
-    `group_by` nor in `filters`, and the parquet contains at least one row
-    where TRIM(LOWER(col)) == 'total'. Returns {col: [actual_value]} using
-    the value as it appears in the parquet (preserves case/whitespace).
 
-    `TIME_PERIOD` is never locked.
-    """
-    from pathlib import Path
-    from app.config import PARQUET_DIR
+_REASON_HINTS = {
+    "overlapping_levels": "Filter {col} to ONE level (e.g. only single years or only one band size, "
+                          "only counties) with filters, or group by {col}; or query without group_by.",
+    "unverified_structure": "Pin {col} to one explicit value (or its Total) in filters, or group by {col}.",
+    "contains_aggregate": "Remove the Total/aggregate value from the {col} filter or filter to it alone.",
+    "label_hierarchy": "Pin {col} to a single explicit value or its Total in filters.",
+    "missing_weights": "Filter every other dimension to one value, or group by it. "
+                       "Rates/indices cannot be summed or averaged across categories.",
+    "non_additive_measure": "Filter every other dimension to one value, or group by it.",
+    "mixed_units": "Filter {col} to exactly one unit.",
+    "slice_value_missing": "A filter value for {col} does not exist; use exact values from get_dataset_schema.",
+    "declared_partition_invalid": "Pin {col} to one explicit value.",
+}
 
-    p = Path(PARQUET_DIR) / f"{matrix_code}.parquet"
-    if not p.exists():
-        return {}
 
-    grouped = set(group_by or [])
-    filtered = set(filters.keys())
-    candidates = [
-        d["dim_column_name"] for d in dimensions
-        if d["dim_column_name"] not in grouped
-        and d["dim_column_name"] not in filtered
-        and d["dim_column_name"] != "TIME_PERIOD"
-    ]
-    if not candidates:
-        return {}
-
-    locks: dict[str, list[str]] = {}
-    for col in candidates:
-        try:
-            rows = conn.execute(
-                f'SELECT DISTINCT "{col}" FROM read_parquet(\'{p}\') '
-                f'WHERE LOWER(TRIM(CAST("{col}" AS VARCHAR))) = \'total\''
-            ).fetchall()
-            if rows:
-                locks[col] = [r[0] for r in rows]
-        except Exception:
-            continue
-    return locks
+def _unavailable_hint(decision) -> str:
+    col = decision.blocking_dimension or "the blocking dimension"
+    tmpl = _REASON_HINTS.get(decision.reason or "", "Narrow the query with explicit filters.")
+    return tmpl.format(col=col) + " Raw rows (no group_by, with filters) remain available."
 
 
 def _handle_list_categories(inp: dict, conn) -> dict:
@@ -486,6 +477,16 @@ def run_agent(
             "elapsed_s": round(time.monotonic() - started, 3), "max_seconds": config.ASK_MAX_SECONDS,
         }
 
+    def _finalize(answer: str) -> tuple[str, dict]:
+        """Deterministic answer check (outside the prompt): keep aggregation
+        warnings on the answer, flag numbers no valid query contains, and
+        withhold an answer that claims values without any valid query."""
+        ans, ver = _check_answer(answer, question, tool_trace)
+        for w in ver.pop("_warnings"):
+            if w not in agent_warnings:
+                agent_warnings.append(w)
+        return ans, ver
+
     def _stopped(reason: str, text: str | None = None) -> AgentResult:
         msgs = {
             "iterations": "Reached the model-call limit",
@@ -498,6 +499,7 @@ def run_agent(
             "I could not finish within the request limits. "
             + ("Partial data is attached. " if last_query_result else "")
             + "Please retry with a more specific question.")
+        answer, verification = _finalize(answer)
         return AgentResult(
             answer=answer,
             citations=_extract_citations(answer, tool_trace),
@@ -507,6 +509,7 @@ def run_agent(
             warnings=agent_warnings,
             stop_reason=reason,
             budget=_budget(),
+            verification=verification,
         )
 
     while True:
@@ -538,7 +541,9 @@ def run_agent(
                 t["tool"] == "search_datasets" and t["output"].get("total", 0) > 0
                 for t in tool_trace
             )
-            if not _guardrail_fired and last_query_result is None and search_had_results:
+            query_attempted = any(t["tool"] == "query_dataset_data" for t in tool_trace)
+            if (not _guardrail_fired and last_query_result is None and search_had_results
+                    and not query_attempted):
                 _guardrail_fired = True
                 if resp.text or resp.tool_calls:
                     messages.append(_assistant_turn(resp, provider=prov_name))
@@ -555,7 +560,7 @@ def run_agent(
                 continue
 
             # Done — extract final answer
-            answer = resp.text or "(no answer)"
+            answer, verification = _finalize(resp.text or "(no answer)")
             citations = _extract_citations(answer, tool_trace)
             chart_spec = _get_chart_spec(last_queried_matrix, conn) if last_queried_matrix else None
             return AgentResult(
@@ -566,6 +571,7 @@ def run_agent(
                 chart_spec=chart_spec,
                 warnings=agent_warnings,
                 budget=_budget(),
+                verification=verification,
             )
 
         if iterations >= config.ASK_MAX_ITERATIONS:
@@ -605,14 +611,17 @@ def run_agent(
             })
 
             if tc["name"] == "query_dataset_data" and "error" not in result:
-                # FIX-08 item 7 (DEFERRED until FIX-02 merges): this is where the tool's
-                # aggregation outcome (unsafe/approximate/unavailable) must be inspected so
-                # the final answer keeps its warnings and never relabels an approximation
-                # as an official statistic. Today only the legacy `warnings` list is used.
-                last_query_result = result
-                last_queried_matrix = tc["input"].get("matrix_code")
-                if result.get("warnings"):
-                    agent_warnings.extend(result["warnings"])
+                # FIX-08 item 7: the tool's aggregation outcome decides what the
+                # answer may claim. Only ok/approximation results are data; an
+                # "unavailable" one carries a reason code and no rows. Warnings
+                # (approximation, pins, unavailable reasons) always reach the
+                # final response; see _check_answer for the deterministic part.
+                if result.get("status") in ("ok", "approximation"):
+                    last_query_result = result
+                    last_queried_matrix = tc["input"].get("matrix_code")
+                for w in result.get("warnings") or []:
+                    if w not in agent_warnings:
+                        agent_warnings.append(w)
 
             tool_result_messages.append({
                 "role": "tool",
@@ -680,21 +689,90 @@ def _anthropic_tool_results_turn(tool_result_messages: list[dict]) -> dict:
 
 
 def _extract_citations(answer: str, tool_trace: list[dict]) -> list[dict]:
-    """Extract matrix_codes + names from the answer text and tool trace."""
-    codes: dict[str, str] = {}  # matrix_code → matrix_name
-    # From tool trace
-    for entry in tool_trace:
-        if entry["tool"] in ("get_dataset_schema", "query_dataset_data"):
-            mc = entry["input"].get("matrix_code")
-            if mc:
-                name = ""
-                if isinstance(entry.get("output"), dict):
-                    name = entry["output"].get("matrix_name", "")
-                codes[mc] = name or codes.get(mc, "")
-    # Also scan answer for parenthesised codes like (POP101A_judete)
+    """Citations from the tool trace (+ parenthesised codes in the answer).
+
+    Each carries the aggregation outcome of the queries behind it so a UI can
+    show "official total" vs "approximation" vs "unavailable":
+    {matrix_code, matrix_name, queries: [{status, outcome, method, reason,
+    approximation, filters, levels}]}.
+    """
+    codes: dict[str, dict] = {}
+
+    def entry(code):
+        return codes.setdefault(code, {"matrix_code": code, "matrix_name": "", "queries": []})
+
+    for t in tool_trace:
+        if t["tool"] not in ("get_dataset_schema", "query_dataset_data"):
+            continue
+        mc = t["input"].get("matrix_code")
+        if not mc:
+            continue
+        e = entry(mc)
+        out = t.get("output") if isinstance(t.get("output"), dict) else {}
+        name = out.get("name") or out.get("matrix_name") or ""
+        if name:
+            e["matrix_name"] = name
+        if t["tool"] == "query_dataset_data" and "error" not in out:
+            agg = out.get("aggregation") or {}
+            e["queries"].append({
+                "status": out.get("status"),
+                "outcome": agg.get("outcome") or ("raw" if out.get("status") == "ok" else None),
+                "method": agg.get("method"), "reason": agg.get("reason") or out.get("reason"),
+                "approximation": bool(agg.get("approximation")),
+                "filters": agg.get("filters") if agg else (t["input"].get("filters") or {}),
+                "levels": agg.get("levels") or {},
+            })
     for match in re.finditer(r'\(([A-Z][A-Z0-9_]{3,})\)', answer):
-        codes.setdefault(match.group(1), "")
-    return [{"matrix_code": k, "matrix_name": v} for k, v in sorted(codes.items())]
+        entry(match.group(1))
+    return [codes[k] for k in sorted(codes)]
+
+
+def _check_answer(answer: str, question: str, tool_trace: list[dict]) -> tuple[str, dict]:
+    """FIX-08 item 7, deterministic and outside the prompt.
+
+    * no valid query (rows under an ok/approximation outcome) but the answer
+      states numbers -> the answer is replaced (values_withheld);
+    * valid query but numbers the results do not contain -> flagged
+      (unverified_numbers) in `warnings` and `verification.uncited_numbers`;
+    * an approximation the answer did not qualify gets an explicit note.
+    """
+    lang = answer_check.guess_lang(question)
+    valid = answer_check.valid_queries(tool_trace)
+    unavailable = [
+        {"matrix_code": t["output"].get("matrix_code"), "reason": t["output"].get("reason")}
+        for t in tool_trace
+        if t["tool"] == "query_dataset_data" and isinstance(t.get("output"), dict)
+        and t["output"].get("status") == "unavailable"]
+    approx = sorted({v.get("matrix_code") for v in valid if v.get("status") == "approximation"})
+    warns: list[str] = []
+    ver = {"valid_query": bool(valid), "uncited_numbers": [],
+           "unavailable": unavailable, "approximations": approx, "status": "no_values"}
+
+    if not valid:
+        if answer_check.has_value_claims(answer, question):
+            ver["status"] = "values_withheld"
+            ver["uncited_numbers"] = [c["raw"] for c in answer_check.find_numbers(answer, question)]
+            warns.append("Answer withheld: it stated figures but no data query succeeded.")
+            answer = answer_check.NOTICES[lang]["withheld"]
+            if unavailable:
+                reasons = ", ".join(sorted({u["reason"] or "?" for u in unavailable}))
+                answer += f" ({reasons})"
+        ver["_warnings"] = warns
+        return answer, ver
+
+    unc = answer_check.uncited_numbers(answer, valid, question)
+    if unc:
+        ver["status"] = "unverified_numbers"
+        ver["uncited_numbers"] = unc
+        warns.append("Numbers not found in any query result (derived or unverified): "
+                     + ", ".join(unc[:8]))
+    else:
+        ver["status"] = "verified"
+    notes = answer_check.approximation_notes(answer, tool_trace, lang)
+    if notes:
+        answer = answer.rstrip() + "\n\n" + "\n".join(notes)
+    ver["_warnings"] = warns
+    return answer, ver
 
 
 def _get_chart_spec(matrix_code: str, conn) -> dict | None:

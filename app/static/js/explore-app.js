@@ -2094,7 +2094,7 @@ class LensApp {
         try {
             this.data = await API.getDatasetData(code, filters, 50000, { groupBy });
             // Server may have auto-applied time window for very large datasets
-            if (this.data.time_windowed) {
+            if (this.data.time_windowed || this.data.truncated) {
                 this._showServerTimeWindowNotice();
             } else if (autoFilterApplied) {
                 this._showLargeDatasetNotice();
@@ -2271,9 +2271,22 @@ class LensApp {
                 shownPeriods = seen.size;
             }
         }
-        const msg = this.lang === 'ro'
-            ? `Se afișează ultimele ${shownPeriods || '?'} perioade (din ${periods.length} disponibile) — set de date mare`
-            : `Showing last ${shownPeriods || '?'} periods (of ${periods.length} available) — large dataset`;
+        const ro = this.lang === 'ro';
+        const parts = [];
+        if (data?.time_windowed) {
+            parts.push(ro
+                ? `Se afișează ultimele ${shownPeriods || '?'} perioade (din ${periods.length} disponibile) — set de date mare`
+                : `Showing last ${shownPeriods || '?'} periods (of ${periods.length} available) — large dataset`);
+        }
+        if (data?.truncated) {
+            parts.push(ro ? 'Rezultatul a atins limita de rânduri — unele combinații lipsesc.'
+                          : 'The result hit the row cap — some combinations are missing.');
+        }
+        if (data?.partial_period_dropped) {
+            parts.push(ro ? `Perioada ${data.partial_period_dropped} a fost omisă (ar fi fost incompletă).`
+                          : `Period ${data.partial_period_dropped} was left out: it would have been incomplete.`);
+        }
+        const msg = parts.join(' ');
         let notice = document.getElementById('large-dataset-notice');
         if (!notice) {
             notice = document.createElement('div');
@@ -2295,48 +2308,105 @@ class LensApp {
     renderInsights() {
         const row = document.getElementById('insights-row');
         row.innerHTML = '';
+        if (this.data && this.data.unavailable) {
+            // The shared aggregation policy refused this selection: show why.
+            this._insightSeq = (this._insightSeq || 0) + 1;
+            const t = aggReasonText(this.data.aggregation, this.lang,
+                { kind: 'total', dimType: this._dimType(this.data.aggregation?.blocking_dimension) });
+            row.innerHTML = `<div class="insight-card" role="note"><div class="insight-label">Status</div><div class="insight-value insight-unavail">${_escHtml(t)}</div></div>`;
+            return;
+        }
         if (!this.data || !this.data.rows.length) {
             row.innerHTML = `<div class="insight-card"><div class="insight-label">Status</div><div class="insight-value" style="font-size:16px;color:var(--text-2)">${this.ui.noDataFilters}</div></div>`;
             return;
         }
 
-        const rows = this.data.rows;
-        const cols = this.data.columns;
-        const valueIdx = cols.length - 1;
-        const values = rows.map(r => r[valueIdx]).filter(v => v != null);
-        const setup = this.panelSetup;
+        // FIX-02: totals/trends are never summed from these rows in the
+        // browser (they mix grains and totals with components). The headline
+        // series comes from the server's aggregation policy; only counts are
+        // computed here.
+        const seq = this._insightSeq = (this._insightSeq || 0) + 1;
+        this._renderInsightCards(row, null);
+        this._headlineSeries().then(series => {
+            if (seq !== this._insightSeq) return;       // a newer render superseded this one
+            this._renderInsightCards(row, series);
+        });
+    }
 
-        // Aggregate by time period if time dimension exists
-        // Use AVG for rate/percentage data, SUM for counts
-        const unitType = this.chartConfig?.primary_unit_type;
-        const useAvg = unitType === 'percentage' || unitType === 'time_unit' || unitType === 'rate';
-        const timeDim = setup?.timeDim;
-        const timeIdx = timeDim ? cols.indexOf(timeDim) : -1;
-        let periodTotals = null; // [{period, total}] sorted chronologically
-
-        if (timeIdx !== -1) {
-            const byPeriod = {};
-            const byCounts = {};
-            for (const r of rows) {
-                const t = r[timeIdx];
-                const v = r[valueIdx];
-                if (t != null && v != null) {
-                    byPeriod[t] = (byPeriod[t] || 0) + v;
-                    byCounts[t] = (byCounts[t] || 0) + 1;
-                }
-            }
-            periodTotals = Object.entries(byPeriod)
-                .map(([p, t]) => ({
-                    period: p,
-                    total: useAvg ? t / (byCounts[p] || 1) : t,
-                }))
-                .sort((a, b) => String(a.period).localeCompare(String(b.period)));
+    /** "No data" or, when the aggregation policy refused the selection, why. */
+    _emptyDataText() {
+        if (this.data?.unavailable) {
+            return _escHtml(aggReasonText(this.data.aggregation, this.lang,
+                { kind: 'tile', dimType: this._dimType(this.data.aggregation?.blocking_dimension) }));
         }
+        return this.ui.noData;
+    }
 
-        // Card 1: Latest period aggregate with YoY trend
-        if (periodTotals && periodTotals.length > 0) {
-            const latest = periodTotals[periodTotals.length - 1];
-            const prev = periodTotals.length > 1 ? periodTotals[periodTotals.length - 2] : null;
+    _dimType(col) {
+        return (this.metadata?.dimensions || []).find(d => d.dim_column_name === col)?.dim_type || null;
+    }
+
+    /** Server-validated total per period for the current filters:
+     *  {kind:'ok', totals:[{period,total}], aggregation} | {kind:'unavailable', aggregation}
+     *  | {kind:'none'} (no time dimension) | {kind:'error'}. */
+    /** Server-aggregated rows for the given axis columns under the current
+     *  filters. Charts used to sum `this.data` (every dimension at full
+     *  granularity) in the browser, which double-counts totals and
+     *  overlapping grains; the server applies the aggregation policy once.
+     *  Returns the /data payload (check `.unavailable`) or null on error. */
+    _serverAgg(cols, extra = {}) {
+        const gb = [...new Set((cols || []).filter(Boolean))];
+        if (!gb.length || !this.metadata) return Promise.resolve(null);
+        if (!this._aggStore || this._aggStore.ref !== this.data) {
+            this._aggStore = { ref: this.data, map: new Map() };
+        }
+        const key = JSON.stringify([gb, extra]);
+        const { map } = this._aggStore;
+        if (!map.has(key)) {
+            map.set(key, API.getDatasetData(this.metadata.matrix_code,
+                { ...this.getFilters(), ...extra }, 50000, { groupBy: gb })
+                .catch(e => { console.warn('Aggregated slice failed:', e); return null; }));
+        }
+        return map.get(key);
+    }
+
+    async _headlineSeries() {
+        const timeDim = this.panelSetup?.timeDim;
+        if (!timeDim) return { kind: 'none' };
+        try {
+            const res = await this._serverAgg([timeDim]);
+            if (!res) return { kind: 'error' };
+            if (res.unavailable) return { kind: 'unavailable', aggregation: res.aggregation };
+            const ti = res.columns.indexOf(timeDim), vi = res.columns.length - 1;
+            const totals = res.rows
+                .filter(r => r[ti] != null && r[vi] != null)
+                .map(r => ({ period: r[ti], total: r[vi] }))
+                .sort((x, y) => String(x.period).localeCompare(String(y.period)));
+            return { kind: 'ok', totals, aggregation: res.aggregation };
+        } catch (e) {
+            console.warn('Headline series unavailable:', e);
+            return { kind: 'error' };
+        }
+    }
+
+    _renderInsightCards(row, series) {
+        row.innerHTML = '';
+        const rows = this.data.rows, cols = this.data.columns;
+        const valueIdx = cols.length - 1;
+        const timeDim = this.panelSetup?.timeDim;
+        const totals = series?.kind === 'ok' ? series.totals : [];
+        const unavailText = kind => aggReasonText(series?.aggregation, this.lang,
+            { kind, dimType: this._dimType(series?.aggregation?.blocking_dimension) });
+
+        // Card 1: latest aggregate with trend (server totals; arithmetic only)
+        if (!series) {
+            this.addInsight(row, this.ui.latestValue, '…');
+        } else if (series.kind === 'unavailable') {
+            this.addInsight(row, this.ui.latestValue,
+                `<span class="insight-unavail" role="note">${_escHtml(unavailText('total'))}</span>`);
+        } else if (totals.length) {
+            const latest = totals[totals.length - 1];
+            const prev = totals.length > 1 ? totals[totals.length - 2] : null;
             let trendHtml = '';
             if (prev && prev.total !== 0) {
                 const pctChange = ((latest.total - prev.total) / Math.abs(prev.total)) * 100;
@@ -2346,20 +2416,19 @@ class LensApp {
             }
             const periodLabel = String(latest.period).replace(/^Anul\s+/, '');
             this.addInsight(row, this.ui.latestValue, this.formatBigNumber(latest.total),
-                (trendHtml ? trendHtml + ' ' : '') + (periodLabel ? `<span class="insight-period">${periodLabel}</span>` : ''));
+                (trendHtml ? trendHtml + ' ' : '') + (periodLabel ? `<span class="insight-period">${periodLabel}</span>` : '')
+                + aggBadgeHTML(series.aggregation, this.lang));
         } else {
-            // No time dimension — show sum or avg of all values
-            const agg = useAvg
-                ? values.reduce((a, b) => a + b, 0) / values.length
-                : values.reduce((a, b) => a + b, 0);
-            this.addInsight(row, this.ui.latestValue, this.formatBigNumber(agg));
+            this.addInsight(row, this.ui.dataPoints, formatNumber(rows.length, 0));
         }
 
-        // Card 2: Overall Change (first→last period %)
-        if (periodTotals && periodTotals.length >= 2) {
-            const first = periodTotals[0];
-            const latest = periodTotals[periodTotals.length - 1];
-            if (first.total && first.total !== 0) {
+        // Card 2: overall change (first -> last server total)
+        if (series?.kind === 'unavailable') {
+            this.addInsight(row, this.ui.overallChange,
+                `<span class="insight-unavail" role="note">${_escHtml(unavailText('change'))}</span>`);
+        } else if (totals.length >= 2) {
+            const first = totals[0], latest = totals[totals.length - 1];
+            if (first.total) {
                 const change = ((latest.total - first.total) / Math.abs(first.total)) * 100;
                 const sign = change >= 0 ? '+' : '';
                 const cls = change >= 0 ? 'insight-up' : 'insight-down';
@@ -2368,37 +2437,34 @@ class LensApp {
                     `<span class="${cls}">${sign}${change.toFixed(1)}%</span>`,
                     `${this.ui.since} ${firstLabel}`);
             } else {
-                this.addInsight(row, this.ui.coverage, String(periodTotals.length),
-                    this.ui.periods);
+                this.addInsight(row, this.ui.coverage, String(totals.length), this.ui.periods);
             }
         } else {
             this.addInsight(row, this.ui.dataPoints, formatNumber(rows.length, 0));
         }
 
-        // Card 3: Data Coverage (periods × categories)
-        if (periodTotals && periodTotals.length > 0) {
-            // Count unique values in the largest non-time dimension
+        // Card 3: coverage (counts only — no summing)
+        const timeIdx = timeDim ? cols.indexOf(timeDim) : -1;
+        if (timeIdx !== -1) {
+            const nPeriods = new Set(rows.map(r => r[timeIdx]).filter(v => v != null)).size;
             const nonTimeDims = cols.filter((c, i) => i !== valueIdx && c !== timeDim);
             let catCount = 0;
-            if (nonTimeDims.length > 0) {
-                // Find dimension with most unique values
-                for (const dim of nonTimeDims) {
-                    const idx = cols.indexOf(dim);
-                    const uniq = new Set(rows.map(r => r[idx]).filter(v => v != null)).size;
-                    if (uniq > catCount) catCount = uniq;
-                }
+            for (const dim of nonTimeDims) {
+                const idx = cols.indexOf(dim);
+                const uniq = new Set(rows.map(r => r[idx]).filter(v => v != null)).size;
+                if (uniq > catCount) catCount = uniq;
             }
             const sub = catCount > 1
                 ? `${this.ui.periods} · ${catCount} ${this.ui.categories}`
                 : this.ui.periods;
-            this.addInsight(row, this.ui.coverage, String(periodTotals.length), sub);
+            this.addInsight(row, this.ui.coverage, String(nPeriods), sub);
         } else {
             this.addInsight(row, this.ui.coverage, formatNumber(rows.length, 0), this.ui.dataPoints);
         }
 
-        // Card 4: Sparkline (per-period totals) or Data Points
-        if (periodTotals && periodTotals.length >= 3) {
-            this.addSparklineInsight(row, periodTotals);
+        // Card 4: sparkline of the server totals, or data points
+        if (totals.length >= 3) {
+            this.addSparklineInsight(row, totals);
         } else {
             this.addInsight(row, this.ui.dataPoints, formatNumber(rows.length, 0),
                 `${this.ui.ofTotal} ${formatNumber(this.metadata.row_count, 0)} ${this.ui.total}`);
@@ -2478,10 +2544,13 @@ class LensApp {
         const seriesIdx = seriesDim ? cols.indexOf(seriesDim) : -1;
         const valIdx = cols.length - 1;
 
-        const unitType = this.chartConfig?.primary_unit_type;
-        const useAvg = unitType === 'percentage' || unitType === 'time_unit' || unitType === 'rate';
+        // One shared additivity verdict (server aggregation policy): a
+        // non-additive measure is averaged over the sub-periods, never summed.
+        const useAvg = this.metadata?.measure === 'non_additive';
 
-        // key = seriesValue + '|' + year
+        // key = every non-time, non-value cell of the row + year. Distinct cells
+        // of any other dimension are never merged here (FIX-02).
+        const cellIdx = cols.map((c, i) => i).filter(i => i !== timeIdx && i !== valIdx);
         const sums = new Map();
         const counts = new Map();
         const firstRow = new Map();
@@ -2489,7 +2558,7 @@ class LensApp {
         for (const row of data.rows) {
             const period = String(row[timeIdx] || '');
             const year = period.slice(0, 4);  // "2024-01" → "2024"
-            const seriesVal = seriesIdx >= 0 ? row[seriesIdx] : '__';
+            const seriesVal = cellIdx.map(i => row[i]).join('\u0001');
             const key = `${seriesVal}|${year}`;
             const v = row[valIdx];
             if (v == null) continue;
@@ -2618,7 +2687,7 @@ class LensApp {
         if (!setup?.hasTimePanel) return;
 
         if (!this.data || !this.data.rows.length) {
-            container.innerHTML = `<div class="chart-loading">${this.ui.noData}</div>`;
+            container.innerHTML = `<div class="chart-loading">${this._emptyDataText()}</div>`;
             return;
         }
         container.innerHTML = '';
@@ -2657,7 +2726,14 @@ class LensApp {
                 _yearlyAgg: this.yearlyAgg,
                 _timeGranularity: this.timeGranularity,
             };
-            const translated = this._translateData(this.data);
+            // Aggregated by the server's policy, never summed from raw cells here.
+            const agg = await this._serverAgg([setup.timeDim, facetDim || setup.timeSeriesDim]);
+            if (agg?.unavailable) {
+                container.innerHTML = `<div class="chart-loading" role="note">${_escHtml(aggReasonText(agg.aggregation, this.lang,
+                    { kind: 'tile', dimType: this._dimType(agg.aggregation?.blocking_dimension) }))}</div>`;
+                return;
+            }
+            const translated = this._translateData(agg || this.data);
             // Yearly aggregation (default ON for monthly/quarterly; user can toggle)
             const aggregated = this.yearlyAgg
                 ? this._aggregateByYear(translated, setup.timeDim, setup.timeSeriesDim)
@@ -2690,7 +2766,7 @@ class LensApp {
         }
 
         if (!this.data || !this.data.rows.length) {
-            container.innerHTML = `<div class="chart-loading">${this.ui.noData}</div>`;
+            container.innerHTML = `<div class="chart-loading">${this._emptyDataText()}</div>`;
             return;
         }
 
@@ -2699,8 +2775,21 @@ class LensApp {
         const periodIdx = this.selectedPeriodIdx < 0 ? periods.length - 1 : this.selectedPeriodIdx;
         const selectedPeriod = periods[periodIdx];
 
-        let filteredData = this.data;
-        if (selectedPeriod && setup.timeDim) {
+        const isChoroplethSnap = this.snapshotChartType === 'choropleth';
+        const aggSnap = await this._serverAgg(
+            isChoroplethSnap ? [setup.geoDim, setup.timeDim] : [setup.snapXDim, setup.snapSeriesDim],
+            (!isChoroplethSnap && selectedPeriod && setup.timeDim)
+                ? { [setup.timeDim]: [selectedPeriod.id] } : {});
+        if (aggSnap?.unavailable) {
+            container.innerHTML = `<div class="chart-loading" role="note">${_escHtml(aggReasonText(aggSnap.aggregation, this.lang,
+                { kind: 'tile', dimType: this._dimType(aggSnap.aggregation?.blocking_dimension) }))}</div>`;
+            document.getElementById('distribution-strip')?.classList.add('hidden');
+            return;
+        }
+        // The server already pinned the period (non-choropleth) and collapsed
+        // other dims under the policy; fall back to raw rows only on a failed call.
+        let filteredData = aggSnap || this.data;
+        if (!aggSnap && selectedPeriod && setup.timeDim) {
             const timeCol = this.data.columns.indexOf(setup.timeDim);
             if (timeCol !== -1) {
                 const periodId = selectedPeriod.id;
@@ -2744,7 +2833,7 @@ class LensApp {
             };
             // Choropleth needs all time periods for its internal timeline
             // Also: choropleth must use untranslated data — geo names must match GeoJSON features
-            const chartData = isChoropleth ? this.data : filteredData;
+            const chartData = isChoropleth ? (aggSnap || this.data) : filteredData;
 
             const chart = await createChart(container, cfg, isChoropleth ? chartData : this._translateData(chartData), this.metadata);
             if (chart) {
@@ -2754,7 +2843,7 @@ class LensApp {
                 if (btn) { btn.classList.remove('hidden'); btn.onclick = () => _exportPng(chart, `${this.metadata.matrix_code}-snapshot`); }
             }
             // Distribution strip: auto-shown below choropleth
-            this._renderDistribution(this.data, setup);
+            this._renderDistribution(isChoropleth ? (aggSnap || this.data) : this.data, setup);
         } catch (err) {
             container.innerHTML = `<div class="chart-loading" style="color:var(--red)">Chart error: ${err.message}</div>`;
         }

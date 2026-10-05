@@ -5,6 +5,7 @@ chart_config). Reusable across the FastAPI route, the `tempo-dev` MCP
 server, and the LLM agent (Step 2 of the LLM tooling plan).
 """
 import json
+import logging
 from pathlib import Path
 
 from app.config import PARQUET_DIR
@@ -13,10 +14,13 @@ from app.services.chart_selector import (
     build_signature, select_charts, assign_roles, decide_pair, TOTAL_RE)
 from app.services.dashboard_composer import (
     compose_dashboard, retune_ranked_series, primary_time_dim,
-    _build_slice, _non_total_options, NON_ADDITIVE_UNIT_TYPES)
+    _build_slice, _non_total_options, _effective)
+from app.services import aggregation_policy as ap
 from app.services import dimension_structure as dstruct
 from app.services.query_builder import build_data_query
 
+
+log = logging.getLogger(__name__)
 
 _EN_METAS_DIR = Path(__file__).parent.parent.parent / "data" / "2-metas" / "en"
 
@@ -74,7 +78,8 @@ def _parquet_dim_values(conn, matrix_code: str, dimensions: list) -> dict:
 
 def _detect_composition(conn, matrix_code: str, dimensions: list,
                         actual_values: dict, unit_type: str,
-                        struct: dict | None = None) -> bool | None:
+                        struct: dict | None = None,
+                        non_additive: bool | None = None) -> bool | None:
     """Data-grounded parts-of-whole check for the stackable series dim.
 
     Picks the dim a stacked chart would use as its series (small
@@ -98,7 +103,8 @@ def _detect_composition(conn, matrix_code: str, dimensions: list,
     dim = candidates[0][2]
     col = dim['dim_column_name']
 
-    non_additive = unit_type in NON_ADDITIVE_UNIT_TYPES
+    if non_additive is None:
+        non_additive = ap.is_non_additive_unit(unit_type)
     time_dim = primary_time_dim(dimensions)
     spec = _build_slice({'x_axis': col}, dimensions, time_dim,
                         'horizontal_bar', actual_values, non_additive, struct)
@@ -139,46 +145,10 @@ def _load_en_meta(matrix_code: str) -> dict:
     return {}
 
 
-def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict | None:
-    """Fetch full metadata + dimensions + chart config for a dataset.
-
-    Args:
-        matrix_code: Dataset identifier
-        lang:        'ro' or 'en'
-        conn:        Optional DuckDB cursor; defaults to `get_conn()`
-
-    Returns:
-        Dict with the full dataset shape (see `app/routers/datasets.py:get_dataset`),
-        or None if the matrix_code is not found. Callers decide whether to
-        raise an HTTPException or handle the missing case differently.
-    """
-    if conn is None:
-        conn = get_conn()
-    en_meta = _load_en_meta(matrix_code) if lang == "en" else {}
-
-    # Fetch matrix info
-    m = conn.execute("""
-        SELECT matrix_code, matrix_name, context_code, ancestor_codes,
-               definitie, metodologie, ultima_actualizare, observatii,
-               row_count, mat_max_dim, is_split, parent_matrix_code,
-               matrix_name_en
-        FROM matrices
-        WHERE matrix_code = ?
-    """, [matrix_code]).fetchone()
-
-    if not m:
-        return None
-
-    # Fetch profile
-    profile_row = conn.execute("""
-        SELECT * FROM matrix_profiles WHERE matrix_code = ?
-    """, [matrix_code]).fetchone()
-
-    profile = {}
-    if profile_row:
-        profile_cols = [d[0] for d in conn.execute("DESCRIBE matrix_profiles").fetchall()]
-        profile = dict(zip(profile_cols, profile_row))
-
+def load_dimensions(conn, matrix_code: str, lang: str = "ro",
+                    en_meta: dict | None = None) -> list:
+    """Dimensions with options and parsed metadata, in SDMX column names."""
+    en_meta = en_meta or {}
     # Fetch dimensions with options and parsed metadata
     dims_raw = conn.execute("""
         SELECT
@@ -294,6 +264,50 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
             'option_count': opt_count,
             'options': option_list,
         })
+    return dimensions
+
+
+def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict | None:
+    """Fetch full metadata + dimensions + chart config for a dataset.
+
+    Args:
+        matrix_code: Dataset identifier
+        lang:        'ro' or 'en'
+        conn:        Optional DuckDB cursor; defaults to `get_conn()`
+
+    Returns:
+        Dict with the full dataset shape (see `app/routers/datasets.py:get_dataset`),
+        or None if the matrix_code is not found. Callers decide whether to
+        raise an HTTPException or handle the missing case differently.
+    """
+    if conn is None:
+        conn = get_conn()
+    en_meta = _load_en_meta(matrix_code) if lang == "en" else {}
+
+    # Fetch matrix info
+    m = conn.execute("""
+        SELECT matrix_code, matrix_name, context_code, ancestor_codes,
+               definitie, metodologie, ultima_actualizare, observatii,
+               row_count, mat_max_dim, is_split, parent_matrix_code,
+               matrix_name_en
+        FROM matrices
+        WHERE matrix_code = ?
+    """, [matrix_code]).fetchone()
+
+    if not m:
+        return None
+
+    # Fetch profile
+    profile_row = conn.execute("""
+        SELECT * FROM matrix_profiles WHERE matrix_code = ?
+    """, [matrix_code]).fetchone()
+
+    profile = {}
+    if profile_row:
+        profile_cols = [d[0] for d in conn.execute("DESCRIBE matrix_profiles").fetchall()]
+        profile = dict(zip(profile_cols, profile_row))
+
+    dimensions = load_dimensions(conn, matrix_code, lang, en_meta)
 
     # Build context path from ancestor_codes as structured array
     # For sub-datasets without ancestor_codes, inherit from parent
@@ -377,10 +391,17 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
     # falls back to its label-based heuristic.
     struct = dstruct.load(conn, matrix_code)
     unit_type = profile.get('primary_unit_type', 'count') or 'count'
+    # One additivity verdict for composer, insights, grouped API and agent:
+    # indicator wording (name + definition) and verified structure, not just
+    # the unit label. Underscore key: kept out of the public dataset_signature.
+    measure = ap.dataset_measure(
+        unit_type, f"{m[1] or ''} {(m[4] or '')[:300]}", struct)
     data_signals = {'is_composition': _detect_composition(
-        conn, matrix_code, dimensions, actual_values, unit_type, struct)}
+        conn, matrix_code, dimensions, actual_values, unit_type, struct,
+        non_additive=(measure == 'non_additive'))}
     sig = build_signature(profile, dimensions, coverage, value_profile, trend,
                           data_signals)
+    sig['_measure'] = measure
     ranked = select_charts(sig)
 
     # Roles for each ranked chart, then align evolution-series defaults with
@@ -435,6 +456,10 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
     else:
         definitie, metodologie, observatii = m[4], m[5], m[7]
 
+    if lang == "ro":
+        _remember_context(matrix_code, dimensions, actual_values, struct,
+                          measure, unit_type)
+
     return {
         'matrix_code': m[0],
         'matrix_name': display_name,
@@ -453,5 +478,100 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
         'parent': parent_info,
         'profile': profile,
         'dimensions': dimensions,
+        'measure': measure,
         'chart_config': chart_config,
     }
+
+
+# ---------------------------------------------------------------------------
+# Aggregation context (FIX-02 phase 2): everything decide() needs about one
+# dataset, shared by the grouped data endpoint and the Ask agent. get_dataset_meta
+# warms it as a side effect (the dataset page calls meta first), so the first
+# grouped query rarely pays for a second round of per-column parquet scans.
+# ---------------------------------------------------------------------------
+import threading
+import time as _time
+
+_CTX_CACHE: dict = {}
+_CTX_TTL = 3600
+_CTX_MAX = 48
+_CTX_LOCK = threading.Lock()
+
+
+def _remember_context(matrix_code, dimensions, actual_values, struct, measure,
+                      unit_type):
+    with _CTX_LOCK:
+        if len(_CTX_CACHE) >= _CTX_MAX:
+            _CTX_CACHE.clear()
+        _CTX_CACHE[matrix_code] = {
+            'ts': _time.time(), 'dimensions': dimensions,
+            'actual_values': actual_values, 'struct': struct,
+            'measure': measure, 'unit_type': unit_type}
+
+
+def get_aggregation_context(conn, matrix_code: str) -> dict | None:
+    """{dimensions, actual_values, struct, measure, unit_type} (Romanian labels),
+    cached; None when the dataset is unknown."""
+    hit = _CTX_CACHE.get(matrix_code)
+    if hit and _time.time() - hit['ts'] < _CTX_TTL:
+        return hit
+    try:
+        if get_dataset_meta(matrix_code, lang="ro", conn=conn) is None:
+            return None
+        return _CTX_CACHE.get(matrix_code)
+    except Exception:
+        # Metadata/profile tables unusable: decide conservatively from the
+        # recorded dimensions and the parquet alone (types unknown, so only
+        # label cues and Total rows can license a collapse).
+        log.exception("aggregation context fell back to light mode: %s", matrix_code)
+        return _light_context(conn, matrix_code)
+
+
+def _light_context(conn, matrix_code: str) -> dict | None:
+    rows = conn.execute(
+        "SELECT dim_code, dim_label, dim_column_name, option_count FROM dimensions "
+        "WHERE matrix_code = ? ORDER BY dim_code", [matrix_code]).fetchall()
+    if not rows:
+        return None
+    dimensions = []
+    for code, label, col, n in rows:
+        dtype = ('time' if col == 'TIME_PERIOD'
+                 else 'unit' if col == 'UNIT_MEASURE' else 'indicator')
+        dimensions.append({'dim_code': code, 'dim_label': label,
+                           'dim_column_name': col, 'dim_type': dtype,
+                           'option_count': n, 'options': []})
+    actual = _parquet_dim_values(conn, matrix_code, dimensions)
+    for d in dimensions:
+        d['options'] = [{'label': v, 'sdmx_value': v, 'parsed': {}}
+                        for v in actual.get(d['dim_column_name'], {})]
+    try:
+        ut = conn.execute("SELECT primary_unit_type FROM matrix_profiles "
+                          "WHERE matrix_code = ?", [matrix_code]).fetchone()
+        unit_type = ut[0] if ut else None
+    except Exception:
+        unit_type = None
+    return {'ts': _time.time(), 'dimensions': dimensions,
+            'actual_values': actual, 'struct': {},
+            'measure': ap.classify_measure(unit_type), 'unit_type': unit_type,
+            'light': True}
+
+
+def clear_context_cache():
+    with _CTX_LOCK:
+        _CTX_CACHE.clear()
+
+
+def decide_grouped(ctx: dict, group_by, filters, *,
+                   allow_approximation: bool = False, levels: dict | None = None):
+    """The shared aggregation verdict for a grouped API/agent query.
+
+    `group_by`/`filters` use SDMX column names and data values. Same decide()
+    as composer tiles and insights, plus api_mode (axis grain, time collapse).
+    """
+    dims = ctx['dimensions']
+    effective = {d['dim_column_name']: _effective(d, ctx['actual_values'])
+                 for d in dims}
+    return ap.decide(
+        dimensions=dims, effective=effective, group_by=list(group_by or []),
+        filters=filters, struct=ctx['struct'], measure=ctx['measure'],
+        levels=levels, allow_approximation=allow_approximation, api_mode=True)

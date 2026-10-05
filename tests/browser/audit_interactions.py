@@ -110,7 +110,7 @@ def run_v1(b, w, shots):
 def run_v2(b, w, shots):
     tag = f"v2@{w}"
     pg = new_page(b, w)
-    pg.goto(f"{BASE}/dataset-v2.html?code=POP107A", wait_until="networkidle")
+    pg.goto(f"{BASE}/dataset-v2.html?code=POP107D", wait_until="networkidle")
     pg.wait_for_timeout(2000)
     seen = tab_flow(pg, 110)
     check(any("dbv2-pill" in f["cls"] or f["tag"] == "SELECT" for f in seen), f"{tag} tab reaches filter controls")
@@ -146,7 +146,7 @@ def run_v2(b, w, shots):
 def run_zoom(b, shots):
     # 200% browser zoom on a 1280px window == 640 CSS px; 320 CSS px == 400% / small phone
     for w in (640, 320):
-        for path in ("/?code=POP107A", "/dataset-v2.html?code=POP107A"):
+        for path in ("/?code=POP107A", "/dataset-v2.html?code=POP107D"):
             pg = new_page(b, w, dsf=2)
             pg.goto(BASE + path, wait_until="networkidle")
             pg.wait_for_timeout(1500)

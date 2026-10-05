@@ -12,7 +12,8 @@ PAGES = {
     "home": "/",
     "v1-POP107A": "/?code=POP107A",
     "v1-long": "/?code=TUR104B",
-    "v2-POP107A": "/dataset-v2.html?code=POP107A",
+    "v2-POP107A": "/dataset-v2.html?code=POP107A",   # FIX-02: all tiles withheld, shows reasons
+    "v2-POP107D": "/dataset-v2.html?code=POP107D",
     "v2-long": "/dataset-v2.html?code=TUR104B",
     "places": "/places",
     "place-bihor": "/place/county/bihor",
