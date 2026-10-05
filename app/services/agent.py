@@ -9,13 +9,16 @@ generates SQL directly.
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 
 from app import config
 from app.db import get_conn
-from app.services.llm_client import complete_with_tools
+from app.services.ask_guard import RedactingFilter, redact_text
+from app.services.llm_client import LLMError, classify_provider_error, complete_with_tools
 
 log = logging.getLogger(__name__)
+log.addFilter(RedactingFilter())  # credentials never reach agent logs (FIX-08)
 
 # ---------------------------------------------------------------------------
 # Tool definitions (JSON Schema, provider-agnostic)
@@ -149,6 +152,9 @@ class AgentResult:
     data: dict | None = None
     chart_spec: dict | None = None
     warnings: list[str] = field(default_factory=list)
+    # FIX-08 budgets: "end_turn" normally, else "iterations" | "tools" | "deadline" | "provider"
+    stop_reason: str = "end_turn"
+    budget: dict = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -466,16 +472,63 @@ def run_agent(
     agent_warnings = []
     _guardrail_fired = False  # one-shot: only inject the data-query nudge once per run
 
-    for iteration in range(config.ASK_MAX_TOOL_CALLS + 1):
+    # FIX-08: independent budgets. Each is checked BEFORE the call it would forbid.
+    started = time.monotonic()
+    deadline = started + config.ASK_MAX_SECONDS
+    iterations = 0
+    tools_used = 0
+    prov_name = provider or config.LLM_PROVIDER
+
+    def _budget() -> dict:
+        return {
+            "iterations": iterations, "max_iterations": config.ASK_MAX_ITERATIONS,
+            "tools": tools_used, "max_tools": config.ASK_MAX_TOOL_CALLS,
+            "elapsed_s": round(time.monotonic() - started, 3), "max_seconds": config.ASK_MAX_SECONDS,
+        }
+
+    def _stopped(reason: str, text: str | None = None) -> AgentResult:
+        msgs = {
+            "iterations": "Reached the model-call limit",
+            "tools": "Reached the tool-call limit",
+            "deadline": "Reached the time limit",
+            "provider": "The model provider became unavailable",
+        }
+        agent_warnings.append(f"{msgs[reason]} before a final answer; the result is partial.")
+        answer = text or (
+            "I could not finish within the request limits. "
+            + ("Partial data is attached. " if last_query_result else "")
+            + "Please retry with a more specific question.")
+        return AgentResult(
+            answer=answer,
+            citations=_extract_citations(answer, tool_trace),
+            tool_trace=tool_trace,
+            data=last_query_result,
+            chart_spec=_get_chart_spec(last_queried_matrix, conn) if last_queried_matrix else None,
+            warnings=agent_warnings,
+            stop_reason=reason,
+            budget=_budget(),
+        )
+
+    while True:
+        if iterations >= config.ASK_MAX_ITERATIONS:
+            return _stopped("iterations")
+        if time.monotonic() >= deadline:
+            return _stopped("deadline")
         if config.DEBUG:
-            log.debug("Agent iteration %d, %d messages", iteration, len(messages))
+            log.debug("Agent iteration %d, %d messages", iterations, len(messages))
 
-        resp = complete_with_tools(messages, TOOLS, system=SYSTEM_PROMPT,
-                                   provider=provider, model=model, api_key=api_key)
-
-        if resp.text:
-            # LLM produced a text response — may be mixed with tool calls
-            pass
+        iterations += 1
+        try:
+            resp = complete_with_tools(
+                messages, TOOLS, system=SYSTEM_PROMPT,
+                provider=provider, model=model, api_key=api_key,
+                timeout=max(1.0, min(config.ASK_PROVIDER_TIMEOUT, deadline - time.monotonic())))
+        except Exception as e:  # noqa: BLE001
+            err = classify_provider_error(e)
+            if tool_trace and err.code in ("provider_timeout", "provider_unavailable", "provider_rate_limited"):
+                log.warning("Provider error after %d tools: %s", len(tool_trace), err.code)
+                return _stopped("provider")
+            raise err from None
 
         if not resp.tool_calls:
             # Guardrail: model gave up without querying data, but search returned results.
@@ -488,7 +541,7 @@ def run_agent(
             if not _guardrail_fired and last_query_result is None and search_had_results:
                 _guardrail_fired = True
                 if resp.text or resp.tool_calls:
-                    messages.append(_assistant_turn(resp, provider=provider or config.LLM_PROVIDER))
+                    messages.append(_assistant_turn(resp, provider=prov_name))
                 messages.append({
                     "role": "user",
                     "content": (
@@ -498,7 +551,7 @@ def run_agent(
                     ),
                 })
                 agent_warnings.append("Guardrail: model skipped data query — injected follow-up turn.")
-                log.debug("Guardrail fired at iteration %d", iteration)
+                log.debug("Guardrail fired at iteration %d", iterations)
                 continue
 
             # Done — extract final answer
@@ -512,36 +565,36 @@ def run_agent(
                 data=last_query_result,
                 chart_spec=chart_spec,
                 warnings=agent_warnings,
+                budget=_budget(),
             )
 
-        if iteration >= config.ASK_MAX_TOOL_CALLS:
-            agent_warnings.append("Reached tool call limit without a final answer.")
-            answer = resp.text or "I reached the maximum number of tool calls. Please try a more specific question."
-            citations = _extract_citations(answer, tool_trace)
-            return AgentResult(
-                answer=answer,
-                citations=citations,
-                tool_trace=tool_trace,
-                data=last_query_result,
-                chart_spec=_get_chart_spec(last_queried_matrix, conn) if last_queried_matrix else None,
-                warnings=agent_warnings,
-            )
+        if iterations >= config.ASK_MAX_ITERATIONS:
+            # The model wants tools but there is no model call left to read their results.
+            return _stopped("iterations", resp.text)
 
         # Append the assistant turn (with tool_use blocks for Anthropic)
-        messages.append(_assistant_turn(resp, provider=provider or config.LLM_PROVIDER))
+        messages.append(_assistant_turn(resp, provider=prov_name))
 
-        # Dispatch all tool calls in this turn
+        # Dispatch the tool calls in this turn, counting EVERY one against the budget.
         tool_result_messages = []
+        over_budget = None
         for tc in resp.tool_calls:
+            if tools_used >= config.ASK_MAX_TOOL_CALLS:
+                over_budget = "tools"
+                break
+            if time.monotonic() >= deadline:
+                over_budget = "deadline"
+                break
+            tools_used += 1
             handler = TOOL_HANDLERS.get(tc["name"])
             if handler:
                 try:
                     result = handler(tc["input"], conn)
-                except Exception as e:
-                    log.exception("Tool %s failed", tc["name"])
-                    result = {"error": str(e)}
+                except Exception as e:  # noqa: BLE001
+                    log.error("Tool %s failed: %s", tc["name"], type(e).__name__)
+                    result = {"error": redact_text(str(e))[:300]}
             else:
-                result = {"error": f"Unknown tool: {tc['name']}"}
+                result = {"error": "Unknown tool"}
 
             result_str = json.dumps(result, ensure_ascii=False, default=str)
 
@@ -552,6 +605,10 @@ def run_agent(
             })
 
             if tc["name"] == "query_dataset_data" and "error" not in result:
+                # FIX-08 item 7 (DEFERRED until FIX-02 merges): this is where the tool's
+                # aggregation outcome (unsafe/approximate/unavailable) must be inspected so
+                # the final answer keeps its warnings and never relabels an approximation
+                # as an official statistic. Today only the legacy `warnings` list is used.
                 last_query_result = result
                 last_queried_matrix = tc["input"].get("matrix_code")
                 if result.get("warnings"):
@@ -563,16 +620,17 @@ def run_agent(
                 "content": result_str,
             })
 
+        if over_budget:
+            # Tool results for the skipped calls do not exist, so the conversation cannot
+            # continue; stop with whatever was gathered.
+            return _stopped(over_budget, resp.text)
+
         # For Anthropic: all tool results go in a single user turn
         # For OpenAI/Gemini: each tool result is its own message
-        prov = provider or config.LLM_PROVIDER
-        if prov == "anthropic":
+        if prov_name == "anthropic":
             messages.append(_anthropic_tool_results_turn(tool_result_messages))
         else:
             messages.extend(tool_result_messages)
-
-    # Should not reach here
-    return AgentResult(answer="Unexpected agent termination.", warnings=["Agent loop exited unexpectedly."])
 
 
 # ---------------------------------------------------------------------------
