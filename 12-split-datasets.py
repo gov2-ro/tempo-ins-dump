@@ -269,6 +269,11 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> lis
             "row_count": row_count, "group": group,
         })
 
+    # Dry-run results carry row_count=0 and the real child paths; the cleanup
+    # below would unlink existing children. Never touch files in dry-run.
+    if dry_run:
+        return results
+
     # Guard: a real split needs ≥2 groups with data.
     # If only 1 (or 0) succeeded, the metadata lied — abort and clean up.
     if len(results) < 2:
@@ -697,6 +702,11 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
             "sub_code": sub_code, "path": str(dst),
             "row_count": row_count, "combo": combo, "rules": sorted_rules,
         })
+
+    # Dry-run results carry row_count=0 and the real child paths; the cleanup
+    # below would unlink existing children. Never touch files in dry-run.
+    if dry_run:
+        return results
 
     # Guard: a real split needs ≥2 combos with data.
     results_with_data = [r for r in results if r["row_count"] > 0]
