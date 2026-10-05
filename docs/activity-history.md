@@ -1,5 +1,23 @@
 # Activity History
 
+## 2026-10-05 — FIX-02 phase 1: verified aggregation and headline provenance
+
+New `app/services/aggregation_policy.py` is the one decision point for composer
+tiles, insight KPIs and curated headlines (grouped API queries, agent and
+frontend are phase 2). Synthetic fixtures pin the spec's known answers (100 not
+200; weighted 11% not 15%; mixed units refused; zero comparator → unavailable).
+Headlines: IND118A 115,962 → 57,981; FOM106F 4,954.67 → 4,959 (pinned SEX=Total
+instead of averaging Total/F/M); IPC102A, AMG157G and AGR209C omitted because no
+aggregate or weights exist; SAN102A (hospital beds), IND101M (turnover index) and
+SCL103A (primary to post-secondary) relabelled; CON104S shows growth in points.
+POP107A totals are suppressed; POP107D gives 19,612,984 for 2025.
+
+Decision: unknown structure is conservative, as the spec requires. Cost: KPI
+coverage fell from 2,551 to 1,602 datasets and 91 datasets lose all tiles, mostly
+split children without `dimension_structure` rows. FIX-03's backfill (run on a
+copied generation) is expected to restore most; there is no off switch. Total
+detection judges data values, not labels, so RO and EN decide alike.
+
 ## 2026-10-05 — Audit remediation wave 1: FIX-01, FIX-03 phase 1, FIX-05 phase 1
 
 Implemented by parallel agents in separate worktrees/branches, reviewed and merged

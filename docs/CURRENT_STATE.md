@@ -126,8 +126,18 @@ tools in the session rather than assuming another checkout has the same setup.
 - Charts use MAX_DATA_ROWS (50,000 by default) with grouping/time-window behavior.
   Current CSV/XLSX and SDMX also cap observations without adequate disclosure.
   They must not be described as complete exports until FIX-04 lands.
-- Aggregation safety, population overlap, home electricity/CPI cards and place
-  rates remain unresolved. See FIX-02/FIX-06, not historical “fixed” chart claims.
+- Aggregation (FIX-02 phase 1): composed totals, insight KPIs and curated
+  headlines decide through `app/services/aggregation_policy.decide()`. A total row
+  is preferred; otherwise one verified or declared disjoint partition is summed.
+  Rates, indices and averages are never summed or averaged into a total. Unprofiled
+  indicator dimensions, overlapping age/geo levels, mixed units and missing weights
+  suppress the number with a reason code (`suppressed` in insights/composition).
+  Every KPI and headline card carries `provenance` (source_code, period, unit,
+  filters, levels, method, verification, approximation, outcome, reason,
+  comparison, dimensions). Headline cards are declared as slice + method in
+  `headline_config.json`; monthly/quarterly cards compare YoY. Grouped API queries
+  (`dataset_data.py`), the Ask agent and frontend disclosure are still phase 2;
+  place rates are FIX-06.
 
 ## Deployment today
 
@@ -176,6 +186,12 @@ Of the 162 files with >20% invalid TIME_PERIOD, 149 are served. 241 files have
 duplicate keys with conflicting values (160 served); 225 `matrices.row_count`
 values differ from actual rows. The release check found `search.duckdb` covering
 1,225 of 3,368 canonical matrices (built April 2026).
+
+FIX-02 corpus sweep (2026-10-05, 3,368 canonical datasets): datasets with a
+headline KPI went from 2,551 to 1,602 (963 lost, 14 gained); 91 lose all composed
+tiles. Reasons: unverified_structure 885, overlapping_levels 58, mixed_units 27,
+missing_weights 22, label_hierarchy 17. Most losses lack `dimension_structure`
+rows (mainly split children); FIX-03 structure backfill should restore most.
 
 Tests on 2026-10-03: 38 passing, 3 warnings. Chart eval: 1,986 baseline cases unchanged, 2,116
 added. Search: 17 top sets unchanged, 2 order changes. These results establish
