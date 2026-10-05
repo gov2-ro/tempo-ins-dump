@@ -459,6 +459,11 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False,
             "row_count": row_count, "group": group,
         })
 
+    if dry_run:
+        # Nothing was written, and "row_count 0" below means "not computed", not "empty":
+        # the cleanup that follows would delete the LIVE children (their paths coincide).
+        return results
+
     # Guard: a real split needs ≥2 groups with data.
     # If only 1 (or 0) succeeded, the metadata lied — abort and clean up.
     if len(results) < 2:
@@ -664,6 +669,13 @@ def _copy_dimensions(conn, rule: SplitRule, sub_code: str, sub_info: dict):
         dim_col = dim[3]
         # Resolve actual column name in sub-parquet (may differ from SDMX name)
         actual_col = sdmx_to_v2.get(dim_col, dim_col)
+        if sub_cols is not None and actual_col not in sub_cols:
+            # dimensions.dim_column_name can still be the legacy *_nom_id name while the
+            # canonical child parquet carries the SDMX column (new imports always do):
+            # look it up in sdmx_column_map, else the child would lose every dimension.
+            resolved = _resolve_v3_column(conn, rule.matrix_code, dim_col, list(sub_cols))
+            if resolved in sub_cols:
+                actual_col = resolved
 
         # Skip dropped columns
         if dim_col in rule.drop_columns:
@@ -672,7 +684,7 @@ def _copy_dimensions(conn, rule: SplitRule, sub_code: str, sub_info: dict):
             continue
 
         # Use actual parquet column name for DB storage (v2 names for v2-sourced splits)
-        store_col = actual_col if is_sub_v2 else dim_col
+        store_col = actual_col
 
         # For slash_dims, geo_hierarchy, mixed_time_granularity: filter options to this group's IDs
         if rule.pattern in ("slash_dims", "geo_hierarchy", "mixed_time_granularity") and parent_dim_id == rule.split_dimension_id:
@@ -706,7 +718,7 @@ def _copy_dimensions(conn, rule: SplitRule, sub_code: str, sub_info: dict):
             """).fetchall()
             if sub_info.get("path") and sub_info.get("row_count", 0) > 0:
                 # Use actual parquet column name for option pruning
-                check_col = actual_col if is_sub_v2 else dim_col
+                check_col = actual_col
                 active_ids = _get_active_option_ids(
                     conn, Path(sub_info["path"]), check_col, parent_opts
                 )
@@ -891,6 +903,9 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
             "row_count": row_count, "combo": combo, "rules": sorted_rules,
         })
 
+    if dry_run:
+        return results  # see split_parquet_by_filter: dry-run must never reach the cleanup
+
     # Guard: a real split needs ≥2 combos with data.
     results_with_data = [r for r in results if r["row_count"] > 0]
     if len(results_with_data) < 2:
@@ -996,6 +1011,13 @@ def _copy_dimensions_multi(conn, matrix_code: str, sub_code: str,
         parent_dim_id = dim[0]
         dim_col = dim[3]
         actual_col = sdmx_to_v2.get(dim_col, dim_col)
+        if sub_cols is not None and actual_col not in sub_cols:
+            # dimensions.dim_column_name can still be the legacy *_nom_id name while the
+            # canonical child parquet carries the SDMX column (new imports always do):
+            # look it up in sdmx_column_map, else the child would lose every dimension.
+            resolved = _resolve_v3_column(conn, matrix_code, dim_col, list(sub_cols))
+            if resolved in sub_cols:
+                actual_col = resolved
 
         if dim_col in all_drop_cols:
             continue
@@ -1004,7 +1026,7 @@ def _copy_dimensions_multi(conn, matrix_code: str, sub_code: str,
 
         new_dim_id = _next_dim_id(conn)
         # Use actual parquet column name for DB storage
-        store_col = actual_col if is_sub_v2 else dim_col
+        store_col = actual_col
 
         if parent_dim_id in split_dim_map:
             rule, group = split_dim_map[parent_dim_id]
@@ -1034,7 +1056,7 @@ def _copy_dimensions_multi(conn, matrix_code: str, sub_code: str,
                 FROM dimension_options WHERE dimension_id = {parent_dim_id}
             """).fetchall()
             if sub_info.get("path") and sub_info.get("row_count", 0) > 0:
-                check_col = actual_col if is_sub_v2 else dim_col
+                check_col = actual_col
                 active_ids = _get_active_option_ids(
                     conn, Path(sub_info["path"]), check_col, parent_opts
                 )
@@ -1124,6 +1146,10 @@ def process_parent(conn, matrix_code: str, mrules: list) -> tuple[int, int] | No
             record_failure(f"{matrix_code}: {e}; previous children restored")
             return None
         return len(subs), sum(s["row_count"] for s in subs)
+    except Exception as e:  # nothing under the corpus was touched before the swap
+        record_failure(f"{matrix_code}: staging error {type(e).__name__}: {e}; "
+                       "previous children (if any) unchanged")
+        return None
     finally:
         shutil.rmtree(stage_dir, ignore_errors=True)
 

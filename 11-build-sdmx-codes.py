@@ -295,8 +295,16 @@ def build_sdmx_column_map(conn: duckdb.DuckDBPyConnection, debug: bool = False, 
     for matrix_code, dims in matrices.items():
         used_names = set()
         used_old_cols = set()  # Track old_column_name to skip duplicates (truncation collisions)
+        if codes:
+            # Targeted refresh: a dimension whose dim_column_name is already a resolved
+            # SDMX name (true for most of the corpus, see docs/BACKLOG.md) must keep its
+            # existing sdmx_column_map row; treating that name as the "old" column would
+            # write a REF_AREA -> REF_AREA self-mapping over the real legacy mapping.
+            used_names.update(d[2] for d in dims if not d[2].endswith("_nom_id"))
 
         for dim_code, dim_label, old_col_name, dim_type in dims:
+            if codes and not old_col_name.endswith("_nom_id"):
+                continue
             if old_col_name in used_old_cols:
                 dupes_skipped += 1
                 if debug:
@@ -416,12 +424,11 @@ def main(argv=None):
         col_records = build_sdmx_column_map(conn, debug=args.debug, codes=codes)
 
         if not args.dry_run:
-            if codes:
-                conn.execute(
-                    "DELETE FROM sdmx_column_map WHERE matrix_code IN "
-                    f"({', '.join('?' for _ in codes)})", list(codes))
+            # Targeted: replace only the keys regenerated here; every other row (other
+            # matrices, already-canonical dimensions of these) stays.
+            verb = "INSERT OR REPLACE" if codes else "INSERT"
             conn.executemany(
-                "INSERT INTO sdmx_column_map VALUES (?, ?, ?, ?)",
+                f"{verb} INTO sdmx_column_map VALUES (?, ?, ?, ?)",
                 col_records,
             )
             count = conn.execute("SELECT COUNT(*) FROM sdmx_column_map").fetchone()[0]

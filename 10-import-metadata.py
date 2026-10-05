@@ -132,9 +132,9 @@ def import_matrices_basic(conn: duckdb.DuckDBPyConnection) -> int:
 # dim_column_name) is executed as delete+insert and fails the FK check while child
 # rows exist. Non-indexed columns, dimension_options and option_count update fine.
 # So an indexed change detaches the matrix's dimensions (autocommit, options first),
-# applies the update, and the normal sync re-inserts the dimensions. Interrupted
-# between those steps the matrix simply has no dimensions and the next run (or the
-# orchestrator retry) rebuilds them.
+# applies the update and re-inserts the very same rows (same ids and column names).
+# Interrupted between those steps the matrix has no dimensions; the next run (or the
+# orchestrator retry) rebuilds them from the metadata JSON.
 # ---------------------------------------------------------------------------
 
 INDEXED_MATRIX_COLS = {"context_code", "mat_active", "mat_max_dim"}
@@ -257,12 +257,31 @@ def matrix_values(conn, matrix_code: str, data: Dict[str, Any]) -> Dict[str, Any
     return vals
 
 
-def _detach_dimensions(conn, matrix_code: str) -> None:
-    """Delete a matrix's dimension_options then dimensions (autocommit, in that order)."""
+def _detach_dimensions(conn, matrix_code: str):
+    """Snapshot, then delete, a matrix's dimensions + options (autocommit, options first)."""
+    dims = conn.execute(
+        "SELECT dimension_id, matrix_code, dim_code, dim_label, dim_column_name, option_count "
+        "FROM dimensions WHERE matrix_code = ?", [matrix_code]).fetchall()
+    opts = conn.execute(
+        "SELECT option_id, dimension_id, nom_item_id, option_label, option_offset, parent_id "
+        "FROM dimension_options WHERE dimension_id IN "
+        "(SELECT dimension_id FROM dimensions WHERE matrix_code = ?)", [matrix_code]).fetchall()
     conn.execute(
         "DELETE FROM dimension_options WHERE dimension_id IN "
         "(SELECT dimension_id FROM dimensions WHERE matrix_code = ?)", [matrix_code])
     conn.execute("DELETE FROM dimensions WHERE matrix_code = ?", [matrix_code])
+    return dims, opts
+
+
+def _reattach_dimensions(conn, dims, opts) -> None:
+    if dims:
+        conn.executemany(
+            "INSERT INTO dimensions (dimension_id, matrix_code, dim_code, dim_label, "
+            "dim_column_name, option_count) VALUES (?, ?, ?, ?, ?, ?)", dims)
+    if opts:
+        conn.executemany(
+            "INSERT INTO dimension_options (option_id, dimension_id, nom_item_id, option_label, "
+            "option_offset, parent_id) VALUES (?, ?, ?, ?, ?, ?)", opts)
 
 
 def enrich_matrix_metadata(conn, matrix_code: str, dry_run: bool = False) -> Dict[str, Any]:
@@ -298,13 +317,18 @@ def enrich_matrix_metadata(conn, matrix_code: str, dry_run: bool = False) -> Dic
 
     has_dims = conn.execute(
         "SELECT COUNT(*) FROM dimensions WHERE matrix_code = ?", [matrix_code]).fetchone()[0] > 0
+    saved = None
     if has_dims and INDEXED_MATRIX_COLS & set(changed):
-        _detach_dimensions(conn, matrix_code)
+        saved = _detach_dimensions(conn, matrix_code)
         result["detached"] = True
 
     sets = ", ".join(f"{c} = ?" for c in changed)
-    conn.execute(f"UPDATE matrices SET {sets} WHERE matrix_code = ?",
-                 [new[c] for c in changed] + [matrix_code])
+    try:
+        conn.execute(f"UPDATE matrices SET {sets} WHERE matrix_code = ?",
+                     [new[c] for c in changed] + [matrix_code])
+    finally:
+        if saved is not None:
+            _reattach_dimensions(conn, *saved)
     return result
 
 
@@ -343,9 +367,14 @@ def sync_dimensions(conn, matrix_code: str, ids: IdAllocator,
                     dry_run: bool = False) -> Dict[str, int]:
     """Reconcile dimensions + dimension_options of one matrix with its metadata JSON.
 
-    Position (dim_code) identifies a dimension. A dimension whose label/column changed
-    is rebuilt; otherwise options are diffed by nom_item_id (insert new, delete gone,
-    update changed labels/offsets). Other matrices are never touched.
+    Position (dim_code) identifies a dimension (INS renames labels between fetches, the
+    position is stable). dim_column_name is NOT compared: in the real corpus it was
+    canonicalised to the SDMX name (REF_AREA, TIME_PERIOD, ...) after the first import
+    and must survive; only a brand-new dimension gets the sanitised legacy name (which
+    11-build-sdmx-codes then maps). A changed label replaces the dimension row in place
+    (same dimension_id and column name; the label is indexed so UPDATE is not possible).
+    Options are diffed by nom_item_id (insert new, delete gone, update changed
+    labels/offsets). Other matrices are never touched.
     """
     data = load_meta(matrix_code)
     dims_json = data.get("dimensionsMap", [])
@@ -390,21 +419,28 @@ def sync_dimensions(conn, matrix_code: str, ids: IdAllocator,
 
     for dim_idx, dim in enumerate(dims_json, 1):
         label = dim["label"]
-        column = sanitize_column_name(label)
         cur = existing.get(dim_idx)
         if cur is None:
             stats["dims_added"] += 1
             insert_dimension(dim_idx, dim)
             continue
         dim_id, _, cur_label, cur_col, cur_count = cur
-        if cur_label != label or cur_col != column:
-            # indexed columns cannot be updated in place (see module note): rebuild
+        if cur_label != label:
             stats["dims_rebuilt"] += 1
             if not dry_run:
+                saved = conn.execute(
+                    "SELECT option_id, dimension_id, nom_item_id, option_label, option_offset, "
+                    "parent_id FROM dimension_options WHERE dimension_id = ?", [dim_id]).fetchall()
                 conn.execute("DELETE FROM dimension_options WHERE dimension_id = ?", [dim_id])
                 conn.execute("DELETE FROM dimensions WHERE dimension_id = ?", [dim_id])
-            insert_dimension(dim_idx, dim)
-            continue
+                conn.execute(
+                    "INSERT INTO dimensions (dimension_id, matrix_code, dim_code, dim_label, "
+                    "dim_column_name, option_count) VALUES (?, ?, ?, ?, ?, ?)",
+                    [dim_id, matrix_code, dim_idx, label, cur_col, cur_count])
+                if saved:
+                    conn.executemany(
+                        "INSERT INTO dimension_options (option_id, dimension_id, nom_item_id, "
+                        "option_label, option_offset, parent_id) VALUES (?, ?, ?, ?, ?, ?)", saved)
 
         options = _dedupe_options(dim.get("options", []), matrix_code, label)
         db_opts = {
