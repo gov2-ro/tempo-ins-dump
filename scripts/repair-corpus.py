@@ -3,7 +3,7 @@
 Corpus repair planner (FIX-03). DRY-RUN BY DEFAULT; never writes in place.
 
 Reads the corpus (DuckDB read_only, parquet read-only, raw metas/CSVs/logs
-read-only) and produces a repair plan with four sections:
+read-only) and produces a repair plan with five sections:
 
   quarantine          leftover / zero-row parquets that no matrices or
                       dataset_splits row refers to: file, sha256, rows, reason.
@@ -17,7 +17,12 @@ read-only) and produces a repair plan with four sections:
                       values, classified per the FIX-03 county-split policy using
                       aggregation_policy additivity. Report only.
 
---apply --target-dir DIR performs ONLY the quarantine step, and only on an explicit
+  dim_columns         dimensions sharing one dim_column_name (INT109*: several CAEN
+                      dimensions all 'ECON_ACTIVITY'), mapped to the parquet columns
+                      stage 9 actually wrote (ECON_ACTIVITY_2, ...).
+
+--apply --target-dir DIR performs ONE step (--step quarantine, the default, or
+--step dim-columns), and only on an explicit
 COPY of the corpus: files are moved from <DIR>/corpus/parquet/ to <DIR>/quarantine/
 together with quarantine-manifest.json. It refuses when DIR (or any file it would
 move) resolves inside the source data dir, so it can never act in place or through a
@@ -27,6 +32,7 @@ Usage
   python scripts/repair-corpus.py [--data-dir DIR] [--report-json F] [--report-md F]
                                   [--audit-json F] [--no-grain]
   python scripts/repair-corpus.py --apply --target-dir COPY_DIR [--data-dir DIR]
+  python scripts/repair-corpus.py --apply --step dim-columns --target-dir COPY_DIR
 Report files must not be inside <data-dir>/corpus.
 """
 import argparse
@@ -130,6 +136,98 @@ def apply_quarantine(plan: dict, data_dir: Path, target: Path) -> dict:
                 "count": len(moved), "files": moved}
     (qdir / "quarantine-manifest.json").write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")
     return {"moved": len(moved), "quarantine_dir": str(qdir)}
+
+
+# ------------------------------------------------------- duplicate dim columns
+def plan_dim_columns(conn, parquet_dir: Path) -> dict:
+    """Matrices whose dimensions share one dim_column_name (INT109A: two CAEN
+    dimensions both 'ECON_ACTIVITY'). sdmx_column_map is keyed on the truncated
+    legacy column name, so one map row renamed both; stage 9 named the parquet
+    columns by position (ECON_ACTIVITY, ECON_ACTIVITY_2, ...). Proposes, in
+    dimension_id order, the parquet column each dimension really is."""
+    dups = conn.execute(
+        "SELECT matrix_code, dim_column_name FROM dimensions "
+        "GROUP BY 1, 2 HAVING COUNT(*) > 1 ORDER BY 1, 2").fetchall()
+    pconn = duckdb.connect()
+    items, problems = [], []
+    try:
+        for mc, name in dups:
+            f = parquet_dir / f"{mc}.parquet"
+            if not f.is_file():
+                problems.append({"matrix_code": mc, "column": name, "reason": "no parquet"})
+                continue
+            cols = [r[0] for r in pconn.execute("DESCRIBE SELECT * FROM read_parquet(?)", [str(f)]).fetchall()]
+            dims = conn.execute(
+                "SELECT dimension_id FROM dimensions WHERE matrix_code = ? AND dim_column_name = ? "
+                "ORDER BY dimension_id", [mc, name]).fetchall()
+            pat = re.compile(rf"^{re.escape(name)}(_\d+)?$")
+            targets = [c for c in cols if pat.match(c)]
+            if len(targets) != len(dims):
+                problems.append({"matrix_code": mc, "column": name, "dims": len(dims),
+                                 "parquet_columns": targets, "reason": "count mismatch"})
+                continue
+            items += [{"matrix_code": mc, "dimension_id": d, "old": name, "new": t}
+                      for (d,), t in zip(dims, targets) if t != name]
+    finally:
+        pconn.close()
+    return {"count": len(items), "matrices": sorted({i["matrix_code"] for i in items}),
+            "changes": items, "problems": problems}
+
+
+def apply_dim_columns(plan: dict, data_dir: Path, target: Path) -> dict:
+    """Rename the planned dimensions in the COPY's metadata.duckdb. DuckDB applies an
+    UPDATE of the indexed dim_column_name as delete+insert, which the dimension_options
+    foreign key rejects, so each matrix's dimensions and options are re-inserted with
+    the same ids (autocommit steps with a compensating restore, as in stage 12)."""
+    src_corpus = data_dir / "corpus"
+    db = target / "corpus" / "metadata.duckdb"
+    if inside(target, src_corpus) or inside(src_corpus, target) or target.resolve() == data_dir.resolve() \
+            or inside(db, src_corpus):
+        raise SystemExit(f"refusing: --target-dir {target} overlaps the source corpus {src_corpus}")
+    if plan["problems"]:
+        raise SystemExit(f"refusing: unresolved duplicate columns: {plan['problems'][:3]}")
+    by_matrix: dict[str, dict[int, str]] = {}
+    old = {it["dimension_id"]: it["old"] for it in plan["changes"]}
+    for it in plan["changes"]:
+        by_matrix.setdefault(it["matrix_code"], {})[it["dimension_id"]] = it["new"]
+    conn = duckdb.connect(str(db))
+    try:
+        cols = [r[0] for r in conn.execute("DESCRIBE dimensions").fetchall()]
+        ci = cols.index("dim_column_name")
+        dins = f"INSERT INTO dimensions VALUES ({', '.join('?' * len(cols))})"
+        for mc, renames in by_matrix.items():
+            dims = conn.execute("SELECT * FROM dimensions WHERE matrix_code = ? ORDER BY dimension_id",
+                                [mc]).fetchall()
+            stale = [d[0] for d in dims if d[0] in renames and d[ci] != old[d[0]]]
+            if stale or len([d for d in dims if d[0] in renames]) != len(renames):
+                raise SystemExit(f"refusing: {mc} dimensions differ from the plan: {stale or renames}")
+            opts = conn.execute("SELECT * FROM dimension_options WHERE dimension_id IN "
+                                "(SELECT dimension_id FROM dimensions WHERE matrix_code = ?)", [mc]).fetchall()
+            oins = f"INSERT INTO dimension_options VALUES ({', '.join('?' * len(opts[0]))})" if opts else None
+            new_dims = [tuple(renames.get(d[0], v) if i == ci else v for i, v in enumerate(d)) for d in dims]
+            # Autocommit steps: DuckDB rejects deleting referencing and referenced rows in
+            # one transaction. On failure the original rows are put back.
+            try:
+                conn.execute("DELETE FROM dimension_options WHERE dimension_id IN "
+                             "(SELECT dimension_id FROM dimensions WHERE matrix_code = ?)", [mc])
+                conn.execute("DELETE FROM dimensions WHERE matrix_code = ?", [mc])
+                conn.executemany(dins, new_dims)
+                if oins:
+                    conn.executemany(oins, opts)
+            except BaseException:
+                conn.execute("DELETE FROM dimension_options WHERE dimension_id IN "
+                             "(SELECT dimension_id FROM dimensions WHERE matrix_code = ?)", [mc])
+                conn.execute("DELETE FROM dimensions WHERE matrix_code = ?", [mc])
+                conn.executemany(dins, dims)
+                if oins:
+                    conn.executemany(oins, opts)
+                raise
+        left = conn.execute("SELECT COUNT(*) FROM (SELECT matrix_code, dim_column_name FROM dimensions "
+                            "WHERE list_contains(?, matrix_code) GROUP BY 1, 2 HAVING COUNT(*) > 1)",
+                            [list(by_matrix)]).fetchone()[0]
+    finally:
+        conn.close()
+    return {"renamed": len(plan["changes"]), "matrices": len(by_matrix), "duplicates_left": left}
 
 
 # ------------------------------------------------------------------ metadata-only
@@ -378,6 +476,7 @@ def build_plan(data_dir: Path, do_grain=True, audit_json=None) -> dict:
             "time_misclassified": report_time(rep, data_dir, audit),
             "conflicting_grain": classify_grain(conn, rep, data_dir) if do_grain or audit_json else
             {"count": 0, "skipped": "--no-grain"},
+            "dim_columns": plan_dim_columns(conn, data_dir / "corpus" / "parquet"),
         }
     finally:
         conn.close()
@@ -402,6 +501,12 @@ def render_md(p: dict) -> str:
         L.append(f"- cause `{k}`: {n}")
     for k, n in g.get("by_decision", {}).items():
         L.append(f"- decision `{k}`: {n}")
+    d = p.get("dim_columns")
+    if d:
+        L += ["", f"## Duplicate dimension columns: {d['count']} renames in {len(d['matrices'])} matrices", ""]
+        L += [f"- `{i['matrix_code']}` dimension {i['dimension_id']}: {i['old']} → {i['new']}"
+              for i in d["changes"][:12]]
+        L += [f"- problem `{x['matrix_code']}`: {x['reason']}" for x in d["problems"]]
     return "\n".join(L) + "\n"
 
 
@@ -412,7 +517,9 @@ def main(argv=None) -> int:
     ap.add_argument("--report-md")
     ap.add_argument("--audit-json", help="reuse an audit-corpus.py --full --hashes JSON (skips the scan)")
     ap.add_argument("--no-grain", action="store_true")
-    ap.add_argument("--apply", action="store_true", help="quarantine step only, on --target-dir (a COPY)")
+    ap.add_argument("--apply", action="store_true", help="apply --step on --target-dir (a COPY)")
+    ap.add_argument("--step", choices=("quarantine", "dim-columns"), default="quarantine",
+                    help="what --apply does (default: quarantine)")
     ap.add_argument("--target-dir", help="copy of the data dir to apply to; required with --apply")
     a = ap.parse_args(argv)
     data_dir = Path(a.data_dir).resolve()
@@ -423,6 +530,21 @@ def main(argv=None) -> int:
     for f in (a.report_json, a.report_md):
         if f and inside(Path(f).resolve(), data_dir / "corpus"):
             ap.error("report files must not be inside the corpus")
+
+    if a.apply and a.step == "dim-columns":
+        # planned from the SOURCE (read-only); apply re-checks every row in the copy
+        conn = duckdb.connect(str(data_dir / "corpus" / "metadata.duckdb"), read_only=True)
+        try:
+            dplan = plan_dim_columns(conn, data_dir / "corpus" / "parquet")
+        finally:
+            conn.close()
+        res = apply_dim_columns(dplan, data_dir, Path(a.target_dir).resolve())
+        print(f"renamed {res['renamed']} dimensions in {res['matrices']} matrices "
+              f"({res['duplicates_left']} duplicate columns left)")
+        if a.report_json:
+            Path(a.report_json).write_text(json.dumps({"kind": "repair-dim-columns", "plan": dplan,
+                                                       "applied": res}, indent=1, sort_keys=True) + "\n")
+        return 0 if res["duplicates_left"] == 0 else 1
 
     plan = build_plan(data_dir, do_grain=not a.no_grain, audit_json=a.audit_json)
     if a.apply:
