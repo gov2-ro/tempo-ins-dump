@@ -106,6 +106,19 @@ _ADD_TEXT_RE = re.compile(
     r'productia|valoare adaugata|subventi\w*|impozit\w*)\b', re.I)
 
 
+# Without a unit type (no unit dimension, or a split child never profiled) the
+# indicator name is the only evidence. Narrower than _NON_ADD_TEXT_RE: plain
+# 'indicatori'/'salariati' are counts, 'medii/mediu de rezidenta' are urban/rural
+# areas, 'Mediu -' is the environment, 'in preturile anului' are amounts at
+# constant prices, and an average headcount ('numarul mediu') adds across groups.
+_UNKNOWN_UNIT_NON_ADD_RE = re.compile(
+    r'\b(rat[ae]|ratei|ratele|indice\w*|indicii|pondere\w*|procent\w*|'
+    r'medi[ae]|mediu (?:net|brut|lunar|anual)|castig\w*|'
+    r'pret(?:urile|uri|ul)?(?! (?:curente|constante|comparabile|anului|ale anului))|'
+    r'tarif\w*|densitat\w*|speranta de viata|per capita|pe locuitor|pe cap de locuitor|'
+    r'la 1000|la 100|la 100000)\b', re.I)
+
+
 def _fold(text: str) -> str:
     """Lower-case, accent-stripped text (the indicator regexes are accent-free)."""
     if not text:
@@ -125,14 +138,20 @@ def classify_measure(unit_type: str | None, text: str = '',
     A verified `additive` flag from the profiler wins. Currency amounts are
     additive only when the indicator text says so ("cifra de afaceri",
     "investitii") and nothing in it says average/price/wage; otherwise they
-    stay conservative. Other unit types follow NON_ADDITIVE_UNIT_TYPES.
+    stay conservative. An unknown unit (None / 'other': no unit dimension, or an
+    unprofiled split child) is additive unless the name says rate, average,
+    share, index, price or per-capita. Other unit types follow
+    NON_ADDITIVE_UNIT_TYPES.
     """
     if struct_additive is not None:
         return 'additive' if struct_additive else 'non_additive'
     ut = unit_type or ''
+    text = _fold(text)
+    if ut in ('', 'other'):
+        # Unknown unit: rates, averages, shares and indices by name are never summed.
+        return 'non_additive' if text and _UNKNOWN_UNIT_NON_ADD_RE.search(text) else 'additive'
     if ut not in NON_ADDITIVE_UNIT_TYPES:
         return 'additive'
-    text = _fold(text)
     if ut == 'currency' and text:
         if _NON_ADD_TEXT_RE.search(text):
             return 'non_additive'

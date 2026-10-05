@@ -683,6 +683,26 @@ def main(argv=None):
     profile_rows = []
     archetype_counts: dict[str, int] = defaultdict(int)
 
+    # A split child that lost its unit column (multi_um / cross_product splits on
+    # UNIT_MEASURE) carries its unit only in the split value ('promile',
+    # 'numar_persoane'). Without it the child had no unit type, which consumers
+    # read as an additive count and summed rates and averages.
+    split_units: dict[str, str] = {}
+    try:
+        def is_unit_col(c):  # SDMX or legacy (um_*_nom_id) unit column
+            return c == 'UNIT_MEASURE' or bool(re.match(r'^(um|unitati_de_masura)_', c or ''))
+        for sub, pattern, sdim, sval, sdims in conn.execute(
+                "SELECT sub_matrix_code, split_pattern, split_dimension, split_value, split_dimensions "
+                "FROM dataset_splits").fetchall():
+            if sdims:
+                slug = next((v for k, v in (json.loads(sdims) or {}).items() if is_unit_col(k)), None)
+            else:
+                slug = sval if pattern == 'multi_um' or is_unit_col(sdim) else None
+            if slug:
+                split_units[sub] = parse_unit(slug.replace('_', ' '))['unit_type']
+    except duckdb.CatalogException:
+        pass  # scratch DB without dataset_splits
+
     for matrix_code, dims in matrix_dims.items():
         has_time      = any(d['dim_type'] == 'time'      for d in dims.values())
         has_geo       = any(d['dim_type'] in ('geo',)    for d in dims.values())
@@ -719,6 +739,8 @@ def main(argv=None):
         for d in dims.values():
             if d['dim_type'] == 'unit':
                 all_unit_types.update(d['unit_types'])
+        if not all_unit_types and matrix_code in split_units:
+            all_unit_types = {split_units[matrix_code]}
         primary_unit = next(iter(all_unit_types - {'other'}), None) or next(iter(all_unit_types), None)
 
         # Parse coverage: fraction of this matrix's options with confidence ≥ 0.8

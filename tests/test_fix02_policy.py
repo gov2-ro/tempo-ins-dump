@@ -203,3 +203,22 @@ def test_provenance_fields():
     assert set(p) == {'source_code', 'period', 'unit', 'filters', 'levels', 'method',
                       'verification', 'approximation', 'outcome', 'reason',
                       'comparison', 'dimensions'}
+
+
+def test_unknown_unit_is_judged_by_the_indicator_name():
+    # Split children without a profile reached the policy as unit None and were
+    # summed: FOM106E_judete (average wage) 22,342,500 vs INS 4,959; LMV101B
+    # (vacancy rate) 99.77 vs 0.61; TJU0913 (share of modernised roads).
+    for name in ('Castigul salarial nominal mediu net lunar [judete]',
+                 'Rata  locurilor de munca vacante pe regiuni [regiuni × anual]',
+                 'Tinta 1 - PONDERE DRUMURI MODERNIZATE IN TOTAL RETEA DRUMURI',
+                 'Indicii preturilor de consum', 'Speranta de viata la nastere',
+                 'Medicii la 1000 locuitori', 'Densitatea populatiei'):
+        assert classify_measure(None, name) == 'non_additive', name
+        assert classify_measure('other', name) == 'non_additive', name
+    for name in ('Numarul mediu al salariatilor pe activitati', 'Accidentati in munca',
+                 'Principalii indicatori ai intreprinderilor', 'Salariati pe judete',
+                 'Populatia pe sexe si medii de rezidenta', 'Mediu - Numar de angajati',
+                 'Cheltuieli de cercetare in preturile anului 2010', ''):
+        assert classify_measure(None, name) == 'additive', name
+    assert classify_measure(None, 'Rata somajului', struct_additive=True) == 'additive'
