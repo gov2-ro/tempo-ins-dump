@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from app.db import get_conn
 from app.services.place_service import (
-    resolve_place, get_place_datasets, get_place_kpis,
+    resolve_place, get_place_datasets, get_place_kpi_report,
     get_place_peers, get_kpi_baselines, slugify,
 )
 
@@ -60,7 +60,11 @@ def list_places():
 
 @router.get("/api/places/{place_type}/{slug}/baselines/{kpi_label}")
 def get_place_baselines(place_type: str, slug: str, kpi_label: str):
-    """National + region baseline series for a single KPI."""
+    """National + region baseline series for a single KPI.
+
+    `kpi_label` accepts the KPI key, its RO/EN label or a legacy label
+    (e.g. the former "Rata șomajului BIM", now registered unemployment).
+    """
     if place_type not in GEO_LEVELS:
         raise HTTPException(404, "Unknown place type")
     label = unquote(kpi_label)
@@ -86,7 +90,7 @@ def get_place_profile(place_type: str, slug: str):
             "name": place.get("parent_name", place["parent_slug"]),
         }
 
-    kpis = get_place_kpis(place_type, slug, conn=conn)
+    kpi_report = get_place_kpi_report(place_type, slug, conn=conn)
     datasets = get_place_datasets(place_type, slug, conn=conn)
     peers = get_place_peers(place_type, slug, conn=conn)
 
@@ -97,7 +101,8 @@ def get_place_profile(place_type: str, slug: str):
             "slug": slug,
             "parent": parent,
         },
-        "kpis": kpis,
+        "kpis": kpi_report["kpis"],
+        "omitted_kpis": kpi_report["omitted"],
         "datasets": datasets,
         "peers": peers,
         "dataset_count": len(datasets),
