@@ -42,6 +42,16 @@ from split_rules import detect_all, SplitRule, SplitGroup
 
 logger = logging.getLogger(__name__)
 
+# Handled split failures (child could not be written/registered). Any entry makes
+# main() exit nonzero so update-pipeline.py can record a required-stage failure.
+SPLIT_FAILURES: list[str] = []
+EXIT_SPLIT_FAILED = 1
+
+
+def record_failure(msg: str) -> None:
+    SPLIT_FAILURES.append(msg)
+    logger.error(msg)
+
 # Paths
 DATA_DIR = Path(__file__).parent / "data"
 PARQUET_V3_DIR = CORPUS_PARQUET_DIR  # Output goes to corpus/parquet
@@ -260,7 +270,7 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False) -> lis
                     f"SELECT COUNT(*) FROM read_parquet('{dst}')"
                 ).fetchone()[0]
             except Exception as e:
-                logger.error(f"Failed to split {rule.matrix_code} -> {sub_code}: {e}")
+                record_failure(f"Failed to split {rule.matrix_code} -> {sub_code}: {e}")
                 continue
 
         logger.debug(f"  {sub_code}: {row_count} rows -> {dst.name}")
@@ -337,7 +347,7 @@ def _split_hierarchy(conn, src: Path, dst: Path, rule: SplitRule, group: SplitGr
         conn.execute(query)
         return conn.execute(f"SELECT COUNT(*) FROM read_parquet('{dst}')").fetchone()[0]
     except Exception as e:
-        logger.error(f"Hierarchy split failed for {rule.matrix_code}/{group.label}: {e}")
+        record_failure(f"Hierarchy split failed for {rule.matrix_code}/{group.label}: {e}")
         return 0
 
 
@@ -689,7 +699,7 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
                 f"SELECT COUNT(*) FROM read_parquet('{dst}')"
             ).fetchone()[0]
         except Exception as e:
-            logger.error(f"Failed to split {matrix_code} -> {sub_code}: {e}")
+            record_failure(f"Failed to split {matrix_code} -> {sub_code}: {e}")
             continue
 
         logger.debug(f"  {sub_code}: {row_count} rows -> {dst.name}")
@@ -962,6 +972,7 @@ def main():
                             total_rows += sub["row_count"]
                         else:
                             errors += 1
+                            SPLIT_FAILURES.append(f"{matrix_code}: empty sub-dataset {sub.get('sub_code')}")
             else:
                 patterns = "+".join(r.pattern for r in mrules)
                 logger.debug(f"\n[{i}/{len(matrix_list)}] {matrix_code} (cross-product: {patterns})")
@@ -974,6 +985,7 @@ def main():
                             total_rows += sub["row_count"]
                         else:
                             errors += 1
+                            SPLIT_FAILURES.append(f"{matrix_code}: empty sub-dataset {sub.get('sub_code')}")
 
         elapsed = time.time() - t0
 
@@ -1000,6 +1012,10 @@ def main():
 
     finally:
         conn.close()
+
+    if SPLIT_FAILURES and not args.dry_run:
+        logger.error(f"{len(SPLIT_FAILURES)} split failure(s); first: {SPLIT_FAILURES[0]}")
+        sys.exit(EXIT_SPLIT_FAILED)
 
 
 if __name__ == "__main__":
