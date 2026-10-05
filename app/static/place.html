@@ -28,7 +28,7 @@
         .dataset-count { font-size:0.85rem; color:var(--text-muted); margin-top:0.4rem; }
 
         /* KPI Heroes */
-        .kpi-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:0.75rem; margin-bottom:2rem; }
+        .kpi-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr)); gap:0.75rem; margin-bottom:0.75rem; }
         .kpi-card {
             background:var(--bg-3); border:1px solid var(--border);
             border-radius:8px; padding:0.875rem; cursor:pointer; transition:border-color 0.15s;
@@ -40,6 +40,19 @@
         .kpi-delta { font-size:0.75rem; margin-top:0.15rem; }
         .kpi-delta.up { color:var(--green); }
         .kpi-delta.down { color:var(--red); }
+        .kpi-delta.flat, .kpi-delta.na { color:var(--text-muted); }
+        .kpi-delta-range { color:var(--text-muted); font-size:0.7rem; }
+        .kpi-delta-range.warn { color:var(--amber, #f59e0b); }
+        .kpi-period { font-size:0.75rem; color:var(--text-muted); margin-left:0.35rem; font-variant-numeric:tabular-nums; }
+        .kpi-badges { display:flex; flex-wrap:wrap; gap:0.25rem; margin-top:0.25rem; }
+        .kpi-badges:empty { display:none; }
+        .kpi-badge { font-size:0.65rem; padding:0.05rem 0.4rem; border-radius:999px; border:1px solid var(--border); color:var(--text-muted); }
+        .kpi-badge.approx { color:var(--amber, #f59e0b); border-color:var(--amber, #f59e0b); }
+        .kpi-badge.stale { color:var(--amber, #f59e0b); border-color:var(--amber, #f59e0b); }
+        .kpi-source { font-size:0.65rem; color:var(--text-muted); margin-top:0.35rem; line-height:1.3; overflow-wrap:anywhere; }
+        .kpi-omitted { font-size:0.75rem; color:var(--text-muted); margin-bottom:2rem; }
+        .comparison-meta, .comparison-note { font-size:0.75rem; color:var(--text-muted); margin:0.25rem 0; overflow-wrap:anywhere; }
+        .comparison-note { color:var(--amber, #f59e0b); }
         .kpi-sparkline { height:32px; margin-top:0.4rem; }
 
         /* Theme Sections */
@@ -193,6 +206,7 @@
                 <div class="dataset-count" id="dataset-count"></div>
             </div>
             <div class="kpi-grid" id="kpi-grid"></div>
+            <div class="kpi-omitted" id="kpi-omitted"></div>
 
             <!-- Section B: Themed Sections -->
             <div class="section-title" id="section-title-themes">Seturi de date pe teme</div>
@@ -201,13 +215,15 @@
             <!-- Section C: Comparison -->
             <div class="comparison-section">
                 <div class="section-title">Comparație — <span id="comparison-kpi-label" style="color:var(--text-primary)"></span></div>
+                <div class="comparison-meta" id="comparison-kpi-meta"></div>
                 <div class="always-chips" id="always-chips"></div>
                 <div class="peer-groups" id="peer-groups"></div>
+                <div class="comparison-note" id="comparison-note"></div>
                 <div id="comparison-chart"></div>
             </div>
         </div>
     </div>
 
-    <script src="/js/place-page.js?v=3"></script>
+    <script src="/js/place-page.js?v=4"></script>
 </body>
 </html>

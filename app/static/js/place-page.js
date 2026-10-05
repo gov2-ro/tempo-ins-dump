@@ -10,28 +10,28 @@ function alignToYears(seriesData, years) {
 
 const THEMES = [
   { id: 'demografie',   label: 'Demografie',      icon: '👥',
-    kpi_labels: ['Populație rezidentă', 'Rata natalității', 'Rata mortalității'],
+    kpi_keys: ['resident_population', 'birth_rate', 'death_rate'],
     categories: ['Populație', 'Demografie', 'Natalitate', 'Mortalitate', 'Decese', 'Fertilitate'] },
   { id: 'munca',        label: 'Forță de muncă',  icon: '💼',
-    kpi_labels: ['Rata șomajului BIM', 'Câștig salarial net mediu lunar'],
+    kpi_keys: ['registered_unemployment_rate', 'net_monthly_wage'],
     categories: ['Forța de muncă', 'Muncă', 'Salarii', 'Șomaj', 'Ocupare'] },
   { id: 'economie',     label: 'Economie',        icon: '📈',
-    kpi_labels: [],
+    kpi_keys: [],
     categories: ['Economie', 'Conturi naționale', 'Prețuri', 'Finanțe', 'Comerț'] },
   { id: 'educatie',     label: 'Educație',        icon: '🎓',
-    kpi_labels: [],
+    kpi_keys: [],
     categories: ['Educație', 'Învățământ', 'Școli', 'Elevi'] },
   { id: 'sanatate',     label: 'Sănătate',        icon: '🏥',
-    kpi_labels: [],
+    kpi_keys: [],
     categories: ['Sănătate', 'Asistență medicală', 'Spitale'] },
   { id: 'agricultura',  label: 'Agricultură',     icon: '🌾',
-    kpi_labels: [],
+    kpi_keys: [],
     categories: ['Agricultură', 'Silvicultură', 'Fond funciar'] },
   { id: 'industrie',    label: 'Industrie',       icon: '🏭',
-    kpi_labels: [],
+    kpi_keys: [],
     categories: ['Industrie', 'Producție industrială', 'Construcții'] },
   { id: 'turism',       label: 'Turism',          icon: '🏨',
-    kpi_labels: [],
+    kpi_keys: [],
     categories: ['Turism', 'Cazare', 'Hoteluri'] },
 ];
 
@@ -40,12 +40,28 @@ const PLACE_UI = {
           datasets: 'seturi de date disponibile', themes: 'Seturi de date pe teme',
           comparison: 'Comparație', national: 'Medie națională', sameRegion: 'Aceeași regiune:',
           similarSize: 'Mărime similară:', typeLabels: { county:'Județ', region:'Regiune', macroregion:'Macroregiune', locality:'Localitate' },
-          searchPlaceholder: 'Caută un loc...' },
+          searchPlaceholder: 'Caută un loc...',
+          approx: 'aproximare', approxTitle: 'Aproximare: medie simplă, nu rata oficială pentru total',
+          weighted: 'medie ponderată', source: 'Sursă', period: 'perioadă', method: 'Metodă',
+          stale: 'date mai vechi', staleTitle: 'Sursa are date până în', changeNA: 'schimbare indisponibilă',
+          diffDates: 'perioade diferite', vs: 'față de', since: 'din',
+          units: { percent: '%', percentage_points: 'p.p.', per_mille_points: 'puncte ‰' },
+          noteDiff: 'Atenție: perioade diferite în grafic —', nationalApprox: 'Medie națională (aproximare)',
+          regionWord: '(regiune)', omitted: 'Indicatori indisponibili:',
+          omittedReasons: { no_all_activities_total: 'nu există rând de total pe activități', no_data: 'fără date', missing_weights: 'fără ponderi' }, },
     en: { loading: 'Loading...', notFound: 'Place not found.', error: 'Loading error.',
           datasets: 'datasets available', themes: 'Datasets by theme',
           comparison: 'Comparison', national: 'National average', sameRegion: 'Same region:',
           similarSize: 'Similar size:', typeLabels: { county:'County', region:'Region', macroregion:'Macroregion', locality:'Locality' },
-          searchPlaceholder: 'Search a place...' },
+          searchPlaceholder: 'Search a place...',
+          approx: 'approximation', approxTitle: 'Approximation: simple mean, not the official rate for the total',
+          weighted: 'weighted mean', source: 'Source', period: 'period', method: 'Method',
+          stale: 'older data', staleTitle: 'Source has data through', changeNA: 'change unavailable',
+          diffDates: 'different periods', vs: 'vs', since: 'since',
+          units: { percent: '%', percentage_points: 'pp', per_mille_points: '‰ points' },
+          noteDiff: 'Note: different periods in the chart —', nationalApprox: 'National mean (approximation)',
+          regionWord: '(region)', omitted: 'Unavailable indicators:',
+          omittedReasons: { no_all_activities_total: 'no all-activities total row in the source', no_data: 'no data', missing_weights: 'no weights' }, },
 };
 
 class PlaceProfileApp {
@@ -95,6 +111,7 @@ class PlaceProfileApp {
             document.getElementById('lang-label').textContent = this.lang === 'ro' ? 'EN' : 'RO';
             document.documentElement.setAttribute('lang', this.lang);
             this._applyLangStrings();
+            this._rerenderForLang();
         });
 
         // Place search in topbar
@@ -113,6 +130,16 @@ class PlaceProfileApp {
             const typeLabel = t.typeLabels[this.data.place.type] || this.data.place.type;
             document.getElementById('geo-badge').textContent = typeLabel;
         }
+    }
+
+    // KPI labels, methods and units are language-dependent
+    _rerenderForLang() {
+        if (!this.data) return;
+        this._renderKPIs();
+        this._renderThemes();
+        this._renderComparisonHeader();
+        this._renderBaselineChips();
+        this._refreshComparisonChart();
     }
 
     async _initPlaceSearch() {
@@ -208,29 +235,93 @@ class PlaceProfileApp {
         document.getElementById('dataset-count').textContent = `${dataset_count} ${this.ui.datasets}`;
     }
 
+    // ---- KPI helpers (language-aware labels, dates, units, change) ----
+    _kl(kpi) { return this.lang === 'en' ? (kpi.label_en || kpi.label) : kpi.label; }
+    _ku(kpi) { return this.lang === 'en' ? (kpi.unit_en || kpi.unit) : kpi.unit; }
+    _locale() { return this.lang === 'en' ? 'en-GB' : 'ro-RO'; }
+
+    _fmtValue(kpi, v) {
+        if (v == null) return '—';
+        const kind = kpi.unit_kind;
+        const max = (kind === 'percent_rate' || kind === 'per_mille_rate') ? 1 : 0;
+        return v.toLocaleString(this._locale(), { maximumFractionDigits: max });
+    }
+
+    // {text, cls, title}: delta with its own unit (relative % for counts,
+    // percentage points for % rates, per-mille points for ‰ rates) and dates.
+    _changeParts(kpi) {
+        const t = this.ui, ch = kpi.change;
+        if (!ch || ch.status !== 'ok' || ch.value == null) {
+            return { text: t.changeNA, cls: 'na', title: ch && ch.reason ? ch.reason : '' };
+        }
+        const v = ch.value;
+        const arrow = v > 0 ? '▲' : v < 0 ? '▼' : '■';
+        const cls = v > 0 ? 'up' : v < 0 ? 'down' : 'flat';
+        const sign = v > 0 ? '+' : v < 0 ? '−' : '';
+        const unit = t.units[ch.display_unit] || ch.display_unit;
+        const num = Math.abs(v).toLocaleString(this._locale(), { maximumFractionDigits: 2 });
+        const sep = ch.display_unit === 'percent' ? '' : ' ';
+        const gap = ch.basis !== 'yoy';
+        const range = ch.from_period && ch.to_period
+            ? `${t.vs} ${ch.from_period}${gap ? ` (${t.diffDates})` : ''}` : '';
+        return { text: `${arrow} ${sign}${num}${sep}${unit}`, range, cls, gap,
+                 title: `${ch.from_period || '?'} → ${ch.to_period || '?'}` };
+    }
+
+    _methodBadge(kpi) {
+        const t = this.ui, m = kpi.method || {};
+        if (m.approximation) return `<span class="kpi-badge approx" title="${_esc(t.approxTitle)}">${_esc(t.approx)}</span>`;
+        if (m.code === 'weighted_mean') return `<span class="kpi-badge weighted">${_esc(t.weighted)}</span>`;
+        return '';
+    }
+
+    _methodNote(kpi) {
+        const m = kpi.method || {};
+        return (this.lang === 'en' ? m.note_en : m.note) || '';
+    }
+
     _renderKPIs() {
         const grid = document.getElementById('kpi-grid');
         for (const c of this.sparklines) c.dispose();
         this.sparklines = [];
+        const t = this.ui;
         grid.innerHTML = this.data.kpis.map((kpi, i) => {
-            const deltaHtml = kpi.change_yoy != null
-                ? `<div class="kpi-delta ${kpi.change_yoy >= 0 ? 'up' : 'down'}">
-                     ${kpi.change_yoy >= 0 ? '▲' : '▼'} ${Math.abs(kpi.change_yoy)} ${_esc(kpi.unit)}
-                   </div>`
-                : '';
+            const ch = this._changeParts(kpi);
+            const deltaHtml = `<div class="kpi-delta ${ch.cls}" title="${_esc(ch.title || '')}">
+                     ${_esc(ch.text)}${ch.range ? ` <span class="kpi-delta-range${ch.gap ? ' warn' : ''}">${_esc(ch.range)}</span>` : ''}
+                   </div>`;
+            const staleHtml = kpi.stale
+                ? `<span class="kpi-badge stale" title="${_esc(t.staleTitle)} ${_esc(kpi.source_latest_period)}">${_esc(t.stale)}</span>` : '';
+            const note = this._methodNote(kpi);
+            const src = kpi.source || {};
+            const srcTitle = (this.lang === 'en' ? src.title_en : src.title) || '';
+            const def = (this.lang === 'en' ? kpi.definition_en : kpi.definition) || '';
             return `
-                <div class="kpi-card ${i === 0 ? 'active' : ''}"
-                     data-kpi-index="${i}"
+                <div class="kpi-card ${i === this.activeKpiIndex ? 'active' : ''}"
+                     data-kpi-index="${i}" data-kpi-key="${_esc(kpi.key)}"
+                     title="${_esc(def)}"
                      onclick="app._selectKpi(${i})">
-                    <div class="kpi-label">${_esc(kpi.label)}</div>
+                    <div class="kpi-label">${_esc(this._kl(kpi))}</div>
                     <div>
-                        <span class="kpi-value">${kpi.value != null ? kpi.value.toLocaleString('ro-RO') : '—'}</span>
-                        <span class="kpi-unit">${_esc(kpi.unit)}</span>
+                        <span class="kpi-value">${this._fmtValue(kpi, kpi.value)}</span>
+                        <span class="kpi-unit">${_esc(this._ku(kpi))}</span>
+                        <span class="kpi-period">${_esc(kpi.period || '')}</span>
                     </div>
                     ${deltaHtml}
+                    <div class="kpi-badges">${this._methodBadge(kpi)}${staleHtml}</div>
                     <div class="kpi-sparkline" id="kpi-spark-${i}"></div>
+                    <div class="kpi-source" title="${_esc(srcTitle)}">${_esc(t.source)}: ${_esc(src.code || '')}${note ? ` · ${_esc(note)}` : ''}</div>
                 </div>`;
         }).join('');
+
+        const om = this.data.omitted_kpis || [];
+        const omEl = document.getElementById('kpi-omitted');
+        if (omEl) {
+            omEl.innerHTML = om.length
+                ? `${_esc(t.omitted)} ` + om.map(o => `${_esc(this.lang === 'en' ? (o.label_en || o.label) : o.label)}`
+                    + ` (${_esc(t.omittedReasons[o.reason] || o.reason)})`).join('; ')
+                : '';
+        }
 
         requestAnimationFrame(() => {
             this.data.kpis.forEach((kpi, i) => {
@@ -261,14 +352,28 @@ class PlaceProfileApp {
         setTimeout(() => chart.resize(), 0);
     }
 
-    _selectKpi(index) {
+    async _selectKpi(index) {
         document.querySelectorAll('.kpi-card').forEach((el, i) => {
             el.classList.toggle('active', i === index);
         });
         this.activeKpiIndex = index;
-        document.getElementById('comparison-kpi-label').textContent =
-            this.data.kpis[index]?.label || '';
+        this._renderComparisonHeader();
+        // Baselines and peer series are per KPI: reload them for the new selection.
+        this.comparisonData = {};
+        this._applyPeerSeries();
+        await this._loadBaselines();
         this._refreshComparisonChart();
+    }
+
+    _renderComparisonHeader() {
+        const kpi = this.data.kpis[this.activeKpiIndex];
+        document.getElementById('comparison-kpi-label').textContent = kpi ? this._kl(kpi) : '';
+        const meta = document.getElementById('comparison-kpi-meta');
+        if (meta && kpi) {
+            const note = this._methodNote(kpi);
+            meta.textContent = `${this.ui.source}: ${(kpi.source || {}).code || ''} · ${kpi.period || ''} · ${this._ku(kpi)}`
+                + (note ? ` · ${note}` : '');
+        }
     }
 
     _renderIndicatorGrid() {
@@ -285,17 +390,17 @@ class PlaceProfileApp {
             const themeDatasets = datasets.filter(d =>
                 theme.categories.some(cat => d.category.toLowerCase().includes(cat.toLowerCase()))
             );
-            const themeKpis = theme.kpi_labels
-                .map(label => this.data.kpis.find(k => k.label === label))
+            const themeKpis = theme.kpi_keys
+                .map(key => this.data.kpis.find(k => k.key === key))
                 .filter(Boolean);
 
             if (themeDatasets.length === 0 && themeKpis.length === 0) continue;
 
             const chartsHtml = themeKpis.slice(0, 3).map((kpi, i) => `
                 <div class="mini-chart-cell">
-                    <div class="mini-chart-title">${_esc(kpi.label)}</div>
+                    <div class="mini-chart-title">${_esc(this._kl(kpi))}</div>
                     <div class="mini-chart-canvas" id="mini-${theme.id}-${i}"></div>
-                    <div class="mini-chart-stat">${kpi.value != null ? kpi.value.toLocaleString('ro-RO') : '—'} ${_esc(kpi.unit)}</div>
+                    <div class="mini-chart-stat">${this._fmtValue(kpi, kpi.value)} ${_esc(this._ku(kpi))} · ${_esc(kpi.period || '')}${kpi.method && kpi.method.approximation ? ` · ${_esc(this.ui.approx)}` : ''}</div>
                 </div>
             `).join('');
 
@@ -357,8 +462,8 @@ class PlaceProfileApp {
         // Render mini charts
         requestAnimationFrame(() => {
             for (const theme of THEMES) {
-                const themeKpis = theme.kpi_labels
-                    .map(label => this.data.kpis.find(k => k.label === label))
+                const themeKpis = theme.kpi_keys
+                    .map(key => this.data.kpis.find(k => k.key === key))
                     .filter(Boolean)
                     .slice(0, 3);
                 themeKpis.forEach((kpi, i) => {
@@ -380,65 +485,84 @@ class PlaceProfileApp {
     _renderComparison() {
         const { place, peers, kpis } = this.data;
 
-        const alwaysChips = document.getElementById('always-chips');
-        const baselines = [];
-        if (place.parent) {
-            baselines.push(`<span class="baseline-chip">🇷🇴 Medie națională</span>`);
-            baselines.push(`<span class="baseline-chip">${_esc(place.parent.name)} (regiune)</span>`);
-        } else {
-            baselines.push(`<span class="baseline-chip">🇷🇴 Medie națională</span>`);
-        }
-        alwaysChips.innerHTML = baselines.join('');
-
         const peerGroupsEl = document.getElementById('peer-groups');
         const groups = [];
+        const chip = p => `<div class="peer-chip ${this.activePeers.has(p.slug) ? 'active' : ''}" data-slug="${p.slug}" data-type="${p.type}" data-name="${_esc(p.name)}"
+                      onclick="app._togglePeer(this)">${_esc(p.name)}</div>`;
         if (peers.same_region?.length) {
-            const chips = peers.same_region.map(p =>
-                `<div class="peer-chip" data-slug="${p.slug}" data-type="${p.type}" data-name="${_esc(p.name)}"
-                      onclick="app._togglePeer(this)">${_esc(p.name)}</div>`
-            ).join('');
             groups.push(`<div class="peer-group">
-                <span class="peer-group-label">${this.ui.sameRegion}</span>${chips}
+                <span class="peer-group-label">${this.ui.sameRegion}</span>${peers.same_region.map(chip).join('')}
             </div>`);
         }
         if (peers.similar_size?.length) {
-            const chips = peers.similar_size.map(p =>
-                `<div class="peer-chip" data-slug="${p.slug}" data-type="${p.type}" data-name="${_esc(p.name)}"
-                      onclick="app._togglePeer(this)">${_esc(p.name)}</div>`
-            ).join('');
             groups.push(`<div class="peer-group">
-                <span class="peer-group-label">${this.ui.similarSize}</span>${chips}
+                <span class="peer-group-label">${this.ui.similarSize}</span>${peers.similar_size.map(chip).join('')}
             </div>`);
         }
         peerGroupsEl.innerHTML = groups.join('');
+        this._renderBaselineChips();
+        this._renderComparisonHeader();
 
-        document.getElementById('comparison-kpi-label').textContent = kpis[0]?.label || '';
-
-        const chartEl = document.getElementById('comparison-chart');
-        this.comparisonChart = echarts.init(chartEl, null, { renderer: 'svg' });
-
+        if (!this.comparisonChart) {
+            const chartEl = document.getElementById('comparison-chart');
+            this.comparisonChart = echarts.init(chartEl, null, { renderer: 'svg' });
+        }
         this._loadBaselines().then(() => this._refreshComparisonChart());
+    }
+
+    _renderBaselineChips() {
+        const { place } = this.data;
+        const alwaysChips = document.getElementById('always-chips');
+        const nat = this.comparisonData['__national__meta'];
+        const natLabel = nat && nat.approximation ? this.ui.nationalApprox : this.ui.national;
+        const chips = [`<span class="baseline-chip">🇷🇴 ${_esc(natLabel)}</span>`];
+        if (place.parent) chips.push(`<span class="baseline-chip">${_esc(place.parent.name)} ${_esc(this.ui.regionWord)}</span>`);
+        alwaysChips.innerHTML = chips.join('');
     }
 
     async _loadBaselines() {
         const kpi = this.data.kpis[this.activeKpiIndex];
         if (!kpi) return;
-        const label = encodeURIComponent(kpi.label);
+        const key = encodeURIComponent(kpi.key);
         try {
             const resp = await fetch(
-                `/api/places/${this.placeType}/${this.placeSlug}/baselines/${label}`
+                `/api/places/${this.placeType}/${this.placeSlug}/baselines/${key}`
             );
             if (!resp.ok) return;
-            const { national, region } = await resp.json();
-            this.comparisonData['__national__'] = national;
-            this.comparisonData['__region__'] = region;
+            const b = await resp.json();
+            // ignore a stale response if the selection changed meanwhile
+            if (this.data.kpis[this.activeKpiIndex] !== kpi) return;
+            this.comparisonData['__national__'] = b.national || [];
+            this.comparisonData['__region__'] = b.region || [];
+            this.comparisonData['__national__meta'] = b.national_meta;
+            this.comparisonData['__region__meta'] = b.region_meta;
+            this._renderBaselineChips();
         } catch (_) {}
+    }
+
+    // Peer profile cache: slug -> /api/places response (one fetch per peer)
+    async _peerProfile(type, slug) {
+        this.peerProfiles = this.peerProfiles || {};
+        if (!this.peerProfiles[slug]) {
+            const resp = await fetch(`/api/places/${type}/${slug}`);
+            if (!resp.ok) return null;
+            this.peerProfiles[slug] = await resp.json();
+        }
+        return this.peerProfiles[slug];
+    }
+
+    _applyPeerSeries() {
+        const key = this.data.kpis[this.activeKpiIndex]?.key;
+        for (const slug of this.activePeers) {
+            const peer = (this.peerProfiles || {})[slug];
+            const kpi = peer && peer.kpis.find(k => k.key === key);
+            this.comparisonData[slug] = kpi ? kpi.sparkline : [];
+        }
     }
 
     async _togglePeer(el) {
         const slug = el.dataset.slug;
         const type = el.dataset.type;
-        const name = el.dataset.name;
 
         if (this.activePeers.has(slug)) {
             this.activePeers.delete(slug);
@@ -449,14 +573,9 @@ class PlaceProfileApp {
             this.activePeers.add(slug);
             el.classList.add('active');
             try {
-                const resp = await fetch(`/api/places/${type}/${slug}`);
-                if (resp.ok) {
-                    const peer = await resp.json();
-                    const kpiLabel = this.data.kpis[this.activeKpiIndex]?.label;
-                    const kpi = peer.kpis.find(k => k.label === kpiLabel);
-                    this.comparisonData[slug] = kpi ? kpi.sparkline : [];
-                }
+                await this._peerProfile(type, slug);
             } catch (_) {}
+            this._applyPeerSeries();
         }
         this._refreshComparisonChart();
     }
@@ -466,11 +585,19 @@ class PlaceProfileApp {
         const kpi = this.data.kpis[this.activeKpiIndex];
         if (!kpi) return;
 
-        const xYears = kpi.sparkline.map(r => r.year);
+        // x axis = union of every plotted series' periods, ascending, so a
+        // baseline or peer that is newer/older than the place is not cut off.
+        const yearSet = new Set(kpi.sparkline.map(r => r.year));
+        for (const k of ['__national__', '__region__', ...this.activePeers]) {
+            for (const r of (this.comparisonData[k] || [])) yearSet.add(r.year);
+        }
+        const xYears = [...yearSet].sort();
         const series = [];
         const primaryValues = []; // place + peers only — used for y-axis range
         const colors = ['#3b82f6', '#94a3b8', '#64748b', '#f59e0b', '#a78bfa', '#4ade80'];
         let colorIdx = 0;
+        const lastYear = arr => (arr && arr.length ? arr[arr.length - 1].year : null);
+        const periods = [[this.data.place.name, lastYear(kpi.sparkline)]];
 
         const placeData = alignToYears(kpi.sparkline, xYears);
         primaryValues.push(...placeData.filter(v => v != null));
@@ -479,27 +606,32 @@ class PlaceProfileApp {
             type: 'line',
             data: placeData,
             lineStyle: { width: 2.5, color: colors[colorIdx++] },
-            showSymbol: false, smooth: true,
+            showSymbol: false, smooth: false, connectNulls: false,
         });
 
+        const natMeta = this.comparisonData['__national__meta'];
         if (this.comparisonData['__national__']?.length) {
+            const nn = natMeta && natMeta.approximation ? this.ui.nationalApprox : this.ui.national;
             series.push({
-                name: this.ui.national,
+                name: nn,
                 type: 'line',
                 data: alignToYears(this.comparisonData['__national__'], xYears),
                 lineStyle: { width: 1.5, color: colors[colorIdx++], type: 'dashed' },
-                showSymbol: false, smooth: true,
+                showSymbol: false, smooth: false,
             });
+            periods.push([nn, lastYear(this.comparisonData['__national__'])]);
         }
 
         if (this.comparisonData['__region__']?.length) {
+            const rn = this.data.place.parent?.name || 'Regiune';
             series.push({
-                name: this.data.place.parent?.name || 'Regiune',
+                name: rn,
                 type: 'line',
                 data: alignToYears(this.comparisonData['__region__'], xYears),
                 lineStyle: { width: 1.5, color: colors[colorIdx++], type: 'dashed' },
-                showSymbol: false, smooth: true,
+                showSymbol: false, smooth: false,
             });
+            periods.push([rn, lastYear(this.comparisonData['__region__'])]);
         }
 
         for (const slug of this.activePeers) {
@@ -513,9 +645,19 @@ class PlaceProfileApp {
                     type: 'line',
                     data: peerData,
                     lineStyle: { width: 1.5, color: colors[colorIdx++ % colors.length] },
-                    showSymbol: false, smooth: true,
+                    showSymbol: false, smooth: false,
                 });
+                periods.push([peerName, lastYear(this.comparisonData[slug])]);
             }
+        }
+
+        // Different-date warning: every plotted line should end on the same period.
+        const noteEl = document.getElementById('comparison-note');
+        if (noteEl) {
+            const ends = new Set(periods.map(p => p[1]).filter(Boolean));
+            noteEl.textContent = ends.size > 1
+                ? `${this.ui.noteDiff} ` + periods.map(p => `${p[0]} ${p[1] || '—'}`).join(', ')
+                : '';
         }
 
         // Compute y-axis range from place + peer data only.
