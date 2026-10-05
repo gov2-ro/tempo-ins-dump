@@ -450,6 +450,18 @@
             border-color: var(--accent);
         }
         .s-btn-primary:hover { opacity: 0.88; background: var(--accent); }
+        .settings-check label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+        .settings-check input { width: auto; }
+        #ask-logging-banner {
+            font-size: 0.78rem;
+            color: var(--text-1);
+            background: var(--bg-2);
+            border: 1px solid var(--accent);
+            border-radius: var(--radius-sm);
+            padding: 8px 12px;
+            margin-bottom: 8px;
+        }
+        #ask-logging-banner.hidden { display: none; }
         .settings-note {
             font-size: 0.72rem;
             color: var(--text-3);
@@ -489,12 +501,18 @@
                     <div class="settings-row">
                         <label for="s-key">API Key</label>
                         <input id="s-key" type="password" placeholder="sk-ant-… or sk-proj-…" autocomplete="off">
+                        <div id="s-key-status" class="settings-note" aria-live="polite"></div>
+                    </div>
+                    <div class="settings-row settings-check">
+                        <label for="s-remember"><input id="s-remember" type="checkbox">
+                            Remember this key on this device</label>
+                        <div class="settings-note" id="s-remember-note">Off by default: the key is kept only for this browser tab (sessionStorage) and disappears when the tab closes. If you tick this, the key is saved <strong>unencrypted</strong> in this browser's localStorage, readable by any script running on this page, until you press Clear.</div>
                     </div>
                     <div class="settings-actions">
                         <button id="s-clear" class="s-btn">Clear</button>
                         <button id="s-save" class="s-btn s-btn-primary">Save</button>
                     </div>
-                    <div class="settings-note">Key is stored in your browser only and sent with each request. The server never logs or persists it.</div>
+                    <div class="settings-note" id="s-transit-note">Your key is sent to this server with each question so the server can call the model provider on your behalf. The server does not store or log it, but it does pass through the server, so only use a key you are comfortable with that. Clear removes it from this browser (tab and device storage).</div>
                 </div>
             </div>
             <button class="toggle-btn" id="theme-toggle" title="Toggle light/dark theme">
@@ -524,6 +542,10 @@
 
         <!-- Input -->
         <div class="chat-input-area">
+            <div id="ask-logging-banner" class="hidden" role="note">
+                Chat logging is ON for this server: your questions, the answers and the data tool calls
+                are written to the server logs (credentials are redacted). Don't submit personal or confidential information.
+            </div>
             <div id="byok-notice" class="hidden">
                 <span>🔑 Set your API key to start chatting.</span>
                 <button id="byok-notice-btn">Open settings</button>
