@@ -9,17 +9,26 @@ Note: sdmxthon (used by the Dashboard Generator) only supports XML, not JSON.
 """
 from __future__ import annotations
 
-import os
+import logging
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
 from app.db import get_conn
 from app.config import PARQUET_DIR
+from app.services.request_validation import (
+    parse_period_range, period_span_sql, quote_ident, valid_matrix_code)
 
 router = APIRouter()
+log = logging.getLogger(__name__)
 
 AGENCY = "INS"
+
+
+def _esc(v) -> str:
+    """Escape text for use in XML element content or a double-quoted attribute."""
+    return (str(v).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;"))
 
 
 def _parquet_path(flow: str) -> str | None:
@@ -43,10 +52,15 @@ def _parse_key(key: str, dim_names: list[str]) -> dict[str, list[str]]:
     parts = key.split(".")
     for i, part in enumerate(parts):
         if i >= len(dim_names):
-            break
+            if part:
+                raise HTTPException(
+                    400, "Key has more segments than the dataset has dimensions")
+            continue
         if part:  # non-empty = specific value(s)
             # SDMX allows '+' as OR separator
-            filters[dim_names[i]] = part.split("+")
+            vals = [v for v in part.split("+") if v]
+            if vals:
+                filters[dim_names[i]] = vals
     return filters
 
 
@@ -57,7 +71,7 @@ def _parse_key(key: str, dim_names: list[str]) -> dict[str, list[str]]:
 @router.get("/2.1/data/{agency_flow:path}")
 def get_data(
     agency_flow: str,
-    lastNObservations: Optional[int] = Query(None),
+    lastNObservations: Optional[int] = Query(None, ge=1, le=10000),
     startPeriod: Optional[str] = Query(None),
     endPeriod: Optional[str] = Query(None),
 ):
@@ -65,9 +79,11 @@ def get_data(
 
     URL form: /sdmx/2.1/data/INS,ACC102B/..
     The path after the flow ID is the dimension key (dot-separated).
-    """
-    import duckdb as _duckdb
 
+    4xx responses: 400 malformed/reversed startPeriod/endPeriod or a key with
+    more non-empty segments than dimensions; 404 unknown dataset; 422 invalid
+    lastNObservations (must be >= 1). See docs/SDMX-API.md.
+    """
     # Parse "INS,ACC102B/key" or "INS,ACC102B"
     if "/" in agency_flow:
         flow_part, key = agency_flow.split("/", 1)
@@ -78,57 +94,77 @@ def get_data(
     # Strip agency prefix (e.g. "INS,ACC102B" → "ACC102B")
     flow = flow_part.split(",")[-1].strip()
 
+    # Validate request shape before touching the database.
+    if not valid_matrix_code(flow):
+        raise HTTPException(404, "Dataset not found")
+    start_m, end_m = parse_period_range(startPeriod, endPeriod)
+
     parquet = _parquet_path(flow)
     if not parquet:
         raise HTTPException(404, f"Dataset {flow} not found")
 
-    conn_meta = get_conn()
-    dims = conn_meta.execute(
-        "SELECT dim_label, dim_column_name, dim_code FROM dimensions WHERE matrix_code = ? ORDER BY dim_code",
-        [flow]
-    ).fetchall()
-    if not dims:
-        raise HTTPException(404, f"No dimensions found for {flow}")
-
-    dim_names = [d[1] for d in dims]   # column names in parquet
-    dim_labels = [d[0] for d in dims]  # human-readable labels
-
-    # Build WHERE clauses
-    key_filters = _parse_key(key, dim_names)
-
-    conn_data = _duckdb.connect()
-    where_clauses: list[str] = []
-    for col, vals in key_filters.items():
-        quoted = ", ".join(f"'{v.replace(chr(39), chr(39)*2)}'" for v in vals)
-        where_clauses.append(f'"{col}" IN ({quoted})')
-
-    if startPeriod:
-        where_clauses.append(f'"TIME_PERIOD" >= \'{startPeriod}\'')
-    if endPeriod:
-        where_clauses.append(f'"TIME_PERIOD" <= \'{endPeriod}\'')
-
-    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
-
-    # For lastNObservations: get last N distinct TIME_PERIOD values
-    time_filter_sql = ""
-    if lastNObservations:
-        time_rows = conn_data.execute(
-            f"SELECT DISTINCT TIME_PERIOD FROM read_parquet('{parquet}') {where_sql} ORDER BY TIME_PERIOD DESC LIMIT {lastNObservations}"
-        ).fetchall()
-        if time_rows:
-            time_vals = ", ".join(f"'{r[0]}'" for r in time_rows)
-            if where_clauses:
-                where_sql += f' AND "TIME_PERIOD" IN ({time_vals})'
-            else:
-                where_sql = f'WHERE "TIME_PERIOD" IN ({time_vals})'
-
-    col_select = ", ".join(f'"{c}"' for c in dim_names) + ', "OBS_VALUE"'
-    sql = f"SELECT {col_select} FROM read_parquet('{parquet}') {where_sql} LIMIT 50000"
-
+    # One request-owned cursor on the shared, memory-limited connection
+    # (app/db.py) — never an unconstrained in-memory connection.
+    conn = get_conn()
     try:
-        rows = conn_data.execute(sql).fetchall()
-    except Exception as e:
-        raise HTTPException(500, f"Query error: {e}")
+        dims = conn.execute(
+            "SELECT dim_label, dim_column_name, dim_code FROM dimensions WHERE matrix_code = ? ORDER BY dim_code",
+            [flow]
+        ).fetchall()
+        if not dims:
+            raise HTTPException(404, f"No dimensions found for {flow}")
+
+        dim_names = [d[1] for d in dims]   # column names in parquet
+        key_filters = _parse_key(key, dim_names)
+
+        # All user values are bound parameters; identifiers come from the
+        # dimensions table and are quoted.
+        where_clauses: list[str] = []
+        params: list = []
+        for col, vals in key_filters.items():
+            marks = ", ".join("?" for _ in vals)
+            where_clauses.append(f"{quote_ident(col)} IN ({marks})")
+            params.extend(vals)
+
+        tp = quote_ident("TIME_PERIOD")
+        first_sql, last_sql = period_span_sql(tp)
+        if start_m is not None:
+            where_clauses.append(f"({first_sql}) >= ?")
+            params.append(start_m)
+        if end_m is not None:
+            where_clauses.append(f"({last_sql}) <= ?")
+            params.append(end_m)
+
+        where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+        # For lastNObservations: get last N distinct TIME_PERIOD values
+        if lastNObservations:
+            try:
+                time_rows = conn.execute(
+                    f"SELECT DISTINCT {tp} FROM read_parquet(?) {where_sql} "
+                    f"ORDER BY {tp} DESC LIMIT ?",
+                    [str(parquet), *params, int(lastNObservations)],
+                ).fetchall()
+            except Exception:
+                log.exception("sdmx lastN query failed flow=%s", flow)
+                raise HTTPException(500, "Query failed")
+            if time_rows:
+                marks = ", ".join("?" for _ in time_rows)
+                clause = f"{tp} IN ({marks})"
+                where_sql = (f"{where_sql} AND {clause}" if where_clauses
+                             else f"WHERE {clause}")
+                params.extend(r[0] for r in time_rows)
+
+        col_select = ", ".join(quote_ident(c) for c in dim_names) + ', "OBS_VALUE"'
+        sql = f"SELECT {col_select} FROM read_parquet(?) {where_sql} LIMIT 50000"
+
+        try:
+            rows = conn.execute(sql, [str(parquet), *params]).fetchall()
+        except Exception:
+            log.exception("sdmx data query failed flow=%s", flow)
+            raise HTTPException(500, "Query failed")
+    finally:
+        conn.close()
 
     # -----------------------------------------------------------------------
     # Build SDMX-ML 2.1 GenericData XML
@@ -136,13 +172,10 @@ def get_data(
     # DataSet with generic:Obs children (flat "AllDimensions" format).
     # -----------------------------------------------------------------------
 
-    def _esc(v: str) -> str:
-        return str(v).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
-
     obs_lines: list[str] = []
     for row in rows:
         values = "".join(
-            f'<generic:Value id="{dim_names[i]}" value="{_esc(row[i] if row[i] is not None else "")}"/>'
+            f'<generic:Value id="{_esc(dim_names[i])}" value="{_esc(row[i] if row[i] is not None else "")}"/>'
             for i in range(len(dim_names))
         )
         obs_val = "" if row[-1] is None else str(row[-1])
@@ -191,6 +224,8 @@ def get_data(
 @router.get("/2.1/datastructure/{agency}/{flow}/{version}")
 def get_datastructure(agency: str, flow: str, version: str):
     """Minimal SDMX-ML 2.1 DataStructure definition."""
+    if not valid_matrix_code(flow):
+        raise HTTPException(404, "Dataset not found")
     conn = get_conn()
 
     dims = conn.execute(
@@ -240,7 +275,7 @@ def get_datastructure(agency: str, flow: str, version: str):
 
         codelist_elements += f"""
       <structure:Codelist id="{cl_id}" version="1.0" agencyID="{AGENCY}">
-        <structure:Name>{label}</structure:Name>{code_items}
+        <structure:Name>{_esc(label)}</structure:Name>{code_items}
       </structure:Codelist>"""
 
     safe_name = name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -283,6 +318,8 @@ def get_datastructure(agency: str, flow: str, version: str):
 @router.get("/2.1/dataflow/{agency}/{flow}/{version}")
 def get_dataflow(agency: str, flow: str, version: str):
     """Minimal SDMX-ML 2.1 Dataflow definition."""
+    if not valid_matrix_code(flow):
+        raise HTTPException(404, "Dataset not found")
     conn = get_conn()
 
     matrix = conn.execute(
@@ -300,7 +337,7 @@ def get_dataflow(agency: str, flow: str, version: str):
   xmlns:common="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/common">
   <message:Structures>
     <structure:Dataflows>
-      <structure:Dataflow id="{flow}" version="{version}" agencyID="{AGENCY}">
+      <structure:Dataflow id="{flow}" version="{_esc(version)}" agencyID="{AGENCY}">
         <structure:Name xml:lang="ro">{safe_name}</structure:Name>
         <structure:Structure>
           <Ref id="{flow}" version="1.0" agencyID="{AGENCY}" package="datastructure" class="DataStructure"/>
