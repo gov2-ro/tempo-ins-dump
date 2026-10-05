@@ -58,7 +58,18 @@ All settings are env vars. None are required except enabling the endpoint and pr
 | `TEMPO_ASK_ENABLED` | `false` | **Must be `true`** to activate `POST /api/ask`. Returns 404 otherwise. |
 | `TEMPO_LLM_PROVIDER` | `anthropic` | `anthropic` or `openai` |
 | `TEMPO_LLM_MODEL` | `claude-sonnet-4-6` | Any model ID accepted by the provider |
-| `TEMPO_ASK_MAX_TOOL_CALLS` | `8` | Max LLM→tool iterations per request |
+| `TEMPO_ASK_MAX_ITERATIONS` | `8` | Max model calls per request |
+| `TEMPO_ASK_MAX_TOOL_CALLS` | `12` | Max tools dispatched per request, counting every tool in a multi-tool response. (Before FIX-08 this env var meant loop iterations.) |
+| `TEMPO_ASK_MAX_SECONDS` | `90` | Wall-clock budget per request; checked before every model call and tool |
+| `TEMPO_ASK_MAX_CONCURRENT` | `2` | In-process cap on simultaneous agent requests; extra requests get `503` + `Retry-After` |
+| `TEMPO_ASK_RETRY_AFTER_SECONDS` | `10` | `Retry-After` value for the concurrency rejection |
+| `TEMPO_ASK_PROVIDER_TIMEOUT` | `30` | Per provider call timeout (also clamped to the remaining request budget) |
+| `TEMPO_ASK_PROVIDER_MAX_RETRIES` | `1` | SDK-level retries per provider call |
+| `TEMPO_ASK_MAX_HISTORY_TURNS` / `_MAX_TURN_CHARS` / `_MAX_REQUEST_CHARS` | `20` / `8000` / `40000` | History bounds; violations return `400` (shape) or `413` (size) before any provider call |
+| `TEMPO_ASK_ALLOWED_PROVIDERS` | all in `ask-models.json` | Comma list restricting BYOK providers |
+| `TEMPO_ASK_ALLOWED_MODELS` | from `app/static/ask-models.json` | Comma list `provider:model` replacing the JSON allowlist for BYOK calls |
+| `TEMPO_ASK_SERVER_MODELS` | `TEMPO_LLM_PROVIDER:TEMPO_LLM_MODEL` | `provider:model` pairs a server-funded (no user key) call may use |
+| `TEMPO_ASK_LOG_CHATS` | `false` | Content logging, see below. Keep off unless you accept the retention terms |
 | `TEMPO_DEBUG` | `false` | Set `true` for verbose agent iteration logs |
 
 ### Launch examples
@@ -281,8 +292,41 @@ for step in resp.json()["tool_trace"]:
 ## 8. Limitations
 
 - **Max 5,000 rows** per `query_dataset_data` call (returns `truncated: true` if hit).
-- **Max 8 tool calls** per request (configurable via `TEMPO_ASK_MAX_TOOL_CALLS`).
+- **Budgets per request**: 8 model calls, 12 tools, 90 s (all configurable, see section 2). When one is hit the response is a partial result (`stop_reason` = `iterations`/`tools`/`deadline`/`provider`, plus a warning), not an error.
 - **Dimension labels are Romanian-only** — the agent is aware and searches bilingually, but raw values in `data.rows` will be Romanian strings.
 - **No streaming** — the response is returned only when the full agent loop completes.
 - **Not idempotent** — repeated identical questions may produce slightly different tool call paths (LLM non-determinism).
 - **Write operations are impossible by design** — the agent has read-only service access.
+
+---
+
+## 9. Request limits, keys and logging (FIX-08)
+
+**Validation.** `history` accepts only `{role: user|assistant, content}` turns where content is a
+string or a list of `{type: text, text}` blocks. System/developer/tool roles, tool blocks and extra
+fields are rejected with 400; size violations with 413. Nothing reaches a provider before validation,
+allowlist and concurrency checks pass. Unknown providers/models are 400 (BYOK) or 403 (server-funded);
+they never fall back to another provider.
+
+**Errors.** Provider failures become stable messages: 401 (key rejected), 429/503 with `Retry-After`
+(rate limit, timeout, outage), 502 otherwise. Provider text, headers and keys are never returned or logged.
+
+**Keys.** The chat page keeps a BYOK key in memory and `sessionStorage` (this tab only). "Remember this
+key on this device" is an explicit opt-in that writes it unencrypted to `localStorage`. Clear removes it
+from both. A key stored in `localStorage` by an older version is not deleted silently: it is loaded,
+shown as "saved on this device" with the box ticked, and removed by Clear. The key is never copied back
+into the DOM. The key is sent to this server with every request (the server calls the provider for
+you); it is not stored or logged by the app, but it does transit the server.
+
+**Logging contract.**
+- Always: one `ASK_METRICS {json}` line per request (status, provider/model, byok flag, iterations, tools,
+  elapsed, question length). No question, answer, history, tool payload or credential.
+- Only with `TEMPO_ASK_LOG_CHATS=true` (default off, also in `fly.toml`): a separate `CHAT_LOG {json}` line
+  on stdout (`fly logs`) and `logs/ask-chats.jsonl` containing question, answer, tool trace and citations.
+  The page shows a banner (from `GET /api/ask/config`) before any question is submitted. Retention is that of
+  the log sink; the app does not rotate or purge it, and anyone with log access can read it.
+- Credentials are redacted recursively (key names such as `api_key`/`authorization`, `sk-...`, `AIza...`,
+  `Bearer ...`, and the request's own key) in chat logs, tool errors and agent/ask loggers.
+
+**Not yet done (item 7).** Consuming FIX-02 aggregation outcomes in answers/citations is deferred until
+FIX-02 merges; the hook point is marked in `app/services/agent.py` where `query_dataset_data` results are handled.

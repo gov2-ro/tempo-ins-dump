@@ -11,38 +11,83 @@
 
 const history = [];   // [{role:'user'|'assistant', content: str}]
 let isLoading = false;
+let MAX_HISTORY_TURNS = 20;  // overwritten from /api/ask/config
+
+/** Show the chat-logging disclosure before any question is submitted. */
+async function initServerNotices() {
+    try {
+        const cfg = await (await fetch('/api/ask/config')).json();
+        if (cfg.limits && cfg.limits.max_history_turns) MAX_HISTORY_TURNS = cfg.limits.max_history_turns;
+        const b = document.getElementById('ask-logging-banner');
+        if (b) b.classList.toggle('hidden', !cfg.chat_logging);
+    } catch { /* leave the banner hidden only if the config is unreachable */ }
+}
 
 // ---------------------------------------------------------------------------
 // BYOK — Bring Your Own Key settings (persisted in localStorage)
 // ---------------------------------------------------------------------------
 
-const PROVIDER_DEFAULTS = { anthropic: 'claude-sonnet-4-6', openai: 'gpt-4o', gemini: 'gemini-2.0-flash' };
+const PROVIDER_DEFAULTS = { anthropic: 'claude-sonnet-4-6', openai: 'gpt-4o', gemini: 'gemini-2.5-flash' };
 let PROVIDER_MODELS = {};  // loaded from /ask-models.json
 
+// Key storage policy (FIX-08):
+//  - default: in memory + sessionStorage (this tab only, gone when the tab closes)
+//  - opt-in "Remember on this device": localStorage (unencrypted)
+//  - a key left in localStorage by an older version is NOT deleted silently and NOT
+//    hidden: it is loaded, shown as "remembered on this device", and Clear removes it.
+// The key is never written to the DOM (the input is left empty after saving).
+const K = { key: 'ask_api_key', provider: 'ask_provider', model: 'ask_model' };
+let memKey = '';
+
+function store(kind) {
+    try { return kind === 'local' ? window.localStorage : window.sessionStorage; } catch { return null; }
+}
+function sget(kind, k) { try { return store(kind)?.getItem(k) || ''; } catch { return ''; } }
+function sset(kind, k, v) { try { store(kind)?.setItem(k, v); } catch { /* storage blocked */ } }
+function sdel(kind, k) { try { store(kind)?.removeItem(k); } catch { /* storage blocked */ } }
+
+/** Where the current key is persisted: 'device' | 'tab' | 'none'. */
+function keyScope() {
+    if (sget('local', K.key)) return 'device';
+    if (memKey || sget('session', K.key)) return 'tab';
+    return 'none';
+}
+
 function getBYOK() {
-    const apiKey = localStorage.getItem('ask_api_key') || '';
-    const provider = localStorage.getItem('ask_provider') || 'anthropic';
-    const model = localStorage.getItem('ask_model') || '';
+    const apiKey = memKey || sget('local', K.key) || sget('session', K.key);
+    const provider = sget('local', K.provider) || sget('session', K.provider) || 'anthropic';
+    const model = sget('local', K.model) || sget('session', K.model) || '';
     return { apiKey, provider, model };
 }
 
-function saveBYOK(provider, model, apiKey) {
-    localStorage.setItem('ask_provider', provider);
-    localStorage.setItem('ask_model', model);
-    if (apiKey) localStorage.setItem('ask_api_key', apiKey);
-    else localStorage.removeItem('ask_api_key');
+function saveBYOK(provider, model, apiKey, remember) {
+    const existing = getBYOK().apiKey;
+    const key = apiKey || existing;           // empty field keeps the current key
+    memKey = key;
+    // wipe both scopes first so a key never lingers in the scope the user did not choose
+    for (const kind of ['local', 'session']) for (const k of Object.values(K)) sdel(kind, k);
+    const kind = remember ? 'local' : 'session';
+    sset(kind, K.provider, provider);
+    sset(kind, K.model, model);
+    if (key) sset(kind, K.key, key);
     updateKeyBadge();
 }
 
 function clearBYOK() {
-    localStorage.removeItem('ask_provider');
-    localStorage.removeItem('ask_model');
-    localStorage.removeItem('ask_api_key');
+    memKey = '';
+    for (const kind of ['local', 'session']) for (const k of Object.values(K)) sdel(kind, k);
     updateKeyBadge();
 }
 
 function updateKeyBadge() {
-    const hasKey = !!localStorage.getItem('ask_api_key');
+    const scope = keyScope();
+    const hasKey = scope !== 'none';
+    const status = document.getElementById('s-key-status');
+    if (status) status.textContent = scope === 'device'
+        ? 'A key is saved on this device (localStorage). Press Clear to remove it.'
+        : scope === 'tab' ? 'A key is set for this tab only.' : 'No key set.';
+    const remember = document.getElementById('s-remember');
+    if (remember) remember.checked = scope === 'device';
     const badge = document.getElementById('settings-badge');
     if (badge) badge.classList.toggle('hidden', !hasKey);
     const notice = document.getElementById('byok-notice');
@@ -88,10 +133,11 @@ async function initSettings() {
     }
 
     // Populate fields from localStorage
-    const { provider, model, apiKey } = getBYOK();
+    const { provider, model } = getBYOK();
     document.getElementById('s-provider').value = provider;
     populateModelSelect(provider, model);
-    document.getElementById('s-key').value = apiKey;
+    // the stored key is deliberately NOT copied into the input (keeps it out of the DOM)
+    document.getElementById('s-key').value = '';
     updateKeyBadge();
 
     // Rebuild model dropdown when provider changes
@@ -117,7 +163,8 @@ async function initSettings() {
         const p = document.getElementById('s-provider').value;
         const m = document.getElementById('s-model').value;
         const k = document.getElementById('s-key').value.trim();
-        saveBYOK(p, m, k);
+        saveBYOK(p, m, k, document.getElementById('s-remember').checked);
+        document.getElementById('s-key').value = '';
         panel.classList.add('hidden');
     });
 
@@ -456,17 +503,20 @@ async function sendMessage() {
     const loadingEl = appendLoadingIndicator();
 
     try {
+        // server caps history; send only the most recent turns (see /api/ask/config limits)
         const resp = await fetch('/api/ask', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question, history, ...byokPayload() }),
+            body: JSON.stringify({ question, history: history.slice(-MAX_HISTORY_TURNS), ...byokPayload() }),
         });
 
         loadingEl.remove();
 
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-            appendMessage('assistant', `Error: ${err.detail || resp.statusText}`);
+            const detail = typeof err.detail === 'string' ? err.detail : 'Request rejected';
+            const retry = resp.headers.get('Retry-After');
+            appendMessage('assistant', `Error: ${detail}` + (retry ? ` (retry in ~${retry}s)` : ''));
             return;
         }
 
@@ -509,6 +559,7 @@ function autoResize(el) {
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     initSettings();
+    initServerNotices();
 
     // Theme toggle
     document.getElementById('theme-toggle').addEventListener('click', () => {

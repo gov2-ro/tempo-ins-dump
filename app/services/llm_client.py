@@ -13,6 +13,38 @@ from typing import Any
 from app import config
 
 
+class LLMError(Exception):
+    """Stable, secret-free provider failure. ``str(e)`` is safe to show to clients."""
+
+    def __init__(self, code: str, message: str, status: int = 502, retry_after: int | None = None):
+        super().__init__(message)
+        self.code, self.message, self.status, self.retry_after = code, message, status, retry_after
+
+
+class UnsupportedProvider(LLMError):
+    def __init__(self):
+        super().__init__("unsupported_provider", "Unsupported provider", status=400)
+
+
+def classify_provider_error(e: BaseException) -> LLMError:
+    """Map any provider/SDK exception to a stable LLMError. Never embeds str(e)."""
+    if isinstance(e, LLMError):
+        return e
+    name = type(e).__name__.lower()
+    status = getattr(e, "status_code", None)
+    if status in (401, 403):
+        return LLMError("provider_auth", "The provider rejected the API key", 401)
+    if status == 404:
+        return LLMError("provider_model", "The provider does not know this model", 400)
+    if status == 429 or "ratelimit" in name:
+        return LLMError("provider_rate_limited", "The provider rate-limited the request", 429, 30)
+    if "timeout" in name or isinstance(e, TimeoutError):
+        return LLMError("provider_timeout", "The provider did not answer in time", 503, 10)
+    if "connection" in name or (isinstance(status, int) and status >= 500):
+        return LLMError("provider_unavailable", "The provider is unavailable", 503, 10)
+    return LLMError("provider_error", "The provider request failed", 502)
+
+
 @dataclass
 class LLMResponse:
     stop_reason: str           # "end_turn" | "tool_use" | "max_tokens"
@@ -29,6 +61,7 @@ def complete_with_tools(
     system: str = "",
     max_tokens: int = 2048,
     api_key: str | None = None,
+    timeout: float | None = None,
 ) -> LLMResponse:
     """Call an LLM with tool definitions, return a normalised LLMResponse.
 
@@ -41,31 +74,40 @@ def complete_with_tools(
         system:     System prompt text.
         max_tokens: Maximum output tokens.
         api_key:    Optional BYOK API key. None → reads from env (default behaviour).
+        timeout:    Per-call timeout in seconds (default config.ASK_PROVIDER_TIMEOUT).
+
+    Raises LLMError (stable message, no provider text or secrets) on any failure.
+    Unknown providers raise UnsupportedProvider; they never fall through.
     """
     prov = provider or config.LLM_PROVIDER
     mdl = model or config.LLM_MODEL
+    kw = dict(model=mdl, system=system, max_tokens=max_tokens,
+              timeout=timeout or config.ASK_PROVIDER_TIMEOUT)
 
-    if prov == "openai":
-        return _openai(messages, tools, model=mdl, system=system, max_tokens=max_tokens, api_key=api_key)
-    if prov == "gemini":
-        # Gemini via OpenAI-compatible endpoint — no extra dependency needed
-        key = api_key or config.GEMINI_API_KEY or None
-        return _openai(
-            messages, tools, model=mdl, system=system, max_tokens=max_tokens,
-            api_key=key,
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-        )
-    return _anthropic(messages, tools, model=mdl, system=system, max_tokens=max_tokens, api_key=api_key)
+    try:
+        if prov == "anthropic":
+            return _anthropic(messages, tools, api_key=api_key, **kw)
+        if prov == "openai":
+            return _openai(messages, tools, api_key=api_key, **kw)
+        if prov == "gemini":
+            # Gemini via OpenAI-compatible endpoint — no extra dependency needed
+            return _openai(
+                messages, tools, api_key=api_key or config.GEMINI_API_KEY or None,
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/", **kw)
+    except Exception as e:  # noqa: BLE001 — classified, original text dropped
+        raise classify_provider_error(e) from None
+    raise UnsupportedProvider()
 
 
 # ---------------------------------------------------------------------------
 # Anthropic backend
 # ---------------------------------------------------------------------------
 
-def _anthropic(messages, tools, *, model, system, max_tokens, api_key=None) -> LLMResponse:
+def _anthropic(messages, tools, *, model, system, max_tokens, api_key=None, timeout=30.0) -> LLMResponse:
     import anthropic
 
-    client = anthropic.Anthropic(api_key=api_key)  # None → reads ANTHROPIC_API_KEY from env
+    client = anthropic.Anthropic(api_key=api_key, timeout=timeout,
+                                 max_retries=config.ASK_PROVIDER_MAX_RETRIES)  # None → reads ANTHROPIC_API_KEY from env
 
     # Convert generic messages to Anthropic format (handles tool results)
     ant_messages = [_to_anthropic_message(m) for m in messages]
@@ -127,10 +169,12 @@ def _to_anthropic_message(msg: dict) -> dict:
 # OpenAI backend
 # ---------------------------------------------------------------------------
 
-def _openai(messages, tools, *, model, system, max_tokens, api_key=None, base_url=None) -> LLMResponse:
+def _openai(messages, tools, *, model, system, max_tokens, api_key=None, base_url=None,
+            timeout=30.0) -> LLMResponse:
     import openai
 
-    client = openai.OpenAI(api_key=api_key, base_url=base_url)  # None → reads OPENAI_API_KEY / default base URL
+    client = openai.OpenAI(api_key=api_key, base_url=base_url, timeout=timeout,
+                           max_retries=config.ASK_PROVIDER_MAX_RETRIES)  # None → reads OPENAI_API_KEY / default base URL
 
     oai_messages = [{"role": "system", "content": system}] if system else []
     oai_messages += [_to_openai_message(m) for m in messages]
