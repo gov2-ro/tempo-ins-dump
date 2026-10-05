@@ -62,21 +62,27 @@ for the current raw-CSV-to-SDMX-parquet conversion. `12-parquet-to-sdmx.py` is
 deprecated; do not run it against the corpus. September's migration was executed
 and the remaining no-map cases were backfilled by September 8.
 
-`update-pipeline.py` does per-matrix metadata → CSV → stage 9 → split → structure
-→ view profile, then index/import/date synchronization. It does **not** yet
-implement the complete dependency order above (FIX-03 phase 2). Since FIX-03
-phase 1 it records per-matrix/per-stage outcomes in
+`update-pipeline.py` (FIX-03 phases 1 and 2a) runs per matrix: meta → CSV →
+targeted import (`10-import-metadata --matrix`, which reconciles existing matrices
+against `2-metas`, so new options and periods are imported) → targeted classify
+and code maps (`--matrix`; canonical dimensions keep their `sdmx_column_map` rows)
+→ stage 9 → stage 12 children as a set → stats import → stage 13 and view
+profiles for parent and children → validate → checkpoint. New dimension ids are
+MAX+1 (the DB sequences lag the data). Global-only steps (coverage, trends, value
+profiles, search index) are recorded under `stale` and run with
+`--global-profiles`. It records per-matrix/per-stage outcomes in
 `data/logs/update-pipeline-state.json` (`--state-file`). Required stages are
-metadata, CSV, conversion, registered split and the batch index/import/date sync.
+metadata, CSV, import/classify/maps, conversion, registered split and validation.
 A required failure exits 1, puts the matrix in a persisted retry set (merged into
 the next run) and freezes the watermark. Optional profiling failures exit 0 but
 are listed (`--strict` makes them fatal). The watermark is the newest feed date of
 a fully successful run (inclusive), never today's date, and is not moved by
 `--matrix` or partial runs. `last-pipeline-run.txt` mirrors it. `--lang en` and
 `TEMPO_LANG=en` are rejected (exit 2) because canonical outputs are shared;
-children always get `TEMPO_LANG=ro`. `3-fetch-metas`, `6-fetch-csv` (exit 3 =
-empty dataset, not retried), `12-split-datasets` and `13-dimension-structure` exit
-nonzero on handled errors; scripts 1, 2 and 4 still always exit 0.
+children always get `TEMPO_LANG=ro`. Stages 3, 6 (exit 3 = empty dataset, not
+retried), 12 and 13 exit nonzero on handled errors; 1, 2 and 4 still always exit 0.
+None of this has been run against the real DB yet: back up `metadata.duckdb` and
+the parquet dir, stop the dev server, and dry-run one matrix first.
 
 `scripts/audit-corpus.py --data-dir DIR [--json-out F] [--hashes]` is a
 deterministic read-only audit: file categories (served canonical, noncanonical

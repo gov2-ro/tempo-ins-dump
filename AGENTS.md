@@ -61,12 +61,16 @@ Full rebuild order:
 - Most processing scripts accept `--matrix CODE`; flags differ, check `--help`.
 
 **Orchestrator** `update-pipeline.py`: incremental runs from the INS news feed
-(`get-news.py` → `data/insse_news.csv`). Per matrix: meta → CSV → stage 9 → split →
-dim structure → view profile; then meta index + import + date sync. It does **not**
-re-run phase B mappings or all of phase D (FIX-03 phase 2). Outcomes and the retry
-set live in `data/logs/update-pipeline-state.json`; a required failure exits 1 and
-freezes the watermark. Child scripts 3/6/12/13 exit nonzero on handled errors
-(`6-fetch-csv` exit 3 = empty dataset); 1/2/4 still always exit 0.
+(`get-news.py` → `data/insse_news.csv`). Per matrix, in order: meta → CSV →
+`10-import-metadata --matrix` → `10-classify-dimensions --matrix` →
+`11-build-sdmx-codes --matrix` → stage 9 → `12 --matrix` → `10-import-metadata
+--stats-only` → stage 13 + view profiles for parent and children (optional) →
+validate; then meta index + date sync. Every return code is checked. Outcomes and
+the retry set live in `data/logs/update-pipeline-state.json`; a required failure
+exits 1 and freezes the watermark. Coverage, trends, value profiles and the search
+index are global-only: touched matrices are listed under `stale` in the state file
+and `--global-profiles` runs them. Child scripts 3/6/12/13 exit nonzero on handled
+errors (`6-fetch-csv` exit 3 = empty dataset); 1/2/4 still always exit 0.
 Read-only corpus audit: `python scripts/audit-corpus.py --data-dir data`.
 
 **Shared pipeline modules:** `duckdb_config.py` (paths, `TEMPO_LANG`),
@@ -156,6 +160,14 @@ bash scripts/prepare-deploy-data.sh                # stage deploy data
   `get_related` falls back to parent + siblings.
 - `is_composition` is a runtime-only parquet probe, so it scores `None` in the chart eval.
 - `do` is a reserved word in DuckDB SQL — alias `dimension_options` as `dopt`.
+- `11-build-sdmx-codes.py` **without `--matrix`** drops and rebuilds both mapping
+  tables and destroys canonical mappings. Use `--matrix`.
+- Stage 12 replaces a parent's children as a set (staging dir, validate, swap files
+  and DB rows, compensating rollback). A leftover `.split-backup-*` dir means an
+  interrupted swap; re-running the parent regenerates the set. Before FIX-03
+  phase 2a, `12 --dry-run` **deleted live child parquets** — don't run it from an
+  older checkout.
+- Pipeline scratch runs: `TEMPO_PIPELINE_DATA_DIR` relocates every pipeline path.
 - Initialize the schema only for a new scratch DB. Never force-recreate
   `data/corpus/metadata.duckdb`.
 

@@ -1,6 +1,6 @@
 # FIX-03 — Retryable pipeline and validated corpus generations
 
-Status: phase 1 (success semantics, retry state, read-only audit) and phase 2b (generation manifest, dry-run repair planner, structure-backfill measurement on a copy) merged to audit-fixes; phase 2a (refresh ordering, targeted refresh, atomic splits) in progress. No corpus repair has been applied. Priority: P1. Owner: ingestion and corpus tooling.
+Status: phase 1 (success semantics, retry state, read-only audit) and phase 2b (generation manifest, dry-run repair planner, structure-backfill measurement on a copy) merged to audit-fixes; phase 2a (refresh ordering, targeted refresh, atomic splits) merged too. Not yet exercised on the real DB. No corpus repair has been applied. Priority: P1. Owner: ingestion and corpus tooling.
 Dependencies: agree on FIX-02's verified grain/additivity contract. Deliver control
 flow, refresh ordering, and corpus repair in independently reviewable steps.
 

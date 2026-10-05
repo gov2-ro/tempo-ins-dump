@@ -1,5 +1,22 @@
 # Activity History
 
+## 2026-10-05 — FIX-03 phase 2a: refresh ordering, targeted refresh, atomic splits
+
+The orchestrator now imports, classifies and builds code maps before conversion,
+splits and registers children as a set, profiles parent and children, validates,
+then checkpoints. Import reconciles existing matrices against `2-metas`;
+`10-classify-dimensions` and `11-build-sdmx-codes` accept `--matrix`. Stage 12
+stages, validates and swaps child files and DB rows with compensating rollback
+(DuckDB rejects the needed FK delete order inside one transaction).
+
+Bugs found and fixed on the way: **`12 --dry-run` deleted live child parquets**
+(dry-run results carried `row_count: 0` with real paths, and the 0-row cleanup
+unlinked them — present on main); import used lagging DB sequences for new ids
+(`seq_dimension_id` 7,501 vs real max 15,711); a targeted `11` would have written
+`REF_AREA → REF_AREA` self-mappings over legacy maps; freshly imported children
+got zero dimensions. All tested on synthetic scratch trees only
+(`TEMPO_PIPELINE_DATA_DIR`); not yet run on the real DB.
+
 ## 2026-10-05 — FIX-03 phase 2b: generation manifest and repair dry-run
 
 Tooling only; the live corpus was read, never written. Added a deterministic
