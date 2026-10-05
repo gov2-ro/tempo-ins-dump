@@ -9,6 +9,8 @@ import json
 import time
 import logging
 
+import duckdb
+
 from app.config import PARQUET_DIR
 from app.db import get_conn
 from app.services.chart_selector import TOTAL_RE as _TOTAL_RE
@@ -186,14 +188,27 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
                                'reason': decision.reason,
                                'column': decision.blocking_dimension})
 
+    # A summed total is published only when the source agrees (FIX-03 repair:
+    # scripts/check-kpi-totals.py asked INS for the same cell).
+    source_check = None
+    if period_totals:
+        reason, source_check = _source_total_gate(conn, matrix_code, decision)
+        if reason:
+            suppressed.append({'key': 'latest', 'outcome': ap.UNAVAILABLE,
+                               'reason': reason, 'column': None})
+            period_totals = []
+
     if period_totals:
         latest_p, latest_v = period_totals[-1]
         first = period_totals[0]
         period = _period_label(latest_p)
 
         def _prov(comparison=None):
-            return ap.provenance(decision, source_code=matrix_code, period=period,
-                                 unit=unit_label, comparison=comparison)
+            p = ap.provenance(decision, source_code=matrix_code, period=period,
+                              unit=unit_label, comparison=comparison)
+            if source_check:
+                p['source_check'] = source_check
+            return p
 
         kpis.append({
             'key': 'latest', 'label': tr['latest'],
@@ -333,6 +348,41 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
         _cache.clear()
     _cache[key] = {'data': data, 'ts': now}
     return data
+
+
+# Verifications that only mean "no hierarchy was detected" — a sum resting on
+# them needs the source's own total to agree before it is published.
+_WEAK_VERIFICATIONS = frozenset({'profile_flat', 'metadata', 'label', 'unverified', None})
+
+
+def _source_total_gate(conn, matrix_code, decision):
+    """(reason to withhold | None, source_check | None) for a summed KPI.
+
+    kpi_total_checks holds, per dataset, how its summed latest KPI compared with
+    the cell INS publishes for the same slice (Total on the summed dimensions).
+    Without that table the generation predates the check and nothing changes.
+    A mismatch always withholds; a sum resting on weak verification also needs
+    a match. Verified/curated sums stand unless INS disagrees.
+    """
+    summed = [d for d in (decision.dimensions if decision else [])
+              if d.get('treatment') in ('partition', 'level')]
+    if not summed:
+        return None, None
+    try:
+        row = _fetch_row(conn, 'kpi_total_checks', matrix_code)
+    except duckdb.CatalogException:
+        return None, None
+    status = row.get('status')
+    if status == 'mismatch':
+        return 'source_total_mismatch', None
+    if status == 'match':
+        return None, {'source': 'INS', 'period': row.get('period'), 'value': row.get('ins'),
+                      'relative_diff': row.get('rel')}
+    if any(d.get('verification') in _WEAK_VERIFICATIONS for d in summed):
+        if (row.get('reason') or '').startswith('no_total_option'):
+            return 'no_source_total', None
+        return 'source_total_unchecked', None
+    return None, None
 
 
 def _fetch_row(conn, table, matrix_code):
