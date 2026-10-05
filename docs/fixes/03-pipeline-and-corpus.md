@@ -1,6 +1,6 @@
 # FIX-03 — Retryable pipeline and validated corpus generations
 
-Status: not started. Priority: P1. Owner: ingestion and corpus tooling.
+Status: phase 1 implemented on branch fix/03-pipeline-control (orchestrator success semantics, retry state, watermark, child exit codes, language rejection, read-only audit); refresh ordering, targeted refresh, repair and generation manifests not started. Priority: P1. Owner: ingestion and corpus tooling.
 Dependencies: agree on FIX-02's verified grain/additivity contract. Deliver control
 flow, refresh ordering, and corpus repair in independently reviewable steps.
 

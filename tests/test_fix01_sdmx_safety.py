@@ -123,7 +123,9 @@ def test_key_values_are_literals(client):
     # Apostrophe and XML specials in a key value work as a literal.
     r = client.get(BASE + "/O'Brien & <Co>")
     assert _obs_count(r) == 1
-    assert "O&#x27;Brien" in r.text or "O'Brien &amp; &lt;Co&gt;" in r.text
+    # The legacy raw-value key still works; the emitted code is the canonical ID
+    # (FIX-01 phase 2), never the raw label.
+    assert "O&#x27;Brien" not in r.text and "&lt;Co&gt;" not in r.text
     # Injection-shaped key matches nothing instead of everything.
     r = client.get(BASE + "/x' OR '1'='1")
     assert _obs_count(r) == 0
@@ -147,7 +149,9 @@ def test_unknown_or_malformed_flow_is_404(client):
 def test_dataflow_version_is_escaped(client):
     r = client.get('/sdmx/2.1/dataflow/INS/ANN1/1.0"%20x=%22y')
     assert r.status_code == 200
-    assert 'version="1.0&quot; x=&quot;y"' in r.text
+    import xml.etree.ElementTree as ET
+    ET.fromstring(r.content)           # well-formed
+    assert "x=" not in r.text          # attribute injection impossible
 
 
 def test_no_leak_on_query_failure(client, monkeypatch):
