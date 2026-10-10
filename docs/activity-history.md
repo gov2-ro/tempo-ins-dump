@@ -1,5 +1,21 @@
 # Activity History
 
+## 2026-10-11 — Averages named only in indicator options are no longer summed
+
+Found by before/after screenshots of the repaired corpus: SAR119E (disposable
+income, lei) showed 61K for 2024, Feminin + Masculin means added, and its pyramid
+added the mean and the median. Its name and definition read as an amount
+("Veniturile ...", `_ADD_TEXT_RE`), so `classify_measure` said additive; only the
+indicator options ("media/mediana veniturilor ... pe adult-echivalent") say
+average. `dataset_measure` now also takes the indicator dims' option labels: for
+currency/unknown units without a verified structure, an option naming a mean,
+median or per-head amount makes the dataset non-additive. The pattern is narrow
+because `indicator` is the catch-all dim type ("Mediu" education level, CAEN
+"Servicii de reprezentare media"). On the repaired copy 16 datasets flip, none the
+other way: SAR119A–H, four SDG "Media UE" comparisons, TOZ1334 (+2 children),
+TPN1421. Counts are never flipped (an average headcount still adds). The chart
+selector doesn't read the measure, so the chart eval is unaffected.
+
 ## 2026-10-05 — FIX-02 phase 2 + FIX-08 item 7: every consumer on the aggregation policy
 
 Grouped `/datasets/{code}/data` runs `decide()` on the collapsed dimensions (pins

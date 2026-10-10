@@ -222,3 +222,28 @@ def test_unknown_unit_is_judged_by_the_indicator_name():
                  'Cheltuieli de cercetare in preturile anului 2010', ''):
         assert classify_measure(None, name) == 'additive', name
     assert classify_measure(None, 'Rata somajului', struct_additive=True) == 'additive'
+
+
+def test_indicator_options_naming_an_average_are_not_summed():
+    # SAR119E: "Venitul disponibil ..." with "Veniturile ..." in the definition
+    # reads as an income amount; only the options say mean/median. Summing the
+    # sexes showed 61K lei for a 32,001 lei mean.
+    from app.services.aggregation_policy import dataset_measure, indicator_labels
+    text = 'Venitul disponibil pe sexe Veniturile disponibile se raporteaza la adulti'
+    dims = [{'dim_type': 'indicator', 'options': [
+                {'label': 'media veniturilor disponibile pe adult-echivalent'},
+                {'label': 'mediana veniturilor disponibile pe adult-echivalent'}]},
+            {'dim_type': 'gender', 'options': [{'label': 'Masculin'}]}]
+    assert classify_measure('currency', text) == 'additive'
+    assert dataset_measure('currency', text, None, indicator_labels(dims)) == 'non_additive'
+    for label in ('Media UE', 'Cantitatea medie anuala de precipitatii',
+                  'Cheltuieli totale pe gospodarie', 'PIB pe locuitor'):
+        assert dataset_measure(None, 'x', None, [label]) == 'non_additive', label
+    # breakdowns and activities that only look like averages stay additive
+    for label in ('Mediu', 'Servicii de reprezentare media', 'Numarul mediu de salariati',
+                  'Medii de rezidenta'):
+        assert dataset_measure('currency', 'Cifra de afaceri', None, [label]) == 'additive', label
+    # counts keep summing; a verified structure still wins
+    assert dataset_measure('count', 'x', None, ['media x']) == 'additive'
+    assert dataset_measure('currency', text, {'C': {'additive': True}},
+                           ['media veniturilor']) == 'additive'
