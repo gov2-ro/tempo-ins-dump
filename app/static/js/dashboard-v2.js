@@ -41,6 +41,9 @@ const UI_STRINGS = {
         logTooltip: 'Scară logaritmică (valori foarte inegale)',
         transpose: '⇄',
         transposeTooltip: 'Inversează axele',
+        views: { bars: 'Bare', grouped: 'Grupate', stacked: 'Stivuite', heatmap: 'Hartă termică' },
+        viewTooltip: 'Alt mod de a arăta aceleași date',
+        pickTooltip: 'Ce serie arată barele',
         notableTop: 'cea mai mare valoare',
         notableBottom: 'cea mai mică valoare',
         crossFilterHint: 'Click pe hartă sau pe bare filtrează celelalte grafice',
@@ -100,6 +103,9 @@ const UI_STRINGS = {
         logTooltip: 'Logarithmic scale (highly unequal values)',
         transpose: '⇄',
         transposeTooltip: 'Swap axes',
+        views: { bars: 'Bars', grouped: 'Grouped', stacked: 'Stacked', heatmap: 'Heatmap' },
+        viewTooltip: 'Another way to show the same data',
+        pickTooltip: 'Which series the bars show',
         notableTop: 'highest value',
         notableBottom: 'lowest value',
         crossFilterHint: 'Clicking the map or bars filters the other charts',
@@ -182,6 +188,8 @@ class DashboardV2 {
         this.tileSwaps = {};       // chart.id → bool (x/series transposed)
         this.tileNorms = {};       // chart.id → bool (per-1000-capita)
         this.tileLogs = {};        // chart.id → bool (log scale)
+        this.tileViews = {};       // chart.id → 'bars' | 'grouped' | 'stacked' | 'heatmap'
+        this.tilePicks = {};       // chart.id → series value the bars view shows
         this._popRef = null;       // /reference/population cache
         try {
             this.userFilters = JSON.parse(params.get('f') || '{}');
@@ -197,6 +205,8 @@ class DashboardV2 {
                 if (st.s) this.tileSwaps[id] = true;
                 if (st.n) this.tileNorms[id] = true;
                 if (st.l) this.tileLogs[id] = true;
+                if (st.v) this.tileViews[id] = st.v;
+                if (st.p) this.tilePicks[id] = st.p;
             }
         } catch { /* malformed ?t= — ignore */ }
     }
@@ -643,7 +653,60 @@ class DashboardV2 {
         }
         this.tileTransformChips(chart, frag);
         this.tilePerspectiveChips(chart, frag);
+        this.tileViewChips(chart, frag);
         return frag;
+    }
+
+    /** The view a category × category tile shows (composer `views`), or null. */
+    tileView(chart) {
+        if (!chart.views?.length) return null;
+        const v = this.tileViews[chart.id];
+        return chart.views.includes(v) ? v : (chart.default_view || chart.views[0]);
+    }
+
+    /** Bars / grouped / stacked / heatmap: the same slice, drawn another way.
+     *  The composer lists only the views that are honest for the data —
+     *  no stacking of rates or overlapping categories. */
+    tileViewChips(chart, frag) {
+        const current = this.tileView(chart);
+        if (!current || chart.views.length < 2) return;
+        const group = document.createElement('span');
+        group.className = 'dbv2-view-group';
+        group.setAttribute('role', 'group');
+        group.title = this.ui.viewTooltip;
+        for (const v of chart.views) {
+            this._chipBtn(group, this.ui.views[v] || v, this.ui.viewTooltip, v === current, () => {
+                if (v === current) return;
+                if (v === chart.default_view) delete this.tileViews[chart.id];
+                else this.tileViews[chart.id] = v;
+                this.refresh();
+            });
+        }
+        frag.appendChild(group);
+    }
+
+    /** Select for the series value the bars view shows, built from the slice
+     *  itself (INS option order, totals excluded) so every option has data. */
+    tilePickSelect(chart, seriesCol, values, current, bar) {
+        bar.querySelector('.dbv2-pick')?.remove();
+        if (values.length < 2) return;
+        const sel = document.createElement('select');
+        sel.className = 'dbv2-chip-select dbv2-pick';
+        sel.title = this.ui.pickTooltip;
+        for (const v of values) {
+            const o = document.createElement('option');
+            o.value = v;
+            o.textContent = String(v).trim();
+            sel.appendChild(o);
+        }
+        sel.value = current;
+        sel.addEventListener('change', () => {
+            if (sel.value === values[0]) delete this.tilePicks[chart.id];
+            else this.tilePicks[chart.id] = sel.value;
+            this.refresh();
+        });
+        const anchor = bar.querySelector('.dbv2-tile-type');
+        bar.insertBefore(sel, bar.querySelector('.dbv2-view-group') || anchor);
     }
 
     /** Blow one tile up to full width and height. A 103-bar pyramid or a
@@ -915,12 +978,52 @@ class DashboardV2 {
                 tileData = await this.normalizePerCapita(tileData, roles, chart) || tileData;
             }
 
-            const tileRoles = seasonalMode
+            let tileRoles = seasonalMode
                 ? { x_axis: '__SUB__', series: '__YEAR__' } : roles;
+            // Category × category views: bars of one series value, grouped,
+            // stacked or the heatmap — all drawn from the same slice.
+            const view = this.tileView(chart);
+            let renderType = chart.chart_type;
+            const viewFlags = {};
+            container.style.minHeight = '';
+            let rowHeight = 0;
+            if (view && roles?.x_axis && roles?.series) {
+                const sIdx = tileData.columns.indexOf(roles.series);
+                const sVals = orderedDimValues(tileData.rows, sIdx, roles.series, this.metadata)
+                    .filter(v => !isTotalLabel(v));
+                viewFlags._insOrder = true;
+                if (view === 'bars') {
+                    const pick = sVals.includes(this.tilePicks[chart.id])
+                        ? this.tilePicks[chart.id] : sVals[0];
+                    this.tilePickSelect(chart, roles.series, sVals, pick, bar0);
+                    tileData = { ...tileData, rows: tileData.rows.filter(r => r[sIdx] === pick) };
+                    tileRoles = { ...roles, series: null };
+                    renderType = 'horizontal_bar';
+                } else if (view === 'grouped' || view === 'stacked') {
+                    renderType = 'horizontal_bar';
+                    viewFlags._grouped = view === 'grouped';
+                }
+                if (view === 'grouped') rowHeight = 8 + 7 * sVals.length;
+                const typeEl = bar0?.querySelector('.dbv2-tile-type');
+                if (typeEl) {
+                    const shown = { bars: 'horizontal_bar', grouped: 'grouped_bar',
+                                    stacked: 'stacked_bar', heatmap: 'heatmap' }[view];
+                    typeEl.textContent = chartTypeLabel(shown, this.lang);
+                    typeEl.dataset.chartType = shown;
+                }
+            }
+            if (view && renderType === 'horizontal_bar') {
+                // One readable row per category (plus breakdown gaps); grouped
+                // rows hold one bar per series. The slot height is a floor.
+                const xi = tileData.columns.indexOf(tileRoles?.x_axis);
+                const nCats = xi === -1 ? 0 : new Set(tileData.rows.map(r => r[xi])).size;
+                container.style.minHeight = `${Math.min(1400, nCats * (rowHeight || 22) + 90)}px`;
+            }
             const tileConfig = {
                 ...this.metadata.chart_config,
-                primary_chart: chart.chart_type,
-                ranked_charts: [{ chart_type: chart.chart_type, roles: tileRoles }],
+                ...viewFlags,
+                primary_chart: renderType,
+                ranked_charts: [{ chart_type: renderType, roles: tileRoles }],
                 time_dim: seasonalMode ? '__SUB__' : timeDim,
                 geo_dim: sliceDim('geo'),
                 _valueFormat: valueFormat,
@@ -1450,6 +1553,8 @@ class DashboardV2 {
             if (this.tileSwaps[ch.id]) st.s = 1;
             if (this.tileNorms[ch.id]) st.n = 1;
             if (this.tileLogs[ch.id]) st.l = 1;
+            if (this.tileViews[ch.id]) st.v = this.tileViews[ch.id];
+            if (this.tilePicks[ch.id]) st.p = this.tilePicks[ch.id];
             if (Object.keys(st).length) t[ch.id] = st;
         }
         if (Object.keys(t).length) url.searchParams.set('t', JSON.stringify(t));

@@ -66,6 +66,15 @@ SLOTS = {
 # they need horizontal room (a 68-column heatmap in a side tile is noise),
 # so they're ordered last and given the full-width slot.
 NON_HERO_CHARTS = {'heatmap'}
+
+# Category × category heatmaps open as bars; the tile offers the other views
+# of the same slice. Grouped bars stop being readable past a handful of
+# series, stacked past a dozen.
+MAX_GROUPED_SERIES = 6
+MAX_STACKED_SERIES = 12
+# Series dims whose options partition the population without a verified
+# structure (totals are excluded before stacking).
+PARTITION_DIM_TYPES = {'gender', 'residence'}
 WIDE_CHARTS = {'heatmap'}
 LAYOUTS_WIDE = {2: 'hero_full', 3: 'hero_side_full', 4: 'hero_2side_full'}
 SLOTS_WIDE = {
@@ -396,6 +405,45 @@ def retune_ranked_series(ranked: list[dict], dimensions: list, sig: dict,
             entry['roles'] = {**roles, 'series': _col(best)}
 
 
+def _categorical_views(roles: dict, dimensions: list, actual_values: dict | None,
+                       struct: dict | None, non_additive: bool):
+    """(roles, views) for a category × category heatmap tile, or None when
+    its series has fewer than two real values.
+
+    The wider dim becomes the bar categories (x_axis); the other is the series
+    the bars view picks one value of. Stacking is offered only when the parts
+    add up to a whole: an additive measure, and a series dim that is a
+    verified partition (or sex / residence) with no hierarchy. Rates or
+    overlapping categories stack into a meaningless total, and a 'flat'
+    profile only means no hierarchy was *detected*: AED103A's flat series
+    nests "Formala" in "Formala sau non-formala" in "Formala, non-formala
+    sau informala".
+    """
+    by_col = {_col(d): d for d in dimensions}
+    x_dim, s_dim = by_col.get(roles.get('x_axis')), by_col.get(roles.get('series'))
+    if x_dim is None or s_dim is None:
+        return None
+    n_x = len(_non_total_options(x_dim, actual_values))
+    n_s = len(_non_total_options(s_dim, actual_values))
+    if min(n_x, n_s) < 2:
+        return None
+    if n_s > n_x:
+        x_dim, s_dim, n_s = s_dim, x_dim, n_x
+        roles = {**roles, 'x_axis': _col(x_dim), 'series': _col(s_dim)}
+    views = ['bars']
+    if n_s <= MAX_GROUPED_SERIES:
+        views.append('grouped')
+    s_struct = (struct or {}).get(_col(s_dim)) or {}
+    partition = (s_struct.get('additive') is True
+                 or s_dim.get('dim_type') in PARTITION_DIM_TYPES)
+    if (not non_additive and partition and n_s <= MAX_STACKED_SERIES
+            and (s_struct.get('n_levels') or 0) <= 1
+            and _hierarchy_root_pin(s_dim, _effective(s_dim, actual_values)) is None):
+        views.append('stacked')
+    views.append('heatmap')
+    return roles, views
+
+
 def _chart_axis(chart_type: str, roles: dict, time_col: str | None,
                 geo_col: str | None = None) -> str:
     if chart_type == 'bar_vertical':
@@ -691,6 +739,17 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
                 roles = {**roles, 'x_axis': time_col, 'series': roles.get('x_axis')}
             else:
                 continue
+        views = None
+        if chart_type == 'heatmap' and time_col not in (roles.get('x_axis'), roles.get('series')):
+            got = _categorical_views(roles, dimensions, actual_values, struct, non_additive)
+            if got is None:
+                # One series value: a one-row heatmap is a bar chart drawn as
+                # colour (AED313A). Show the bars, unless a tile already does.
+                if any(c['roles'].get('x_axis') == roles.get('x_axis') for c in charts):
+                    continue
+                chart_type, roles = 'horizontal_bar', {**roles, 'series': None}
+            else:
+                roles, views = got
         axis = _chart_axis(chart_type, roles, time_col, geo_col)
         # Evolution charts: swap the selector's gender-first series for the
         # most informative real split (copy — ranked_charts keep their roles).
@@ -718,6 +777,15 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
             'controls': _tile_controls(spec, dimensions, actual_values, struct),
             'annotations': _annotations_for(axis, spec['group_by'], time_col, trend),
         })
+        if views:
+            # When a ranking tile already draws these categories as bars,
+            # open on the view it doesn't show.
+            ranked_x = any(c['chart_type'] == 'horizontal_bar'
+                           and c['roles'].get('x_axis') == roles.get('x_axis')
+                           for c in charts[:-1])
+            charts[-1]['views'] = views
+            charts[-1]['default_view'] = (
+                'bars' if not ranked_x else 'grouped' if 'grouped' in views else 'heatmap')
 
     # Synthesize missing companions the hero axis wants
     for want in COMPANION_AXES.get(hero_axis, []):

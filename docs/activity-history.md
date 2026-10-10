@@ -1,5 +1,28 @@
 # Activity History
 
+## 2026-10-11 — Category × category tiles open as bars, with a view toggle
+
+Heatmaps of two categorical dims were hard to read: AED313A drew a one-row
+heatmap, AED101A a 4 × 30 grid with its mixed breakdown dim (sex, residence,
+age, education, job status, region) sorted alphabetically. The composer now
+gives such tiles `views` (bars | grouped | stacked | heatmap) and a
+`default_view`; the client draws all of them from the same slice.
+- **bars** (default): one series value at a time, picked in the tile; INS
+  option order with a gap between breakdowns; Total kept as a grey reference bar.
+- **grouped** only up to 6 series; it is the default when a ranking tile already
+  shows the same categories as bars.
+- **stacked** only for an additive measure *and* a verified partition (or sex /
+  residence). A "flat" profile is not enough: AED103A's flat series nests
+  "Formala" in "Formala sau non-formala".
+- The wider dim becomes the bar categories. A heatmap whose series has one
+  value becomes bars, or is dropped when a ranking tile already shows them.
+- Rankings over a mixed breakdown dim also keep INS order instead of a value sort.
+- View tiles grow with the number of categories (min-height, not height:
+  `flex: 1` ignores height).
+On the repaired copy 443 tiles get views (404 open as bars, 29 grouped, 10
+heatmap), stacking is offered on 27. Time × category heatmaps are unchanged.
+The chart selector is untouched, so the chart eval doesn't move.
+
 ## 2026-10-11 — Averages named only in indicator options are no longer summed
 
 Found by before/after screenshots of the repaired corpus: SAR119E (disposable

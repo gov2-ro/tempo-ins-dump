@@ -69,6 +69,48 @@ function orderedDimValues(rows, colIdx, dimName, metadata) {
     return ordered;
 }
 
+/** Aggregate option ("Total", "Total persoane", "Ambele sexe") — mirrors
+ *  chart_selector.TOTAL_RE. */
+function isTotalLabel(label) {
+    return /^\s*(total|toate|ambele sexe|ambele|urban\s*\+\s*rural|m\s*\+\s*f)\b/i.test(String(label ?? ''));
+}
+
+/** Which breakdown an option belongs to. INS packs several breakdowns into
+ *  one dim (AED101A: sex, residence, age, education, job status, region, in
+ *  that order); knowing the kind lets bar charts separate them. */
+const BREAKDOWN_KINDS = [
+    ['total', /^\s*(total|toate|ambele sexe)\b/i],
+    ['sex', /^\s*(masculin|feminin|barbati|femei)\b/i],
+    ['residence', /^\s*(urban|rural)\s*$/i],
+    ['age', /(\d+\s*-\s*\d+\s*ani|\d+\s*ani\b|sub \d+|peste \d+)/i],
+    ['education', /^\s*(superior|mediu|scazut|liceal|postliceal|profesional|gimnazial|primar|fara scoala|universitar|vocational|tertiar)/i],
+    ['status', /(ocupat|somer|inactiv|pensionar|elev|student|salariat|patron|lucrator)/i],
+    ['region', /(macroregiunea|regiunea|nord-|sud-|centru|vest|bucuresti|ilfov)/i],
+];
+function breakdownKind(label) {
+    const l = String(label ?? '').replace(/^[\s-]+/, '');
+    for (const [kind, re] of BREAKDOWN_KINDS) if (re.test(l)) return kind;
+    return null;
+}
+
+/** Category order with blank spacer rows between breakdowns, when a dim mixes
+ *  at least two recognised ones. Spacers are unique strings of zero-width
+ *  spaces; their data is null. */
+function withBreakdownGaps(ids, labelOf) {
+    const kinds = ids.map(id => breakdownKind(labelOf(id)));
+    const known = new Set(kinds.filter(k => k && k !== 'total'));
+    if (known.size < 2) return ids;
+    const out = [];
+    let prev, gap = 0;
+    ids.forEach((id, i) => {
+        const k = kinds[i] || prev;
+        if (i && k !== prev) out.push({ spacer: '\u200b'.repeat(++gap) });
+        out.push(id);
+        prev = k;
+    });
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // Population Pyramid
 // ---------------------------------------------------------------------------
@@ -221,6 +263,18 @@ function createHorizontalBarChart(container, config, data, metadata) {
     const seriesDim = config.series_dim;
     const seriesIdx = seriesDim ? cols.indexOf(seriesDim) : -1;
 
+    // --- INS option order: category views of a cat × cat slice (bars,
+    //     grouped, stacked). Order and breakdown gaps carry the meaning that
+    //     a value sort would scramble; Total stays as the reference bar. ---
+    // A dim that packs several breakdowns (sex, age, region…) reads in INS
+    // order even as a ranking: sorting by value interleaves the groups.
+    const mixed = catIdx !== -1 && withBreakdownGaps(
+        orderedDimValues(rows, catIdx, catDim, metadata), id => String(catLabels[String(id)] || id)
+    ).some(c => c?.spacer !== undefined);
+    if (config._insOrder || mixed) {
+        return _orderedHorizontalBars(chart, config, data, metadata, catDim, catIdx, seriesDim, seriesIdx);
+    }
+
     // --- No series: single-color bars (original behavior) ---
     if (seriesIdx === -1) {
         const totals = {};
@@ -300,6 +354,75 @@ function createHorizontalBarChart(container, config, data, metadata) {
         grid: { left: 160, right: 20, top: 10, bottom: series.length > 1 ? 50 : 30 },
         xAxis: { type: 'value', axisLabel: { fontSize: 11, formatter: v => axisNumber(v) } },
         yAxis: { type: 'category', data: yData, axisLabel: { fontSize: 11, width: 145, overflow: 'truncate' } },
+        series,
+        animationDuration: 300,
+    });
+    return chart;
+}
+
+
+function _orderedHorizontalBars(chart, config, data, metadata, catDim, catIdx, seriesDim, seriesIdx) {
+    const rows = data.rows;
+    const valueIdx = data.columns.length - 1;
+    const catLabels = data.column_labels[catDim] || {};
+    const labelOf = id => String(catLabels[String(id)] || id).trim();
+    const stacked = seriesIdx !== -1 && !config._grouped;
+    const keepTotal = !stacked;   // a total stacked on its parts double-counts
+
+    let seriesIds = [null];
+    if (seriesIdx !== -1) {
+        seriesIds = orderedDimValues(rows, seriesIdx, seriesDim, metadata).filter(v => !isTotalLabel(v));
+    }
+    const cell = {};
+    for (const r of rows) {
+        const s = seriesIdx === -1 ? null : r[seriesIdx];
+        cell[`${r[catIdx]}\u0000${s}`] = r[valueIdx];
+    }
+    const cats = orderedDimValues(rows, catIdx, catDim, metadata)
+        .filter(id => keepTotal || !isTotalLabel(labelOf(id)))
+        .slice(0, 80);
+    // ECharts draws the first category at the bottom: reverse for top-down reading.
+    const slots = withBreakdownGaps(cats, labelOf).reverse();
+    const yData = slots.map(c => c?.spacer ?? labelOf(c));
+    const seriesLabels = data.column_labels[seriesDim] || {};
+    const single = seriesIds.length === 1;
+    const COLORS = ['#1a56db', '#e74694', '#0ea5e9', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#64748b'];
+    const series = seriesIds.map((sid, i) => ({
+        name: sid === null ? '' : String(seriesLabels[String(sid)] || sid).trim(),
+        type: 'bar',
+        ...(stacked ? { stack: 'total' } : {}),
+        barMaxWidth: 22,
+        data: slots.map(c => {
+            if (c?.spacer !== undefined) return null;
+            const v = cell[`${c}\u0000${sid}`];
+            if (v === undefined || v === null) return null;
+            // Total is the reference bar, not one more category
+            return single && isTotalLabel(labelOf(c))
+                ? { value: v, itemStyle: { color: '#94a3b8' } } : v;
+        }),
+        itemStyle: { color: COLORS[i % COLORS.length] },
+        label: { show: single && cats.length <= 40, position: 'right', fontSize: 10,
+                 formatter: p => (p.value == null ? '' : formatNumber(p.value)) },
+    }));
+
+    chart.setOption({
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' },
+            formatter(params) {
+                if (!params.length || /^\u200b+$/.test(params[0].name)) return '';
+                let html = `<b>${params[0].name}</b><br/>`;
+                for (const p of params) {
+                    if (p.value === null || p.value === undefined) continue;
+                    html += `${p.marker} ${p.seriesName ? p.seriesName + ': ' : ''}<b>${formatNumber(p.value)}</b><br/>`;
+                }
+                return html;
+            } },
+        legend: { show: series.length > 1, type: 'scroll', bottom: 0, textStyle: { fontSize: 11 } },
+        grid: { left: 200, right: single ? 56 : 20, top: 10, bottom: series.length > 1 ? 50 : 24 },
+        xAxis: { type: (config._logScale && !stacked) ? 'log' : 'value',
+                 axisLabel: { fontSize: 11, formatter: v => axisNumber(v) } },
+        yAxis: { type: 'category', data: yData,
+                 axisTick: { show: false },
+                 axisLabel: { fontSize: 11, width: 190, overflow: 'truncate', interval: 0 } },
         series,
         animationDuration: 300,
     });
@@ -476,11 +599,13 @@ function createHeatmapChart(container, config, data, metadata) {
         ? rows.filter(r => r[timeIdx] === latestTime)
         : rows;
 
-    const xIds = uniqueValues(activeRows, xIdx).filter(id => {
+    const order = (idx, dim) => config._insOrder
+        ? orderedDimValues(activeRows, idx, dim, metadata) : uniqueValues(activeRows, idx);
+    const xIds = order(xIdx, xDim).filter(id => {
         const lbl = (xLabels[String(id)] || '').trim().toLowerCase();
         return lbl !== 'total' && lbl !== 'toate';
     });
-    const yIds = uniqueValues(activeRows, yIdx).filter(id => {
+    const yIds = order(yIdx, yDim).filter(id => {
         const lbl = (yLabels[String(id)] || '').trim().toLowerCase();
         return lbl !== 'total' && lbl !== 'toate';
     });
