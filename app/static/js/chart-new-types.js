@@ -84,8 +84,9 @@ const BREAKDOWN_KINDS = [
     ['residence', /^\s*(urban|rural)\s*$/i],
     ['age', /(\d+\s*-\s*\d+\s*ani|\d+\s*ani\b|sub \d+|peste \d+)/i],
     ['education', /^\s*(superior|mediu|scazut|liceal|postliceal|profesional|gimnazial|primar|fara scoala|universitar|vocational|tertiar)/i],
-    ['status', /(ocupat|somer|inactiv|pensionar|elev|student|salariat|patron|lucrator)/i],
-    ['region', /(macroregiunea|regiunea|nord-|sud-|centru|vest|bucuresti|ilfov)/i],
+    ['status', /^\s*(persoana ocupata|persoana inactiva|ocupat|somer|inactiv|pensionar|elev|student)/i],
+    ['macroregion', /^\s*macroregiunea\b/i],
+    ['region', /^\s*(regiunea|nord-\w+|sud-\w+|centru|vest|bucuresti)\b/i],
 ];
 function breakdownKind(label) {
     const l = String(label ?? '').replace(/^[\s-]+/, '');
@@ -93,21 +94,65 @@ function breakdownKind(label) {
     return null;
 }
 
-/** Category order with blank spacer rows between breakdowns, when a dim mixes
- *  at least two recognised ones. Spacers are unique strings of zero-width
- *  spaces; their data is null. */
-function withBreakdownGaps(ids, labelOf) {
-    const kinds = ids.map(id => breakdownKind(labelOf(id)));
-    const known = new Set(kinds.filter(k => k && k !== 'total'));
-    if (known.size < 2) return ids;
-    const out = [];
-    let prev, gap = 0;
+/** Grain of an option inside one dim: a breakdown kind, a CAEN level
+ *  ("A  AGRICULTURA" section, "01 Agricultura" division, "INDUSTRIE"
+ *  aggregate), or an indentation depth. null when nothing says. */
+function categoryGroup(rawLabel) {
+    const raw = String(rawLabel ?? '');
+    const l = raw.trim();
+    if (isTotalLabel(l)) return 'total';
+    const kind = breakdownKind(l);       // before CAEN: "18-24 ani" looks like "02-03 …"
+    if (kind) return kind;
+    if (/^[A-U]\s+[A-Z]/.test(l) && l === l.toUpperCase()) return 'caen_section';
+    if (/^\d{2}(-\d{2})?\s+\S/.test(l)) return 'caen_division';
+    if (/^\d{3,4}\s+\S/.test(l)) return 'caen_group';
+    if (/^[A-Z ,;-]{4,}$/.test(l)) return 'caps_aggregate';
+    const depth = raw.length - raw.trimStart().length;
+    return depth ? `depth${depth}` : null;
+}
+
+// Groups whose own order is the meaning (age bands, education levels).
+const ORDINAL_GROUPS = new Set(['age', 'education']);
+// Coarser CAEN grains come first, whatever INS interleaves.
+const GROUP_RANK = { caps_aggregate: 1, caen_section: 2, caen_division: 3, caen_group: 4 };
+
+/** Does this dim pack several breakdowns (sex + age + region…)? */
+function isMixedBreakdown(ids, labelOf) {
+    const kinds = new Set(ids.map(id => breakdownKind(labelOf(id))).filter(k => k && k !== 'total'));
+    return kinds.size >= 2;
+}
+
+/** Bar order for one dim: Total first, then each grain as its own block
+ *  (first-seen order), blocks separated by spacer rows. Inside a block bars
+ *  are sorted by value, except ordinal ones (age, education) and when
+ *  `byValue` is false (INS order). Without blocks the whole list sorts.
+ *  Ranking a section against its own divisions compares different grains,
+ *  hence blocks. Spacers are {spacer: unique zero-width string}. */
+function layoutCategories(ids, labelOf, valueOf, byValue = true) {
+    const keys = [];
+    let prev = null;
+    for (const id of ids) {
+        const k = categoryGroup(labelOf(id)) ?? prev;   // unlabeled rows join their predecessor
+        keys.push(k);
+        if (k !== 'total') prev = k;
+    }
+    const blocks = new Map();
     ids.forEach((id, i) => {
-        const k = kinds[i] || prev;
-        if (i && k !== prev) out.push({ spacer: '\u200b'.repeat(++gap) });
-        out.push(id);
-        prev = k;
+        const k = keys[i] ?? '_';
+        if (!blocks.has(k)) blocks.set(k, []);
+        blocks.get(k).push(id);
     });
+    const desc = list => list.slice().sort((a, b) => (valueOf(b) ?? -Infinity) - (valueOf(a) ?? -Infinity));
+    const total = blocks.get('total') || [];
+    blocks.delete('total');
+    const order = [...blocks.keys()].sort((a, b) => (GROUP_RANK[a] || 9) - (GROUP_RANK[b] || 9));
+    const out = [...total];
+    let gap = 0;
+    for (const k of order) {
+        const list = blocks.get(k);
+        if (out.length && blocks.size > 1) out.push({ spacer: '​'.repeat(++gap) });
+        out.push(...(byValue && !ORDINAL_GROUPS.has(k) ? desc(list) : list));
+    }
     return out;
 }
 
@@ -263,14 +308,11 @@ function createHorizontalBarChart(container, config, data, metadata) {
     const seriesDim = config.series_dim;
     const seriesIdx = seriesDim ? cols.indexOf(seriesDim) : -1;
 
-    // --- INS option order: category views of a cat × cat slice (bars,
-    //     grouped, stacked). Order and breakdown gaps carry the meaning that
-    //     a value sort would scramble; Total stays as the reference bar. ---
-    // A dim that packs several breakdowns (sex, age, region…) reads in INS
-    // order even as a ranking: sorting by value interleaves the groups.
-    const mixed = catIdx !== -1 && withBreakdownGaps(
-        orderedDimValues(rows, catIdx, catDim, metadata), id => String(catLabels[String(id)] || id)
-    ).some(c => c?.spacer !== undefined);
+    // --- Category views of a cat × cat slice (bars, grouped, stacked), and
+    //     rankings over a dim that packs several breakdowns: bars sorted
+    //     inside each breakdown, blocks kept apart; Total is the reference. ---
+    const mixed = catIdx !== -1 && isMixedBreakdown(
+        orderedDimValues(rows, catIdx, catDim, metadata), id => String(catLabels[String(id)] || id));
     if (config._insOrder || mixed) {
         return _orderedHorizontalBars(chart, config, data, metadata, catDim, catIdx, seriesDim, seriesIdx);
     }
@@ -380,9 +422,14 @@ function _orderedHorizontalBars(chart, config, data, metadata, catDim, catIdx, s
     }
     const cats = orderedDimValues(rows, catIdx, catDim, metadata)
         .filter(id => keepTotal || !isTotalLabel(labelOf(id)))
-        .slice(0, 80);
+        .slice(0, 150);
+    // Sort key: the bar itself, the first series when grouped, the stack height.
+    const valueOf = id => {
+        if (!stacked) return cell[`${id}\u0000${seriesIds[0]}`] ?? null;
+        return seriesIds.reduce((a, sid) => a + (cell[`${id}\u0000${sid}`] || 0), 0);
+    };
     // ECharts draws the first category at the bottom: reverse for top-down reading.
-    const slots = withBreakdownGaps(cats, labelOf).reverse();
+    const slots = layoutCategories(cats, labelOf, valueOf, config._sort !== 'ins').reverse();
     const yData = slots.map(c => c?.spacer ?? labelOf(c));
     const seriesLabels = data.column_labels[seriesDim] || {};
     const single = seriesIds.length === 1;

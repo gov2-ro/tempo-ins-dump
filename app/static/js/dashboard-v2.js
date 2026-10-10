@@ -44,6 +44,9 @@ const UI_STRINGS = {
         views: { bars: 'Bare', grouped: 'Grupate', stacked: 'Stivuite', heatmap: 'Hartă termică' },
         viewTooltip: 'Alt mod de a arăta aceleași date',
         pickTooltip: 'Ce serie arată barele',
+        sortValue: '↓ valoare',
+        sortTooltip: 'Bare ordonate după valoare în fiecare grupă; apasă pentru ordinea INS',
+        play: 'Redă anii', pause: 'Pauză',
         notableTop: 'cea mai mare valoare',
         notableBottom: 'cea mai mică valoare',
         crossFilterHint: 'Click pe hartă sau pe bare filtrează celelalte grafice',
@@ -106,6 +109,9 @@ const UI_STRINGS = {
         views: { bars: 'Bars', grouped: 'Grouped', stacked: 'Stacked', heatmap: 'Heatmap' },
         viewTooltip: 'Another way to show the same data',
         pickTooltip: 'Which series the bars show',
+        sortValue: '↓ value',
+        sortTooltip: 'Bars sorted by value within each group; click for INS order',
+        play: 'Play the years', pause: 'Pause',
         notableTop: 'highest value',
         notableBottom: 'lowest value',
         crossFilterHint: 'Clicking the map or bars filters the other charts',
@@ -190,6 +196,8 @@ class DashboardV2 {
         this.tileLogs = {};        // chart.id → bool (log scale)
         this.tileViews = {};       // chart.id → 'bars' | 'grouped' | 'stacked' | 'heatmap'
         this.tilePicks = {};       // chart.id → series value the bars view shows
+        this.tileSorts = {};       // chart.id → 'ins' (INS option order) | unset (by value)
+        this._players = {};        // chart.id → token of the running year player
         this._popRef = null;       // /reference/population cache
         try {
             this.userFilters = JSON.parse(params.get('f') || '{}');
@@ -207,6 +215,7 @@ class DashboardV2 {
                 if (st.l) this.tileLogs[id] = true;
                 if (st.v) this.tileViews[id] = st.v;
                 if (st.p) this.tilePicks[id] = st.p;
+                if (st.o) this.tileSorts[id] = 'ins';
             }
         } catch { /* malformed ?t= — ignore */ }
     }
@@ -373,6 +382,7 @@ class DashboardV2 {
     }
 
     async refresh() {
+        this._players = {};     // a rebuilt tile bar can't drive a running player
         this.syncURL();
         const slices = await this.fetchSlices();
         // Composer-time data holes answer no question — drop those tiles and
@@ -633,6 +643,10 @@ class DashboardV2 {
     tileControls(chart) {
         const frag = document.createDocumentFragment();
         for (const ctrl of chart.controls || []) {
+            if (ctrl.dim_type === 'time' && ctrl.options.length >= 3) {
+                frag.appendChild(this.timeSlider(chart, ctrl));
+                continue;
+            }
             const sel = document.createElement('select');
             sel.className = 'dbv2-chip-select';
             sel.title = ctrl.label || ctrl.column;
@@ -655,6 +669,85 @@ class DashboardV2 {
         this.tilePerspectiveChips(chart, frag);
         this.tileViewChips(chart, frag);
         return frag;
+    }
+
+    /** Year slider with play for a tile pinned to one period. Options come
+     *  newest-first from the composer; the slider runs oldest → newest. */
+    timeSlider(chart, ctrl) {
+        const opts = [...ctrl.options].reverse();
+        const values = opts.map(o => String(o.value));
+        const current = () => String(this.tileFilters[chart.id]?.[ctrl.column] ?? ctrl.default);
+        const wrap = document.createElement('span');
+        wrap.className = 'dbv2-time-slider';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'dbv2-chip-btn dbv2-play';
+        const range = document.createElement('input');
+        range.type = 'range';
+        range.min = 0;
+        range.max = values.length - 1;
+        range.step = 1;
+        range.value = Math.max(0, values.indexOf(current()));
+        range.setAttribute('aria-label', ctrl.label || ctrl.column);
+        const out = document.createElement('output');
+        const show = i => { out.textContent = opts[i].label.replace(/^Anul\s+/i, ''); };
+        show(+range.value);
+        const syncBtn = () => {
+            const on = !!this._players[chart.id];
+            btn.textContent = on ? '❚❚' : '▶';
+            btn.title = on ? this.ui.pause : this.ui.play;
+            btn.setAttribute('aria-label', btn.title);
+            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        };
+        const setYear = async i => {
+            const tf = this.tileFilters[chart.id] ||= {};
+            if (values[i] === String(ctrl.default)) delete tf[ctrl.column];
+            else tf[ctrl.column] = values[i];
+            range.value = i;
+            show(i);
+            await this.refreshTile(chart);
+        };
+        range.addEventListener('input', () => show(+range.value));
+        range.addEventListener('change', () => { this.stopPlayer(chart.id); syncBtn(); setYear(+range.value); });
+        btn.addEventListener('click', async () => {
+            if (this._players[chart.id]) { this.stopPlayer(chart.id); syncBtn(); return; }
+            const token = this._players[chart.id] = {};
+            syncBtn();
+            let i = +range.value >= values.length - 1 ? 0 : +range.value + 1;
+            while (this._players[chart.id] === token && i < values.length) {
+                await setYear(i++);
+                await new Promise(r => setTimeout(r, 900));
+            }
+            if (this._players[chart.id] === token) delete this._players[chart.id];
+            syncBtn();
+        });
+        syncBtn();
+        wrap.append(btn, range, out);
+        return wrap;
+    }
+
+    stopPlayer(id) { delete this._players[id]; }
+
+    /** Re-render one tile after a tile-local change (year slider): the other
+     *  tiles and the layout stay as they are. */
+    async refreshTile(chart) {
+        this.syncURL();
+        const data = await API.getDatasetData(this.code, this.tileEffectiveFilters(chart), 50000,
+            { groupBy: chart.data.group_by }).catch(e => {
+            console.error(`Slice for ${chart.id} failed:`, e);
+            return null;
+        });
+        const container = document.getElementById(`dbv2-chart-${chart.id}`);
+        if (!container) return;
+        const i = this.charts.findIndex(c => c.getDom?.() === container);
+        if (i !== -1) {
+            try { this.charts[i].dispose(); } catch { /* gone */ }
+            this.charts.splice(i, 1);
+        }
+        container.parentNode.querySelector('.dbv2-tile-bar')
+            ?.querySelectorAll('.dbv2-coverage, .agg-badge')
+            .forEach(el => el.remove());
+        await this.renderTiles([chart], new Map([[chart.id, data]]));
     }
 
     /** The view a category × category tile shows (composer `views`), or null. */
@@ -683,6 +776,14 @@ class DashboardV2 {
             });
         }
         frag.appendChild(group);
+        if (current !== 'heatmap') {
+            const sorted = this.tileSorts[chart.id] !== 'ins';
+            this._chipBtn(frag, this.ui.sortValue, this.ui.sortTooltip, sorted, () => {
+                if (sorted) this.tileSorts[chart.id] = 'ins';
+                else delete this.tileSorts[chart.id];
+                this.refresh();
+            });
+        }
     }
 
     /** Select for the series value the bars view shows, built from the slice
@@ -989,14 +1090,21 @@ class DashboardV2 {
             let rowHeight = 0;
             if (view && roles?.x_axis && roles?.series) {
                 const sIdx = tileData.columns.indexOf(roles.series);
-                const sVals = orderedDimValues(tileData.rows, sIdx, roles.series, this.metadata)
-                    .filter(v => !isTotalLabel(v));
+                const allS = orderedDimValues(tileData.rows, sIdx, roles.series, this.metadata);
+                // A period where only the Total series has data still has bars to show.
+                const sVals = allS.filter(v => !isTotalLabel(v)).length
+                    ? allS.filter(v => !isTotalLabel(v)) : allS;
                 viewFlags._insOrder = true;
+                viewFlags._sort = this.tileSorts[chart.id] || 'value';
                 if (view === 'bars') {
                     const pick = sVals.includes(this.tilePicks[chart.id])
                         ? this.tilePicks[chart.id] : sVals[0];
                     this.tilePickSelect(chart, roles.series, sVals, pick, bar0);
                     tileData = { ...tileData, rows: tileData.rows.filter(r => r[sIdx] === pick) };
+                    if (!tileData.rows.length) {
+                        container.innerHTML = `<div class="dbv2-empty">${this.ui.noDataTile}</div>`;
+                        continue;
+                    }
                     tileRoles = { ...roles, series: null };
                     renderType = 'horizontal_bar';
                 } else if (view === 'grouped' || view === 'stacked') {
@@ -1017,7 +1125,7 @@ class DashboardV2 {
                 // rows hold one bar per series. The slot height is a floor.
                 const xi = tileData.columns.indexOf(tileRoles?.x_axis);
                 const nCats = xi === -1 ? 0 : new Set(tileData.rows.map(r => r[xi])).size;
-                container.style.minHeight = `${Math.min(1400, nCats * (rowHeight || 22) + 90)}px`;
+                container.style.minHeight = `${Math.min(2600, nCats * (rowHeight || 22) + 90)}px`;
             }
             const tileConfig = {
                 ...this.metadata.chart_config,
@@ -1555,6 +1663,7 @@ class DashboardV2 {
             if (this.tileLogs[ch.id]) st.l = 1;
             if (this.tileViews[ch.id]) st.v = this.tileViews[ch.id];
             if (this.tilePicks[ch.id]) st.p = this.tilePicks[ch.id];
+            if (this.tileSorts[ch.id]) st.o = 1;
             if (Object.keys(st).length) t[ch.id] = st;
         }
         if (Object.keys(t).length) url.searchParams.set('t', JSON.stringify(t));

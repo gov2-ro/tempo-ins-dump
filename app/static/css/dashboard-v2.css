@@ -206,6 +206,13 @@ body.sidebar-open .dbv2-main {
 }
 .dbv2-chip-select:hover { border-color: var(--text-2); }
 
+/* Year slider + play on tiles pinned to one period */
+.dbv2-time-slider { display: inline-flex; align-items: center; gap: 6px; }
+.dbv2-time-slider input[type=range] { width: 140px; accent-color: var(--accent); }
+.dbv2-time-slider output { font-size: 0.72rem; color: var(--text-1); min-width: 3.5em;
+                           font-variant-numeric: tabular-nums; }
+.dbv2-play { min-width: 28px; }
+
 /* Index / Δ% transform toggles in the tile bar */
 .dbv2-chip-btn {
     font-size: 0.72rem;

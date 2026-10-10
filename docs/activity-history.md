@@ -1,5 +1,19 @@
 # Activity History
 
+## 2026-10-11 — Year slider with play on pinned tiles; bars sorted within each grain
+
+Tiles pinned to one period get a slider with play instead of a year
+dropdown (3+ periods). Moving it re-renders only that tile (`refreshTile`),
+so playing doesn't rebuild the grid; any full refresh stops the player.
+Category bars now sort by value, but inside blocks: Total first, then each
+grain on its own. Blocks are breakdown kinds (sex, residence, age,
+education, status, macroregion, region) or CAEN levels (all-caps
+aggregates like INDUSTRIE, then sections "A  …", then divisions "01 …").
+Ranking a section against its own divisions compares different grains.
+Age and education keep INS order (the order is the meaning). A "↓ valoare"
+chip switches a tile back to INS order. A period where only the Total
+series has data falls back to Total; an empty one says so.
+
 ## 2026-10-11 — Category × category tiles open as bars, with a view toggle
 
 Heatmaps of two categorical dims were hard to read: AED313A drew a one-row
