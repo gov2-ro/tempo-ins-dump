@@ -1,5 +1,47 @@
 # Activity History
 
+## 2026-10-05 — FIX-03: profiles, search, manifest and release gate on the copy
+
+Trend/value profiles: the profilers now read the right files (value profiles had
+1,152 errors from stale paths, now 0). The 8 Sep tables lacked rows for 883 of the
+1,986 chart-eval datasets, so any rebuild moves charts; the copy keeps 8 Sep rows
+where they exist and uses fresh rows for missing and remapped datasets. Chart eval:
+39 primary / 143 top-set changes, listed with causes in the copy's
+`reports/chart-eval-diff.md`; baselines not rebuilt. `dataset_coverage` kept (its
+profiler matches legacy ids only).
+
+View profiles regenerated into a fresh directory (4,109; old set kept in
+`snapshots/`), `search.duckdb` rebuilt (all 3,376 canonical matrices; was 1,225),
+row counts refreshed, stored `parquet_path` rebased to the published location,
+generation `a6737a263a34` staged into the copy's own `deploy-data`
+(`TEMPO_CORPUS_SRC`/`TEMPO_DEPLOY_OUT`; the repo's `deploy-data` untouched). Release
+gate passes; strict mode blocks only on the 160 conflicting-grain files.
+
+Browser on the copy (:8091): v1 still showed ACC102B's 4,960 because its headline
+card comes from a grouped `/data` request, not `/insights`; the grouped headline
+series now applies the same INS gate (fix/02). After that: layout 64/64,
+interactions 71/71, aggregation 4/4, targeted pages 12/12, no console or request
+errors.
+
+## 2026-10-05 — FIX-03: time-column remap on the copy
+
+149 served files had no valid TIME_PERIOD. `10-classify-dimensions` typed any label
+containing "saptamani" or the word "ani" as time — weekly-hours bands, "Ani de
+baza", "Ani de creare", "ANI/UM" (a one-option dimension holding the indicator's
+title, 110 sustainable-development files) — and stage 11 gave the first time
+dimension TIME_PERIOD, pushing "Perioade" to TIME_PERIOD_2. Their headline KPIs
+summed across the real years (INT112A's "period" was "An creare 2023").
+
+Fixed at the root: time only for period labels; a period-labelled dimension with
+no dated option (CNF101F "Luni" = month names) is categorical; stage 11 names the
+demoted concepts. Targeted classify/stage 11 keep existing rows, so
+`repair-corpus.py --step time-columns` resets each affected parent in the copy to
+its imported state before classify → 11 → 9 → 12 → stats → 13 rebuild it.
+Verified: 162 files identical cell for cell except column names, child sets
+unchanged, audit 0 served time violations, 37 of the 41 summed KPIs this exposed
+match INS (26 new requests), 4 withheld (no INS total). Tests: fix/03 470,
+integration 479. `check-kpi-totals collect` now bypasses the gate it feeds.
+
 ## 2026-10-05 — FIX-03 repair on a copy; summed KPIs checked against INS
 
 Repair applied step by step on a copied generation (`~/devbox/gov2/tempo-gen-20261005`),

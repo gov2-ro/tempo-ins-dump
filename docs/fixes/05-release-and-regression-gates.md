@@ -1,6 +1,6 @@
 # FIX-05 — Reproducible releases, FTS and regression gates
 
-Status: phase 1 implemented on fix/05-release-gates and merged to audit-fixes (not yet on main) (FTS staging, release-check wrapper, FTS-in-image, per-request FTS cursors, split requirements, tracked CI, corpus test markers); not deployed, docker smoke not yet run (no docker locally). Phase 2 (FIX-03 generation manifest, correctness fixtures from other packages, image smoke evidence, eval baselines) open. Priority: P1. Owner: deployment and validation tooling.
+Status: phase 1 implemented on fix/05-release-gates and merged to audit-fixes (not yet on main) (FTS staging, release-check wrapper, FTS-in-image, per-request FTS cursors, split requirements, tracked CI, corpus test markers); not deployed, docker smoke not yet run (no docker locally). Phase 2 (FIX-03 generation manifest, correctness fixtures from other packages, image smoke evidence, eval baselines) open. Priority: P1. Owner: deployment and validation tooling. 2026-10-05: the gate (manifest included) passed against the repaired copy staged in its own deploy-data; docker smoke still not run.
 Dependencies: FIX-03 generation manifest; meaningful tests from the other packages.
 FTS staging and an initial validation wrapper may ship before corpus repair.
 

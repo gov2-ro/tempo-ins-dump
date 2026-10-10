@@ -282,8 +282,23 @@ INS total. On the live corpus 385 of 936 comparable summed KPIs disagree with IN
 (e.g. ACC102B 4,960 vs 4,862; summed rates/averages off by orders of magnitude).
 With the measure fix and the gate (`kpi_total_checks` in the generation), the copy
 publishes 1,084 latest KPIs, every summed one confirmed by INS or by verified
-structure that INS does not contradict. Still open: time-shift remap, view
-profiles, search index, manifest and release gate.
+structure that INS does not contradict. Time columns: classify typed hours bands,
+base/creation years, 'ANI/UM' (the indicator's title) and similar labels as time,
+so 149 served files had 'Perioade' in TIME_PERIOD_2; fixed at the root (period
+labels only) and rebuilt on the copy (162 files, values unchanged; 0 served time
+violations). Then on the copy: trend/value profiles rebuilt only where the 8 Sep
+rows were missing or described remapped files (dataset_coverage kept: its profiler
+cannot read SDMX values); 4,109 view profiles regenerated (ART124A, legacy-shaped,
+has none — as on live); `search.duckdb` covers all 3,376 canonical matrices; stored
+`parquet_path` rebased to the published location; generation `a6737a263a34`
+staged into the copy's own `deploy-data` — `release-check.py` passes (456 tests,
+plus 23 corpus tests against the copy); `--require-clean-audit` blocks only on the
+160 conflicting-grain files. Browser on the copy: layout 64/64, interactions 71/71,
+aggregation 4/4, targeted pages 12/12. The grouped `/data` headline series (v1's
+"Ultima valoare") now uses the same INS gate as insights. Chart-selector eval vs
+baseline: 39 primary / 143 top-set changes (`reports/chart-eval-diff.md` in the
+copy); search eval: 13 of 17 top sets change (index now covers split children).
+Neither baseline rebuilt. Not published.
 
 Stored `matrices/dataset_splits.parquet_path` values are absolute paths from
 whichever tree wrote them (3,349 still point at the deleted `parquet-v3/`); code
