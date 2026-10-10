@@ -398,7 +398,8 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
     # the unit label. Underscore key: kept out of the public dataset_signature.
     # The raw unit type: a missing profile is "unknown", not a count.
     measure = ap.dataset_measure(
-        profile.get('primary_unit_type'), f"{m[1] or ''} {(m[4] or '')[:300]}", struct)
+        profile.get('primary_unit_type'), f"{m[1] or ''} {(m[4] or '')[:300]}", struct,
+        ap.indicator_labels(dimensions))
     data_signals = {'is_composition': _detect_composition(
         conn, matrix_code, dimensions, actual_values, unit_type, struct,
         non_additive=(measure == 'non_additive'))}

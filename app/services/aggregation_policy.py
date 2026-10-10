@@ -118,6 +118,20 @@ _UNKNOWN_UNIT_NON_ADD_RE = re.compile(
     r'tarif\w*|densitat\w*|speranta de viata|per capita|pe locuitor|pe cap de locuitor|'
     r'la 1000|la 100|la 100000)\b', re.I)
 
+# Indicator *option* labels that name an average, median or per-head amount
+# ("media veniturilor disponibile pe adult-echivalent"). SAR119E's name and
+# definition read as income amounts ("Veniturile ..."), so only its options
+# say it must not be summed. Narrow on purpose: indicator dims also carry
+# breakdowns such as the education level "Mediu" and the CAEN activity
+# "Servicii de reprezentare media" (hence "media" only before a word).
+_AVERAGE_OPTION_RE = re.compile(
+    r'\b((?<!-)media(?= \w)|mediana|valoarea medie|medi[ae] (?:lunara|anuala|zilnica)|'
+    r'(?:pe|per) (?:adult\w*|locuitor|salariat|persoana|cap de locuitor|capita|gospodarie))\b')
+
+# Unit types whose additivity the option labels may overturn. Counts stay
+# additive (an average headcount still adds); the rest are non-additive anyway.
+_OPTION_CHECKED_UNITS = frozenset({'', 'other', 'currency'})
+
 
 def _fold(text: str) -> str:
     """Lower-case, accent-stripped text (the indicator regexes are accent-free)."""
@@ -161,20 +175,32 @@ def classify_measure(unit_type: str | None, text: str = '',
 
 
 def dataset_measure(unit_type: str | None, text: str = '',
-                    struct: dict | None = None) -> str:
+                    struct: dict | None = None,
+                    indicator_labels=()) -> str:
     """Dataset-level 'additive' | 'non_additive' for every consumer.
 
     `text` is the dataset name (+ definition). A verified per-dimension
     `additive` flag from dimension_structure wins (any False -> non_additive;
     otherwise at least one True -> additive); else classify_measure decides
-    from the unit type and indicator wording. Composer, insights, grouped API
-    queries and the Ask agent all call this, so they agree.
+    from the unit type and indicator wording. Unverified currency/unknown
+    datasets whose indicator options name an average, median or per-head
+    amount (`indicator_labels`) are non-additive. Composer, insights, grouped
+    API queries and the Ask agent all call this, so they agree.
     """
     flags = [s.get('additive') for s in (struct or {}).values()
              if isinstance(s, dict) and s.get('additive') is not None]
     verified = (False if flags and not all(flags)
                 else True if flags else None)
+    if (verified is None and (unit_type or '') in _OPTION_CHECKED_UNITS
+            and any(_AVERAGE_OPTION_RE.search(_fold(l)) for l in indicator_labels)):
+        return 'non_additive'
     return classify_measure(unit_type, text, verified)
+
+
+def indicator_labels(dimensions) -> list[str]:
+    """Option labels of a dataset's indicator dimensions (dataset_measure input)."""
+    return [o.get('label') or '' for d in dimensions or ()
+            if d.get('dim_type') == 'indicator' for o in d.get('options') or ()]
 
 
 # --- pure arithmetic helpers -------------------------------------------------

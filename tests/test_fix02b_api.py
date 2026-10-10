@@ -192,3 +192,12 @@ def test_non_additive_policy_is_the_shared_one(client):
     # a verified additive structure beats the unit heuristic
     assert ap.dataset_measure("index", "x", {"C": {"additive": True}}) == "additive"
     assert ap.dataset_measure("count", "x", {"C": {"additive": False}}) == "non_additive"
+
+
+def test_income_means_by_sex_are_never_summed(client):
+    from fix02b_corpus import INCX_MEAN, INCX_NAIVE_2024
+    meta = client.get("/api/datasets/INCX").json()
+    assert meta["measure"] == "non_additive"
+    body = q(client, "INCX", ["TIME_PERIOD"], {"VENITURI": [INCX_MEAN]})
+    assert INCX_NAIVE_2024 not in series(body).values()
+    assert body.get("aggregation", {}).get("method") != "sum_partition"

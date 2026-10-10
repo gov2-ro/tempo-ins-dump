@@ -9,6 +9,9 @@ get_dataset_meta (so the shared aggregation context is the real one):
   ADDX   additive counts: CATEGORY has a Total row (120 = 50 + 70 in 2023).
   RATEX  percentage rates by region, no total: an unweighted mean is not an
          official rate.
+  INCX   SAR119E-like: currency means/medians by sex, no total. Name and
+         definition read as income amounts; only the indicator options say
+         average. Summing the sexes gives 61,176 lei for a 32,001 mean.
 """
 from __future__ import annotations
 
@@ -25,6 +28,13 @@ POPX_NAIVE_2025 = 200.0 * 1.1
 
 ADDX_ROWS = [("Total", "2022", 100.0), ("A", "2022", 40.0), ("B", "2022", 60.0),
              ("Total", "2023", 120.0), ("A", "2023", 50.0), ("B", "2023", 70.0)]
+INCX_MEAN = "media veniturilor disponibile pe adult-echivalent"
+INCX_MEDIAN = "mediana veniturilor disponibile pe adult-echivalent"
+INCX_ROWS = [(INCX_MEAN, "Masculin", "2024", 32001.0), (INCX_MEAN, "Feminin", "2024", 29175.0),
+             (INCX_MEDIAN, "Masculin", "2024", 30234.0), (INCX_MEDIAN, "Feminin", "2024", 27673.0),
+             (INCX_MEAN, "Masculin", "2023", 25000.0), (INCX_MEAN, "Feminin", "2023", 23000.0),
+             (INCX_MEDIAN, "Masculin", "2023", 24000.0), (INCX_MEDIAN, "Feminin", "2023", 22000.0)]
+INCX_NAIVE_2024 = 32001.0 + 29175.0
 RATEX_ROWS = [("Nord", "2023", 10.0), ("Sud", "2023", 20.0),
               ("Nord", "2024", 12.0), ("Sud", "2024", 22.0)]
 
@@ -47,6 +57,8 @@ def build_corpus(tmp_path, structure: bool = False):
            "CATEGORY VARCHAR, TIME_PERIOD VARCHAR, OBS_VALUE DOUBLE", ADDX_ROWS)
     _write(corpus / "parquet" / "RATEX.parquet",
            "REF_AREA VARCHAR, TIME_PERIOD VARCHAR, OBS_VALUE DOUBLE", RATEX_ROWS)
+    _write(corpus / "parquet" / "INCX.parquet",
+           "VENITURI VARCHAR, SEX VARCHAR, TIME_PERIOD VARCHAR, OBS_VALUE DOUBLE", INCX_ROWS)
 
     db = duckdb.connect(str(corpus / "metadata.duckdb"))
     db.execute("""CREATE TABLE matrices (matrix_code VARCHAR, matrix_name VARCHAR,
@@ -104,12 +116,21 @@ def build_corpus(tmp_path, structure: bool = False):
              [("Nord", dict(geo_level="region")), ("Sud", dict(geo_level="region"))]),
             ("TIME_PERIOD", "Ani", "time",
              [("2023", dict(year=2023)), ("2024", dict(year=2024))])]),
+        "INCX": ("Venitul disponibil pe sexe", "currency", len(INCX_ROWS), [
+            ("VENITURI", "Venituri disponibile", "indicator",
+             [(INCX_MEAN, {}), (INCX_MEDIAN, {})]),
+            ("SEX", "Sexe", "gender",
+             [("Masculin", dict(gender="M")), ("Feminin", dict(gender="F"))]),
+            ("TIME_PERIOD", "Ani", "time",
+             [("2023", dict(year=2023)), ("2024", dict(year=2024))])]),
     }
+    definitions = {"INCX": "Veniturile disponibile ale gospodariei se raporteaza "
+                           "la numarul de adulti-echivalent."}
     did = nid = 0
     for code, (name, unit, nrows, dims) in spec.items():
         db.execute("INSERT INTO matrices (matrix_code, matrix_name, matrix_name_en, "
                    "row_count, definitie) VALUES (?, ?, ?, ?, ?)",
-                   [code, name, name, nrows, name])
+                   [code, name, name, nrows, definitions.get(code, name)])
         db.execute("INSERT INTO matrix_profiles VALUES (?, ?, 'x', 2022, 2025, '[]')",
                    [code, unit])
         for i, (col, label, dtype, opts) in enumerate(dims, 1):
