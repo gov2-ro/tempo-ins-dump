@@ -1,7 +1,8 @@
 """INS TEMPO Data Explorer — FastAPI application."""
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import Request
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 import logging
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
@@ -39,6 +40,13 @@ app.include_router(ask.router, prefix="/api", tags=["ask"])
 app.include_router(places.router, tags=["places"])
 
 _LLMS_TXT = Path(__file__).parent.parent / "llms.txt"
+
+@app.get("/dataset.html", include_in_schema=False)
+def dataset_alias(request: Request):
+    """Old dataset URL (still in saved Ask answers): the v2 page, same query."""
+    q = request.url.query
+    return RedirectResponse("/dataset-v2.html" + (f"?{q}" if q else ""), status_code=301)
+
 
 @app.get("/llms.txt", include_in_schema=False)
 async def llms_txt():

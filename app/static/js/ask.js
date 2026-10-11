@@ -241,7 +241,7 @@ function renderDataTable(data) {
     meta.textContent = `${data.row_count ?? data.rows.length} rows`;
     if (data.matrix_code) {
         const link = document.createElement('a');
-        link.href = `/dataset.html?code=${data.matrix_code}`;
+        link.href = datasetHref(data.matrix_code);
         link.target = '_blank';
         link.textContent = data.matrix_code;
         link.className = 'chat-data-code';
@@ -291,6 +291,43 @@ function renderDataTable(data) {
 // Chart rendering (simple eCharts for line / bar)
 // ---------------------------------------------------------------------------
 
+/** The dataset page a citation or table opens (the canonical v2 route). */
+function datasetHref(code) {
+    let en = false;
+    try { en = (localStorage.getItem('lens_lang') || 'ro') === 'en'; } catch { /* storage blocked */ }
+    return `/dataset-v2.html?code=${encodeURIComponent(code)}${en ? '&lang=en' : ''}`;
+}
+
+/** Chart series from a query result (PA-01c, audit A03). Every column other
+ *  than time and value that varies across rows is part of a series' identity
+ *  (geography included), so no observation is merged into another. A repeated
+ *  (series, period) pair returns {error} instead of keeping one of them; the
+ *  table still shows every row. */
+function chartSeries(columns, rows) {
+    const timeIdx = columns.indexOf('TIME_PERIOD');
+    const valueIdx = columns.indexOf('OBS_VALUE');
+    if (timeIdx === -1 || valueIdx === -1) return { error: 'no_time_or_value' };
+    const keyIdx = columns.map((_, i) => i).filter(i => i !== timeIdx && i !== valueIdx
+        && new Set(rows.map(r => r[i])).size > 1);
+    const seriesMap = new Map();
+    const allX = new Set();
+    for (const row of rows) {
+        const name = keyIdx.map(i => String(row[i] ?? '').trim()).join(' · ') || 'Value';
+        const x = row[timeIdx];
+        const y = row[valueIdx] == null ? null : parseFloat(row[valueIdx]);
+        if (!seriesMap.has(name)) seriesMap.set(name, new Map());
+        const pts = seriesMap.get(name);
+        if (pts.has(x)) return { error: 'duplicate_key', series: name, period: x };
+        pts.set(x, Number.isNaN(y) ? null : y);
+        allX.add(x);
+    }
+    const xData = Array.from(allX).sort();
+    return {
+        xData,
+        series: [...seriesMap].map(([name, pts]) => ({ name, data: xData.map(x => pts.get(x) ?? null) })),
+    };
+}
+
 function renderChart(data, chartSpec) {
     if (!data || !data.columns || !data.rows || data.rows.length === 0) return null;
     if (!chartSpec || !chartSpec.primary_chart) return null;
@@ -298,37 +335,18 @@ function renderChart(data, chartSpec) {
     const primary = chartSpec.primary_chart;
     if (!['line', 'bar', 'grouped_bar', 'stacked_bar', 'area'].includes(primary)) return null;
 
-    // Detect column roles
-    const cols = data.columns;
-    const timeIdx = cols.findIndex(c => c === 'TIME_PERIOD' || c.toLowerCase().includes('time') || c.toLowerCase().includes('year'));
-    const valueIdx = cols.findIndex(c => c === 'OBS_VALUE' || c.toLowerCase().includes('value') || c.toLowerCase().includes('obs'));
-    const groupIdx = cols.findIndex((c, i) => i !== timeIdx && i !== valueIdx && !['REF_AREA', 'UNIT_MEASURE', 'UNIT_MULT'].includes(c));
-
-    if (timeIdx === -1 || valueIdx === -1) return null;
+    const built = chartSeries(data.columns, data.rows);
+    if (built.error) return null;    // the table below still lists every row
 
     const container = document.createElement('div');
     container.className = 'chat-chart';
-
-    // Build series — group by groupIdx if available
-    const seriesMap = {};
-    const allX = new Set();
-
-    data.rows.forEach(row => {
-        const x = row[timeIdx];
-        const y = parseFloat(row[valueIdx]);
-        const g = groupIdx >= 0 ? (row[groupIdx] ?? 'Value') : 'Value';
-        if (!seriesMap[g]) seriesMap[g] = {};
-        seriesMap[g][x] = isNaN(y) ? null : y;
-        allX.add(x);
-    });
-
-    const xData = Array.from(allX).sort();
+    const xData = built.xData;
     const chartType = ['area', 'line'].includes(primary) ? 'line' : 'bar';
-    const series = Object.entries(seriesMap).map(([name, pts]) => ({
+    const series = built.series.map(({ name, data: pts }) => ({
         name,
         type: chartType,
         areaStyle: primary === 'area' ? {} : undefined,
-        data: xData.map(x => pts[x] ?? null),
+        data: pts,
         smooth: primary === 'line' || primary === 'area',
     }));
 
@@ -417,7 +435,7 @@ function appendAssistantResponse(result) {
             const code = typeof c === 'string' ? c : c.matrix_code;
             const name = typeof c === 'string' ? '' : (c.matrix_name || '');
             const a = document.createElement('a');
-            a.href = `/dataset.html?code=${code}`;
+            a.href = datasetHref(code);
             a.target = '_blank';
             a.className = 'chat-citation';
             a.textContent = `↗ ${code}${name ? ' — ' + name : ''}`;

@@ -383,8 +383,12 @@ class DashboardV2 {
 
     async refresh() {
         this._players = {};     // a rebuilt tile bar can't drive a running player
+        // Selection version (PA-01c, audit A05): a response that completes after
+        // a newer selection was made is dropped, so labels, URL and values agree.
+        const version = this._version = (this._version || 0) + 1;
         this.syncURL();
         const slices = await this.fetchSlices();
+        if (version !== this._version) return;
         // Composer-time data holes answer no question — drop those tiles and
         // re-layout around the survivors. But once the USER has filtered
         // (globally or per-tile), every tile stays visible with an explicit
@@ -732,11 +736,16 @@ class DashboardV2 {
      *  tiles and the layout stay as they are. */
     async refreshTile(chart) {
         this.syncURL();
+        const version = this._version || 0;
+        const seq = this._tileSeq ||= {};
+        const mine = seq[chart.id] = (seq[chart.id] || 0) + 1;
         const data = await API.getDatasetData(this.code, this.tileEffectiveFilters(chart), 50000,
             { groupBy: chart.data.group_by }).catch(e => {
             console.error(`Slice for ${chart.id} failed:`, e);
             return null;
         });
+        // A newer slider position, or a full refresh, owns this tile now.
+        if (seq[chart.id] !== mine || (this._version || 0) !== version) return;
         const container = document.getElementById(`dbv2-chart-${chart.id}`);
         if (!container) return;
         const i = this.charts.findIndex(c => c.getDom?.() === container);

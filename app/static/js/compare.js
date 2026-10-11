@@ -3,7 +3,7 @@
  *
  * Overlays each dataset's default temporal slice on a shared time axis
  * (dual y-axis when unit types differ) and, when both are county-level,
- * scatters the latest-period county values against each other.
+ * scatters county values of the latest period both datasets share.
  * Entry point: the "Compară" link on dashboard-v2 related-dataset cards.
  */
 
@@ -16,7 +16,12 @@ const CMP_UI = {
         evolution: 'Evoluție în timp',
         noTemporal: 'Cel puțin unul dintre seturi nu are serie temporală — suprapunerea în timp nu este posibilă.',
         counties: 'Corespondență pe județe',
-        scatterSub: (n, r, p) => `${n} județe · corelație r = ${r}${p ? ` · ${p}` : ''}`,
+        scatterSub: (n, r, p) => `${n} județe · ${r == null ? 'corelație nedefinită' : `corelație r = ${r}`}${p ? ` · ${p}` : ''}`,
+        excluded: (a, b) => `Excluse: ${[a, b].filter(Boolean).join(' · ')}`,
+        onlyIn: (code, names) => `doar în ${code}: ${names.join(', ')}`,
+        noCommon: (pa, pb) => `Nicio perioadă comună pe județe (${pa} / ${pb}); corelația nu se calculează între ani diferiți.`,
+        duplicateArea: name => `Județul ${name} apare de mai multe ori în aceeași perioadă; corelația nu se calculează.`,
+        assoc: 'asociere, nu relație cauzală',
         slice: 'felie',
         openTitle: 'Deschide dashboardul setului de date',
     },
@@ -28,7 +33,12 @@ const CMP_UI = {
         evolution: 'Evolution over time',
         noTemporal: 'At least one dataset has no time series — the overlay is not possible.',
         counties: 'County correspondence',
-        scatterSub: (n, r, p) => `${n} counties · correlation r = ${r}${p ? ` · ${p}` : ''}`,
+        scatterSub: (n, r, p) => `${n} counties · ${r == null ? 'correlation undefined' : `correlation r = ${r}`}${p ? ` · ${p}` : ''}`,
+        excluded: (a, b) => `Excluded: ${[a, b].filter(Boolean).join(' · ')}`,
+        onlyIn: (code, names) => `only in ${code}: ${names.join(', ')}`,
+        noCommon: (pa, pb) => `No common county period (${pa} / ${pb}); correlation is not computed across different years.`,
+        duplicateArea: name => `County ${name} appears more than once in the same period; correlation is not computed.`,
+        assoc: 'association, not causation',
         slice: 'slice',
         openTitle: 'Open the dataset dashboard',
     },
@@ -38,8 +48,11 @@ function normPeriod(p) {
     return String(p).replace(/anul\s*/i, '').trim();
 }
 
+/** Pearson r, or null when undefined: fewer than two pairs, a non-finite
+ *  value or a constant axis (PA-01c, audit A06 — never a misleading 0). */
 function pearson(pts) {
     const n = pts.length;
+    if (n < 2 || pts.some(p => !Number.isFinite(p[0]) || !Number.isFinite(p[1]))) return null;
     const mx = pts.reduce((s, p) => s + p[0], 0) / n;
     const my = pts.reduce((s, p) => s + p[1], 0) / n;
     let num = 0, dx = 0, dy = 0;
@@ -48,7 +61,7 @@ function pearson(pts) {
         dx += (x - mx) ** 2;
         dy += (y - my) ** 2;
     }
-    return dx && dy ? num / Math.sqrt(dx * dy) : 0;
+    return dx && dy ? num / Math.sqrt(dx * dy) : null;
 }
 
 class ComparePage {
@@ -200,10 +213,10 @@ class ComparePage {
                      splitLine: { show: false } }]
                 : [{ type: 'value', name: sa.unitType, scale: true }],
             series: [
-                { name: nameA, type: 'line', yAxisIndex: 0, connectNulls: true,
+                { name: nameA, type: 'line', yAxisIndex: 0, connectNulls: false,
                   showSymbol: periods.length < 40,
                   data: periods.map(p => sa.points.get(p) ?? null) },
-                { name: nameB, type: 'line', yAxisIndex: dual ? 1 : 0, connectNulls: true,
+                { name: nameB, type: 'line', yAxisIndex: dual ? 1 : 0, connectNulls: false,
                   showSymbol: periods.length < 40,
                   data: periods.map(p => sb.points.get(p) ?? null) },
             ],
@@ -211,9 +224,10 @@ class ComparePage {
         this.charts.push(chart);
     }
 
-    /** Latest-period county values of one dataset, keyed by clean county
-     *  name so the two datasets can be joined. Prefers the ranking tile
-     *  (time already pinned to the latest period). */
+    /** County values of one dataset for every available period:
+     *  {byPeriod: Map(period -> Map(county -> value)), duplicate: Map(period -> county)}. Uses the
+     *  geo tile's slice with time released, so the two datasets can be
+     *  aligned on a period they share instead of each one's own latest. */
     async geoSlice(meta) {
         const comp = meta.chart_config?.composition;
         const geoCol = meta.chart_config?.geo_dim;
@@ -223,30 +237,25 @@ class ComparePage {
         const tile = tiles.find(c => !timeCol || !c.data.group_by.includes(timeCol))
             || tiles[0];
         if (!tile) return null;
+        const filters = { ...tile.data.filters };
+        const groupBy = [...tile.data.group_by];
+        if (timeCol) {
+            delete filters[timeCol];
+            if (!groupBy.includes(timeCol)) groupBy.push(timeCol);
+        }
         let data;
         try {
-            data = await API.getDatasetData(meta.matrix_code, tile.data.filters,
-                                            50000, { groupBy: tile.data.group_by });
+            data = await API.getDatasetData(meta.matrix_code, filters, 50000, { groupBy });
         } catch (e) {
             console.warn(`Geo slice for ${meta.matrix_code} failed:`, e);
             return null;
         }
-        if (!data?.rows?.length) return null;
+        if (!data?.rows?.length || data.truncated) return null;   // never correlate a capped result
         const cols = data.columns;
         const gi = cols.indexOf(geoCol);
+        const ti = timeCol ? cols.indexOf(timeCol) : -1;
         const vi = cols.length - 1;
         if (gi === -1) return null;
-
-        let rows = data.rows;
-        let period = null;
-        const ti = timeCol ? cols.indexOf(timeCol) : -1;
-        if (ti !== -1) {
-            const periods = [...new Set(rows.map(r => String(r[ti])))].sort();
-            period = periods[periods.length - 1];
-            rows = rows.filter(r => String(r[ti]) === period);
-        } else if (timeCol && tile.data.filters[timeCol]) {
-            period = String(tile.data.filters[timeCol][0]);
-        }
 
         const dim = (meta.dimensions || []).find(d => d.dim_column_name === geoCol);
         const toClean = {};
@@ -258,14 +267,40 @@ class ComparePage {
         }
         // Aggregate areas would sit far off the county cloud — drop them
         const aggRe = /^(total|macroregiunea|regiunea)/i;
-        const values = new Map();
-        for (const r of rows) {
+        const byPeriod = new Map();
+        const duplicate = new Map();   // period -> a county seen twice
+        for (const r of data.rows) {
             const raw = String(r[gi]).trim();
             const clean = toClean[raw] || raw;
             if (aggRe.test(clean)) continue;
-            if (r[vi] != null) values.set(clean, r[vi]);
+            const period = ti === -1 ? '' : normPeriod(r[ti]);
+            if (!byPeriod.has(period)) byPeriod.set(period, new Map());
+            const m = byPeriod.get(period);
+            if (m.has(clean) && !duplicate.has(period)) duplicate.set(period, clean);
+            m.set(clean, r[vi]);
         }
-        return values.size ? { values, period: period ? normPeriod(period) : null } : null;
+        return byPeriod.size ? { byPeriod, duplicate } : null;
+    }
+
+    /** Pairs for the latest period both datasets cover (no implicit lag).
+     *  Pure, so it can be checked on fixtures. */
+    static alignCounties(ga, gb) {
+        const common = [...ga.byPeriod.keys()].filter(p => gb.byPeriod.has(p)).sort();
+        const latest = m => [...m.keys()].sort().pop();
+        if (!common.length) {
+            return { error: 'no_common_period', periods: [latest(ga.byPeriod), latest(gb.byPeriod)] };
+        }
+        const period = common[common.length - 1];
+        const dup = ga.duplicate?.get(period) || gb.duplicate?.get(period);
+        if (dup) return { error: 'duplicate_area', name: dup };
+        const a = ga.byPeriod.get(period), b = gb.byPeriod.get(period);
+        const ok = v => v != null && Number.isFinite(+v);
+        const pts = [];
+        for (const [name, v] of a) if (ok(v) && ok(b.get(name))) pts.push([+v, +b.get(name), name]);
+        const onlyA = [...a].filter(([n, v]) => ok(v) && !ok(b.get(n))).map(([n]) => n).sort();
+        const onlyB = [...b].filter(([n, w]) => ok(w) && !ok(a.get(n))).map(([n]) => n).sort();
+        return { period, pts, onlyA, onlyB,
+                 r: pearson(pts) };
     }
 
     async renderScatter() {
@@ -275,21 +310,29 @@ class ComparePage {
         const [ga, gb] = await Promise.all([
             this.geoSlice(this.metaA), this.geoSlice(this.metaB)]);
         if (!ga || !gb) return;
-        const pts = [];
-        for (const [name, v] of ga.values) {
-            const w = gb.values.get(name);
-            if (w != null) pts.push([v, w, name]);
-        }
-        if (pts.length < 5) return;
-
-        const r = pearson(pts);
-        const periodNote = ga.period === gb.period
-            ? ga.period
-            : [ga.period, gb.period].filter(Boolean).join(' / ');
+        const al = ComparePage.alignCounties(ga, gb);
         document.getElementById('cmp-scatter-title').textContent = this.ui.counties;
-        document.getElementById('cmp-scatter-sub').textContent =
-            this.ui.scatterSub(pts.length, r.toFixed(2), periodNote);
         const section = document.getElementById('cmp-scatter');
+        const sub = document.getElementById('cmp-scatter-sub');
+        if (al.error) {
+            sub.textContent = al.error === 'no_common_period'
+                ? this.ui.noCommon(...al.periods) : this.ui.duplicateArea(al.name);
+            document.getElementById('cmp-scatter-chart').classList.add('hidden');
+            section.classList.remove('hidden');
+            return;
+        }
+        const pts = al.pts;
+        if (pts.length < 2) return;
+        sub.textContent = this.ui.scatterSub(pts.length, al.r == null ? null : al.r.toFixed(2),
+                                             `${al.period} · ${this.ui.assoc}`);
+        const excluded = [al.onlyA.length ? this.ui.onlyIn(this.a, al.onlyA) : '',
+                          al.onlyB.length ? this.ui.onlyIn(this.b, al.onlyB) : ''];
+        if (excluded.some(Boolean)) {
+            const note = document.createElement('div');
+            note.className = 'dbv2-notice cmp-excluded';
+            note.textContent = this.ui.excluded(...excluded);
+            section.appendChild(note);
+        }
         section.classList.remove('hidden');
         const chart = echarts.init(document.getElementById('cmp-scatter-chart'));
         chart.setOption({
