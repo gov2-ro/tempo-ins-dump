@@ -194,10 +194,12 @@ def _build_sql(matrix_code: str, dimensions: list, filters: dict,
     # Every query orders by its output columns, so identical requests return
     # identical rows in identical order (and a truncated result is always cut
     # at the same place). The scan order used to leak through (PA-04 workload).
+    # The value is the last tie-break: files with repeated keys (conflicting
+    # grain) would otherwise return equal-key rows in scan order.
     if not time_column or time_column not in output_cols:
-        order = ", ".join(quote_ident(c) for c in output_cols)
+        order = ", ".join([quote_ident(c) for c in output_cols] + ['"OBS_VALUE"'])
         return f"{body} ORDER BY {order} LIMIT {int(limit)}"
-    rest = [quote_ident(c) for c in output_cols if c != time_column]
+    rest = [quote_ident(c) for c in output_cols if c != time_column] + ['"OBS_VALUE"']
     tie = "".join(f", {c}" for c in rest)
 
     # Ordering ASC and then LIMITing throws away the NEWEST periods whenever

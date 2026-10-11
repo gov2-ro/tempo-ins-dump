@@ -34,6 +34,7 @@ docs/misc/*
 .mcp.json
 test-results/*
 _site/
+_static/
 docs/misc/screenshots/inspiration/*
 
 # Byte-compiled / optimized / DLL files
