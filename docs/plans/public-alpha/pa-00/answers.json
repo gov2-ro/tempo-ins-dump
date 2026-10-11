@@ -1,0 +1,418 @@
+{
+ "schema": 1,
+ "kind": "pa00-answer-expectations",
+ "recorded": "2026-10-11",
+ "generation": "a6737a263a34bf83b69dde1c8a0366f584396d28a78a716f0ce55563fdbdbb90",
+ "note": "Candidate expectations only. No record is verified; values are NOT golden numbers until a reviewer signs the record in answer-records.md. Do not freeze them in tests as truth.",
+ "records": {
+  "Q1": {
+   "status": "candidate",
+   "version": 1,
+   "source": {
+    "dataset": "POP105A_judete_grupe",
+    "parent": "POP105A",
+    "definition": "resident population on 1 January"
+   },
+   "selection": {
+    "REF_AREA": [
+     "Cluj",
+     "Iasi",
+     "Municipiul Bucuresti"
+    ],
+    "collapse": {
+     "AGE": "18 five-year groups 0-4 .. 85+",
+     "SEX": [
+      "Masculin",
+      "Feminin"
+     ],
+     "RESIDENCE": [
+      "Urban",
+      "Rural"
+     ]
+    },
+    "period": "2012..2025 annual"
+   },
+   "method": "sum of a complete disjoint partition (no total rows in the source export)",
+   "unit": "persons",
+   "tolerance": 0,
+   "values": {
+    "Cluj": {
+     "2012": 693608,
+     "2013": 697457,
+     "2014": 699097,
+     "2015": 700982,
+     "2016": 701258,
+     "2017": 702780,
+     "2018": 704619,
+     "2019": 706952,
+     "2020": 709872,
+     "2021": 710664,
+     "2022": 683028,
+     "2023": 688844,
+     "2024": 693507,
+     "2025": 697030
+    },
+    "Iasi": {
+     "2012": 772979,
+     "2013": 775165,
+     "2014": 781503,
+     "2015": 787589,
+     "2016": 788659,
+     "2017": 789935,
+     "2018": 791753,
+     "2019": 794706,
+     "2020": 794979,
+     "2021": 797131,
+     "2022": 765720,
+     "2023": 774025,
+     "2024": 778689,
+     "2025": 780364
+    },
+    "Municipiul Bucuresti": {
+     "2012": 1886866,
+     "2013": 1875389,
+     "2014": 1865563,
+     "2015": 1853638,
+     "2016": 1843962,
+     "2017": 1826579,
+     "2018": 1828869,
+     "2019": 1832802,
+     "2020": 1841052,
+     "2021": 1828781,
+     "2022": 1722974,
+     "2023": 1724966,
+     "2024": 1721784,
+     "2025": 1709458
+    }
+   },
+   "series_break": {
+    "between": [
+     "2021",
+     "2022"
+    ],
+    "reason": "pre-2022 estimates rest on the 2011 census, 2022+ on the 2021 census; a change across this boundary is not demographic change alone"
+   },
+   "evidence": {
+    "corpus_equals_retained_csv": true,
+    "independent_ins_cell": null,
+    "open": "INS Total cells for these counties not retained; national 2025 differs from the INS cell fetched 2026-10-05 by 7,120"
+   }
+  },
+  "Q2": {
+   "status": "blocked",
+   "version": 1,
+   "source": {
+    "dataset": "FOM106E_judete",
+    "parent": "FOM106E"
+   },
+   "blocker": "source export has no TOTAL-activity x Total-sex cells; app refuses (missing_weights), approximation is unweighted"
+  },
+  "Q3": {
+   "status": "blocked",
+   "version": 1,
+   "source": {
+    "dataset": "SOM103A_judete",
+    "parent": "SOM103A"
+   },
+   "blocker": "source export has no Total-sex rate; app refuses (missing_weights) or shows a labelled unweighted mean",
+   "decision": {
+    "source": "SOM103A",
+    "frequency": "annual",
+    "decided": "2026-10-11"
+   }
+  },
+  "Q4": {
+   "status": "candidate",
+   "version": 1,
+   "feasibility": "feasible, pending denominator verification and definition approval",
+   "numerator": {
+    "dataset": "TUR105D_judete",
+    "collapse": {
+     "TYPE": "19 structure types",
+     "TYPE_2": [
+      "Romani",
+      "Straini"
+     ]
+    },
+    "period": "2024"
+   },
+   "denominator": {
+    "dataset": "POP105A_judete_grupe",
+    "reference_date": "2024-01-01"
+   },
+   "formula": "stays(county, year) / resident_population(county, 1 January of the same year)",
+   "excluded_sources": [
+    "TUR105E_judet",
+    "TUR105H_judet (conflicting grain)"
+   ],
+   "evidence": {
+    "numerator_national_2024": 30837328,
+    "ins_TUR105C_total_2024": 30837328,
+    "ins_cell_fetched": "2026-10-05"
+   },
+   "values_2024": [
+    {
+     "geo": "Constanta",
+     "stays_2024": 5564869,
+     "resident_pop_2024_01_01": 657419,
+     "stays_per_resident": 8.465
+    },
+    {
+     "geo": "Brasov",
+     "stays_2024": 2936342,
+     "resident_pop_2024_01_01": 557129,
+     "stays_per_resident": 5.27
+    },
+    {
+     "geo": "Valcea",
+     "stays_2024": 1452437,
+     "resident_pop_2024_01_01": 340637,
+     "stays_per_resident": 4.264
+    },
+    {
+     "geo": "Covasna",
+     "stays_2024": 623626,
+     "resident_pop_2024_01_01": 199675,
+     "stays_per_resident": 3.123
+    },
+    {
+     "geo": "Bihor",
+     "stays_2024": 1547886,
+     "resident_pop_2024_01_01": 555957,
+     "stays_per_resident": 2.784
+    },
+    {
+     "geo": "Caras-Severin",
+     "stays_2024": 660287,
+     "resident_pop_2024_01_01": 243685,
+     "stays_per_resident": 2.71
+    },
+    {
+     "geo": "Sibiu",
+     "stays_2024": 936093,
+     "resident_pop_2024_01_01": 393581,
+     "stays_per_resident": 2.378
+    },
+    {
+     "geo": "Municipiul Bucuresti",
+     "stays_2024": 3969063,
+     "resident_pop_2024_01_01": 1721784,
+     "stays_per_resident": 2.305
+    },
+    {
+     "geo": "Tulcea",
+     "stays_2024": 374297,
+     "resident_pop_2024_01_01": 189336,
+     "stays_per_resident": 1.977
+    },
+    {
+     "geo": "Prahova",
+     "stays_2024": 1283828,
+     "resident_pop_2024_01_01": 688976,
+     "stays_per_resident": 1.863
+    },
+    {
+     "geo": "Suceava",
+     "stays_2024": 1180370,
+     "resident_pop_2024_01_01": 645196,
+     "stays_per_resident": 1.829
+    },
+    {
+     "geo": "Harghita",
+     "stays_2024": 531331,
+     "resident_pop_2024_01_01": 292148,
+     "stays_per_resident": 1.819
+    },
+    {
+     "geo": "Cluj",
+     "stays_2024": 1208319,
+     "resident_pop_2024_01_01": 693507,
+     "stays_per_resident": 1.742
+    },
+    {
+     "geo": "Mures",
+     "stays_2024": 900451,
+     "resident_pop_2024_01_01": 519831,
+     "stays_per_resident": 1.732
+    },
+    {
+     "geo": "Alba",
+     "stays_2024": 469672,
+     "resident_pop_2024_01_01": 325697,
+     "stays_per_resident": 1.442
+    },
+    {
+     "geo": "Maramures",
+     "stays_2024": 628467,
+     "resident_pop_2024_01_01": 451881,
+     "stays_per_resident": 1.391
+    },
+    {
+     "geo": "Neamt",
+     "stays_2024": 558824,
+     "resident_pop_2024_01_01": 447776,
+     "stays_per_resident": 1.248
+    },
+    {
+     "geo": "Arges",
+     "stays_2024": 641511,
+     "resident_pop_2024_01_01": 564829,
+     "stays_per_resident": 1.136
+    },
+    {
+     "geo": "Timis",
+     "stays_2024": 700556,
+     "resident_pop_2024_01_01": 663543,
+     "stays_per_resident": 1.056
+    },
+    {
+     "geo": "Mehedinti",
+     "stays_2024": 225458,
+     "resident_pop_2024_01_01": 230094,
+     "stays_per_resident": 0.98
+    },
+    {
+     "geo": "Braila",
+     "stays_2024": 253217,
+     "resident_pop_2024_01_01": 274751,
+     "stays_per_resident": 0.922
+    },
+    {
+     "geo": "Hunedoara",
+     "stays_2024": 305565,
+     "resident_pop_2024_01_01": 354879,
+     "stays_per_resident": 0.861
+    },
+    {
+     "geo": "Arad",
+     "stays_2024": 330877,
+     "resident_pop_2024_01_01": 410871,
+     "stays_per_resident": 0.805
+    },
+    {
+     "geo": "Iasi",
+     "stays_2024": 602753,
+     "resident_pop_2024_01_01": 778689,
+     "stays_per_resident": 0.774
+    },
+    {
+     "geo": "Gorj",
+     "stays_2024": 233068,
+     "resident_pop_2024_01_01": 310056,
+     "stays_per_resident": 0.752
+    },
+    {
+     "geo": "Ialomita",
+     "stays_2024": 184524,
+     "resident_pop_2024_01_01": 249364,
+     "stays_per_resident": 0.74
+    },
+    {
+     "geo": "Bistrita-Nasaud",
+     "stays_2024": 210944,
+     "resident_pop_2024_01_01": 297082,
+     "stays_per_resident": 0.71
+    },
+    {
+     "geo": "Bacau",
+     "stays_2024": 406190,
+     "resident_pop_2024_01_01": 595888,
+     "stays_per_resident": 0.682
+    },
+    {
+     "geo": "Satu Mare",
+     "stays_2024": 207026,
+     "resident_pop_2024_01_01": 330701,
+     "stays_per_resident": 0.626
+    },
+    {
+     "geo": "Dambovita",
+     "stays_2024": 262642,
+     "resident_pop_2024_01_01": 476962,
+     "stays_per_resident": 0.551
+    },
+    {
+     "geo": "Buzau",
+     "stays_2024": 203215,
+     "resident_pop_2024_01_01": 398344,
+     "stays_per_resident": 0.51
+    },
+    {
+     "geo": "Dolj",
+     "stays_2024": 289288,
+     "resident_pop_2024_01_01": 598371,
+     "stays_per_resident": 0.483
+    },
+    {
+     "geo": "Ilfov",
+     "stays_2024": 263596,
+     "resident_pop_2024_01_01": 583663,
+     "stays_per_resident": 0.452
+    },
+    {
+     "geo": "Salaj",
+     "stays_2024": 83340,
+     "resident_pop_2024_01_01": 210656,
+     "stays_per_resident": 0.396
+    },
+    {
+     "geo": "Galati",
+     "stays_2024": 175480,
+     "resident_pop_2024_01_01": 493009,
+     "stays_per_resident": 0.356
+    },
+    {
+     "geo": "Giurgiu",
+     "stays_2024": 71991,
+     "resident_pop_2024_01_01": 258661,
+     "stays_per_resident": 0.278
+    },
+    {
+     "geo": "Vaslui",
+     "stays_2024": 85880,
+     "resident_pop_2024_01_01": 369517,
+     "stays_per_resident": 0.232
+    },
+    {
+     "geo": "Vrancea",
+     "stays_2024": 74723,
+     "resident_pop_2024_01_01": 332313,
+     "stays_per_resident": 0.225
+    },
+    {
+     "geo": "Olt",
+     "stays_2024": 80671,
+     "resident_pop_2024_01_01": 376539,
+     "stays_per_resident": 0.214
+    },
+    {
+     "geo": "Botosani",
+     "stays_2024": 79837,
+     "resident_pop_2024_01_01": 389748,
+     "stays_per_resident": 0.205
+    },
+    {
+     "geo": "Calarasi",
+     "stays_2024": 32773,
+     "resident_pop_2024_01_01": 279349,
+     "stays_per_resident": 0.117
+    },
+    {
+     "geo": "Teleorman",
+     "stays_2024": 6041,
+     "resident_pop_2024_01_01": 315482,
+     "stays_per_resident": 0.019
+    }
+   ],
+   "decision": {
+    "denominator": "resident population on 1 January of the same year",
+    "decided": "2026-10-11"
+   }
+  },
+  "Q5": {
+   "status": "candidate",
+   "version": 1,
+   "note": "checklist only; acceptance is PA-03"
+  }
+ }
+}

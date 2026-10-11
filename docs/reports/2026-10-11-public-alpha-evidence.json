@@ -1,0 +1,1234 @@
+{
+  "audit_date": "2026-10-11",
+  "scope": {
+    "type": "latest_local",
+    "feature_branch": "feat/structural-bar-toggle",
+    "commit": "6a727a2f10b10c0d46e4ae1a5acf2a6ca6d0605c",
+    "browser_base": "http://127.0.0.1:8093",
+    "generation_id": "a6737a263a34bf83b69dde1c8a0366f584396d28a78a716f0ce55563fdbdbb90",
+    "generation_built_at": "2026-10-05T15:41:35+00:00",
+    "production_findings_included": false
+  },
+  "validation": {
+    "ordinary_latest_tests": {
+      "passed": 462,
+      "skipped": 29
+    },
+    "repaired_corpus_tests": {
+      "passed": 23,
+      "deselected": 468
+    },
+    "chart_eval": {
+      "total_baseline": 1986,
+      "total_current": 4110,
+      "ok": 1450,
+      "primary_changed": 39,
+      "top_set_changed": 143,
+      "confidence_changed": 51,
+      "score_drift": 303,
+      "missing": 0,
+      "added": 2124,
+      "score_threshold": 0.05
+    },
+    "search_eval": {
+      "total_baseline": 17,
+      "total_current": 17,
+      "ok": 0,
+      "top_set_changed": 13,
+      "order_changed": 4,
+      "total_hit_drifts": 0,
+      "missing": 0,
+      "added": 0
+    },
+    "paid_llm_calls": 0,
+    "application_changes": false,
+    "corpus_repairs": false,
+    "deployment": false
+  },
+  "corpus": {
+    "summary": {
+      "distinct_split_children": 2191,
+      "files_by_category": {
+        "invalid": 0,
+        "leftover": 0,
+        "noncanonical_parent": 734,
+        "registered_split": 2191,
+        "served_canonical": 1185
+      },
+      "files_without_matrices_row": 0,
+      "findings_counts": {
+        "conflicting_grain": 174,
+        "duplicate_grain": 177,
+        "legacy_shape": 0,
+        "no_time_period_column": 0,
+        "null_dims": 0,
+        "time_any_invalid": 1,
+        "time_invalid_gt_20pct": 0,
+        "unreadable": 0
+      },
+      "matrices_rows": 4110,
+      "matrices_without_file": 0,
+      "metadata_only_by_category": {
+        "intentional_unavailable": 0,
+        "invalid": 0
+      },
+      "parquet_files": 4110,
+      "parquets_without_view_profile": 1,
+      "profiles_without_parquet": 0,
+      "readable_parquets": 4110,
+      "registration_issue_counts": {
+        "duplicate_split_registrations": 0,
+        "path_mismatch": 0,
+        "recursive_splits": 0,
+        "row_count_mismatch": 0,
+        "split_parent_not_in_matrices": 0,
+        "split_row_count_mismatch": 0,
+        "split_sub_not_flagged_split": 0
+      },
+      "schema_shapes": {
+        "legacy": 0,
+        "sdmx": 4110,
+        "unknown": 0
+      },
+      "split_registrations": 2191,
+      "view_profiles_total": 4109,
+      "violation_counts": {
+        "conflicting_grain": 160,
+        "invalid": 0,
+        "metadata_only_should_be_served": 0,
+        "null_dims": 0,
+        "time_invalid_gt_20pct": 0
+      }
+    },
+    "served_conflicting_grain": [
+      "AGR101B_judet",
+      "AGR108B_judet",
+      "AGR109B_judet",
+      "AGR112B_judet",
+      "AGR115B_judet",
+      "AGR201B_judet",
+      "AGR201E",
+      "AGR202B_hectolitri_100_l_judet",
+      "AGR202B_kilograme_judet",
+      "AGR202B_mii_bucati_judet",
+      "AGR202B_tone_greutate_vie_judet",
+      "AGR208A",
+      "AGR208B",
+      "ART101B_judet",
+      "ART103B_judet",
+      "ART103D_judet",
+      "ART104A_judet",
+      "ART104C_judet",
+      "ART106A_judet",
+      "ART107A_judet",
+      "ART108A_judet",
+      "ART112A_judet",
+      "ART113A_judet",
+      "ART114A_judet",
+      "ART119A",
+      "ART121A_judet",
+      "ART122A_judet",
+      "ART123A_judet",
+      "ASS118A_mii_lei_ron",
+      "ASS118A_milioane_lei",
+      "ASS122B",
+      "BUF112I_anual_grame",
+      "BUF112J_macroregiuni_anual_grame",
+      "CDP104I",
+      "CDP105A",
+      "CLV106A_grame",
+      "COM1071",
+      "COM1072",
+      "COM1073",
+      "COM1074",
+      "COM1075",
+      "COM1076",
+      "CON102A",
+      "CON102B",
+      "CON102D",
+      "CON104P",
+      "CSP106B",
+      "ECC602A",
+      "FIN101A_miliarde_lei",
+      "FIN101A_milioane_lei",
+      "FIN101B",
+      "FIN102C",
+      "FIN104A_milioane_dolari_usd",
+      "FIN104A_milioane_euro",
+      "FIN105A_miliarde_lei",
+      "FIN105A_milioane_lei",
+      "FOM104D_judet",
+      "GOS106B_judet",
+      "GOS107A_judet",
+      "GOS108A_judet",
+      "GOS109A_judet",
+      "GOS110A_judet",
+      "GOS111A_judet",
+      "GOS112B_judet",
+      "GOS116A_judet",
+      "GOS118A_judet",
+      "JUS105C_judet",
+      "LOC101B_judet",
+      "LOC103B_judet",
+      "LOC104B_judet",
+      "LOC108B_metri_patrati_suprafata_utila_judet",
+      "LOC108B_numar_judet",
+      "PMI101A",
+      "PMI110B_milioane_metri_cubi_an",
+      "PMI110B_tone_an",
+      "PMI110B_tone_o2_zi",
+      "PMI110B_tone_zi",
+      "PNS101A",
+      "PNS102A",
+      "POP107D_grupe_judet",
+      "POP107D_varste_judet",
+      "POP108C_judet",
+      "POP108D_grupe_judet",
+      "POP108D_varste_judet",
+      "POP201D_judet",
+      "POP201K_judet",
+      "POP204C_judet",
+      "POP204F_judet",
+      "POP206D_judet",
+      "POP206J_judet",
+      "POP208C_judet",
+      "POP208G_judet",
+      "POP210D_judet",
+      "POP212B_judet",
+      "POP304B_judet",
+      "POP305B_judet",
+      "POP307A_judet",
+      "POP308A_judet",
+      "POP309E_judet",
+      "POP310E_judet",
+      "PPA101A_anual_lei_buc_judet",
+      "PPA101A_anual_lei_kg_judet",
+      "PPA101A_anual_lei_litru_judet",
+      "PPA101A_lunar_lei_buc_judet",
+      "PPA101A_lunar_lei_fir_judet",
+      "PPA101A_lunar_lei_kg_judet",
+      "PPA101A_lunar_lei_litru_judet",
+      "SAN101B_judet",
+      "SAN102C_judet",
+      "SAN103B_judet",
+      "SAN104B_judet",
+      "SAR102E",
+      "SAR114D",
+      "SAR115C",
+      "SAR116B",
+      "SAR117A",
+      "SCL101C_judet",
+      "SCL103D_judet",
+      "SCL104A_judete",
+      "SCL104A_macroregiuni",
+      "SCL104A_regiuni",
+      "SCL104C_judete",
+      "SCL104C_macroregiuni",
+      "SCL104C_regiuni",
+      "SCL104D_judet",
+      "SCL104F",
+      "SCL105B_judet",
+      "SCL106C_judet",
+      "SCL107C_judet",
+      "SCL108B_judet",
+      "SCL109D_judet",
+      "SCL110B_judet",
+      "SCL111B_judet",
+      "SCL112B_judet",
+      "SOM101B_judete",
+      "SOM101B_macroregiuni",
+      "SOM101B_regiuni",
+      "SOM101E_anual_judet",
+      "SOM101E_lunar_judet",
+      "SOM101F_anual_judet",
+      "SOM101F_lunar_judet",
+      "TBQ0253",
+      "TIC113A",
+      "TMJ1164_judete",
+      "TMJ1164_macroregiuni",
+      "TMJ1164_regiuni",
+      "TQB1511_judete",
+      "TQB1511_macroregiuni",
+      "TQB1511_regiuni",
+      "TQY1552_judete",
+      "TQY1552_macroregiuni",
+      "TQY1552_regiuni",
+      "TUR101C_judet",
+      "TUR102C_judet",
+      "TUR103D_judet",
+      "TUR103F_judet",
+      "TUR104E_judet",
+      "TUR104H_judet",
+      "TUR105E_judet",
+      "TUR105H_judet"
+    ],
+    "profile_coverage": {
+      "column_map": {
+        "served_total": 3376,
+        "served_with": 1584
+      },
+      "coverage": {
+        "served_total": 3376,
+        "served_with": 1225
+      },
+      "dimension_structure": {
+        "served_total": 3376,
+        "served_with": 3376
+      },
+      "matrix_profile": {
+        "served_total": 3376,
+        "served_with": 3375
+      },
+      "trend": {
+        "served_total": 3376,
+        "served_with": 3376
+      },
+      "value_profile": {
+        "served_total": 3376,
+        "served_with": 3376
+      }
+    },
+    "served_missing_view_profile": 1
+  },
+  "search": [
+    {
+      "params": {
+        "q": "POP105A",
+        "limit": 5
+      },
+      "status": 200,
+      "total": 6,
+      "mode": "fts",
+      "hits": [
+        {
+          "matrix_code": "POP105A_judete_grupe",
+          "matrix_name": "Populatia rezidenta la 1 ianuarie pe grupe de varsta si varste, sexe si medii de rezidenta, macroregiuni, regiuni de dezvoltare si judete [judete × grupe]",
+          "time_range": "2003-2025",
+          "has_geo": true,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "POP105A_judete_varste",
+          "matrix_name": "Populatia rezidenta la 1 ianuarie pe grupe de varsta si varste, sexe si medii de rezidenta, macroregiuni, regiuni de dezvoltare si judete [judete × varste]",
+          "time_range": "2003-2025",
+          "has_geo": true,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "POP105A_macroregiuni_grupe",
+          "matrix_name": "Populatia rezidenta la 1 ianuarie pe grupe de varsta si varste, sexe si medii de rezidenta, macroregiuni, regiuni de dezvoltare si judete [macroregiuni × grupe]",
+          "time_range": "2003-2025",
+          "has_geo": true,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "POP105A_macroregiuni_varste",
+          "matrix_name": "Populatia rezidenta la 1 ianuarie pe grupe de varsta si varste, sexe si medii de rezidenta, macroregiuni, regiuni de dezvoltare si judete [macroregiuni × varste]",
+          "time_range": "2003-2025",
+          "has_geo": true,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "POP105A_regiuni_grupe",
+          "matrix_name": "Populatia rezidenta la 1 ianuarie pe grupe de varsta si varste, sexe si medii de rezidenta, macroregiuni, regiuni de dezvoltare si judete [regiuni × grupe]",
+          "time_range": "2003-2025",
+          "has_geo": true,
+          "primary_unit_type": "count"
+        }
+      ]
+    },
+    {
+      "params": {
+        "q": "populatie",
+        "limit": 5
+      },
+      "status": 200,
+      "total": 69,
+      "mode": "fts",
+      "hits": [
+        {
+          "matrix_code": "THC0662_macroregiuni",
+          "matrix_name": "Tinta 6 - Social - PROCENTUL POPULATIEI CONECTATE LA SISTEMUL DE CANALIZARE IN TOTAL POPULATIE [macroregiuni]",
+          "time_range": "2008-2024",
+          "has_geo": true,
+          "primary_unit_type": "percentage"
+        },
+        {
+          "matrix_code": "THC0662_regiuni",
+          "matrix_name": "Tinta 6 - Social - PROCENTUL POPULATIEI CONECTATE LA SISTEMUL DE CANALIZARE IN TOTAL POPULATIE [regiuni]",
+          "time_range": "2008-2024",
+          "has_geo": true,
+          "primary_unit_type": "percentage"
+        },
+        {
+          "matrix_code": "PSC101B_miliarde_lei",
+          "matrix_name": "Valoarea serviciilor prestate pentru populatie pe categorii de servicii CAEN Rev.1 si forme de proprietate [Miliarde lei ]",
+          "time_range": "1998-2008",
+          "has_geo": false,
+          "primary_unit_type": "currency"
+        },
+        {
+          "matrix_code": "PSC101B_milioane_lei",
+          "matrix_name": "Valoarea serviciilor prestate pentru populatie pe categorii de servicii CAEN Rev.1 si forme de proprietate [Milioane lei ]",
+          "time_range": "1998-2008",
+          "has_geo": false,
+          "primary_unit_type": "currency"
+        },
+        {
+          "matrix_code": "PSC101B_milioane_lei_ron",
+          "matrix_name": "Valoarea serviciilor prestate pentru populatie pe categorii de servicii CAEN Rev.1 si forme de proprietate [Milioane lei RON]",
+          "time_range": "1998-2008",
+          "has_geo": false,
+          "primary_unit_type": "currency"
+        }
+      ]
+    },
+    {
+      "params": {
+        "q": "populație",
+        "limit": 5
+      },
+      "status": 200,
+      "total": 69,
+      "mode": "fts",
+      "hits": [
+        {
+          "matrix_code": "THC0662_macroregiuni",
+          "matrix_name": "Tinta 6 - Social - PROCENTUL POPULATIEI CONECTATE LA SISTEMUL DE CANALIZARE IN TOTAL POPULATIE [macroregiuni]",
+          "time_range": "2008-2024",
+          "has_geo": true,
+          "primary_unit_type": "percentage"
+        },
+        {
+          "matrix_code": "THC0662_regiuni",
+          "matrix_name": "Tinta 6 - Social - PROCENTUL POPULATIEI CONECTATE LA SISTEMUL DE CANALIZARE IN TOTAL POPULATIE [regiuni]",
+          "time_range": "2008-2024",
+          "has_geo": true,
+          "primary_unit_type": "percentage"
+        },
+        {
+          "matrix_code": "PSC101B_miliarde_lei",
+          "matrix_name": "Valoarea serviciilor prestate pentru populatie pe categorii de servicii CAEN Rev.1 si forme de proprietate [Miliarde lei ]",
+          "time_range": "1998-2008",
+          "has_geo": false,
+          "primary_unit_type": "currency"
+        },
+        {
+          "matrix_code": "PSC101B_milioane_lei",
+          "matrix_name": "Valoarea serviciilor prestate pentru populatie pe categorii de servicii CAEN Rev.1 si forme de proprietate [Milioane lei ]",
+          "time_range": "1998-2008",
+          "has_geo": false,
+          "primary_unit_type": "currency"
+        },
+        {
+          "matrix_code": "PSC101B_milioane_lei_ron",
+          "matrix_name": "Valoarea serviciilor prestate pentru populatie pe categorii de servicii CAEN Rev.1 si forme de proprietate [Milioane lei RON]",
+          "time_range": "1998-2008",
+          "has_geo": false,
+          "primary_unit_type": "currency"
+        }
+      ]
+    },
+    {
+      "params": {
+        "q": "populatia",
+        "limit": 5
+      },
+      "status": 200,
+      "total": 281,
+      "mode": "fts",
+      "hits": [
+        {
+          "matrix_code": "AMG101D",
+          "matrix_name": "AMIGO - Populatia activa dupa starea civila si sexe",
+          "time_range": "1996-2024",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "AMG101C",
+          "matrix_name": "AMIGO - Populatia activa dupa starea civila si pe grupe de varsta ",
+          "time_range": "1996-2024",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "AMG101E",
+          "matrix_name": "AMIGO - Populatia activa dupa starea civila, pe medii de rezidenta",
+          "time_range": "1996-2024",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "AMG101A_anual",
+          "matrix_name": "AMIGO - Populatia activa  pe grupe de varsta si sexe [anual]",
+          "time_range": null,
+          "has_geo": false,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "AMG101A_trimestrial",
+          "matrix_name": "AMIGO - Populatia activa  pe grupe de varsta si sexe [trimestrial]",
+          "time_range": null,
+          "has_geo": false,
+          "primary_unit_type": "count"
+        }
+      ]
+    },
+    {
+      "params": {
+        "q": "population",
+        "limit": 5
+      },
+      "status": 200,
+      "total": 106,
+      "mode": "fts",
+      "hits": [
+        {
+          "matrix_code": "POP108D",
+          "matrix_name": "POPULATIA DUPA DOMICILIU la 1 iulie pe grupe de varsta si varste, sexe, judete si localitati",
+          "time_range": "1992-2024",
+          "has_geo": true,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "POP107D",
+          "matrix_name": "POPULATIA DUPA DOMICILIU la 1 ianuarie pe grupe de varsta si varste, sexe, judete si localitati",
+          "time_range": "1992-2025",
+          "has_geo": true,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "AMG101D",
+          "matrix_name": "AMIGO - Populatia activa dupa starea civila si sexe",
+          "time_range": "1996-2024",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "AMG101C",
+          "matrix_name": "AMIGO - Populatia activa dupa starea civila si pe grupe de varsta ",
+          "time_range": "1996-2024",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "AMG101E",
+          "matrix_name": "AMIGO - Populatia activa dupa starea civila, pe medii de rezidenta",
+          "time_range": "1996-2024",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        }
+      ]
+    },
+    {
+      "params": {
+        "q": "population Cluj",
+        "limit": 5
+      },
+      "status": 200,
+      "total": 108,
+      "mode": "fts",
+      "hits": [
+        {
+          "matrix_code": "POP108D",
+          "matrix_name": "POPULATIA DUPA DOMICILIU la 1 iulie pe grupe de varsta si varste, sexe, judete si localitati",
+          "time_range": "1992-2024",
+          "has_geo": true,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "POP107D",
+          "matrix_name": "POPULATIA DUPA DOMICILIU la 1 ianuarie pe grupe de varsta si varste, sexe, judete si localitati",
+          "time_range": "1992-2025",
+          "has_geo": true,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "AMG101D",
+          "matrix_name": "AMIGO - Populatia activa dupa starea civila si sexe",
+          "time_range": "1996-2024",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "AMG101C",
+          "matrix_name": "AMIGO - Populatia activa dupa starea civila si pe grupe de varsta ",
+          "time_range": "1996-2024",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "AMG101E",
+          "matrix_name": "AMIGO - Populatia activa dupa starea civila, pe medii de rezidenta",
+          "time_range": "1996-2024",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        }
+      ]
+    },
+    {
+      "params": {
+        "q": "salariu mediu net",
+        "limit": 5
+      },
+      "status": 200,
+      "total": 501,
+      "mode": "fts",
+      "hits": [
+        {
+          "matrix_code": "FOM106E_judete",
+          "matrix_name": "Castigul salarial nominal mediu net lunar pe activitati ale economiei nationale (sectiuni si diviziuni) CAEN Rev.2, sexe, macroregiuni, regiuni de dezvoltare si judete [judete]",
+          "time_range": "2008-2024",
+          "has_geo": true,
+          "primary_unit_type": "currency"
+        },
+        {
+          "matrix_code": "FOM106E_macroregiuni",
+          "matrix_name": "Castigul salarial nominal mediu net lunar pe activitati ale economiei nationale (sectiuni si diviziuni) CAEN Rev.2, sexe, macroregiuni, regiuni de dezvoltare si judete [macroregiuni]",
+          "time_range": "2008-2024",
+          "has_geo": true,
+          "primary_unit_type": "currency"
+        },
+        {
+          "matrix_code": "FOM106E_regiuni",
+          "matrix_name": "Castigul salarial nominal mediu net lunar pe activitati ale economiei nationale (sectiuni si diviziuni) CAEN Rev.2, sexe, macroregiuni, regiuni de dezvoltare si judete [regiuni]",
+          "time_range": "2008-2024",
+          "has_geo": true,
+          "primary_unit_type": "currency"
+        },
+        {
+          "matrix_code": "FOM106A_judete",
+          "matrix_name": "Castigul salarial nominal mediu net lunar pe activitati ale economiei nationale la nivel de sectiune CAEN Rev.1, categorii de salariati, macroregiuni, regiuni de dezvoltare si judete [judete]",
+          "time_range": "1990-2008",
+          "has_geo": true,
+          "primary_unit_type": "currency"
+        },
+        {
+          "matrix_code": "FOM106A_regiuni",
+          "matrix_name": "Castigul salarial nominal mediu net lunar pe activitati ale economiei nationale la nivel de sectiune CAEN Rev.1, categorii de salariati, macroregiuni, regiuni de dezvoltare si judete [regiuni]",
+          "time_range": "1990-2008",
+          "has_geo": true,
+          "primary_unit_type": "currency"
+        }
+      ]
+    },
+    {
+      "params": {
+        "q": "inflatie",
+        "limit": 5
+      },
+      "status": 200,
+      "total": 2,
+      "mode": "name_like",
+      "hits": [
+        {
+          "matrix_code": "TTN1731",
+          "matrix_name": "Tinta 3 - Economic - RATA MEDIE LUNARA A INFLATIEI PE CATEGORII DE MARFURI SI SERVICII",
+          "time_range": "2008-2024",
+          "has_geo": false,
+          "primary_unit_type": "percentage"
+        },
+        {
+          "matrix_code": "IPC101A",
+          "matrix_name": "Rata medie lunara a inflatiei pe categorii de marfuri si servicii cumparate",
+          "time_range": "1991-2024",
+          "has_geo": false,
+          "primary_unit_type": "percentage"
+        }
+      ]
+    },
+    {
+      "params": {
+        "q": "inflation",
+        "limit": 5
+      },
+      "status": 200,
+      "total": 2,
+      "mode": "fts",
+      "hits": [
+        {
+          "matrix_code": "IPC101A",
+          "matrix_name": "Rata medie lunara a inflatiei pe categorii de marfuri si servicii cumparate",
+          "time_range": "1991-2024",
+          "has_geo": false,
+          "primary_unit_type": "percentage"
+        },
+        {
+          "matrix_code": "TTN1731",
+          "matrix_name": "Tinta 3 - Economic - RATA MEDIE LUNARA A INFLATIEI PE CATEGORII DE MARFURI SI SERVICII",
+          "time_range": "2008-2024",
+          "has_geo": false,
+          "primary_unit_type": "percentage"
+        }
+      ]
+    },
+    {
+      "params": {
+        "q": "somaj judete",
+        "limit": 5
+      },
+      "status": 200,
+      "total": 1332,
+      "mode": "fts",
+      "hits": [
+        {
+          "matrix_code": "SOM105A_lei",
+          "matrix_name": "Indemnizatii de somaj - media lunara [Lei ]",
+          "time_range": "1991-2024",
+          "has_geo": false,
+          "primary_unit_type": "currency"
+        },
+        {
+          "matrix_code": "SOM105A_procente",
+          "matrix_name": "Indemnizatii de somaj - media lunara [Procente]",
+          "time_range": "1991-2024",
+          "has_geo": false,
+          "primary_unit_type": "percentage"
+        },
+        {
+          "matrix_code": "TAE0115_lei",
+          "matrix_name": "Tinta 1 - Social - Indemnizatii de somaj - media lunara [Lei ]",
+          "time_range": "2008-2023",
+          "has_geo": false,
+          "primary_unit_type": "currency"
+        },
+        {
+          "matrix_code": "TAE0115_procente",
+          "matrix_name": "Tinta 1 - Social - Indemnizatii de somaj - media lunara [Procente]",
+          "time_range": "2008-2023",
+          "has_geo": false,
+          "primary_unit_type": "percentage"
+        },
+        {
+          "matrix_code": "FOM120A",
+          "matrix_name": "Indicatori structurali din statisticile castigurilor salariale si costului fortei de munca",
+          "time_range": "2001-2023",
+          "has_geo": false,
+          "primary_unit_type": "percentage"
+        }
+      ]
+    },
+    {
+      "params": {
+        "q": "șomaj județe",
+        "limit": 5
+      },
+      "status": 200,
+      "total": 1332,
+      "mode": "fts",
+      "hits": [
+        {
+          "matrix_code": "SOM105A_lei",
+          "matrix_name": "Indemnizatii de somaj - media lunara [Lei ]",
+          "time_range": "1991-2024",
+          "has_geo": false,
+          "primary_unit_type": "currency"
+        },
+        {
+          "matrix_code": "SOM105A_procente",
+          "matrix_name": "Indemnizatii de somaj - media lunara [Procente]",
+          "time_range": "1991-2024",
+          "has_geo": false,
+          "primary_unit_type": "percentage"
+        },
+        {
+          "matrix_code": "TAE0115_lei",
+          "matrix_name": "Tinta 1 - Social - Indemnizatii de somaj - media lunara [Lei ]",
+          "time_range": "2008-2023",
+          "has_geo": false,
+          "primary_unit_type": "currency"
+        },
+        {
+          "matrix_code": "TAE0115_procente",
+          "matrix_name": "Tinta 1 - Social - Indemnizatii de somaj - media lunara [Procente]",
+          "time_range": "2008-2023",
+          "has_geo": false,
+          "primary_unit_type": "percentage"
+        },
+        {
+          "matrix_code": "FOM120A",
+          "matrix_name": "Indicatori structurali din statisticile castigurilor salariale si costului fortei de munca",
+          "time_range": "2001-2023",
+          "has_geo": false,
+          "primary_unit_type": "percentage"
+        }
+      ]
+    },
+    {
+      "params": {
+        "q": "unemployment county",
+        "limit": 5
+      },
+      "status": 200,
+      "total": 10,
+      "mode": "fts",
+      "hits": [
+        {
+          "matrix_code": "ZCL0911",
+          "matrix_name": "Orizont 1 - Economic - Ponderea drumurilor judetene si comunale modernizate in totalul retelei de drumuri, pe regiuni de dezvoltare",
+          "time_range": "2008-2020",
+          "has_geo": true,
+          "primary_unit_type": "percentage"
+        },
+        {
+          "matrix_code": "AMG157I",
+          "matrix_name": "AMIGO - Rata somajului BIM - date cu frecventa lunara, trend, pe grupe de varsta si sexe",
+          "time_range": "2004-2025",
+          "has_geo": false,
+          "primary_unit_type": "percentage"
+        },
+        {
+          "matrix_code": "AMG159E",
+          "matrix_name": " AMIGO-Rata somajului (15-74 ani),pe sexe si regiuni de dezvoltare ( date comparabile)",
+          "time_range": "2009-2024",
+          "has_geo": true,
+          "primary_unit_type": "percentage"
+        },
+        {
+          "matrix_code": "AMG157G",
+          "matrix_name": "AMIGO - Rata somajului BIM - date cu frecventa lunara, serie bruta, pe grupe de varsta si sexe",
+          "time_range": "2004-2025",
+          "has_geo": false,
+          "primary_unit_type": "percentage"
+        },
+        {
+          "matrix_code": "AMG159C",
+          "matrix_name": "AMIGO-Rata somajului (15-74 ani),  dupa nivelul de educatie, pe sexe ( date comparabile)",
+          "time_range": "2009-2025",
+          "has_geo": false,
+          "primary_unit_type": "percentage"
+        }
+      ]
+    },
+    {
+      "params": {
+        "q": "nasteri decese",
+        "limit": 5
+      },
+      "status": 200,
+      "total": 11,
+      "mode": "fts",
+      "hits": [
+        {
+          "matrix_code": "TCT0345",
+          "matrix_name": "Tinta 4 - Social - RATA MORTALITATII NEONATALE (DECESE LA 1 000 DE NASCUTI-VII)",
+          "time_range": "2008-2023",
+          "has_geo": true,
+          "primary_unit_type": null
+        },
+        {
+          "matrix_code": "ZCZ1113",
+          "matrix_name": "Orizont 4 - Mediu - Decese cauzate de boli ale aparatului respirator si ale aparatului circulator",
+          "time_range": "2008-2020",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "POP208D",
+          "matrix_name": "Decese sub 1 an, pe cauze de deces",
+          "time_range": "1990-2024",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "POP208H",
+          "matrix_name": "Decese sub 1 an cu resedinta obisnuita in Romania, pe cauze de deces",
+          "time_range": "2012-2024",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "ZBC0331",
+          "matrix_name": "Orizont 4 - Social - Ponderea nasterilor cu asistenta la nastere, pe medii de rezidenta",
+          "time_range": "2008-2020",
+          "has_geo": false,
+          "primary_unit_type": "percentage"
+        }
+      ]
+    },
+    {
+      "params": {
+        "q": "medici",
+        "limit": 5
+      },
+      "status": 200,
+      "total": 1,
+      "mode": "fts",
+      "hits": [
+        {
+          "matrix_code": "TCW0351",
+          "matrix_name": "Tinta 5 - Social - Valoarea exportului si importului de vaccinuri pentru medicina umana, pe zone intra-UE si extra-UE",
+          "time_range": "2008-2024",
+          "has_geo": false,
+          "primary_unit_type": "currency"
+        }
+      ]
+    },
+    {
+      "params": {
+        "q": "turism innoptari",
+        "limit": 5
+      },
+      "status": 200,
+      "total": 56,
+      "mode": "fts",
+      "hits": [
+        {
+          "matrix_code": "TUR105C",
+          "matrix_name": "Innoptari in structuri de cazare turistica pe destinatii turistice si tipuri de turisti",
+          "time_range": "1990-2024",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "TUR105A",
+          "matrix_name": "Innoptari in structuri de primire turistica, pe tipuri de structuri si forme de proprietate",
+          "time_range": "1990-2021",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "TUR105F",
+          "matrix_name": "Innoptari in structuri de primire turistica pe tipuri de structuri, categorii de confort si tipuri de turisti, pe luni",
+          "time_range": "2010-2025",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "TUR105B",
+          "matrix_name": "Innoptari in structuri de primire turistica pe tipuri de structuri, categorii de confort si tipuri de turisti",
+          "time_range": "1990-2024",
+          "has_geo": false,
+          "primary_unit_type": "count"
+        },
+        {
+          "matrix_code": "TUR106A",
+          "matrix_name": "Indicele de utilizare neta a capacitatii de cazare turistica in functiune pe tipuri de structuri de primire turistica si forme de proprietate",
+          "time_range": "1992-2021",
+          "has_geo": false,
+          "primary_unit_type": "percentage"
+        }
+      ]
+    }
+  ],
+  "tools": {
+    "scope": "feature branch 6a727a2 and repaired generation a6737a263a34",
+    "mcp_unsafe_total": {
+      "matrix_code": "POP107A",
+      "columns": [
+        "TIME_PERIOD",
+        "OBS_VALUE"
+      ],
+      "rows": [
+        {
+          "TIME_PERIOD": "2025",
+          "OBS_VALUE": 129072774.0
+        }
+      ],
+      "row_count": 1,
+      "agg_func": "SUM"
+    },
+    "ask_ignored_filter": {
+      "input": {
+        "matrix_code": "POP105A_judete_grupe",
+        "filters": {
+          "TIME_PERIOD": [
+            "2025"
+          ],
+          "BOGUS": [
+            "Cluj"
+          ]
+        },
+        "group_by": [
+          "TIME_PERIOD"
+        ]
+      },
+      "output": {
+        "matrix_code": "POP105A_judete_grupe",
+        "status": "ok",
+        "columns": [
+          "TIME_PERIOD",
+          "OBS_VALUE"
+        ],
+        "rows": [
+          [
+            "2025",
+            19036031.0
+          ]
+        ],
+        "row_count": 1,
+        "truncated": false,
+        "aggregation": {
+          "outcome": "valid_total",
+          "reason": null,
+          "method": "sum_partition",
+          "verification": "metadata",
+          "approximation": false,
+          "agg_func": "SUM",
+          "filters": {
+            "TIME_PERIOD": [
+              "2025"
+            ],
+            "BOGUS": [
+              "Cluj"
+            ]
+          },
+          "levels": {},
+          "dimensions": [
+            {
+              "column": "AGE",
+              "treatment": "partition",
+              "verification": "profile_flat"
+            },
+            {
+              "column": "SEX",
+              "treatment": "partition",
+              "verification": "metadata"
+            },
+            {
+              "column": "RESIDENCE",
+              "treatment": "partition",
+              "verification": "metadata"
+            },
+            {
+              "column": "REF_AREA",
+              "treatment": "partition",
+              "verification": "profile_flat"
+            },
+            {
+              "column": "TIME_PERIOD",
+              "treatment": "time",
+              "verification": null
+            },
+            {
+              "column": "UNIT_MEASURE",
+              "treatment": "singleton",
+              "verification": "verified"
+            }
+          ],
+          "warnings": [],
+          "weights_source": null,
+          "blocking_dimension": null
+        },
+        "warnings": []
+      }
+    },
+    "ask_schema": {
+      "dataset": "AMG157G",
+      "time_range": null,
+      "time_dimension": {
+        "column": "TIME_PERIOD",
+        "label": "Luni",
+        "type": "time",
+        "option_count": 261,
+        "values": [
+          "2004-01",
+          "2004-02",
+          "2004-03",
+          "2004-04",
+          "2004-05",
+          "2004-06",
+          "2004-07",
+          "2004-08",
+          "2004-09",
+          "2004-10",
+          "2004-11",
+          "2004-12",
+          "2005-01",
+          "2005-02",
+          "2005-03",
+          "2005-04",
+          "2005-05",
+          "2005-06",
+          "2005-07",
+          "2005-08"
+        ]
+      }
+    }
+  },
+  "rest_aggregation_comparison": {
+    "request": {
+      "path": "/api/datasets/POP107A/data",
+      "params": {
+        "filters": "{\"TIME_PERIOD\": [\"2025\"]}",
+        "group_by": "[\"TIME_PERIOD\"]",
+        "limit": 5
+      }
+    },
+    "http_status": 200,
+    "body": {
+      "columns": [
+        "TIME_PERIOD",
+        "OBS_VALUE"
+      ],
+      "column_labels": {},
+      "rows": [],
+      "total_rows": 749428,
+      "returned_rows": 0,
+      "truncated": false,
+      "unavailable": true,
+      "aggregation": {
+        "outcome": "unavailable",
+        "reason": "overlapping_levels",
+        "method": "none",
+        "verification": "unverified",
+        "approximation": false,
+        "agg_func": null,
+        "filters": {
+          "TIME_PERIOD": [
+            "2025"
+          ]
+        },
+        "levels": {},
+        "dimensions": [],
+        "warnings": [],
+        "weights_source": null,
+        "blocking_dimension": "AGE"
+      }
+    }
+  },
+  "browser_fixtures": {
+    "ask_geographic_series": {
+      "kind": "controlled data passed to real renderChart; no provider call",
+      "input": {
+        "columns": [
+          "TIME_PERIOD",
+          "REF_AREA",
+          "OBS_VALUE"
+        ],
+        "rows": [
+          [
+            "2023",
+            "Cluj",
+            10
+          ],
+          [
+            "2023",
+            "Iasi",
+            20
+          ],
+          [
+            "2024",
+            "Cluj",
+            11
+          ],
+          [
+            "2024",
+            "Iasi",
+            21
+          ]
+        ]
+      },
+      "chart_spec": {
+        "primary_chart": "line"
+      },
+      "actual_series": [
+        {
+          "name": "Value",
+          "data": [
+            20,
+            21
+          ]
+        }
+      ],
+      "expected_series": [
+        {
+          "name": "Cluj",
+          "data": [
+            10,
+            11
+          ]
+        },
+        {
+          "name": "Iasi",
+          "data": [
+            20,
+            21
+          ]
+        }
+      ]
+    },
+    "comparison_periods": {
+      "kind": "six county values injected through real geoSlice/renderScatter",
+      "a_period": "2023",
+      "b_period": "2025",
+      "a_values": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "b_values": [
+        2,
+        4,
+        6,
+        8,
+        10,
+        12
+      ],
+      "displayed_label": "6 județe · corelație r = 1.00 · 2023 / 2025"
+    },
+    "constant_axis": {
+      "input": [
+        [
+          1,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          1,
+          5
+        ]
+      ],
+      "actual_pearson": 0,
+      "expected": "undefined"
+    },
+    "year_slider_race": {
+      "kind": "real HTTP responses; earlier request delayed by 900ms",
+      "dataset": "FOM106F",
+      "sequence": "ranking slider 2000, then 2001 after 80ms; inspect after both responses",
+      "displayed_period": "2001",
+      "displayed_values_from_period": "2000",
+      "example_category": "27 Fabricarea echipamentelor electrice",
+      "displayed_value": 215,
+      "correct_2001_value": 307
+    }
+  },
+  "browser_observations": {
+    "broken_ask_dataset_url": {
+      "path": "/dataset.html?code=POP105A",
+      "status": 404
+    },
+    "ask_settings_320px": {
+      "document_width": 320,
+      "panel_left": -72,
+      "panel_right": 248,
+      "panel_width": 320
+    },
+    "dimension_browser_320px": {
+      "sidebar_display": "none",
+      "replacement_selector_present": false,
+      "instruction": "Select a dimension on the left to filter datasets that share it."
+    }
+  },
+  "limits": [
+    "Direct latest MCP function checks, not external-client interoperability certification",
+    "No real-provider LLM conversation",
+    "No production findings used for local readiness",
+    "No load test or formal accessibility/user study"
+  ]
+}

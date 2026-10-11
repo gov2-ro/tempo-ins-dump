@@ -1,0 +1,21 @@
+{
+ "about": "INS reference cells for the PA-00 answer records. Run with scripts/fetch-ins-reference-cells.py; output is retained evidence, not corpus data.",
+ "queries": [
+  {"id": "POP105A-total-counties-2012-2025", "matrix": "POP105A",
+   "purpose": "Q1/Q4 denominator: INS total per county and national, to verify the summed age x sex x residence partition and explain the 2025 national gap",
+   "select": [{"pick": "total"}, {"pick": "total"}, {"pick": "total"},
+              {"pick": "counties", "total": true}, {"pick": "years", "from": 2012, "to": 2025}, {"pick": "all"}]},
+  {"id": "FOM106E-total-counties-2008-2024", "matrix": "FOM106E",
+   "purpose": "Q2: average net monthly earnings, all activities, both sexes, per county",
+   "select": [{"pick": "total"}, {"pick": "total"},
+              {"pick": "counties", "total": true}, {"pick": "years", "from": 2008, "to": 2024}, {"pick": "all"}]},
+  {"id": "SOM103A-total-counties-1991-2024", "matrix": "SOM103A",
+   "purpose": "Q3: registered unemployment rate, both sexes, per county",
+   "select": [{"pick": "total"},
+              {"pick": "counties", "total": true}, {"pick": "years", "from": 1991, "to": 2024}, {"pick": "all"}]},
+  {"id": "TUR105D-total-counties-2012-2024", "matrix": "TUR105D",
+   "purpose": "Q4 numerator: INS total stays per county, to verify the summed type x tourist partition per county",
+   "select": [{"pick": "total"}, {"pick": "total"},
+              {"pick": "counties", "total": true}, {"pick": "years", "from": 2012, "to": 2024}, {"pick": "all"}]}
+ ]
+}

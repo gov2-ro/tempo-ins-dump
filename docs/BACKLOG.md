@@ -4,6 +4,48 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Public-alpha milestone plan — 2026-10-11
+
+- [ ] **Five dependable questions: prepare and deliver the bounded web alpha**.
+  [Plan and specifications](plans/public-alpha/README.md) organize the audit work
+  below into PA-00 baseline/source-backed answer records, PA-01 consistent query
+  and rendering behavior, PA-02 discovery/county journey, PA-03 tourism intensity
+  and reproducible evidence, and PA-04 release/user validation. Start with PA-00;
+  candidate sources and answers are not yet verified. Audience hypothesis:
+  journalists/civic analysts working with county data. Public MCP, a second recipe
+  and broader Ask work are deferred; exposed Ask must pass its complete gate.
+  This is an implementation plan, not completed fixes or a release approval.
+
+## Public-alpha audit — 2026-10-11 (latest local integration)
+
+Scope: `feat/structural-bar-toggle` at `6a727a2`, including FIX-02/FIX-03
+integration, with repaired generation `a6737a263a34` on local :8093. These findings
+supersede older observations where the same behavior was repaired; the production
+deployment is not the readiness reference. Full reproductions, priorities,
+acceptance checks and capability proposals:
+[public-alpha report](reports/2026-10-11-public-alpha-audit.md).
+
+- [ ] **P0 — Share query validation and aggregation across MCP, Ask and REST (A01/A02)**. Latest MCP `tempo_query(POP107A, TIME_PERIOD=2025, group_by=TIME_PERIOD)` returns 129,072,774 while REST refuses the overlapping AGE aggregation. Ask accepts unknown `BOGUS=[Cluj]` and returns the national population with no warning. Route every consumer through one validated query contract; reject unknown columns and verify identical outcomes/effective filters on numerical fixtures.
+- [ ] **P0 — Preserve geographic series in Ask charts (A03)**. `ask.js::renderChart` excludes REF_AREA from series identity; two counties across two years become one last-county series. Use explicit roles/full remaining grain, reject duplicate chart keys, and verify chart/table agreement.
+- [ ] **P1 — Prevent stale year-slider rendering (A05)**. FOM106F with an older response delayed 900ms displays 2000 values under a 2001 label/URL after rapid changes. Add per-tile request version/cancellation and invalidate pending responses after filters, views or datasets change.
+- [ ] **P1 — Require intentional alignment for correlations (A06)**. Compare currently independently selects latest periods; a fixture reports r=1.00 for 2023 versus 2025 without explicit lag. Use latest common compatible period by default, assert unique geo keys and disclose exclusions. Return undefined for constant axes, not r=0. Extend the existing Compare polish item rather than creating another comparison page.
+- [ ] **P1 — Make Ask dimension options searchable and actual periods discoverable (A07)**. AMG157G schema exposes only the first 20 historical months and a null time range. Add bounded option search/pagination and actual available period bounds, with explicit truncation and valid levels. Reuse for public MCP.
+- [ ] **P1 — Parameterize MCP samples (A08)**. `_sample_parquet` interpolates filter values as SQL literals. Bind values/paths and validate identifiers, shapes and positive limits; exercise apostrophes and adversarial literal input on synthetic data before exposing this tool publicly.
+- [ ] **P1 — Fix Ask citations and mobile selectors (A09/A10)**. Citation/data links use nonexistent `/dataset.html`; 320px settings begin at x=-72; mobile Dimension Browser removes its selector with no replacement. Link to the current dataset slice and provide fitted, keyboard-accessible mobile controls.
+- [ ] **P1 — Improve concept discovery and family grouping (A11/A12)**. Full repaired index coverage is available, but common vocabulary ranks unrelated concepts/variants; place theme substring matching leaves most Cluj datasets in “Alte”. Curate aliases, extract place/time context, group split families, map stable categories and explain definition differences in related results. Audit canonical v2 indexing (`noindex` currently set), meaningful initial HTML and sitemap; existing clean-URL/OG ideas remain relevant.
+- [ ] **P2 — Unify Ask configuration and strengthen evidence (A13/A14)**. Consume server-advertised provider/model availability, retain structured query state across turns, add deterministic derived calculations and bind claims to metric/place/period/unit. Numeric presence in a tool result is not semantic verification. Measure real provider tool-calling behavior and token usage before recommending alpha models.
+- [ ] **Capability — Pilot safe joined-series recipes**. Build the minimal compatibility contract on existing metadata/SDMX/structure services; aggregate each source to a verified unique grain before a one-to-one join. First candidates: tourism intensity and salary purchasing power. Preserve denominator definitions/periods, exclusions and generation provenance, and expose the same operations through comparison, Ask and public MCP.
+
+- [ ] **PA-00 — Fetch INS reference total cells (prerequisite for Q2/Q3, verification for Q1/Q4)**. Stage 6 drops every "Total" option, so the corpus has no county all-activities net earnings (FOM106E) and no both-sexes unemployment rate (SOM103A/B). Proposed: a bounded read-only pivot fetch, stored as retained evidence with fetch time + sha256. Cells: POP105A totals for TOTAL + 42 counties 2012–2025, FOM106E TOTAL × Total sex 2008–2024, SOM103A Total sex 1991–2024, TUR105D totals 2024. INS was unreachable on 2026-10-11. See [answer records](plans/public-alpha/pa-00/answer-records.md).
+- [ ] **PA-00 — POP105A national 2025 differs from the INS cell by 7,120 but is recorded as `match`**. Ours is 19,036,031 and INS (fetched 2026-10-05) is 19,043,151. `check-kpi-totals` uses a 0.5 % tolerance, which is too loose for counts. Find out whether this is a revision after the 2 Sep 2025 vintage; use an exact tolerance for count totals.
+- [ ] **PA-00 — Bucharest place profile shows no KPIs**. `/api/places/county/municipiul-bucuresti` returns 0 KPIs, all `no_data`; the data uses `Municipiul Bucuresti` and the place name is `Municipiul București`. Breaks the county journey for Bucharest (PA-02).
+- [ ] **PA-00 — KPI definitions blame INS for our fetch**. `place_kpi_config.json` says SOM103A has no both-sexes row and FOM106E no all-activities total. INS publishes both; stage 6 dropped them. Correct the text when the cells arrive, or now.
+- [ ] **PA-00 — Server cannot report the generation of an unstaged corpus**. `/api/health` reads only `data/MANIFEST.json`, so a dev server on a corpus copy shows `manifest: null`. Fall back to `corpus/generation-manifest.json` so consumers can prove which generation they serve (PA-01 provenance).
+
+The remaining conflicting-grain files and legacy-only coverage profiler are
+already tracked in the FIX-03 repair queue below. Public analytical queries need
+an explicit quality gate for those slices; this audit did not repair the corpus.
+
 ## Audit priorities — 2026-10-03
 
 Current measurements supersede the older counts below; historical entries are

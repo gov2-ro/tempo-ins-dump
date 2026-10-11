@@ -1,5 +1,68 @@
 # Activity History
 
+## 2026-10-11 — PA-00 first increment: baseline, inventory, Q1–Q5 records
+
+Started the public-alpha plan in a separate worktree (`../tempo-alpha`, branch
+`pa/00-baseline`) at the audited commit 6a727a2. The plan docs were copied
+there from the fix/03 checkout, which keeps its uncommitted copies. The copied
+generation a6737a26… recomputes to the same id. Corpus audit, tests (468/23,
+corpus 23 passed) and both evals reproduce the audit, and no baselines were
+rebuilt. The exposure inventory confirms that no path gates conflicting grain,
+and that Ask accepts BYOK even when hosted Ask is off.
+
+Main finding: stage 6 drops "Total" options, so Q2 (county net earnings) and Q3
+(both-sexes unemployment) have no source cell and are `blocked`; the app
+correctly refuses them. Q4 is feasible for 2024: the TUR105D county sum equals
+INS's TUR105C total exactly (30,837,328). Q1 and Q4 are `candidate`. They have
+no county INS cell yet, the national 2025 population is 7,120 off the INS cell,
+and 2021→2022 is a census-rebase break. INS was unreachable today, so nothing
+was fetched. Next: decide on the bounded reference-cell fetch and the Q3 period.
+
+## 2026-10-11 — Scoped public-alpha plan and implementation specifications
+
+Added [the milestone plan](plans/public-alpha/README.md) and five linked packages
+for baseline/answer verification, shared query correctness, discovery and county
+journeys, tourism intensity with portable evidence, and release/user validation.
+Linked the milestone from the backlog without duplicating the audit findings or
+changing their completion status.
+
+The plan uses the audited feature commit and copied corpus as candidate inputs;
+PA-00 must establish the actual implementation baseline and independently verify
+the five answer records. Worktree HEADs were inspected, not runtime behavior.
+Defined the launch boundary, audit-to-package mapping, numerical/browser/resource
+acceptance checks, and separate technical readiness versus publication status.
+
+Non-obvious decisions: one recipe initially; January-reference resident population
+must be an explicit reviewed denominator; live selection links can reflect source
+revisions while downloaded evidence preserves the observed answer. Optional Ask
+must be fully gated, including BYOK, and internal MCP work does not imply public
+hosting. No application changes, corpus writes, numerical answer verification,
+commits, recruitment or deployment were performed in this planning task.
+
+## 2026-10-11 — Public-alpha audit of the latest local integration
+
+Audited `feat/structural-bar-toggle` (`6a727a2`, including the FIX-02/FIX-03
+integration) on :8093 against repaired generation `a6737a263a34`, rather than
+judging the older production deployment. Report and compact evidence:
+[public-alpha audit](reports/2026-10-11-public-alpha-audit.md). Added scoped backlog
+items; no application edits, corpus repair, baseline rebuild or deployment.
+
+Confirmed cross-interface correctness gaps: MCP bypasses the aggregation policy
+(POP107A still returns 129,072,774 there while REST refuses it); Ask silently
+ignores unknown filters and loses county series when charting. A delayed-response
+browser fixture also leaves 2000 values under the year-slider's 2001 label.
+Comparison accepts independently selected periods and treats constant-axis
+correlation as zero. Recorded schema truncation, broken citations, mobile controls
+and discoverability issues separately from proposals for safe joined recipes.
+
+Latest feature tests: 462 passed / 29 skipped, plus 23 read-only corpus-marked
+tests passed against the repaired copy. Fresh full corpus audit confirms repaired
+registration/time/null invariants, with 160 served conflicting-grain files still
+open. Chart/search eval diffs remain consistent with the repaired-generation
+review; baselines unchanged. No paid provider call or external-client MCP
+certification. Proposed priorities preserve existing comparison, per-capita
+transforms, chart exports and the new structural views/year sliders.
+
 ## 2026-10-11 — Year slider with play on pinned tiles; bars sorted within each grain
 
 Tiles pinned to one period get a slider with play instead of a year
