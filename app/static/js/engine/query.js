@@ -15,7 +15,7 @@ export class QueryError extends Error {
 const MAX_FILTER_VALUES = 10000;
 
 /** Python repr() of a str (for validation messages). */
-function pyRepr(s) {
+export function pyRepr(s) {
     s = String(s);
     const q = (s.includes("'") && !s.includes('"')) ? '"' : "'";
     let out = '';
@@ -36,7 +36,7 @@ const isScalar = v => typeof v === 'string' || (typeof v === 'number' && Number.
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const fmtInt = n => Math.trunc(n).toLocaleString('en-US');
 
-function validateFilters(data, allowed) {
+export function validateFilters(data, allowed) {
     if (data === MISSING) return {};
     if (!isObject(data)) throw new QueryError(400, 'Invalid filters: expected a JSON object {column: [values]}');
     let total = 0;
@@ -63,7 +63,7 @@ function validateGroupBy(data, allowed) {
 
 // DuckDB VARCHAR order is byte order; for BMP strings that equals UTF-16 code
 // unit order, which is what < compares. NULLs sort last (ASC and DESC).
-function cmp(a, b) {
+export function cmp(a, b) {
     if (a === b) return 0;
     if (a === null) return 1;
     if (b === null) return -1;

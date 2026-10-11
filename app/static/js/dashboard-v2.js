@@ -314,19 +314,15 @@ class DashboardV2 {
         const geoCol = cfg.geo_dim;
         const picks = geoCol && Array.isArray(this.userFilters[geoCol]) ? this.userFilters[geoCol] : null;
         const groupBy = cfg.time_dim ? [cfg.time_dim, ...(picks && picks.length > 1 ? [geoCol] : [])] : null;
-        const url = new URL(`/api/datasets/${encodeURIComponent(this.code)}/evidence`, window.location.origin);
-        url.searchParams.set('filters', JSON.stringify(filters));
-        if (groupBy) url.searchParams.set('group_by', JSON.stringify(groupBy));
-        url.searchParams.set('lang', this.lang);
         btn.disabled = true;
         try {
-            const resp = await fetch(url);
-            if (!resp.ok) {
-                const err = await resp.json().catch(() => ({}));
-                this.showNotice(`${this.ui.evidenceFailed}: ${err.detail || resp.status}`);
+            let blob;
+            try {
+                blob = await API.datasetEvidence(this.code, { filters, groupBy, lang: this.lang });
+            } catch (e) {
+                this.showNotice(`${this.ui.evidenceFailed}: ${e.message || e.status}`);
                 return;
             }
-            const blob = await resp.blob();
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
             a.download = `${this.code}_evidence.zip`;
@@ -587,7 +583,7 @@ class DashboardV2 {
                 <div class="dash-download">
                     <a class="dl-btn v1-badge" href="/?code=${m.matrix_code}" title="${this.ui.v1Title}">← v1</a>
                     <a class="dl-btn" href="http://statistici.insse.ro/tempoins/index.jsp?page=tempo3&lang=${this.lang === 'en' ? 'en' : 'ro'}&ind=${insCode}" target="_blank" rel="noopener" title="${this.ui.insTitle}">INS ↗</a>
-                    <a class="dl-btn" href="/sdmx/2.1/data/INS,${m.matrix_code}/" target="_blank" rel="noopener" title="SDMX-ML 2.1 data feed">SDMX ↗</a>
+                    ${API.isStatic ? '' : `<a class="dl-btn" href="/sdmx/2.1/data/INS,${m.matrix_code}/" target="_blank" rel="noopener" title="SDMX-ML 2.1 data feed">SDMX ↗</a>`}
                     <button class="dl-btn" id="dbv2-csv-btn">↓ CSV</button>
                     <button class="dl-btn" id="dbv2-xlsx-btn">↓ XLSX</button>
                     <button class="dl-btn" id="dbv2-evidence-btn" title="${this.ui.evidenceTitle}">↓ ${this.ui.evidence}</button>

@@ -138,8 +138,11 @@ def compute(num_rows, den_rows, *, num_unit: str | None, den_unit: str | None,
 # ------------------------------------------------------------------ execution
 
 def _years(conn, code: str) -> list[str]:
-    from app.services.data_query import dimension_values
-    vals = dimension_values(conn, code, "TIME_PERIOD", limit=500)["values"]
+    from app.services.data_query import QueryError, dimension_values
+    try:
+        vals = dimension_values(conn, code, "TIME_PERIOD", limit=500)["values"]
+    except QueryError as e:
+        raise RecipeError("source_failed", f"{code}: {e.message}")
     return sorted({y for y in (_year(v) for v in vals) if y})
 
 
@@ -335,7 +338,7 @@ def run(conn, recipe_id: str, *, year=None, areas=None, lang: str = "ro") -> dic
     elif kind in ("weighted_mean", "rate_from_counts"):
         # these sources are too large for one unfiltered query: pick the year first
         sa, sb = source_specs(r)
-        y, _ = _common_year(_years(conn, sa["dataset"]), _years(conn, sb["dataset"]), year)
+        y, years_all = _common_year(_years(conn, sa["dataset"]), _years(conn, sb["dataset"]), year)
         a_, b_ = _source(conn, sa, lang, y), _source(conn, sb, lang, y)
     if kind == "weighted_mean":
         out = compute_weighted_mean((a_["columns"], a_["table"]), (b_["columns"], b_["table"]),
@@ -348,6 +351,8 @@ def run(conn, recipe_id: str, *, year=None, areas=None, lang: str = "ro") -> dic
         inputs = {"rates": [a_["columns"]] + a_["table"], "counts": [b_["columns"]] + b_["table"]}
     elif kind != "ratio":
         raise RecipeError("unknown_recipe", f"recipe kind {kind!r} is not supported")
+    if kind != "ratio":
+        out["years_available"] = years_all     # the sources were read for one year only
     sources = []
     for src in (a_, b_):
         sources.append({k: (pick(v) if k == "reference" else v) for k, v in src.items()

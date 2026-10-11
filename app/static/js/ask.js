@@ -17,7 +17,7 @@ let ASK_UNAVAILABLE = false; // /api/ask/config: neither hosted nor own-key Ask
 /** Show the chat-logging disclosure before any question is submitted. */
 async function initServerNotices() {
     try {
-        const cfg = await (await fetch('/api/ask/config')).json();
+        const cfg = await API.fetch('/ask/config');
         if (cfg.limits && cfg.limits.max_history_turns) MAX_HISTORY_TURNS = cfg.limits.max_history_turns;
         const b = document.getElementById('ask-logging-banner');
         if (b) b.classList.toggle('hidden', !cfg.chat_logging);

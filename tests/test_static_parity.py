@@ -30,7 +30,7 @@ def _run(cmd, env=None):
 def _parity(data_dir: Path, out: Path, codes=None, per_dataset=30):
     env = {"TEMPO_DATA_DIR": str(data_dir)}
     sel = ["--codes", ",".join(codes)] if codes else []
-    _run([sys.executable, "scripts/build-static.py", "--out", str(out / "static"), *sel], env)
+    _run([sys.executable, "scripts/build-static.py", "--out", str(out / "static"), "--no-record", *sel], env)
     _run([sys.executable, "scripts/gen-parity-cases.py", "--out", str(out / "cases.jsonl"),
           "--per-dataset", str(per_dataset), *sel], env)
     res = _run([NODE, "--max-old-space-size=4096", "tools/static-engine/parity.mjs",
@@ -69,7 +69,7 @@ def test_partitioned_layout_matches_whole_file(tmp_path):
     env = {"TEMPO_DATA_DIR": str(tmp_path / "data")}
     out = tmp_path / "out"
     _run([sys.executable, "scripts/build-static.py", "--out", str(out / "static"),
-          "--codes", "RATEX,POPX", "--partition-rows", "1"], env)
+          "--codes", "RATEX,POPX", "--partition-rows", "1", "--no-record"], env)
     assert (out / "static" / "data" / "RATEX.index.json").exists()
     _run([sys.executable, "scripts/gen-parity-cases.py", "--out", str(out / "cases.jsonl"),
           "--codes", "RATEX,POPX", "--per-dataset", "40"], env)
@@ -78,7 +78,8 @@ def test_partitioned_layout_matches_whole_file(tmp_path):
     assert json.loads(res.strip().splitlines()[-1])["fail"] == 0
     # with a 1-byte budget every partitioned read is refused, never answered wrongly
     _run([sys.executable, "scripts/build-static.py", "--out", str(out / "tiny"),
-          "--codes", "RATEX,POPX", "--partition-rows", "1", "--max-query-bytes", "1"], env)
+          "--codes", "RATEX,POPX", "--partition-rows", "1", "--max-query-bytes", "1",
+          "--no-record"], env)
     res = _run([NODE, "tools/static-engine/parity.mjs", "--build", str(out / "tiny"),
                 "--cases", str(out / "cases.jsonl")])
     s = json.loads(res.strip().splitlines()[-1])
@@ -91,3 +92,48 @@ def test_parity_on_real_sample(tmp_path):
     codes = ["POP105A_judete_grupe", "FOM106F", "SOM103A_judete", "TUR105D_judete",
              "TUR105E_judet", "FOM106E_judete"]
     _parity(data_dir, tmp_path, codes, per_dataset=25)
+
+
+def _api_parity(data_dir: Path, out: Path, codes: list[str], n=40):
+    env = {"TEMPO_DATA_DIR": str(data_dir)}
+    sel = ["--codes", ",".join(codes)]
+    _run([sys.executable, "scripts/build-static.py", "--out", str(out / "static"), *sel], env)
+    _run([sys.executable, "scripts/gen-api-cases.py", "--out", str(out / "api.jsonl"),
+          "--n", str(n), *sel], env)
+    res = _run([NODE, "--max-old-space-size=4096", "tools/static-engine/api-parity.mjs",
+                "--build", str(out / "static"), "--cases", str(out / "api.jsonl")])
+    summary = json.loads(res.strip().splitlines()[-1])
+    assert summary["fail"] == 0 and summary["cases"] > 0, res
+    return summary
+
+
+def test_static_api_matches_server_on_synthetic_corpus(tmp_path):
+    """Catalog, search, options, downloads, evidence and recipes answered by the
+    static site (engine/static-api.js) equal the FastAPI answers."""
+    import duckdb
+    from fix02b_corpus import build_corpus
+    corpus = build_corpus(tmp_path / "data")
+    db = duckdb.connect(str(corpus / "metadata.duckdb"))     # the catalog's columns
+    for ddl in ("matrices ADD COLUMN is_canonical BOOLEAN DEFAULT TRUE",
+                "matrices ADD COLUMN mat_max_dim INTEGER DEFAULT 3",
+                "matrices ADD COLUMN is_split BOOLEAN DEFAULT FALSE",
+                "matrix_profiles ADD COLUMN has_time BOOLEAN DEFAULT TRUE",
+                "matrix_profiles ADD COLUMN has_geo BOOLEAN DEFAULT TRUE",
+                "matrix_profiles ADD COLUMN time_granularity VARCHAR DEFAULT 'annual'",
+                "matrix_profiles ADD COLUMN has_gender BOOLEAN DEFAULT FALSE",
+                "matrix_profiles ADD COLUMN has_age BOOLEAN",
+                "matrix_profiles ADD COLUMN has_residence BOOLEAN DEFAULT FALSE"):
+        db.execute("ALTER TABLE " + ddl.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS"))
+    db.close()
+    s = _api_parity(tmp_path / "data", tmp_path / "out", ["POPX", "ADDX", "RATEX", "INCX"])
+    assert s["ok"] == s["cases"] - s.get("browser_budget_refusals", 0)
+    site = tmp_path / "out" / "static"
+    assert "static" in (site / "js" / "config.js").read_text()
+    assert (site / "rec" / "catalog.json.gz").exists() and (site / "search" / "concepts.json.gz").exists()
+
+
+@pytest.mark.corpus
+def test_static_api_matches_server_on_real_sample(tmp_path):
+    data_dir = Path(os.environ.get("TEMPO_DATA_DIR", ROOT / "data"))
+    _api_parity(data_dir, tmp_path, ["POP105A_judete_grupe", "FOM106E_judete", "FOM104F_judete",
+                                     "SOM103A_judete", "SOM101E", "TUR105D_judete", "ART124A"], n=80)

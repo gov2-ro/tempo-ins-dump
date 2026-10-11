@@ -71,8 +71,8 @@ const emptyTable = columns => ({ columns: [...columns, 'OBS_VALUE'], dicts: {}, 
 
 /**
  * makeLoader({json, binary}) -> loader for runQuery. json(path) resolves to the
- * parsed JSON of a build-relative path or null when absent; binary(path) to the
- * decompressed bytes (Uint8Array/ArrayBuffer) of a .bin.gz file.
+ * parsed JSON of a build-relative path (.json or .json.gz) or null when absent;
+ * binary(path) to the decompressed bytes (Uint8Array/ArrayBuffer) of a .bin.gz file.
  */
 export function makeLoader({ json, binary, maxTables = 48 }) {
     const cache = new Map();
@@ -87,6 +87,12 @@ export function makeLoader({ json, binary, maxTables = 48 }) {
         return v;
     };
     const getJSON = p => memo('j:' + p, () => json(p));
+    // only partitioned datasets have an index file (build.json lists them)
+    const indexOf = async code => {
+        const b = await getJSON('build.json');
+        const parts = b && b.partitioned;
+        return !parts || parts.includes(code) ? getJSON(`data/${code}.index.json`) : null;
+    };
     const getTable = p => lru('t:' + p, async () => decodeTcol(await binary(p)));
 
     async function whole(code) {
@@ -101,17 +107,17 @@ export function makeLoader({ json, binary, maxTables = 48 }) {
 
     return {
         build: () => getJSON('build.json'),
-        policy: code => getJSON(`policy/${code}.json`),
+        policy: code => getJSON(`policy/${code}.json.gz`),
         /** Distinct values (whole file) without loading partitions. */
         async meta(code) {
-            const index = await getJSON(`data/${code}.index.json`);
+            const index = await indexOf(code);
             if (!index) { const w = await whole(code); return { distinct: w.distinct, hasNullTime: w.hasNullTime }; }
             const t = (index.partitions || {}).time;
             return { distinct: index.distinct, hasNullTime: !!(t && t.null) };
         },
         /** The rows a query with these (file-column) filters can touch. */
         async table(code, filters, budget = 0) {
-            const index = await getJSON(`data/${code}.index.json`);
+            const index = await indexOf(code);
             if (!index) return whole(code);
             const parts = index.partitions || {};
             // the partition set that reads fewer rows for these filters

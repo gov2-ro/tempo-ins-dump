@@ -100,9 +100,7 @@ const UI = {
     const content = document.getElementById('places-content');
 
     try {
-        const resp = await fetch('/api/places');
-        if (!resp.ok) throw new Error('API error');
-        const { places } = await resp.json();
+        const { places } = await API.fetch('/places');
         allPlaces = places;
 
         const byType = { county: [], region: [], macroregion: [] };

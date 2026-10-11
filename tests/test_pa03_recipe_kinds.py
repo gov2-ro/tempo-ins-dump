@@ -112,6 +112,7 @@ def conn():
 def test_q2_reproduces_the_national_ins_total(conn):
     r = rc.run(conn, "net_earnings_county", year="2024")
     assert len(r["rows"]) == 42 and r["excluded"] == []
+    assert {"2008", "2023", "2024"} <= set(r["years_available"])   # not just the year read
     national = sum(x["value"] * x["weight_total"] for x in r["rows"]) / \
         sum(x["weight_total"] for x in r["rows"])
     assert round(national) == 4959                            # INS TOTAL 2024, retained cell

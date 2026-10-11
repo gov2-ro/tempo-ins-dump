@@ -97,7 +97,9 @@ def _fts_search(query: str, max_results: int | None = None) -> list[str] | None:
 
     All matches are returned unless `max_results` is given. BM25 scores are
     higher for more relevant docs, so we sort DESC; the secondary sort on
-    matrix_code breaks ties deterministically.
+    matrix_code breaks ties deterministically. Scores are compared rounded to
+    1e-8: equal documents (split siblings) otherwise differ in the last bit by
+    summation order, and the static site (engine/search.js) must rank the same.
     """
     base = _get_search_conn()
     if base is None:
@@ -105,11 +107,12 @@ def _fts_search(query: str, max_results: int | None = None) -> list[str] | None:
     sconn = base.cursor()  # per-request cursor
     try:
         sql = """
-            SELECT sd.matrix_code,
-                   fts_main_search_docs.match_bm25(sd.matrix_code, ?) AS score
-            FROM search_docs sd
+            SELECT matrix_code, score FROM (
+                SELECT sd.matrix_code,
+                       fts_main_search_docs.match_bm25(sd.matrix_code, ?) AS score
+                FROM search_docs sd)
             WHERE score IS NOT NULL
-            ORDER BY score DESC, sd.matrix_code ASC
+            ORDER BY round(score, 8) DESC, matrix_code ASC
         """
         params: list = [query]
         if max_results is not None:

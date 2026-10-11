@@ -183,7 +183,7 @@ class ComparePage {
         const excl = r.excluded.length
             ? `<p class="rcp-excluded">${T.excluded}: ${r.excluded.map(e => `${_escHtml(e.label)} (${T.reasons[e.reason] || e.reason}${
                 e.bounds ? `; ${T.between} ${fmt(e.bounds[0])} – ${fmt(e.bounds[1])}` : ''})`).join(', ')}</p>` : '';
-        const evidenceHref = `/api/recipes/${encodeURIComponent(this.recipe)}/evidence?${qs({ year: r.year, areas: params.areas, lang: this.lang })}`;
+        const evidenceHref = API.recipeEvidenceHref(this.recipe, { year: r.year, areas: params.areas, lang: this.lang });
         host.innerHTML = `
             <h1>${_escHtml(r.recipe.name)} · ${_escHtml(r.year)}</h1>
             <p class="rcp-def">${_escHtml(r.recipe.definition)}</p>

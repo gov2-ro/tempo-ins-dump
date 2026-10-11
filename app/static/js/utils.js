@@ -472,7 +472,7 @@ const FEEDBACK_REPO = 'https://github.com/gov2-ro/tempo-ins-dump/issues/new';
 
 async function openFeedback({ title, dataset = null, selection = null, generation = null, lang = 'ro' } = {}) {
     if (!generation) {
-        try { generation = (await (await fetch('/api/health')).json()).generation?.id || null; } catch { /* optional */ }
+        try { generation = (await API.fetch('/health')).generation?.id || null; } catch { /* optional */ }
     }
     const ro = lang !== 'en';
     const body = [

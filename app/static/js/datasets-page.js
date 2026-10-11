@@ -133,9 +133,7 @@ class DatasetsPage {
             if (this.currentSearch) params.q = this.currentSearch;
             if (this.currentContext) params.ancestor = this.currentContext;
 
-            const qs = new URLSearchParams(params).toString();
-            const resp = await fetch(`/api/datasets?${qs}`);
-            const data = await resp.json();
+            const data = await API.fetch('/datasets', params);
 
             this.totalDatasets = data.total;
             document.getElementById('result-count').textContent = `${formatNumber(data.total, 0)} datasets`;

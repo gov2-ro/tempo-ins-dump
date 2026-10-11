@@ -140,8 +140,7 @@ class PlaceProfileApp {
         const getPlaces = async () => {
             if (places) return places;
             try {
-                const r = await fetch('/api/places');
-                if (r.ok) { const d = await r.json(); places = d.places; }
+                places = (await API.fetch('/places')).places;
             } catch (_) {}
             return places || [];
         };
@@ -182,14 +181,9 @@ class PlaceProfileApp {
         this._initNav();
 
         try {
-            const resp = await fetch(`/api/places/${this.placeType}/${this.placeSlug}`);
-            if (!resp.ok) {
-                document.getElementById('place-loading').textContent = this.ui.notFound;
-                return;
-            }
-            this.data = await resp.json();
+            this.data = await API.fetch(`/places/${this.placeType}/${this.placeSlug}`);
         } catch (e) {
-            document.getElementById('place-loading').textContent = this.ui.error;
+            document.getElementById('place-loading').textContent = e.status === 404 ? this.ui.notFound : this.ui.error;
             return;
         }
 
@@ -492,11 +486,7 @@ class PlaceProfileApp {
         if (!kpi) return;
         const key = encodeURIComponent(kpi.key);
         try {
-            const resp = await fetch(
-                `/api/places/${this.placeType}/${this.placeSlug}/baselines/${key}`
-            );
-            if (!resp.ok) return;
-            const b = await resp.json();
+            const b = await API.fetch(`/places/${this.placeType}/${this.placeSlug}/baselines/${key}`);
             // ignore a stale response if the selection changed meanwhile
             if (this.data.kpis[this.activeKpiIndex] !== kpi) return;
             this.comparisonData['__national__'] = b.national || [];
@@ -511,9 +501,7 @@ class PlaceProfileApp {
     async _peerProfile(type, slug) {
         this.peerProfiles = this.peerProfiles || {};
         if (!this.peerProfiles[slug]) {
-            const resp = await fetch(`/api/places/${type}/${slug}`);
-            if (!resp.ok) return null;
-            this.peerProfiles[slug] = await resp.json();
+            try { this.peerProfiles[slug] = await API.fetch(`/places/${type}/${slug}`); } catch { return null; }
         }
         return this.peerProfiles[slug];
     }

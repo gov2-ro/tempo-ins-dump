@@ -20,7 +20,10 @@ const build = args.build, casesPath = args.cases, verbose = +(args.verbose || 5)
 
 const loader = makeLoader({
     async json(rel) {
-        try { return JSON.parse(await fs.promises.readFile(path.join(build, rel), 'utf8')); } catch (e) {
+        try {
+            const raw = await fs.promises.readFile(path.join(build, rel));
+            return JSON.parse((rel.endsWith('.gz') ? zlib.gunzipSync(raw) : raw).toString('utf8'));
+        } catch (e) {
             if (e.code === 'ENOENT') return null;
             throw e;
         }

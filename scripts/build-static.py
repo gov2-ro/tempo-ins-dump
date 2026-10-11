@@ -10,13 +10,16 @@ served dataset it writes, under --out:
                               files by REF_AREA and by TIME_PERIOD, plus the
                               distinct values of every column
   data/{code}/{area|time}/{n}.bin.gz   the partitions
-  policy/{code}.json          everything the browser engine needs to reproduce
+  policy/{code}.json.gz       everything the browser engine needs to reproduce
                               data_query.run_query exactly: recorded dimensions,
                               allowed column names, time column, the aggregation
                               context decide_grouped uses (with the composer's
                               data-grounded `effective` options pre-resolved), the
                               source-total check row and the grain status
   build.json                  generation, commit, counts
+  rec/, search/, the site     recorded API answers, search inputs, app/static and
+                              view profiles with a static-mode js/config.js
+                              (scripts/static_api.py; skipped with --no-record)
 
 The browser never re-derives any of these: Python stays the specification and
 tools/static-engine/parity.mjs proves the JS engine reproduces run_query.
@@ -32,6 +35,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
+sys.path.insert(0, str(REPO / "scripts"))
+
+import static_api  # noqa: E402
+from static_api import gz_json  # noqa: E402
 
 PARTITION_ROWS = 200_000
 # Most a single query may download (compressed). Above it the browser refuses
@@ -168,6 +175,7 @@ def export_policy(conn, code: str) -> dict:
     """The inputs of data_query.run_query for one dataset, nothing derived."""
     from app.services import data_query as dq, grain_guard, generation
     from app.services.dashboard_composer import _effective
+    from app.services.concept_search import dataset_facts
     from app.services.dataset_meta import get_aggregation_context
     from app.services.query_builder import resolve_parquet_schema
     row_count = conn.execute("SELECT row_count FROM matrices WHERE matrix_code = ?",
@@ -210,11 +218,76 @@ def export_policy(conn, code: str) -> dict:
         "schema": SCHEMA, "code": code, "row_count": row_count, "dimensions": dims,
         "file_dimensions": file_dims, "allowed": allowed, "rename": rename, "time_col": time_col,
         "schema_mismatch": dq.schema_mismatch(schema, dims),
+        "to_file": schema.get("to_file") or {}, "to_sdmx": schema.get("to_sdmx") or {},
+        "file_columns": schema.get("columns") or [], "value_column": schema.get("value_column"),
+        "value_type": _value_type(conn, code, schema.get("value_column")),
+        "en_labels": _en_labels(conn, code, file_dims),
+        "facts": {lang: dataset_facts(conn, code, lang) for lang in ("ro", "en")},
+        "evidence_dims": [r[0] for r in conn.execute(
+            "SELECT DISTINCT dim_column_name FROM dimensions WHERE matrix_code = ? ORDER BY 1",
+            [code]).fetchall()],
         "context": pctx, "kpi_check": kpi, "kpi_table": kpi_table,
         "grain_file_status": grain_guard.file_status(code),
         "grain_check_max_rows": grain_guard.GRAIN_CHECK_MAX_ROWS,
         "generation": generation.summary(), "contract": dq.CONTRACT,
+        "period_bounds": _period_bounds(conn, code, rename.get(time_col, time_col) if time_col else None),
     }
+
+
+def _value_type(conn, code, column):
+    """DuckDB type of the value column: CSV exports print DOUBLE as Python floats."""
+    from app.config import PARQUET_DIR
+    for name, typ, *_ in conn.execute("DESCRIBE SELECT * FROM read_parquet(?)",
+                                      [str(PARQUET_DIR / f"{code}.parquet")]).fetchall():
+        if name == column:
+            return typ
+    return None
+
+
+def _en_labels(conn, code, file_dims):
+    """The RO -> EN label maps CSV/XLSX exports apply for lang=en (differences only)."""
+    from app.services.export import load_value_maps
+    maps = load_value_maps(conn, code, file_dims)
+    return {c: {ro: en for ro, en in m.items() if en != ro} for c, m in maps.items()
+            if any(en != ro for ro, en in m.items())}
+
+
+def _period_bounds(conn, code, column):
+    """/options' period_bounds for the time column (first/last period with data)."""
+    if not column:
+        return None
+    from app.services.data_query import QueryError, dimension_values
+    try:
+        return dimension_values(conn, code, column, limit=1).get("period_bounds")
+    except QueryError:
+        return None
+
+
+# ------------------------------------------------------------------ site
+
+def assemble_site(out: Path, build: dict) -> dict:
+    """The page assets next to the data: app/static, view profiles, and a
+    config.js that switches the frontend to static mode."""
+    import shutil
+    from app.config import CORPUS_DIR
+    static = REPO / "app" / "static"
+    n = 0
+    for src in static.rglob("*"):
+        if src.is_file() and "_obsolete" not in src.parts and src.name != ".DS_Store":
+            dst = out / src.relative_to(static)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+            n += 1
+    vp = CORPUS_DIR / "view-profiles"
+    if vp.exists():
+        shutil.copytree(vp, out / "view-profiles", dirs_exist_ok=True)
+    gen = (build.get("generation") or {}).get("id")
+    (out / "js" / "config.js").write_text(
+        "// generated by scripts/build-static.py\n"
+        "window.TEMPO_CONFIG = " + json.dumps({"mode": "static", "generation": gen,
+                                               "commit": build.get("commit")}) + ";\n",
+        encoding="utf-8")
+    return {"assets": n}
 
 
 # ------------------------------------------------------------------ main
@@ -226,8 +299,12 @@ def main(argv=None) -> int:
     ap.add_argument("--limit", type=int, help="first N served datasets (debug)")
     ap.add_argument("--partition-rows", type=int, default=PARTITION_ROWS)
     ap.add_argument("--max-query-bytes", type=int, default=MAX_QUERY_BYTES)
+    ap.add_argument("--no-record", action="store_true",
+                    help="data and policies only (parity tests): no recorded API, search or site")
+    ap.add_argument("--base-url", default="", help="public origin, e.g. https://ins.gov2.ro")
     a = ap.parse_args(argv)
-    from app.config import MAX_DATA_ROWS, LARGE_DATASET_THRESHOLD
+    from app.config import MAX_DATA_ROWS, LARGE_DATASET_THRESHOLD, EXPORT_MAX_ROWS
+    from app.services.export import xlsx_row_limit
     from app.db import get_conn
     from app.services import generation
     out = Path(a.out)
@@ -241,7 +318,7 @@ def main(argv=None) -> int:
     stats = {"datasets": 0, "rows": 0, "data_bytes": 0, "partitioned": []}
     for i, code in enumerate(codes, 1):
         d = export_data(conn, code, out, a.partition_rows)
-        _json_dump(export_policy(conn, code), out / "policy" / f"{code}.json")
+        gz_json(export_policy(conn, code), out / "policy" / f"{code}.json.gz")
         stats["datasets"] += 1
         stats["rows"] += d["rows"]
         stats["data_bytes"] += d["bytes"]
@@ -257,7 +334,14 @@ def main(argv=None) -> int:
     build = {"schema": SCHEMA, "generation": generation.summary(), "commit": commit,
              "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
              "max_data_rows": MAX_DATA_ROWS, "large_dataset_threshold": LARGE_DATASET_THRESHOLD,
-             "partition_rows": a.partition_rows, "max_query_bytes": a.max_query_bytes, **stats}
+             "partition_rows": a.partition_rows, "max_query_bytes": a.max_query_bytes,
+             "xlsx_row_limit": xlsx_row_limit(), "export_row_limit": EXPORT_MAX_ROWS or None, **stats}
+    if not a.no_record:
+        rec = static_api.record(conn, out, codes, all_datasets=not (a.codes or a.limit),
+                                base_url=a.base_url)
+        srch = static_api.export_search(conn, out)
+        site = assemble_site(out, build)
+        build.update(recorded=rec, search=srch, site=site)
     _json_dump(build, out / "build.json")
     print(json.dumps({k: v for k, v in build.items() if k != "partitioned"}
                      | {"partitioned": len(stats["partitioned"])}, indent=1))

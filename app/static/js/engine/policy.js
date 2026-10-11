@@ -38,7 +38,7 @@ export function pyStr(v) {
     return String(v);
 }
 
-function pyFloatRepr(x) {
+export function pyFloatRepr(x) {
     // Python repr(float): shortest round-trip, exponent form outside [1e-4, 1e16).
     if (x === 0) return Object.is(x, -0) ? '-0.0' : '0.0';
     const a = Math.abs(x);
