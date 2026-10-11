@@ -1,0 +1,403 @@
+{
+ "about": "Reviewed concepts for search (PA-02a). Each entry points at an existing INS dataset family; titles, definitions, units and coverage come from the corpus metadata and data, not from here. `note` is only the plain-language distinction between concepts that users confuse. Aliases are matched accent- and case-insensitively on word boundaries; `generic` aliases make the match ambiguous, so the alternatives are shown with it.",
+ "version": 1,
+ "reviewed": "2026-10-11",
+ "concepts": [
+  {
+   "id": "resident_population",
+   "question": "Q1",
+   "family": "POP105A",
+   "variants": {
+    "county": "POP105A_judete_grupe",
+    "region": "POP105A_regiuni_grupe",
+    "macroregion": "POP105A_macroregiuni_grupe"
+   },
+   "name": {
+    "ro": "Populația rezidentă",
+    "en": "Resident population"
+   },
+   "note": {
+    "ro": "persoanele cu reședința obișnuită în zonă, la 1 ianuarie (statistica oficială, comparabilă european)",
+    "en": "people usually resident in the area, on 1 January (the official, EU-comparable count)"
+   },
+   "aliases": {
+    "ro": [
+     "populatia rezidenta",
+     "populatie rezidenta",
+     "populatiei rezidente",
+     "populatia stabila",
+     "numarul locuitorilor",
+     "numar locuitori",
+     "cati locuitori",
+     "locuitori"
+    ],
+    "en": [
+     "resident population",
+     "usual residents",
+     "number of inhabitants",
+     "inhabitants",
+     "how many people live"
+    ]
+   },
+   "generic": {
+    "ro": [
+     "populatia",
+     "populatie",
+     "populatiei",
+     "populatii"
+    ],
+    "en": [
+     "population"
+    ]
+   },
+   "alternatives": [
+    "domicile_population",
+    "resident_population_july"
+   ]
+  },
+  {
+   "id": "domicile_population",
+   "family": "POP107A",
+   "variants": {
+    "county": "POP107A_judete_grupe",
+    "region": "POP107A_regiuni_grupe",
+    "macroregion": "POP107A_macroregiuni_grupe"
+   },
+   "name": {
+    "ro": "Populația după domiciliu",
+    "en": "Population by domicile"
+   },
+   "note": {
+    "ro": "persoanele cu domiciliul legal (buletin) în zonă, la 1 ianuarie; include plecații în străinătate",
+    "en": "people with their legal address in the area, on 1 January; includes people living abroad"
+   },
+   "aliases": {
+    "ro": [
+     "populatia dupa domiciliu",
+     "populatie dupa domiciliu",
+     "populatia cu domiciliul",
+     "domiciliu"
+    ],
+    "en": [
+     "population by domicile",
+     "domicile population",
+     "registered population",
+     "domicile"
+    ]
+   },
+   "alternatives": [
+    "resident_population"
+   ]
+  },
+  {
+   "id": "resident_population_july",
+   "family": "POP106A",
+   "variants": {
+    "county": "POP106A_judete_grupe",
+    "region": "POP106A_regiuni_grupe",
+    "macroregion": "POP106A_macroregiuni_grupe"
+   },
+   "name": {
+    "ro": "Populația rezidentă la 1 iulie",
+    "en": "Resident population on 1 July"
+   },
+   "note": {
+    "ro": "aceeași definiție ca populația rezidentă, la mijlocul anului",
+    "en": "same definition as resident population, at mid-year"
+   },
+   "aliases": {
+    "ro": [
+     "populatia rezidenta la 1 iulie",
+     "populatia la 1 iulie",
+     "populatia la mijlocul anului"
+    ],
+    "en": [
+     "resident population on 1 july",
+     "mid-year population",
+     "population on 1 july"
+    ]
+   },
+   "alternatives": [
+    "resident_population"
+   ]
+  },
+  {
+   "id": "net_earnings",
+   "question": "Q2",
+   "family": "FOM106E",
+   "variants": {
+    "county": "FOM106E_judete",
+    "region": "FOM106E_regiuni",
+    "macroregion": "FOM106E_macroregiuni"
+   },
+   "name": {
+    "ro": "Câștigul salarial mediu net lunar",
+    "en": "Average net monthly earnings"
+   },
+   "note": {
+    "ro": "salariul mediu după impozit și contribuții, în lei nominali (din cercetarea anuală)",
+    "en": "average pay after tax and contributions, nominal lei (annual survey)"
+   },
+   "aliases": {
+    "ro": [
+     "salariul mediu net",
+     "salariu mediu net",
+     "salariului mediu net",
+     "salariul net",
+     "salariu net",
+     "castigul salarial mediu net",
+     "castig salarial mediu net",
+     "castigul salarial net",
+     "castig salarial net",
+     "salarii nete"
+    ],
+    "en": [
+     "average net earnings",
+     "net earnings",
+     "average net salary",
+     "net salary",
+     "net wage",
+     "net wages",
+     "take-home pay"
+    ]
+   },
+   "generic": {
+    "ro": [
+     "salariul mediu",
+     "salariu mediu",
+     "salariul",
+     "salariu",
+     "salarii",
+     "salariile",
+     "castig salarial",
+     "castigul salarial"
+    ],
+    "en": [
+     "average salary",
+     "average wage",
+     "salary",
+     "salaries",
+     "wages",
+     "earnings"
+    ]
+   },
+   "alternatives": [
+    "gross_earnings"
+   ],
+   "total_recipe": "net_earnings_county"
+  },
+  {
+   "id": "gross_earnings",
+   "family": "FOM107E",
+   "variants": {
+    "county": "FOM107E_judete",
+    "region": "FOM107E_regiuni",
+    "macroregion": "FOM107E_macroregiuni"
+   },
+   "name": {
+    "ro": "Câștigul salarial mediu brut lunar",
+    "en": "Average gross monthly earnings"
+   },
+   "note": {
+    "ro": "salariul mediu înainte de impozit și contribuțiile salariatului",
+    "en": "average pay before tax and the employee's contributions"
+   },
+   "aliases": {
+    "ro": [
+     "salariul mediu brut",
+     "salariu mediu brut",
+     "salariul brut",
+     "salariu brut",
+     "castigul salarial mediu brut",
+     "castig salarial mediu brut",
+     "castigul salarial brut",
+     "castig salarial brut"
+    ],
+    "en": [
+     "average gross earnings",
+     "gross earnings",
+     "gross salary",
+     "gross wage",
+     "gross wages"
+    ]
+   },
+   "alternatives": [
+    "net_earnings"
+   ]
+  },
+  {
+   "id": "registered_unemployment_rate",
+   "question": "Q3",
+   "family": "SOM103A",
+   "variants": {
+    "county": "SOM103A_judete",
+    "region": "SOM103A_regiuni",
+    "macroregion": "SOM103A_macroregiuni"
+   },
+   "name": {
+    "ro": "Rata șomajului înregistrat",
+    "en": "Registered unemployment rate"
+   },
+   "note": {
+    "ro": "șomerii înscriși la agențiile de ocupare (ANOFM), față de populația activă civilă; anual, pe județe",
+    "en": "unemployed people registered with the employment agencies (ANOFM), relative to the civilian active population; annual, by county"
+   },
+   "aliases": {
+    "ro": [
+     "rata somajului inregistrat",
+     "somajul inregistrat",
+     "somaj inregistrat",
+     "someri inregistrati",
+     "rata somajului pe judete",
+     "somaj pe judete",
+     "somaj judete",
+     "somajului inregistrat",
+     "somerilor inregistrati"
+    ],
+    "en": [
+     "registered unemployment rate",
+     "registered unemployment",
+     "unemployment rate by county",
+     "unemployment by county",
+     "county unemployment"
+    ]
+   },
+   "generic": {
+    "ro": [
+     "rata somajului",
+     "rata de somaj",
+     "somajul",
+     "somaj",
+     "someri",
+     "somajului",
+     "somerilor"
+    ],
+    "en": [
+     "unemployment rate",
+     "unemployment",
+     "jobless rate"
+    ]
+   },
+   "alternatives": [
+    "ilo_unemployment_rate"
+   ],
+   "total_recipe": "registered_unemployment_county"
+  },
+  {
+   "id": "ilo_unemployment_rate",
+   "family": "AMG157A",
+   "variants": {
+    "national": "AMG157A_anual",
+    "region": "AMG157F"
+   },
+   "name": {
+    "ro": "Rata șomajului BIM (anchetă)",
+    "en": "ILO unemployment rate (survey)"
+   },
+   "note": {
+    "ro": "estimată din ancheta forței de muncă după definiția Biroului Internațional al Muncii; nu există pe județe",
+    "en": "estimated from the labour force survey on the International Labour Office definition; not available by county"
+   },
+   "aliases": {
+    "ro": [
+     "rata somajului bim",
+     "somaj bim",
+     "somajul bim",
+     "bim"
+    ],
+    "en": [
+     "ilo unemployment rate",
+     "ilo unemployment",
+     "lfs unemployment",
+     "survey unemployment"
+    ]
+   },
+   "alternatives": [
+    "registered_unemployment_rate"
+   ]
+  },
+  {
+   "id": "tourist_overnight_stays",
+   "question": "Q4",
+   "family": "TUR105D",
+   "variants": {
+    "county": "TUR105D_judete",
+    "region": "TUR105D_regiuni",
+    "macroregion": "TUR105D_macroregiuni"
+   },
+   "name": {
+    "ro": "Înnoptări turistice",
+    "en": "Tourist overnight stays"
+   },
+   "note": {
+    "ro": "nopți petrecute în structuri de cazare cu cel puțin 5 locuri, de turiști români și străini",
+    "en": "nights spent in accommodation with at least 5 bed-places, by Romanian and foreign tourists"
+   },
+   "aliases": {
+    "ro": [
+     "innoptari turistice",
+     "innoptarile turistice",
+     "innoptari",
+     "innoptarile",
+     "nopti de cazare"
+    ],
+    "en": [
+     "tourist overnight stays",
+     "overnight stays",
+     "nights spent",
+     "tourist nights",
+     "tourism nights"
+    ]
+   },
+   "generic": {
+    "ro": [
+     "turism",
+     "turisti",
+     "turistice"
+    ],
+    "en": [
+     "tourism",
+     "tourists"
+    ]
+   },
+   "alternatives": [
+    "tourism_intensity"
+   ]
+  },
+  {
+   "id": "tourism_intensity",
+   "question": "Q4",
+   "recipe": "tourism_intensity",
+   "name": {
+    "ro": "Intensitatea turistică (înnoptări pe locuitor)",
+    "en": "Tourism intensity (overnight stays per resident)"
+   },
+   "note": {
+    "ro": "înnoptările turistice din an împărțite la populația rezidentă la 1 ianuarie; pe județe",
+    "en": "a year's overnight stays divided by resident population on 1 January; by county"
+   },
+   "aliases": {
+    "ro": [
+     "innoptari pe locuitor",
+     "innoptari turistice pe locuitor",
+     "innoptari per locuitor",
+     "intensitate turistica",
+     "intensitatea turistica",
+     "innoptari la mia de locuitori",
+     "turisti pe locuitor"
+    ],
+    "en": [
+     "overnight stays per resident",
+     "stays per resident",
+     "tourist overnight stays per resident",
+     "nights per resident",
+     "tourism intensity",
+     "tourism per capita"
+    ]
+   },
+   "alternatives": [
+    "tourist_overnight_stays"
+   ]
+  }
+ ]
+}

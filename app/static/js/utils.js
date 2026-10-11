@@ -357,7 +357,7 @@ function aggMethodTitle(src, lang = 'ro') {
 
 const SEARCH_I18N = {
     ro: {
-        concept: 'Indicator', alt: 'Sau poate:', variants: n => `+${n} variante`,
+        concept: 'Indicator', total: 'Totalul județului (reconstituit) →', alt: 'Sau poate:', variants: n => `+${n} variante`,
         generic: 'termen general: verificați definiția sau alegeți altul mai jos',
         cityNotCounty: name => `${name} este și oraș; datele sunt pentru județul ${name}`,
         periodUnavailable: (y, first, last) => `${y} nu are date (${first}–${last})`,
@@ -368,7 +368,7 @@ const SEARCH_I18N = {
         other: 'Alte seturi de date', county: 'județ',
     },
     en: {
-        concept: 'Indicator', alt: 'Or did you mean:', variants: n => `+${n} variants`,
+        concept: 'Indicator', total: 'County total (reconstructed) →', alt: 'Or did you mean:', variants: n => `+${n} variants`,
         generic: 'broad term: check the definition or pick another below',
         cityNotCounty: name => `${name} is also a city; the data is for ${name} county`,
         periodUnavailable: (y, first, last) => `no data for ${y} (${first}–${last})`,
@@ -421,6 +421,13 @@ function renderSearchResults(container, resp, { lang = 'ro', onOpenCode } = {}) 
             <div class="search-concept-meta">${_escHtml(cov(c.coverage))}${c.unit ? ` · ${_escHtml(c.unit)}` : ''} · <span title="${_escHtml(c.title)}">${_escHtml(c.title)}</span></div>
             ${warn.length ? `<div class="search-concept-warn">${warn.map(_escHtml).join(' · ')}</div>` : ''}`,
             () => { window.location.href = c.href; });
+        if (c.total) {
+            row('search-alt', `
+                <span class="search-concept-name">${_escHtml(t.total)}</span>
+                <span class="search-alt-note">${_escHtml(c.total.status)}</span>
+                <span class="search-item-meta">${_escHtml(cov(c.total.coverage))}</span>`,
+                () => { window.location.href = c.total.href; });
+        }
         if (c.alternatives?.length) {
             const lab = document.createElement('div');
             lab.className = 'search-alt-label';

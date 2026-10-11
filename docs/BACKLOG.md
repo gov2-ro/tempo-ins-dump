@@ -16,6 +16,28 @@ see also [charting-ideas.md](charting-ideas.md)
   and broader Ask work are deferred; exposed Ask must pass its complete gate.
   This is an implementation plan, not completed fixes or a release approval.
 
+- [ ] **Fetch gaps that Q3 exposed (2026-10-11).**
+  - SOM101E has no Bucharest rows, and its locality TOTAL option was dropped.
+    So Q3 excludes Bucharest (range 0.6–0.7).
+  - SOM101B/SOM101B_judete carry Feminin only, because the both-sexes Total
+    was dropped at fetch.
+  - Re-fetch both with their Total options once INS is reachable.
+- [ ] **SOM101E_anual_judet is `conflicting`:** the split dropped the locality
+  dimension, so it has many rows per (sex, county, year). Stage 12 should keep
+  REF_AREA_2 or aggregate it explicitly. The parent SOM101E is fine.
+- [ ] **ART124A stale mapping:** the file is canonical, but `dimensions` and
+  `sdmx_column_map` still name `*_nom_id` columns. It is now refused as
+  `schema_mismatch`. Repair it with `11-build-sdmx-codes --matrix ART124A` on a
+  copy.
+- [ ] **Place pages Q2/Q3:** the earnings and unemployment KPIs should use the
+  `net_earnings_county` / `registered_unemployment_county` recipes (labelled
+  reconstructed) instead of omitting the value or showing an unweighted mean.
+- [ ] **Static S3:**
+  - record the three recipe results (every year) and their evidence ZIPs;
+  - gzip the policy files;
+  - default the big families to recent years or precomputed county × year
+    aggregates, to cut `browser_budget` refusals.
+
 ## Public-alpha audit — 2026-10-11 (latest local integration)
 
 Scope: `feat/structural-bar-toggle` at `6a727a2`, including FIX-02/FIX-03

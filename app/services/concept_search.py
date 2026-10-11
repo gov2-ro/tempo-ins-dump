@@ -263,11 +263,12 @@ def _href(code: str, lang: str, filters: dict | None = None) -> str:
 def recipe_card(conn, concept: dict, parsed: dict, lang: str, alias=None, generic=False) -> dict | None:
     """A concept answered by a reviewed recipe: link to its page with the parsed
     places and year; coverage is the latest year both sources share."""
-    from app.services.recipes import load_recipes
+    from app.services.recipes import load_recipes, source_specs
     r = load_recipes().get(concept["recipe"])
     if not r:
         return None
-    num, den = (dataset_facts(conn, r[k]["dataset"], lang) for k in ("numerator", "denominator"))
+    sa, sb = source_specs(r)
+    num, den = (dataset_facts(conn, x["dataset"], lang) for x in (sa, sb))
     if not num or not den:
         return None
     first = max(str(num["coverage"]["first"]), str(den["coverage"]["first"]))
@@ -287,7 +288,7 @@ def recipe_card(conn, concept: dict, parsed: dict, lang: str, alias=None, generi
     pick = lambda d: d.get(lang) or d["ro"]
     return {"id": concept["id"], "question": concept.get("question"), "name": pick(concept["name"]),
             "note": pick(concept["note"]), "matched": alias, "ambiguous": bool(generic),
-            "code": f"{r['numerator']['dataset']} ÷ {r['denominator']['dataset']}",
+            "code": f"{sa['dataset']} {'÷' if r.get('kind', 'ratio') == 'ratio' else '+'} {sb['dataset']}",
             "family": None, "title": pick(r["name"]), "definition": pick(r["definition"]),
             "unit": pick(r["unit"]), "coverage": {"first": first[:4], "last": last, "frequency": "annual"},
             "quality": "unique", "level": "county", "selection": {k: v for k, v in params.items()
@@ -335,6 +336,11 @@ def concept_card(conn, concept: dict, parsed: dict, lang: str, alias=None, gener
     card["href"] = _href(code, lang, selection or None)
     card["variants"] = [{"level": lv, "code": c, "href": _href(c, lang)}
                         for lv, c in variants.items() if c != code]
+    # INS's own total is not in our data; a reviewed reconstruction is.
+    if concept.get("total_recipe"):
+        rc = recipe_card(conn, {**concept, "recipe": concept["total_recipe"]}, parsed, lang)
+        if rc:
+            card["total"] = {k: rc[k] for k in ("title", "href", "status", "coverage", "notes")}
     return card
 
 

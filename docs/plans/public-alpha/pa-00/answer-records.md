@@ -39,6 +39,37 @@ python scripts/fetch-ins-reference-cells.py --spec docs/plans/public-alpha/pa-00
   --meta-dir $G/2-metas/ro --out /Users/pax/devbox/gov2/tempo-gen-20261005/reports/pa00-reference-cells
 ```
 
+## Reconstruction from data already downloaded (2026-10-11)
+
+Q2 and Q3 lack INS's published total cell, but the corpus holds the weights INS
+itself uses. Both now run as reviewed recipes (`/api/recipes/{id}`, evidence ZIP
+with an offline `recompute.py`): `net_earnings_county` (kind `weighted_mean`) and
+`registered_unemployment_county` (kind `rate_from_counts`).
+
+| Question | Method | Check | County results 2024 (candidate) |
+|---|---|---|---|
+| Q2 net earnings | Σ(earnings × average employees) / Σ employees over CAEN **sections** (A–S, not divisions or INDUSTRIE) × both sexes, joining FOM106E_judete with FOM104F_judete (same breakdown) | national 2024: **4,959.2** vs INS TOTAL 4,959 lei (retained cell); 42/42 areas | Cluj 5,921; Iași 5,097; Bucharest 6,730 (the unweighted mean the app refuses would say 5,522 / 4,880 / 6,890) |
+| Q3 registered unemployment | rate = 100 × ΣU / Σ(U / rate_sex). U by sex = year-end registered unemployed from **SOM101E** (December, summed over localities); rates from SOM103A_judete. The active population by sex is recovered as U / rate. | Rebuilding the **regional** rates by sex from the counties reproduces the published SOM103A regional cells to rounding for 2022–2024 (every region except București-Ilfov men, below). SOM101E women's counts equal SOM101B's to within 6 people nationally, so year-end counts are SOM103A's numerator. Every county result lies between its two sex rates. 41/42 areas | Cluj 1.43; Iași 3.61; Teleorman 9.58 (rank 1); **Bucharest excluded**: SOM101E has no Bucharest rows in our fetch, so only the range 0.6–0.7 is known. The place page shows 1.5 / 3.6 / 0.6 from the unweighted mean. |
+
+**Correction (same day):** an earlier draft of this table gave Q3 = 3.30 %
+nationally, with Cluj 1.6 and Teleorman 8.3, from SOM101B_judete. SOM101B carries
+**women only** (its options are Total and Feminin, and the fetch dropped Total).
+Those figures were the women's rate, not the both-sexes rate. The national
+both-sexes 3.3 % cannot be checked from downloaded data without Bucharest.
+
+What the INS fetch still adds:
+- Q3: Bucharest's both-sexes rate (or its SOM101E rows) and a national check;
+- independent county-level confirmation of both reconstructions and of the
+  Q1/Q4 population sums;
+- an explanation for the 7,120 national population gap.
+
+Only Bucharest's Q3 value is blocked. Rounding limits the reconstructions:
+earnings are published in whole lei, and rates to 0.1. A sex's recovered active
+population is U / rate, so its error is up to ±0.05 / rate (±8 % at 0.6 %). That
+moves a county's both-sexes rate only within its two sex rates. The recipes are
+labelled "reconstituit" and carry these checks as tests
+(`tests/test_pa03_recipe_kinds.py`).
+
 ## Source files
 
 Retained INS exports in `tempo-gen-20261005/data/`. `ultimaActualizare` is the INS

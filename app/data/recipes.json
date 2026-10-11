@@ -1,0 +1,246 @@
+{
+ "about": "Reviewed cross-dataset recipes (PA-03). Each references served datasets and lets the shared query (app/services/data_query.py) decide every aggregation; titles, definitions and source dates come from the corpus metadata. A recipe is a formula over two validated series, not a general join.",
+ "recipes": [
+  {
+   "id": "tourism_intensity",
+   "version": 1,
+   "question": "Q4",
+   "status": {
+    "ro": "în verificare: numitorul (populația la 1 ianuarie) e aprobat; valorile pe județe nu au fost încă verificate cu celulele INS",
+    "en": "under review: the denominator (population on 1 January) is approved; county values not yet checked against INS cells"
+   },
+   "name": {
+    "ro": "Intensitatea turistică: înnoptări pe locuitor",
+    "en": "Tourism intensity: overnight stays per resident"
+   },
+   "unit": {
+    "ro": "înnoptări pe locuitor",
+    "en": "overnight stays per resident"
+   },
+   "definition": {
+    "ro": "Înnoptările turistice din anul Y în structurile de cazare din județ (cu cel puțin 5 locuri, turiști români și străini), împărțite la populația rezidentă a județului la 1 ianuarie a anului Y. Măsoară presiunea turistică față de populație; nu este ponderea locuitorilor care au călătorit.",
+    "en": "Tourist overnight stays in year Y in the county's accommodation (at least 5 bed-places, Romanian and foreign tourists), divided by the county's resident population on 1 January of year Y. It measures tourism pressure relative to population; it is not the share of residents who travelled."
+   },
+   "formula": "intensity(county, Y) = stays(county, Y) / resident_population(county, 1 January Y)",
+   "geo_level": "county",
+   "universe": "denominator",
+   "numerator": {
+    "role": "stays",
+    "dataset": "TUR105D_judete",
+    "concept": "tourist_overnight_stays",
+    "group_by": [
+     "REF_AREA",
+     "TIME_PERIOD"
+    ],
+    "filters": {},
+    "reference": {
+     "ro": "anul calendaristic Y (flux)",
+     "en": "calendar year Y (flow)"
+    }
+   },
+   "denominator": {
+    "role": "population",
+    "dataset": "POP105A_judete_grupe",
+    "concept": "resident_population",
+    "group_by": [
+     "REF_AREA",
+     "TIME_PERIOD"
+    ],
+    "filters": {},
+    "reference": {
+     "ro": "1 ianuarie al anului Y (stoc)",
+     "en": "1 January of year Y (stock)"
+    }
+   },
+   "unit_multipliers": {
+    "Numar": 1,
+    "Numar persoane": 1,
+    "Mii": 1000,
+    "Mii persoane": 1000
+   },
+   "display_decimals": 3,
+   "missing_policy": "A county without stays, without population, or with population <= 0 is excluded with its reason; zero stays with a positive population is a valid 0. No nearest-year substitution, no zero filling.",
+   "kind": "ratio",
+   "columns": [
+    {
+     "key": "stays",
+     "label": {
+      "ro": "Înnoptări",
+      "en": "Overnight stays"
+     },
+     "format": "int"
+    },
+    {
+     "key": "population",
+     "label": {
+      "ro": "Populație rezidentă 1 ian.",
+      "en": "Resident pop. 1 Jan"
+     },
+     "format": "int"
+    },
+    {
+     "key": "value",
+     "label": {
+      "ro": "Înnoptări / locuitor",
+      "en": "Stays / resident"
+     },
+     "format": "decimal"
+    }
+   ]
+  },
+  {
+   "id": "net_earnings_county",
+   "version": 1,
+   "question": "Q2",
+   "kind": "weighted_mean",
+   "status": {
+    "ro": "reconstituit din ponderi publicate de INS; verificat la nivel național (2024: 4.959 lei = totalul INS); valorile pe județe nu au fost încă verificate cu celulele INS",
+    "en": "reconstructed from INS's published weights; checked nationally (2024: 4,959 lei = the INS total); county values not yet checked against INS cells"
+   },
+   "name": {
+    "ro": "Câștigul salarial mediu net lunar, pe județe",
+    "en": "Average net monthly earnings by county"
+   },
+   "unit": {
+    "ro": "lei",
+    "en": "lei"
+   },
+   "definition": {
+    "ro": "Câștigul salarial mediu net lunar al tuturor salariaților din județ (toate activitățile, ambele sexe), calculat ca medie a câștigurilor pe secțiuni CAEN și sexe, ponderată cu numărul mediu de salariați din fiecare celulă. INS publică acest total, dar nu face parte din datele noastre; reconstituirea reproduce totalul național publicat.",
+    "en": "Average net monthly earnings of all employees in the county (all activities, both sexes), computed as the mean of earnings by CAEN section and sex weighted by the average number of employees in each cell. INS publishes this total but it is not in our data; the reconstruction reproduces the published national total."
+   },
+   "formula": "earnings(county, Y) = Σ_{section, sex} net_earnings × employees / Σ employees",
+   "values": {
+    "role": "earnings",
+    "dataset": "FOM106E_judete",
+    "concept": "net_earnings",
+    "group_by": [
+     "ECON_ACTIVITY",
+     "SEX",
+     "REF_AREA",
+     "TIME_PERIOD"
+    ],
+    "filters": {},
+    "reference": {
+     "ro": "anul Y, medie lunară",
+     "en": "year Y, monthly average"
+    }
+   },
+   "weights": {
+    "role": "employees",
+    "dataset": "FOM104F_judete",
+    "group_by": [
+     "ECON_ACTIVITY",
+     "SEX",
+     "REF_AREA",
+     "TIME_PERIOD"
+    ],
+    "filters": {},
+    "reference": {
+     "ro": "numărul mediu de salariați în anul Y",
+     "en": "average number of employees in year Y"
+    }
+   },
+   "cell_columns": [
+    "ECON_ACTIVITY",
+    "SEX"
+   ],
+   "keep": {
+    "ECON_ACTIVITY": "^[A-S]  "
+   },
+   "columns": [
+    {
+     "key": "value",
+     "label": {
+      "ro": "Câștig mediu net (lei)",
+      "en": "Average net earnings (lei)"
+     },
+     "format": "int"
+    },
+    {
+     "key": "weight_total",
+     "label": {
+      "ro": "Salariați (medie)",
+      "en": "Employees (average)"
+     },
+     "format": "int"
+    }
+   ],
+   "display_decimals": 0,
+   "missing_policy": "A county-year with a weighted cell lacking earnings, or without employees, is excluded with its reason. CAEN sections only (A–S); divisions and the INDUSTRIE aggregate would double count."
+  },
+  {
+   "id": "registered_unemployment_county",
+   "version": 1,
+   "question": "Q3",
+   "kind": "rate_from_counts",
+   "status": {
+    "ro": "reconstituit din ratele pe sexe și numărul de șomeri la sfârșitul anului; metoda reproduce ratele regionale publicate pe sexe (2022–2024, la rotunjire); Bucureștiul nu are numărul de șomeri în datele descărcate și apare doar ca interval; valorile pe județe nu au fost încă verificate cu celulele INS",
+    "en": "reconstructed from the rates by sex and the year-end registered unemployed; the method reproduces the published regional rates by sex (2022–2024, to rounding); Bucharest lacks the unemployed count in the downloaded data and is shown only as a range; county values not yet checked against INS cells"
+   },
+   "name": {
+    "ro": "Rata șomajului înregistrat (ambele sexe), pe județe",
+    "en": "Registered unemployment rate (both sexes) by county"
+   },
+   "unit": {
+    "ro": "%",
+    "en": "%"
+   },
+   "definition": {
+    "ro": "Șomerii înregistrați la agențiile de ocupare față de populația activă civilă, pentru ambele sexe. INS publică ratele pe sexe; populația activă a fiecărui sex se obține din numărul de șomeri împărțit la rata lui, apoi rata totală = total șomeri / total populație activă. Nu este rata BIM (din anchetă).",
+    "en": "Unemployed people registered with the employment agencies relative to the civilian active population, both sexes. INS publishes the rates by sex; each sex's active population is the number of unemployed divided by its rate, then the total rate = total unemployed / total active population. Not the ILO (survey) rate."
+   },
+   "formula": "rate(county, Y) = 100 × Σ_sex U / Σ_sex (U / (rate_sex / 100))",
+   "rates": {
+    "role": "rate",
+    "dataset": "SOM103A_judete",
+    "concept": "registered_unemployment_rate",
+    "group_by": [
+     "SEX",
+     "REF_AREA",
+     "TIME_PERIOD"
+    ],
+    "filters": {},
+    "reference": {
+     "ro": "anul Y",
+     "en": "year Y"
+    }
+   },
+   "counts": {
+    "role": "unemployed",
+    "dataset": "SOM101E",
+    "group_by": [
+     "SEX",
+     "REF_AREA",
+     "TIME_PERIOD"
+    ],
+    "filters": {},
+    "reference": {
+     "ro": "șomeri înregistrați la sfârșitul anului (decembrie), însumați pe localități",
+     "en": "registered unemployed at year end (December), summed over localities"
+    }
+   },
+   "by": "SEX",
+   "columns": [
+    {
+     "key": "value",
+     "label": {
+      "ro": "Rata șomajului (%)",
+      "en": "Unemployment rate (%)"
+     },
+     "format": "rate"
+    },
+    {
+     "key": "count_total",
+     "label": {
+      "ro": "Șomeri înregistrați",
+      "en": "Registered unemployed"
+     },
+     "format": "int"
+    }
+   ],
+   "display_decimals": 1,
+   "missing_policy": "A county-year missing a sex's count or rate, or with a zero rate and some unemployed, is excluded with its reason; when both sex rates exist the excluded entry carries their range (the total lies between them)."
+  }
+ ]
+}

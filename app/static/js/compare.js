@@ -125,27 +125,30 @@ class ComparePage {
 
     // ------------------------------------------------------------ recipe (PA-03b)
 
-    /** A reviewed cross-dataset recipe (tourism intensity): computed by the
-     *  server from two validated series, shown as chart + table with the
-     *  definition, sources, exclusions, a live link and an evidence bundle. */
+    /** A reviewed cross-dataset recipe (tourism intensity, Q2 earnings, Q3
+     *  unemployment): computed by the server from two validated sources, shown
+     *  as chart + table (columns from the recipe) with the definition, sources,
+     *  exclusions, a live link and an evidence bundle. */
     async renderRecipe() {
         const ro = this.lang !== 'en';
         const T = ro ? {
             year: 'An', latest: 'ultimul an comun', all: 'toate județele', areas: 'Județe',
-            rank: '#', area: 'Județ', stays: 'Înnoptări', pop: 'Populație rezidentă 1 ian.', value: 'Înnoptări / locuitor',
+            rank: '#', area: 'Județ', between: 'între',
             evidence: 'Descarcă dovezile (ZIP)', copy: 'Copiază linkul', copied: 'Link copiat',
             sources: 'Surse', excluded: 'Excluse', reasons: { numerator_missing: 'fără înnoptări', denominator_missing: 'fără populație',
                 denominator_not_positive: 'populație ≤ 0', nonfinite: 'valoare invalidă', not_in_denominator: 'nu are populație rezidentă pe județ',
-                not_in_data: 'nu există în date' },
+                not_in_data: 'nu există în date', value_missing: 'lipsește o valoare ponderată', no_weights: 'fără ponderi',
+                group_missing: 'lipsesc date pentru un sex', rate_zero: 'rată zero cu șomeri', no_base: 'fără bază' },
             linkNote: 'Linkul recalculează pe datele curente; fișierul ZIP păstrează rezultatul de acum.',
             unavailable: 'Rezultat indisponibil', generation: 'Generația datelor',
         } : {
             year: 'Year', latest: 'latest common year', all: 'all counties', areas: 'Counties',
-            rank: '#', area: 'County', stays: 'Overnight stays', pop: 'Resident pop. 1 Jan', value: 'Stays / resident',
+            rank: '#', area: 'County', between: 'between',
             evidence: 'Download evidence (ZIP)', copy: 'Copy link', copied: 'Link copied',
             sources: 'Sources', excluded: 'Excluded', reasons: { numerator_missing: 'no stays', denominator_missing: 'no population',
                 denominator_not_positive: 'population ≤ 0', nonfinite: 'invalid value', not_in_denominator: 'no county resident population',
-                not_in_data: 'not in the data' },
+                not_in_data: 'not in the data', value_missing: 'a weighted value is missing', no_weights: 'no weights',
+                group_missing: 'data missing for one sex', rate_zero: 'zero rate with unemployed', no_base: 'no base' },
             linkNote: 'The link recomputes on current data; the ZIP keeps this result.',
             unavailable: 'Result unavailable', generation: 'Data generation',
         };
@@ -165,6 +168,10 @@ class ComparePage {
         document.title = `${r.recipe.name} — INS+`;
         const dec = r.recipe.display_decimals ?? 3;
         const fmt = v => v.toLocaleString(ro ? 'ro-RO' : 'en-GB', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+        const cols = r.recipe.columns || [];
+        const valueLabel = (cols.find(c => c.key === 'value') || {}).label || r.recipe.unit;
+        const cell = (c, x) => x[c.key] == null ? '–'
+            : c.key !== 'value' && c.format === 'int' ? formatNumber(Math.round(x[c.key])) : fmt(x[c.key]);
         const qs = o => new URLSearchParams(Object.entries(o).filter(([, v]) => v != null && v !== '')).toString();
         const yearOpts = [`<option value="">${T.latest} (${r.years_available.at(-1)})</option>`]
             .concat([...r.years_available].reverse().map(y => `<option value="${y}" ${y === this.recipeYear ? 'selected' : ''}>${y}</option>`)).join('');
@@ -174,7 +181,8 @@ class ComparePage {
                 (${_escHtml(s.reference || '')}; ${_escHtml(s.unit || '')}${s.source_updated ? `; ${ro ? 'actualizat' : 'updated'} ${_escHtml(s.source_updated)}` : ''})</li>`;
         }).join('');
         const excl = r.excluded.length
-            ? `<p class="rcp-excluded">${T.excluded}: ${r.excluded.map(e => `${_escHtml(e.label)} (${T.reasons[e.reason] || e.reason})`).join(', ')}</p>` : '';
+            ? `<p class="rcp-excluded">${T.excluded}: ${r.excluded.map(e => `${_escHtml(e.label)} (${T.reasons[e.reason] || e.reason}${
+                e.bounds ? `; ${T.between} ${fmt(e.bounds[0])} – ${fmt(e.bounds[1])}` : ''})`).join(', ')}</p>` : '';
         const evidenceHref = `/api/recipes/${encodeURIComponent(this.recipe)}/evidence?${qs({ year: r.year, areas: params.areas, lang: this.lang })}`;
         host.innerHTML = `
             <h1>${_escHtml(r.recipe.name)} · ${_escHtml(r.year)}</h1>
@@ -192,9 +200,9 @@ class ComparePage {
             <section class="dbv2-tile"><div class="dbv2-tile-chart" id="rcp-chart" role="img"
                 aria-label="${_escHtml(r.recipe.name)} ${_escHtml(r.year)}"></div></section>
             <div class="rcp-table-wrap"><table class="rcp-table">
-                <thead><tr><th>${T.rank}</th><th>${T.area}</th><th>${T.stays}</th><th>${T.pop}</th><th>${T.value}</th></tr></thead>
+                <thead><tr><th>${T.rank}</th><th>${T.area}</th>${cols.map(c => `<th>${_escHtml(c.label)}</th>`).join('')}</tr></thead>
                 <tbody>${r.rows.map(x => `<tr><td>${x.rank}</td><td>${_escHtml(x.label)}</td>
-                    <td>${formatNumber(x.stays)}</td><td>${formatNumber(x.population)}</td><td>${fmt(x.intensity)}</td></tr>`).join('')}</tbody>
+                    ${cols.map(c => `<td>${cell(c, x)}</td>`).join('')}</tr>`).join('')}</tbody>
             </table></div>
             <div class="rcp-meta">${T.sources}:<ul>${src}</ul>INS — TEMPO Online.</div>`;
         host.classList.remove('hidden');
@@ -218,11 +226,11 @@ class ComparePage {
                      left: 0, textStyle: { fontSize: 13 }, subtextStyle: { fontSize: 11 } },
             tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' },
                 formatter: p => { const x = rows[p[0].dataIndex];
-                    return `<b>${_escHtml(x.label)}</b><br>${T.value}: ${fmt(x.intensity)}<br>${T.stays}: ${formatNumber(x.stays)}<br>${T.pop}: ${formatNumber(x.population)}`; } },
+                    return `<b>${_escHtml(x.label)}</b>` + cols.map(c => `<br>${_escHtml(c.label)}: ${cell(c, x)}`).join(''); } },
             grid: { left: 8, right: 56, top: 52, bottom: 8, containLabel: true },
             xAxis: { type: 'value' },
             yAxis: { type: 'category', data: rows.map(x => x.label), axisLabel: { fontSize: 11 } },
-            series: [{ type: 'bar', data: rows.map(x => x.intensity),
+            series: [{ type: 'bar', name: valueLabel, data: rows.map(x => x.value),
                        label: { show: true, position: 'right', fontSize: 10, formatter: p => fmt(p.value) } }],
             toolbox: { feature: { saveAsImage: { title: 'PNG', name: `${this.recipe}_${r.year}` } }, right: 0 },
         });

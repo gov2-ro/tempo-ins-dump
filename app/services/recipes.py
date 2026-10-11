@@ -30,6 +30,15 @@ class RecipeError(Exception):
         return {"reason": self.reason, "message": self.message, **self.detail}
 
 
+SOURCE_KEYS = {"ratio": ("numerator", "denominator"), "weighted_mean": ("values", "weights"),
+               "rate_from_counts": ("rates", "counts")}
+
+
+def source_specs(r: dict) -> tuple:
+    """The recipe's two source specs, in formula order."""
+    return tuple(r[k] for k in SOURCE_KEYS[r.get("kind", "ratio")])
+
+
 def load_recipes() -> dict:
     return {r["id"]: r for r in json.loads(RECIPES_PATH.read_text(encoding="utf-8"))["recipes"]}
 
@@ -128,15 +137,24 @@ def compute(num_rows, den_rows, *, num_unit: str | None, den_unit: str | None,
 
 # ------------------------------------------------------------------ execution
 
-def _source(conn, spec: dict, lang: str) -> dict:
-    """Run one source through the shared query; refuse anything incomplete."""
+def _years(conn, code: str) -> list[str]:
+    from app.services.data_query import dimension_values
+    vals = dimension_values(conn, code, "TIME_PERIOD", limit=500)["values"]
+    return sorted({y for y in (_year(v) for v in vals) if y})
+
+
+def _source(conn, spec: dict, lang: str, year: str | None = None) -> dict:
+    """Run one source through the shared query; refuse anything incomplete.
+    `year` pins TIME_PERIOD (sources too large for one unfiltered query)."""
     from app.config import MAX_DATA_ROWS
     from app.services.concept_search import dataset_facts
     from app.services.data_query import QueryError, run_query
     code = spec["dataset"]
     try:
-        res = run_query(conn, code, dict(spec.get("filters") or {}), list(spec["group_by"]),
-                        MAX_DATA_ROWS)
+        flt = dict(spec.get("filters") or {})
+        if year is not None:
+            flt["TIME_PERIOD"] = [year]
+        res = run_query(conn, code, flt, list(spec["group_by"]), MAX_DATA_ROWS)
     except QueryError as e:
         raise RecipeError("source_failed", f"{code}: {e.message}", source=spec["role"])
     agg = res.get("aggregation") or {}
@@ -152,14 +170,152 @@ def _source(conn, spec: dict, lang: str) -> dict:
     gi, ti = cols.index("REF_AREA"), cols.index("TIME_PERIOD")
     facts = dataset_facts(conn, code, lang) or {}
     return {"role": spec["role"], "dataset": code, "rows": [(r[gi], r[ti], r[-1]) for r in res["rows"]],
+            "columns": cols, "table": [list(r) for r in res["rows"]],
             "unit": facts.get("unit"), "title": facts.get("title"),
             "definition": facts.get("definition"), "source_updated": facts.get("source_updated"),
             "coverage": facts.get("coverage"), "concept": spec.get("concept"),
             "reference": spec.get("reference"),
-            "query": {"dataset": code, "filters": spec.get("filters") or {},
+            "query": {"dataset": code, "filters": {**(spec.get("filters") or {}),
+                                                   **({"TIME_PERIOD": [year]} if year else {})},
                       "group_by": spec["group_by"], "approximate": False},
             "aggregation": agg, "quality": res.get("quality"), "generation": res.get("generation"),
             "contract": res.get("contract")}
+
+
+def _common_year(years_a, years_b, year):
+    common = sorted(set(years_a) & set(years_b))
+    if year is not None:
+        year = _year(year)
+        if year not in common:
+            raise RecipeError("year_unavailable", f"no common data for {year}", years_available=common)
+        return year, common
+    if not common:
+        raise RecipeError("no_common_year", "the two sources share no year")
+    return common[-1], common
+
+
+def compute_weighted_mean(values, weights, *, cell_cols, keep: dict, year=None, areas=None) -> dict:
+    """Σ(value × weight) / Σ weight per county and year over a declared partition.
+
+    values / weights: (columns, rows) with the same cell columns plus REF_AREA and
+    TIME_PERIOD. `keep` = {column: regex} selects the partition (e.g. CAEN
+    sections). A county-year is excluded when a weighted cell has no value
+    (`value_missing`) or the weights sum to zero (`no_weights`): a partial
+    average would not be the total INS publishes.
+    """
+    import re as _re
+
+    def keyed(cols, rows, role):
+        ix = {c: cols.index(c) for c in cell_cols + ["REF_AREA", "TIME_PERIOD"]}
+        pats = {c: _re.compile(p) for c, p in keep.items()}
+        out = {}
+        for r in rows:
+            if any(not pats[c].search(str(r[ix[c]] or "")) for c in pats):
+                continue
+            y = _year(r[ix["TIME_PERIOD"]])
+            if y is None:
+                raise RecipeError("unsupported_period", f"{role}: period {r[ix['TIME_PERIOD']]!r} is not annual")
+            k = (geo_id(r[ix["REF_AREA"]]), y, tuple(str(r[ix[c]]) for c in cell_cols))
+            if k in out:
+                raise RecipeError("duplicate_key", f"{role}: more than one row for {k}", source=role)
+            out[k] = (str(r[ix["REF_AREA"]]).strip(), r[-1])
+        return out
+    v = keyed(*values, "value")
+    w = keyed(*weights, "weight")
+    year, common = _common_year({k[1] for k in v}, {k[1] for k in w}, year)
+    want = {geo_id(a) for a in areas} if areas else None
+    cells: dict = {}
+    for (g, y, cell), (label, wt) in w.items():
+        if y == year and (want is None or g in want):
+            cells.setdefault(g, {"label": label, "cells": []})["cells"].append((cell, wt, v.get((g, y, cell), (None, None))[1]))
+    rows, excluded = [], []
+    for g, d in sorted(cells.items()):
+        used = [(val, wt) for _, wt, val in d["cells"] if wt]
+        if any(val is None for val, _ in used):
+            excluded.append({"geo_id": g, "label": d["label"], "reason": "value_missing"})
+            continue
+        tw = sum(wt for _, wt in used)
+        if not tw or tw <= 0:
+            excluded.append({"geo_id": g, "label": d["label"], "reason": "no_weights"})
+            continue
+        rows.append({"geo_id": g, "label": d["label"], "year": year,
+                     "value": sum(val * wt for val, wt in used) / tw,
+                     "weight_total": tw, "cells": len(used)})
+    if want:
+        for g in sorted(want - set(cells)):
+            excluded.append({"geo_id": g, "label": g, "reason": "not_in_data"})
+    rows.sort(key=lambda r: (-r["value"], r["label"]))
+    for i, r in enumerate(rows, 1):
+        r["rank"] = i
+    return {"year": year, "rows": rows, "excluded": excluded, "years_available": common,
+            "universe": len(cells)}
+
+
+def compute_rate_from_counts(rates, counts, *, by: str, year=None, areas=None) -> dict:
+    """Total rate from per-group rates and counts: 100·ΣU / Σ(U / (rate/100)).
+
+    A rate is U / A × 100, so each group's base A = U / (rate/100); summing U
+    and A over the groups (here both sexes) gives the published total rate.
+    A county-year needs every group of the rates present with rate > 0 (or
+    U = 0 and rate = 0), else it is excluded (`group_missing`, `rate_zero`).
+    The total always lies between the group rates, so an area with every rate
+    but some counts missing is excluded with those `bounds`.
+    """
+    def keyed(cols, rows, role):
+        ix = {c: cols.index(c) for c in (by, "REF_AREA", "TIME_PERIOD")}
+        out = {}
+        for r in rows:
+            y = _year(r[ix["TIME_PERIOD"]])
+            if y is None:
+                raise RecipeError("unsupported_period", f"{role}: period {r[ix['TIME_PERIOD']]!r} is not annual")
+            k = (geo_id(r[ix["REF_AREA"]]), y, str(r[ix[by]]))
+            if k in out:
+                raise RecipeError("duplicate_key", f"{role}: more than one row for {k}", source=role)
+            out[k] = (str(r[ix["REF_AREA"]]).strip(), r[-1])
+        return out
+    rt = keyed(*rates, "rate")
+    ct = keyed(*counts, "count")
+    year, common = _common_year({k[1] for k in rt}, {k[1] for k in ct}, year)
+    want = {geo_id(a) for a in areas} if areas else None
+    groups = sorted({k[2] for k in rt if k[1] == year})
+    geos = {}
+    for (g, y, grp), (label, val) in rt.items():
+        if y == year and (want is None or g in want):
+            geos.setdefault(g, label)
+    rows, excluded = [], []
+    for g, label in sorted(geos.items()):
+        U = A = 0.0
+        reason = None
+        for grp in groups:
+            r = rt.get((g, year, grp), (None, None))[1]
+            u = ct.get((g, year, grp), (None, None))[1]
+            if r is None or u is None:
+                reason = "group_missing"
+                break
+            if r <= 0:
+                if u == 0:
+                    continue
+                reason = "rate_zero"
+                break
+            U += u
+            A += u / (r / 100)
+        if reason or A <= 0:
+            ex = {"geo_id": g, "label": label, "reason": reason or "no_base"}
+            rs = [rt.get((g, year, grp), (None, None))[1] for grp in groups]
+            if None not in rs:
+                ex["bounds"] = [min(rs), max(rs)]
+            excluded.append(ex)
+            continue
+        rows.append({"geo_id": g, "label": label, "year": year, "value": 100 * U / A,
+                     "count_total": U, "base_total": A})
+    if want:
+        for g in sorted(want - set(geos)):
+            excluded.append({"geo_id": g, "label": g, "reason": "not_in_data"})
+    rows.sort(key=lambda r: (-r["value"], r["label"]))
+    for i, r in enumerate(rows, 1):
+        r["rank"] = i
+    return {"year": year, "rows": rows, "excluded": excluded, "years_available": common,
+            "universe": len(geos)}
 
 
 def run(conn, recipe_id: str, *, year=None, areas=None, lang: str = "ro") -> dict:
@@ -167,20 +323,44 @@ def run(conn, recipe_id: str, *, year=None, areas=None, lang: str = "ro") -> dic
     if recipe_id not in recipes:
         raise RecipeError("unknown_recipe", f"no recipe {recipe_id!r}")
     r = recipes[recipe_id]
-    num = _source(conn, r["numerator"], lang)
-    den = _source(conn, r["denominator"], lang)
-    out = compute(num["rows"], den["rows"], num_unit=num["unit"], den_unit=den["unit"],
-                  multipliers=r["unit_multipliers"], year=year, areas=areas)
+    kind = r.get("kind", "ratio")
     pick = lambda d: d.get(lang) or d.get("ro") if isinstance(d, dict) else d
+    if kind == "ratio":
+        a_, b_ = _source(conn, r["numerator"], lang), _source(conn, r["denominator"], lang)
+        out = compute(a_["rows"], b_["rows"], num_unit=a_["unit"], den_unit=b_["unit"],
+                      multipliers=r["unit_multipliers"], year=year, areas=areas)
+        for row in out["rows"]:
+            row["value"] = row["intensity"]
+        inputs = {"stays": a_["rows"], "population": b_["rows"]}
+    elif kind in ("weighted_mean", "rate_from_counts"):
+        # these sources are too large for one unfiltered query: pick the year first
+        sa, sb = source_specs(r)
+        y, _ = _common_year(_years(conn, sa["dataset"]), _years(conn, sb["dataset"]), year)
+        a_, b_ = _source(conn, sa, lang, y), _source(conn, sb, lang, y)
+    if kind == "weighted_mean":
+        out = compute_weighted_mean((a_["columns"], a_["table"]), (b_["columns"], b_["table"]),
+                                    cell_cols=r["cell_columns"], keep=r.get("keep") or {},
+                                    year=y, areas=areas)
+        inputs = {"values": [a_["columns"]] + a_["table"], "weights": [b_["columns"]] + b_["table"]}
+    elif kind == "rate_from_counts":
+        out = compute_rate_from_counts((a_["columns"], a_["table"]), (b_["columns"], b_["table"]),
+                                       by=r["by"], year=y, areas=areas)
+        inputs = {"rates": [a_["columns"]] + a_["table"], "counts": [b_["columns"]] + b_["table"]}
+    elif kind != "ratio":
+        raise RecipeError("unknown_recipe", f"recipe kind {kind!r} is not supported")
     sources = []
-    for s in (num, den):
-        sources.append({k: (pick(v) if k == "reference" else v) for k, v in s.items() if k != "rows"})
-    return {"recipe": {"id": r["id"], "version": r["version"], "name": pick(r["name"]),
+    for src in (a_, b_):
+        sources.append({k: (pick(v) if k == "reference" else v) for k, v in src.items()
+                        if k not in ("rows", "table", "columns")})
+    return {"recipe": {"id": r["id"], "version": r["version"], "kind": kind, "name": pick(r["name"]),
                        "unit": pick(r["unit"]), "definition": pick(r["definition"]),
                        "formula": r["formula"], "status": pick(r["status"]),
                        "missing_policy": r["missing_policy"],
                        "display_decimals": r["display_decimals"],
-                       "unit_multipliers": r["unit_multipliers"]},
+                       "unit_multipliers": r.get("unit_multipliers"),
+                       "columns": [{**c, "label": pick(c["label"])} for c in r.get("columns", [])],
+                       "question": r.get("question"),
+                       "parameters": {k: r[k] for k in ("cell_columns", "keep", "by") if k in r}},
             "request": {"year": year, "areas": areas or None, "lang": lang},
-            **out, "sources": sources, "inputs": {"stays": num["rows"], "population": den["rows"]},
-            "generation": den["generation"]}
+            **out, "sources": sources, "inputs": inputs,
+            "generation": b_["generation"]}

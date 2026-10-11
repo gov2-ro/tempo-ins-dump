@@ -1,5 +1,31 @@
 # Activity History
 
+## 2026-10-11 — Static S2 corpus parity; Q2/Q3 reconstructions as recipes
+
+Static S2 replayed the full corpus: 70,708 recorded server answers, with 70,663
+identical. 38 were explained refusals: 4 server resource refusals and 34 over
+the new 12 MB browser budget. The 7 mismatches came from a server bug on
+ART124A, a stale column mapping that answered 500. `run_query` now refuses it
+as `schema_mismatch`, and the engine does the same.
+`docs/plans/public-alpha/static/s2-corpus.md`.
+
+Q2 and Q3 no longer wait on the INS server:
+- **`net_earnings_county`** (weighted mean over CAEN sections × sex, FOM106E by
+  FOM104F employees) reproduces the INS national total for 2024 (4,959 lei).
+- **`registered_unemployment_county`** recovers the active population by sex as
+  U / rate, using SOM101E year-end counts and SOM103A rates. It reproduces the
+  published regional rates by sex for 2022–2024.
+
+Correction: the earlier Q3 draft used SOM101B, which is women only (the fetch
+dropped Total), so its "3.30 % national" was the women's rate. Bucharest has no
+SOM101E rows in our fetch, so it is excluded and shown as a range (0.6–0.7).
+
+Other changes:
+- Evidence ZIPs, `recompute.py`, the recipe page and the search cards
+  ("county total (reconstructed)") now handle all three recipe kinds.
+- `app/data/*.json` (concepts, recipes) had been gitignored by `*/data*/*` and
+  was never committed. It is now tracked.
+
 ## 2026-10-11 — PA-03 tourism intensity + evidence; PA-04 candidate checks
 
 PA-03 (`ada6e1e`): the tourism-intensity recipe goes through the shared query

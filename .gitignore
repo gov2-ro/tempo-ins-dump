@@ -24,6 +24,8 @@ data*/*
 /docs/chart-taxonomy/*
 */data/*
 */data*/*
+# reviewed app config (concepts, recipes) is source, not corpus data
+!app/data/*.json
 _obsolete
 .playwright-mcp/*
 .playwright-mcp/

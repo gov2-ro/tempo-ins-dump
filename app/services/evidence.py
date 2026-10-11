@@ -198,17 +198,92 @@ sys.exit(1 if bad or len(rows) != len(published) else 0)
 '''
 
 
+RECOMPUTE_TABLES_PY = '''"""Recompute result.csv from the bundled inputs, offline, standard library only.
+
+  python recompute.py        prints the recomputed rows and checks result.csv
+
+method.json names the recipe kind and its parameters:
+  weighted_mean     value = sum(value x weight) / sum(weight) per area, over the
+                    cells whose columns match `keep`
+  rate_from_counts  rate = 100 x sum(U) / sum(U / (rate / 100)) per area, over `by`
+"""
+import csv, json, os, re, sys, unicodedata
+
+here = os.path.dirname(os.path.abspath(__file__))
+method = json.load(open(os.path.join(here, "method.json"), encoding="utf-8"))
+year, kind, p = method["year"], method["kind"], method["parameters"]
+
+def gid(label):
+    s = unicodedata.normalize("NFKD", label.strip())
+    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
+    return re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+
+def table(name, cols, keep=None):
+    out = {}
+    with open(os.path.join(here, "inputs", name), encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            if re.sub(r"^Anul\\s+", "", r["TIME_PERIOD"].strip()) != year:
+                continue
+            if keep and any(not re.search(rx, r[c]) for c, rx in keep.items()):
+                continue
+            v = None if r["OBS_VALUE"] == "" else float(r["OBS_VALUE"])
+            out[(gid(r["REF_AREA"]), tuple(r[c] for c in cols))] = (r["REF_AREA"].strip(), v)
+    return out
+
+rows = []
+if kind == "weighted_mean":
+    cols = p["cell_columns"]
+    val, wt = table("values.csv", cols, p["keep"]), table("weights.csv", cols, p["keep"])
+    areas = {}
+    for (g, cell), (label, w) in wt.items():
+        areas.setdefault(g, [label, []])[1].append((w, val.get((g, cell), (None, None))[1]))
+    for g, (label, cells) in areas.items():
+        used = [(v, w) for w, v in cells if w]
+        tw = sum(w for _, w in used)
+        if used and all(v is not None for v, _ in used) and tw > 0:
+            rows.append((label, sum(v * w for v, w in used) / tw))
+elif kind == "rate_from_counts":
+    rt, ct = table("rates.csv", [p["by"]]), table("counts.csv", [p["by"]])
+    groups = sorted({k[1] for k in rt})
+    for g in sorted({k[0] for k in rt}):
+        U = A = 0.0
+        ok = True
+        for grp in groups:
+            r, u = rt.get((g, grp), (None, None))[1], ct.get((g, grp), (None, None))[1]
+            if r is None or u is None or (r <= 0 and u != 0):
+                ok = False
+                break
+            if r > 0:
+                U, A = U + u, A + u / (r / 100)
+        if ok and A > 0:
+            rows.append((rt[(g, groups[0])][0], 100 * U / A))
+else:
+    sys.exit(f"unknown recipe kind {kind!r}")
+
+rows.sort(key=lambda r: (-r[1], r[0]))
+with open(os.path.join(here, "result.csv"), encoding="utf-8") as f:
+    published = {r["label"]: float(r["value"]) for r in csv.DictReader(f)}
+bad = [r for r in rows if r[0] not in published or abs(published[r[0]] - r[1]) > 1e-9 * max(1, abs(r[1]))]
+for r in rows:
+    print(f"{r[0]},{r[1]!r}")
+print(f"recomputed {len(rows)} rows; {len(bad)} differ from result.csv", file=sys.stderr)
+sys.exit(1 if bad or len(rows) != len(published) else 0)
+'''
+
+
 def recipe_bundle(result: dict, link: str) -> bytes:
     r = result["recipe"]
     src = {s["role"]: s for s in result["sources"]}
     year = result["year"]
+    ratio = r.get("kind", "ratio") == "ratio"
     files = {
         "selection.json": _json({"recipe": r["id"], "recipe_version": r["version"], "link": link,
                                  "requested": result["request"], "resolved_year": year,
                                  "years_available": result["years_available"],
                                  "source_queries": {k: v["query"] for k, v in src.items()}}),
         "method.json": _json({
-            "recipe": r["id"], "version": r["version"], "formula": r["formula"],
+            "recipe": r["id"], "version": r["version"], "kind": r.get("kind", "ratio"),
+            "parameters": r.get("parameters") or {}, "formula": r["formula"],
             "definition": r["definition"], "unit": r["unit"], "year": year,
             "reference_dates": {k: v.get("reference") for k, v in src.items()},
             "units": {k: v.get("unit") for k, v in src.items()},
@@ -220,18 +295,32 @@ def recipe_bundle(result: dict, link: str) -> bytes:
             "status": r["status"],
         }),
         "attribution.json": _json(_attribution(result["sources"])),
-        "result.csv": _csv(["rank", "geo_id", "label", "year", "stays", "population", "intensity"],
-                           [[x["rank"], x["geo_id"], x["label"], x["year"], x["stays"],
-                             x["population"], x["intensity"]] for x in result["rows"]]),
-        "recompute.py": RECOMPUTE_PY,
+        "recompute.py": RECOMPUTE_PY if ratio else RECOMPUTE_TABLES_PY,
     }
-    for role, rows in result["inputs"].items():
-        files[f"inputs/{role}.csv"] = _csv(["REF_AREA", "TIME_PERIOD", "OBS_VALUE"], rows)
+    if ratio:
+        files["result.csv"] = _csv(
+            ["rank", "geo_id", "label", "year", "stays", "population", "intensity"],
+            [[x["rank"], x["geo_id"], x["label"], x["year"], x["stays"], x["population"],
+              x["intensity"]] for x in result["rows"]])
+        for role, rows in result["inputs"].items():
+            files[f"inputs/{role}.csv"] = _csv(["REF_AREA", "TIME_PERIOD", "OBS_VALUE"], rows)
+        listing = ("result.csv              ranking, unrounded (stays, population, intensity)\n"
+                   "inputs/stays.csv        overnight stays per county and year, as the site computed them\n"
+                   "inputs/population.csv   resident population on 1 January per county and year\n")
+    else:
+        keys = [c["key"] for c in r.get("columns") or []]
+        keys = ["value"] + [k for k in keys if k != "value"]
+        files["result.csv"] = _csv(["rank", "geo_id", "label", "year", *keys],
+                                   [[x["rank"], x["geo_id"], x["label"], x["year"],
+                                     *[x.get(k) for k in keys]] for x in result["rows"]])
+        listing = "result.csv              ranking, unrounded (value = the recipe's result)\n"
+        for role, (head, *rows) in result["inputs"].items():
+            files[f"inputs/{role}.csv"] = _csv(head, rows)
+            listing += f"inputs/{role}.csv".ljust(24) + f"{(src.get(role) or {}).get('dataset', role)}, " \
+                       "the query result the site used (one row per cell)\n"
     files["README.txt"] = (
         f"{r['name']} — {year}\n\n{r['definition']}\n\nFormula: {r['formula']}\n\n"
-        "result.csv              ranking, unrounded (stays, population, intensity)\n"
-        "inputs/stays.csv        overnight stays per county and year, as the site computed them\n"
-        "inputs/population.csv   resident population on 1 January per county and year\n"
+        + listing +
         "method.json             formula, units, reference dates, exclusions, source decisions\n"
         "selection.json          what was asked, the year used and the source queries\n"
         "attribution.json        sources, update dates and a citation\n"
