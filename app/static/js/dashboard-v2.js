@@ -50,7 +50,7 @@ const UI_STRINGS = {
         logTooltip: 'Scară logaritmică (valori foarte inegale)',
         transpose: '⇄',
         transposeTooltip: 'Inversează axele',
-        views: { bars: 'Bare', grouped: 'Grupate', stacked: 'Stivuite', heatmap: 'Hartă termică' },
+        views: { bars: 'Bare', grouped: 'Grupate', stacked: 'Stivuite', heatmap: 'Hartă termică', lines: 'Linii' },
         viewTooltip: 'Alt mod de a arăta aceleași date',
         pickTooltip: 'Ce serie arată barele',
         sortValue: '↓ valoare',
@@ -124,7 +124,7 @@ const UI_STRINGS = {
         logTooltip: 'Logarithmic scale (highly unequal values)',
         transpose: '⇄',
         transposeTooltip: 'Swap axes',
-        views: { bars: 'Bars', grouped: 'Grouped', stacked: 'Stacked', heatmap: 'Heatmap' },
+        views: { bars: 'Bars', grouped: 'Grouped', stacked: 'Stacked', heatmap: 'Heatmap', lines: 'Lines' },
         viewTooltip: 'Another way to show the same data',
         pickTooltip: 'Which series the bars show',
         sortValue: '↓ value',
@@ -922,6 +922,22 @@ class DashboardV2 {
         await this.renderTiles([chart], new Map([[chart.id, data]]));
     }
 
+    /** A time × category tile with views (lines / stacked / heatmap). */
+    isTemporalViewTile(chart) {
+        return !!chart.views?.includes('lines');
+    }
+
+    /** The chart type a tile is drawn as, after its view. */
+    tileShownType(chart) {
+        const v = this.tileView(chart);
+        if (v && this.isTemporalViewTile(chart)) {
+            return { lines: 'line', heatmap: 'heatmap',
+                     stacked: chart.chart_type === 'area_stacked' ? 'area_stacked' : 'stacked_bar' }[v]
+                || chart.chart_type;
+        }
+        return chart.chart_type;
+    }
+
     /** The view a category × category tile shows (composer `views`), or null. */
     tileView(chart) {
         if (!chart.views?.length) return null;
@@ -948,7 +964,8 @@ class DashboardV2 {
             });
         }
         frag.appendChild(group);
-        if (current !== 'heatmap') {
+        // Sorting orders category bars; years keep their order.
+        if (current !== 'heatmap' && !this.isTemporalViewTile(chart)) {
             const sorted = this.tileSorts[chart.id] !== 'ins';
             this._chipBtn(frag, this.ui.sortValue, this.ui.sortTooltip, sorted, () => {
                 if (sorted) this.tileSorts[chart.id] = 'ins';
@@ -1061,7 +1078,7 @@ class DashboardV2 {
             && chart.data.group_by.includes(chart.roles?.x_axis)
             && (this.metadata.dimensions || []).some(d =>
                 d.dim_type === 'time' && d.dim_column_name === chart.roles.x_axis);
-        if (!timeOnX || !['line', 'area_stacked', 'bar_vertical'].includes(chart.chart_type)) return;
+        if (!timeOnX || !['line', 'area_stacked', 'bar_vertical'].includes(this.tileShownType(chart))) return;
         const modes = [['index', 'Index', this.ui.indexTooltip],
                        ['yoy', 'Δ%', this.ui.yoyTooltip]];
         // Seasonal overlay only makes sense for sub-annual series
@@ -1085,8 +1102,9 @@ class DashboardV2 {
         const roles = chart.roles || {};
 
         // Transpose: both axes categorical → swapping asks the mirror question
+        // (a time × category tile has its own views instead)
         if (['grouped_bar', 'stacked_bar', 'heatmap', 'bubble'].includes(chart.chart_type)
-                && roles.x_axis && roles.series) {
+                && roles.x_axis && roles.series && !this.isTemporalViewTile(chart)) {
             this._chipBtn(frag, this.ui.transpose, this.ui.transposeTooltip,
                 !!this.tileSwaps[chart.id], () => {
                     this.tileSwaps[chart.id] = !this.tileSwaps[chart.id];
@@ -1274,7 +1292,18 @@ class DashboardV2 {
             const viewFlags = {};
             container.style.minHeight = '';
             let rowHeight = 0;
-            if (view && roles?.x_axis && roles?.series) {
+            if (view && roles?.x_axis && roles.x_axis === timeDim) {
+                // Time × category views: lines, stacked bars (only where the
+                // parts add up, per the composer) or the heatmap — same slice.
+                renderType = { lines: 'line', heatmap: 'heatmap',
+                               stacked: chart.chart_type === 'area_stacked' ? 'area_stacked' : 'stacked_bar' }[view]
+                    || renderType;
+                const typeEl = bar0?.querySelector('.dbv2-tile-type');
+                if (typeEl) {
+                    typeEl.textContent = chartTypeLabel(renderType, this.lang);
+                    typeEl.dataset.chartType = renderType;
+                }
+            } else if (view && roles?.x_axis && roles?.series) {
                 const sIdx = tileData.columns.indexOf(roles.series);
                 const allS = orderedDimValues(tileData.rows, sIdx, roles.series, this.metadata);
                 // A period where only the Total series has data still has bars to show.

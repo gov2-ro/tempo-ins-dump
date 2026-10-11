@@ -509,12 +509,10 @@ function createStackedBarChart(container, config, data, metadata) {
         return lbl.replace(/^Anul\s+/, '');
     });
 
-    // Series IDs — exclude totals
+    // Series IDs — exclude totals ("Total, din care:" too: stacking it on its
+    // own parts doubles the bar)
     const allSeriesIds = uniqueValues(rows, seriesIdx);
-    const seriesIds = allSeriesIds.filter(id => {
-        const lbl = (seriesLabels[String(id)] || '').trim().toLowerCase();
-        return lbl !== 'total' && lbl !== 'toate' && lbl !== 'ambele sexe';
-    });
+    const seriesIds = allSeriesIds.filter(id => !isTotalLabel(seriesLabels[String(id)] || String(id)));
 
     // Cap high-cardinality series — keep top N by sum
     const MAX_SERIES = config.max_series || 8;

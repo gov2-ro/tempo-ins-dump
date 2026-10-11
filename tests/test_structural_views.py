@@ -96,3 +96,75 @@ def test_default_view_avoids_repeating_the_ranking_bars():
     ranking = {'chart_type': 'horizontal_bar', 'score': 0.9, 'roles': {'x_axis': 'BRK'}}
     tile = _tile(_compose(RATES, 'percentage', 'non_additive', [ranking]), 'heatmap')
     assert tile['default_view'] == 'grouped'
+
+
+# ---- time × category tiles: lines / stacked / heatmap -----------------------
+
+YEARS = _dim('TIME_PERIOD', 'time', ['Anul 2020', 'Anul 2021', 'Anul 2022'])
+MANY = _dim('ACT', 'indicator', ['Total'] + [f'Activitate {i}' for i in range(12)])
+
+
+def _compose_time(chart_type, series, unit, measure, extra=()):
+    dims = [series, YEARS]
+    ranked = [*extra, {'chart_type': chart_type, 'score': 0.8,
+                       'roles': {'x_axis': 'TIME_PERIOD', 'series': series['dim_column_name']}}]
+    sig = {'primary_unit_type': unit, '_measure': measure, 'time_points': 3}
+    return compose_dashboard(sig, ranked, dims, actual_values=_actual(*dims))
+
+
+def test_stacked_rates_over_time_become_lines():
+    # 1,079 of 1,302 composed stacked tiles stacked rates or overlapping categories
+    tile = _compose_time('stacked_bar', RATES, 'percentage', 'non_additive')['charts'][0]
+    assert tile['chart_type'] == 'line' and tile['default_view'] == 'lines'
+    assert tile['views'] == ['lines', 'heatmap']
+
+
+def test_counts_by_sex_over_time_keep_stacking():
+    tile = _compose_time('stacked_bar', SEX, 'count', 'additive')['charts'][0]
+    assert tile['chart_type'] == 'stacked_bar' and tile['default_view'] == 'stacked'
+    assert tile['views'] == ['lines', 'stacked', 'heatmap']
+
+
+def test_unverified_flat_series_over_time_never_stacks():
+    tile = _compose_time('stacked_bar', RATES, 'count', 'additive')['charts'][0]
+    assert 'stacked' not in tile['views'] and tile['chart_type'] == 'line'
+
+
+def test_time_heatmap_opens_as_lines_when_few_series():
+    tile = _compose_time('heatmap', SEX, 'count', 'additive')['charts'][0]
+    assert tile['chart_type'] == 'line' and tile['roles']['x_axis'] == 'TIME_PERIOD'
+    assert tile['views'] == ['lines', 'stacked', 'heatmap'] and tile['default_view'] == 'lines'
+
+
+def test_time_heatmap_with_many_series_stays_a_heatmap():
+    tile = _tile(_compose_time('heatmap', MANY, 'count', 'additive'), 'heatmap')
+    assert tile['chart_type'] == 'heatmap' and 'views' not in tile
+
+
+def test_one_category_over_time_is_a_line_or_dropped():
+    tile = _compose_time('heatmap', ONE, 'percentage', 'non_additive')['charts'][0]
+    assert tile['chart_type'] == 'line' and tile['roles']['series'] is None
+    line = {'chart_type': 'line', 'score': 0.9, 'roles': {'x_axis': 'TIME_PERIOD', 'series': None}}
+    comp = _compose_time('heatmap', ONE, 'percentage', 'non_additive', extra=[line])
+    assert [c['chart_type'] for c in comp['charts']] == ['line']
+
+
+def test_duplicate_of_a_line_tile_gives_it_the_views():
+    line = {'chart_type': 'line', 'score': 0.9, 'roles': {'x_axis': 'TIME_PERIOD', 'series': 'SEX'}}
+    comp = _compose_time('stacked_bar', SEX, 'count', 'additive', extra=[line])
+    assert len(comp['charts']) == 1
+    tile = comp['charts'][0]
+    assert tile['chart_type'] == 'line' and tile['views'] == ['lines', 'stacked', 'heatmap']
+    assert tile['default_view'] == 'lines'
+
+
+def test_one_period_is_not_an_evolution():
+    # AED109A: a stacked "evolution" of 2022 alone; its categories become bars
+    dims = [RATES, TIME]
+    ranked = [{'chart_type': 'stacked_bar', 'score': 0.8,
+               'roles': {'x_axis': 'TIME_PERIOD', 'series': 'RATA'}}]
+    comp = compose_dashboard({'primary_unit_type': 'percentage', '_measure': 'non_additive',
+                              'time_points': 1}, ranked, dims, actual_values=_actual(*dims))
+    tile = comp['charts'][0]
+    assert tile['chart_type'] == 'horizontal_bar' and tile['roles']['x_axis'] == 'RATA'
+    assert tile['data']['group_by'] == ['RATA']

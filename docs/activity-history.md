@@ -1,5 +1,34 @@
 # Activity History
 
+## 2026-10-11 — Time × category tiles: lines, honest stacking, a view toggle
+
+This follows the category × category bars toggle (`2f45ac8`) to the tiles with
+years on one axis. The composer's `_temporal_views`:
+- **Stacking** uses the category tiles' rule (`_stack_ok`): an additive measure
+  over a verified partition, or sex/residence, with no hierarchy, and at most
+  8 series (the renderer used to drop the rest silently). Otherwise the tile
+  opens as lines.
+- **Heatmaps** with up to 8 series open as lines. Every such tile offers lines
+  | stacked (when honest) | heatmap. More than 8 series stay a heatmap.
+- **One category over time** is a line, or is dropped when a temporal tile
+  already exists.
+- **Duplicates:** a tile that repeats an existing line tile's series hands its
+  views to that tile instead of appearing twice.
+- **One period** (AED109A) is not an evolution: its categories become bars,
+  or the tile is dropped.
+- The client maps views to renderers. Index/Δ% follow the shown type; there
+  is no value sort or transpose on time tiles. The stacked renderer drops
+  "Total, din care" series.
+
+Corpus scan on the copy:
+- Stacked tiles drawn by default went from 1,302 to 85. 1,079 of the 1,302
+  stacked rates or overlapping categories; none of the 85 do.
+- 1,332 time × category tiles get the toggle, 201 of them with stacking.
+- Tiles per dashboard went from 4,589 to 3,364 across the scanned types,
+  mostly from merged duplicates.
+
+The chart selector is untouched.
+
 ## 2026-10-11 — Static site S3–S4: every page on shared hosting, proven equal to the server
 
 The whole site now builds as static files (`scripts/build-static.py`, see

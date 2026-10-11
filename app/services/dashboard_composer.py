@@ -405,6 +405,62 @@ def retune_ranked_series(ranked: list[dict], dimensions: list, sig: dict,
             entry['roles'] = {**roles, 'series': _col(best)}
 
 
+def _stack_ok(s_dim: dict, actual_values: dict | None, struct: dict | None,
+              non_additive: bool) -> bool:
+    """Whether the series' parts add up to a whole: an additive measure, and a
+    series dim that is a verified partition (or sex / residence) with no
+    hierarchy. Rates or overlapping categories stack into a meaningless total,
+    and a 'flat' profile only means no hierarchy was *detected*: AED103A's
+    flat series nests "Formala" in "Formala sau non-formala" in "Formala,
+    non-formala sau informala"."""
+    s_struct = (struct or {}).get(_col(s_dim)) or {}
+    partition = (s_struct.get('additive') is True
+                 or s_dim.get('dim_type') in PARTITION_DIM_TYPES)
+    return (not non_additive and partition
+            and (s_struct.get('n_levels') or 0) <= 1
+            and _hierarchy_root_pin(s_dim, _effective(s_dim, actual_values)) is None)
+
+
+# Time × category tiles: lines stay readable up to a handful of series; the
+# stacked renderer keeps at most 8 (it used to drop the rest silently).
+MAX_LINE_SERIES = 8
+MAX_TIME_STACKED_SERIES = 8
+TEMPORAL_VIEW_TYPES = {'lines': 'line', 'stacked': 'stacked_bar', 'heatmap': 'heatmap'}
+
+
+def _temporal_views(chart_type: str, roles: dict, dimensions: list, time_col: str,
+                    actual_values: dict | None, struct: dict | None, non_additive: bool):
+    """(chart_type, roles, views, default_view) for a time × category tile
+    (a heatmap, stacked bars or stacked areas with years on one axis).
+
+    One category over time is a line. Otherwise the tile offers lines (up to
+    MAX_LINE_SERIES series), stacked bars only when the parts add up to a
+    whole (`_stack_ok`), and the heatmap; it opens on stacked bars when the
+    selector chose them and they are honest, else on lines, else on the
+    heatmap. 904 of 1,111 composed stacked tiles stacked rates or
+    overlapping categories before this.
+    """
+    cat = roles.get('series') if roles.get('x_axis') == time_col else roles.get('x_axis')
+    s_dim = next((d for d in dimensions if _col(d) == cat), None) if cat else None
+    n_s = len(_non_total_options(s_dim, actual_values)) if s_dim else 0
+    roles = {**roles, 'x_axis': time_col, 'series': cat if n_s >= 2 else None}
+    if n_s < 2:
+        return 'line', roles, None, None
+    views = []
+    if n_s <= MAX_LINE_SERIES:
+        views.append('lines')
+    if n_s <= MAX_TIME_STACKED_SERIES and _stack_ok(s_dim, actual_values, struct, non_additive):
+        views.append('stacked')
+    views.append('heatmap')
+    default = ('stacked' if chart_type in ('stacked_bar', 'area_stacked') and 'stacked' in views
+               else 'lines' if 'lines' in views else 'heatmap')
+    if len(views) == 1:          # too many series for lines: the heatmap alone
+        return 'heatmap', roles, None, 'heatmap'
+    if default == 'stacked' and chart_type == 'area_stacked':
+        return 'area_stacked', roles, views, default     # the selector's stacked areas, kept
+    return TEMPORAL_VIEW_TYPES[default], roles, views, default
+
+
 def _categorical_views(roles: dict, dimensions: list, actual_values: dict | None,
                        struct: dict | None, non_additive: bool):
     """(roles, views) for a category × category heatmap tile, or None when
@@ -433,12 +489,7 @@ def _categorical_views(roles: dict, dimensions: list, actual_values: dict | None
     views = ['bars']
     if n_s <= MAX_GROUPED_SERIES:
         views.append('grouped')
-    s_struct = (struct or {}).get(_col(s_dim)) or {}
-    partition = (s_struct.get('additive') is True
-                 or s_dim.get('dim_type') in PARTITION_DIM_TYPES)
-    if (not non_additive and partition and n_s <= MAX_STACKED_SERIES
-            and (s_struct.get('n_levels') or 0) <= 1
-            and _hierarchy_root_pin(s_dim, _effective(s_dim, actual_values)) is None):
+    if n_s <= MAX_STACKED_SERIES and _stack_ok(s_dim, actual_values, struct, non_additive):
         views.append('stacked')
     views.append('heatmap')
     return roles, views
@@ -759,6 +810,32 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
                                          actual_values, non_additive, struct)
             if best is not None and _col(best) != roles.get('series'):
                 roles = {**roles, 'series': _col(best)}
+        default_view = None
+        n_periods = len((actual_values or {}).get(time_col) or ()) if (time_col and actual_values) \
+            else (sig.get('time_points') or 0)
+        if time_col and n_periods < 2 and time_col in (roles.get('x_axis'), roles.get('series')):
+            # One period is not an evolution (AED109A: "Evoluție în timp" of
+            # 2022 alone). Show its categories as bars, unless a tile does.
+            cat = roles.get('series') if roles.get('x_axis') == time_col else roles.get('x_axis')
+            if not cat or any(c['roles'].get('x_axis') == cat for c in charts):
+                continue
+            chart_type, roles, views = 'horizontal_bar', {**roles, 'x_axis': cat, 'series': None}, None
+            axis = _chart_axis(chart_type, roles, time_col, geo_col)
+        elif chart_type in ('heatmap', 'stacked_bar', 'area_stacked') and time_col \
+                and time_col in (roles.get('x_axis'), roles.get('series')):
+            chart_type, roles, views, default_view = _temporal_views(
+                chart_type, roles, dimensions, time_col, actual_values, struct, non_additive)
+            if default_view is None and any(c['axis'] == 'temporal' for c in charts):
+                continue        # one category over time: a line tile already shows it
+            same = next((c for c in charts if c['roles'].get('x_axis') == roles.get('x_axis')
+                         and c['roles'].get('series') == roles.get('series')), None)
+            if same is not None:
+                # A line tile already draws these series: give it the views.
+                if views and not same.get('views') and same['chart_type'] == 'line':
+                    same['views'] = views
+                    same['default_view'] = 'lines'
+                continue
+            axis = _chart_axis(chart_type, roles, time_col, geo_col)
         spec = _build_slice(roles, dimensions, time_dim, chart_type,
                             actual_values, non_additive, struct)
         decision = spec_decision(spec, dimensions, actual_values, struct, non_additive)
@@ -777,7 +854,10 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
             'controls': _tile_controls(spec, dimensions, actual_values, struct),
             'annotations': _annotations_for(axis, spec['group_by'], time_col, trend),
         })
-        if views:
+        if views and default_view:
+            charts[-1]['views'] = views
+            charts[-1]['default_view'] = default_view
+        elif views:
             # When a ranking tile already draws these categories as bars,
             # open on the view it doesn't show.
             ranked_x = any(c['chart_type'] == 'horizontal_bar'
