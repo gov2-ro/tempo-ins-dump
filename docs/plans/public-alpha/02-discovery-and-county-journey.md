@@ -1,6 +1,10 @@
 # PA-02 — Find, understand and compare a county statistic
 
-Status: proposed. Owner: retrieval, metadata presentation and web interaction.
+Status: in progress (2026-10-11). PA-02a/b/c have a first implementation with
+reviewed search judgments, journey checks and canonical pages; see the
+[PA-02 record](pa-02/record.md). Open: a broader vocabulary, locality
+resolution, a dedicated compare control, and a full accessibility pass.
+Owner: retrieval, metadata presentation and web interaction.
 Dependencies: PA-00 reviewed questions; PA-01 contract for integrated behavior.
 Audit: A07, A10–A12. Builds on existing search, places, comparison and FIX-07.
 

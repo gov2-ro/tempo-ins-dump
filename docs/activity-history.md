@@ -1,5 +1,21 @@
 # Activity History
 
+## 2026-10-11 — PA-02: concept search, county journey, canonical pages
+
+On `pa/00-baseline`, record in `docs/plans/public-alpha/pa-02/record.md`.
+Search now starts from reviewed concepts (`app/data/concepts.json`): the Q1–Q4
+families plus what people confuse them with. The parsed places, level and
+year become an explicit selection carried into the dataset URL. Generic words
+come with alternatives instead of a silent pick; family grouping removes
+split-variant floods. Reviewed judgments (`data/eval/pa02_concept_judgments.json`)
+are truth, kept apart from the regression baseline, and all 21 pass. The dataset page shows
+the selected place's own value through the shared query. Home has question,
+place and indicator entry points; place pages group by stable context codes
+(Cluj: 0 "Other" instead of 868). Related datasets say how they differ, the
+Dimension Browser has a mobile select, and `/dataset/{code}` is canonical,
+with definition/coverage/source in the initial HTML, JSON-LD and a sitemap.
+Dockerfile now trusts proxy headers so canonical URLs are https on Fly.
+
 ## 2026-10-11 — PA-01: one validated query, grain gate, race and alignment fixes
 
 All on `pa/00-baseline`; details and before/after in
