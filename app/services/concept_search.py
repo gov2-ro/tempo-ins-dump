@@ -207,7 +207,7 @@ def dataset_facts(conn, code: str, lang: str = "ro") -> dict | None:
     row = conn.execute("""
         SELECT m.matrix_code, m.matrix_name, m.matrix_name_en, m.parent_matrix_code,
                COALESCE(m.definitie, pm.definitie), COALESCE(m.ultima_actualizare, pm.ultima_actualizare),
-               p.primary_unit_type, p.time_granularity
+               p.primary_unit_type
         FROM matrices m
         LEFT JOIN matrices pm ON pm.matrix_code = m.parent_matrix_code
         LEFT JOIN matrix_profiles p ON p.matrix_code = m.matrix_code

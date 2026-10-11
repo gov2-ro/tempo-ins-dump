@@ -794,3 +794,18 @@ body.sidebar-open .dbv2-main {
 .dbv2-kpi-sel { border-color: var(--accent); }
 .dbv2-rel-kind { display: inline-block; margin-top: 4px; font-size: 11px; color: var(--text-2); }
 .dbv2-rel-kind:not(.dbv2-rel-same_theme):not(.dbv2-rel-alternate_breakdown) { color: var(--warning, #b45309); }
+
+/* Server-rendered dataset facts (PA-02c) */
+.dbv2-ssr { margin: 0 0 12px; font-size: 13px; color: var(--text-1); }
+.dbv2-ssr-title { font-size: 1.3rem; margin: 0 0 8px; color: var(--text-0); }
+.dbv2-ssr-def summary { cursor: pointer; color: var(--text-1); line-height: 1.5; max-width: 90ch; }
+.dbv2-ssr-more { color: var(--accent); }
+.dbv2-ssr-def[open] summary .dbv2-ssr-more { display: none; }
+.dbv2-ssr-def p { margin: 6px 0 8px; max-width: 80ch; line-height: 1.5; }
+.dbv2-ssr-facts { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 4px 0; }
+.dbv2-ssr-facts dt { color: var(--text-2); }
+.dbv2-ssr-facts dt::after { content: ':'; }
+.dbv2-ssr-facts dd { margin: 0 0 0 4px; }
+.dbv2-ssr-facts > dt { display: inline; } .dbv2-ssr-facts > dd { display: inline; }
+.dbv2-ssr-links a { color: var(--accent); }
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

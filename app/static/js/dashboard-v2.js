@@ -184,7 +184,9 @@ function slotCharts(charts) {
 class DashboardV2 {
     constructor() {
         const params = new URLSearchParams(window.location.search);
-        this.code = params.get('code');
+        // Canonical /dataset/{code} or the /dataset-v2.html?code= alias
+        this.code = params.get('code')
+            || decodeURIComponent((/^\/dataset\/([^/]+)\/?$/.exec(window.location.pathname) || [])[1] || '') || null;
         this.lang = params.get('lang') || localStorage.getItem('lens_lang') || 'ro';
         if (!UI_STRINGS[this.lang]) this.lang = 'ro';
         this.ui = UI_STRINGS[this.lang];
@@ -555,6 +557,7 @@ class DashboardV2 {
             </div>
         `;
         document.title = `${m.matrix_name} — INS+ v2`;
+        document.querySelector('#dbv2-ssr .dbv2-ssr-title')?.classList.add('visually-hidden');
 
         // Raw observations for the current filters/language (not the chart
         // sample); preflight reports the row count or the rejection.

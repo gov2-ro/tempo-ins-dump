@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 
 from app.config import CORPUS_DIR
-from app.routers import categories, datasets, dataset_data, sdmx, ask, places
+from app.routers import categories, datasets, dataset_data, sdmx, ask, places, pages
 
 app = FastAPI(title="INS TEMPO Explorer", version="0.1.0")
 
@@ -38,6 +38,7 @@ app.include_router(dataset_data.router, prefix="/api", tags=["data"])
 app.include_router(sdmx.router, prefix="/sdmx", tags=["sdmx"])
 app.include_router(ask.router, prefix="/api", tags=["ask"])
 app.include_router(places.router, tags=["places"])
+app.include_router(pages.router, tags=["pages"])
 
 _LLMS_TXT = Path(__file__).parent.parent / "llms.txt"
 

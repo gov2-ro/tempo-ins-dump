@@ -92,6 +92,8 @@ def make_client(tmp_path, monkeypatch):
     import app.routers.dataset_data as dd
     import app.services.data_query as dq
     import app.services.grain_guard as gg
+    import app.services.concept_search as cs
+    import app.routers.pages as pages
     import app.services.query_builder as qb
     import app.services.dataset_meta as dm
 
@@ -101,7 +103,8 @@ def make_client(tmp_path, monkeypatch):
     monkeypatch.setattr(appdb, "DB_PATH", corpus / "metadata.duckdb")
     monkeypatch.setattr(appdb, "_conn", None)
     dm.clear_context_cache()
-    for mod in (sdmx_router, dd, dq, gg, qb, dm):
+    cs._cache.clear()
+    for mod in (sdmx_router, dd, dq, gg, cs, pages, qb, dm):
         monkeypatch.setattr(mod, "PARQUET_DIR", corpus / "parquet")
     from app.main import app
     return TestClient(app, raise_server_exceptions=False)
