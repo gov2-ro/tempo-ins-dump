@@ -1,5 +1,26 @@
 # Activity History
 
+## 2026-10-11 — PA-03 tourism intensity + evidence; PA-04 candidate checks
+
+PA-03 (`ada6e1e`): the tourism-intensity recipe goes through the shared query
+for both sources, with one row per county-year, exact-label joins, a common
+year and reasoned exclusions. Its 2024 result equals the PA-00 Q4 record for
+all 42 counties. Evidence ZIPs (`tempo-evidence/1`) carry the unrounded
+result, inputs, method, attribution and hashes, plus an offline
+`recompute.py` for the recipe; any `/data` selection can be exported, or gets
+a 413. Per-capita tiles now use the same-year population only.
+PA-04 (`76d8e7b`):
+- Staged the candidate from the copy. The strict release check passes with a
+  new, tested `--accept-restriction conflicting_grain`, which requires
+  `grain_findings` plus the shipped grain guard.
+- A 10-minute, 5-client workload: 22,834 requests, no unexpected 5xx or
+  corrupt exports. It exposed non-deterministic row order (fixed) and FTS OOM
+  fallbacks at 64 MB (fixed).
+- Rollback was exercised both ways; the browser smoke covered RO/EN at three
+  widths.
+Open: memory (1.2 GiB RSS locally, needs measuring in the Linux image under
+512 MiB), the image gate, INS cells and user sessions. Not deployed.
+
 ## 2026-10-11 — PA-02: concept search, county journey, canonical pages
 
 On `pa/00-baseline`, record in `docs/plans/public-alpha/pa-02/record.md`.

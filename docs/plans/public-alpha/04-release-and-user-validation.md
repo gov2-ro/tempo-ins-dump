@@ -1,6 +1,10 @@
 # PA-04 — Validate the release and learn from users
 
-Status: proposed. Owner: integration, release evidence and formative research.
+Status: in preparation (2026-10-11). The candidate passes the strict release
+check with an accepted, enforced restriction; workload, rollback and browser
+smoke are recorded. The image/resource gate (no Docker here), the INS cells and
+the user sessions remain. See the [release record](pa-04/release-record.md).
+Owner: integration, release evidence and formative research.
 Dependencies: integrated PA-01/02/03 and PA-00 baseline/answer records.
 Extends FIX-05; does not authorize deployment or sending recruitment messages.
 

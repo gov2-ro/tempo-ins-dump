@@ -50,6 +50,11 @@ acceptance checks and capability proposals:
 - [ ] **PA-02 — Comparison entry from the dataset page**. The selection headline compares chosen counties at a common period, but there is no "Compare with…" control near the header (and no compatibility preview). Build it on `/api/search` + `ComparePage.alignCounties`.
 - [ ] **PA-02 — Search vocabulary beyond Q1–Q4**. `app/data/concepts.json` covers four families and their look-alikes. Long natural questions about other topics still depend on BM25 over stopword-stripped text. Add reviewed concepts as new guided questions are chosen (inflation, doctors, births…), each with judgments.
 
+- [ ] **PA-04 — Memory under load (release blocker until measured)**. Locally (macOS, no limit), five clients peak at 1.2 GiB RSS; `/api/datasets?q=` alone reaches about 1 GiB, and the audited base commit behaves the same. DuckDB reports about 20 MB tracked, so the growth is allocator retention. Measure in the Linux image under 512 MiB with `scripts/alpha-workload.py`, then tune `TEMPO_DB_MEMORY`/`TEMPO_SEARCH_MEMORY`/`TEMPO_SCRATCH_MEMORY` or the allocator. Record in `pa-04/release-record.md`.
+- [ ] **PA-04 — Place profiles are the slowest page**. p95 2.3 s under five clients (target 2 s); each KPI opens its own scratch DuckDB connection and scans parquet. Cache per generation or share one bounded connection.
+- [ ] **PA-04 — Run the image gate and five formative sessions**. Needs Docker/CI and the maintainer's recruitment; script in `pa-04/session-script.md`.
+- [ ] **Search falls back silently on a transient FTS error**. One failed FTS query (e.g. OOM) serves name-matching results for that request and flips `/api/health` to degraded. Consider retrying or returning an explicit error rather than different results.
+
 The remaining conflicting-grain files and legacy-only coverage profiler are
 already tracked in the FIX-03 repair queue below. Public analytical queries need
 an explicit quality gate for those slices; this audit did not repair the corpus.

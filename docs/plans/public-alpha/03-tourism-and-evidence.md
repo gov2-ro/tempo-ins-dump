@@ -1,6 +1,9 @@
 # PA-03 — Tourism intensity and reproducible evidence
 
-Status: proposed. Owner: deterministic analysis and current-view export.
+Status: implemented (2026-10-11), pending the Q4 source gate. The recipe,
+evidence bundles and tests are in place; the county denominators still need the
+INS reference cells. See the [PA-03 record](pa-03/record.md).
+Owner: deterministic analysis and current-view export.
 Dependencies: approved PA-00 Q4 sources; PA-01 query/quality contract; PA-02
 selection state. Extends existing per-capita, comparison, URL state and PNG export.
 
