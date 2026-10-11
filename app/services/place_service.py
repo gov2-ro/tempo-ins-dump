@@ -93,7 +93,7 @@ def resolve_place(place_type: str, slug: str, *, conn=None) -> dict | None:
 
     parent_slug = None
     if place_type == "county":
-        parent_slug = COUNTY_REGION.get(canonical)
+        parent_slug = {slugify(k): v for k, v in COUNTY_REGION.items()}.get(slug)
 
     return {
         "name": canonical,
@@ -352,7 +352,11 @@ def _resolve_series(spec: dict, areas: list[str] | None, geo_level: str, *,
     if not parquet.exists():
         return [], None, None
     info = _info(parquet)
-    present = info["areas"] if areas is None else [a for a in areas if a in info["areas"]]
+    # Match by slug: metadata names carry diacritics ("Municipiul București")
+    # that the parquet values do not ("Municipiul Bucuresti").
+    by_slug = {slugify(a): a for a in info["areas"]}
+    present = info["areas"] if areas is None else list(dict.fromkeys(
+        by_slug[slugify(a)] for a in areas if slugify(a) in by_slug))
     if not collapse and len(present) > 1:
         present = [min(present, key=len)]
     if not present:

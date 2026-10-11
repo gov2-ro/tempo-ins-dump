@@ -362,3 +362,17 @@ def test_corpus_baseline_period_matches_place_period():
         b = ps.get_kpi_baselines("county", "bihor", k["key"])
         assert b["national"], k["key"]
         assert b["national"][-1]["year"] == k["period"], k["key"]
+
+
+# ---- PA-00 finding: diacritics in place names ---------------------------------
+
+def test_place_name_with_diacritics_matches_ascii_data(env, monkeypatch):
+    # Metadata says "Municipiul București", the parquet "Municipiul Bucuresti".
+    tmp, install = env
+    monkeypatch.setattr(ps, "resolve_place", lambda *a, **k: {
+        **PLACE, "name": "Municipiul București", "slug": "municipiul-bucuresti",
+        "ref_area_values": ["Municipiul București"]})
+    spec = _spec(partitions=["SEX", "RESIDENCE"])
+    rows = _count_rows({2024: 1000}, areas=("Municipiul Bucuresti", "Ilfov"))
+    rep = _kpi(tmp, install, spec, COUNT_COLS, rows)
+    assert [k["value"] for k in rep["kpis"]] == [1000.0] and not rep["omitted"]
