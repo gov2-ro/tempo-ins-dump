@@ -1,5 +1,31 @@
 # Activity History
 
+## 2026-10-11 — PA-01: one validated query, grain gate, race and alignment fixes
+
+All on `pa/00-baseline`; details and before/after in
+`docs/plans/public-alpha/pa-01/record.md`.
+- REST, Ask and the dev MCP now share one validated `/data` query
+  (`data_query.run_query`). The MCP no longer sums POP107A's overlapping ages,
+  and Ask rejects unknown filter columns instead of ignoring them.
+  Approximations are opt-in everywhere. Ask no longer strips "Total" and
+  retries an empty query.
+- New `grain_guard`: every aggregating path (data query, insights, headlines,
+  place KPIs, population reference) refuses slices with repeated observation
+  keys; raw rows stay available with their status. Evidence comes from the
+  generation manifest (new `audit.grain_findings`; the copy's manifest was
+  rebuilt with the same generation id, old file in `snapshots/`). Otherwise a
+  bounded query-time slice check runs.
+- Frontend: dashboard tiles drop late responses (the FOM106F race reproduces on
+  the base commit and is fixed); Ask charts keep geography in the series
+  identity; compare correlates only on the latest common period, lists
+  exclusions, and reports r as undefined instead of 0; citations open the v2
+  page.
+- Own-key Ask has its own switch, off by default, because the plan excludes Ask
+  from the alpha.
+Not done: Ask gate items (A07/A13/A14), exact citation slices, the per-capita
+nearest-year fallback, refusal copy on pages. INS was still unreachable, so
+the reference-cell fetch is pending (a poller waits for it).
+
 ## 2026-10-11 — PA-00 first increment: baseline, inventory, Q1–Q5 records
 
 Started the public-alpha plan in a separate worktree (`../tempo-alpha`, branch

@@ -91,7 +91,9 @@ nothing in `app/` or the MCP reads the audit's `conflicting_grain` list (A04).
    too loose for counts; the cause (revision vs. data) is unknown.
 5. INS was unreachable on 2026-10-11 (`statistici.insse.ro:8077`: connection
    reset, also outside the sandbox). No fresh oracle could be fetched today.
-6. `/api/health` cannot report the generation of an unstaged corpus.
+6. `/api/health` cannot report the generation of an unstaged corpus. *(Fixed in
+   PA-01b; the copy's manifest was then rebuilt with `grain_findings`, same
+   generation id: see [PA-01 record](../pa-01/record.md#data-change-on-the-copy).)*
 
 Items 1–4 and 6 are added to [BACKLOG](../../../BACKLOG.md); item 1 is the
 prerequisite in the answer records.

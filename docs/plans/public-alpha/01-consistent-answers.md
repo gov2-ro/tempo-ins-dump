@@ -1,6 +1,12 @@
 # PA-01 — One selection, one statistical decision
 
-Status: proposed. Owner: shared query services and rendering correctness.
+Status: in progress (2026-10-11), branch `pa/00-baseline`. Done, with tests:
+PA-01a shared query (bc7c509), PA-01b grain gate + generation identity (9d14ea5),
+PA-01c stale responses, Ask series, compare alignment, citations (94d8d27), and an
+own-key Ask switch (ab4edc2). Open: Ask gate items (A07/A13/A14; Ask stays
+excluded), citation slices, the per-capita nearest-year fallback and refusal
+copy on pages. See the [PA-01 record](pa-01/record.md).
+Owner: shared query services and rendering correctness.
 Dependencies: PA-00 baseline and source fixtures. Audit: A01–A06, A08, A09;
 A13/A14 if Ask is included. Builds on FIX-01/02/03/06/08.
 
