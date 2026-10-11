@@ -12,6 +12,7 @@ from app.services import agent, ask_guard
 @pytest.fixture(autouse=True)
 def _ask_on(monkeypatch):
     monkeypatch.setattr(config, "ASK_ENABLED", True)
+    monkeypatch.setattr(config, "ASK_BYOK_ENABLED", True)
 
 
 def run(**kw):

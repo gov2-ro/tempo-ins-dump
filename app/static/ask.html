@@ -461,7 +461,17 @@
             padding: 8px 12px;
             margin-bottom: 8px;
         }
-        #ask-logging-banner.hidden { display: none; }
+        #ask-logging-banner.hidden, #ask-unavailable.hidden { display: none; }
+        #ask-unavailable {
+            font-size: 0.85rem;
+            color: var(--text-1);
+            background: var(--bg-2);
+            border: 1px solid var(--border, var(--accent));
+            border-radius: var(--radius-sm);
+            padding: 10px 12px;
+            margin-bottom: 8px;
+        }
+        #ask-unavailable a { color: var(--accent); }
         .settings-note {
             font-size: 0.72rem;
             color: var(--text-3);
@@ -542,6 +552,7 @@
 
         <!-- Input -->
         <div class="chat-input-area">
+            <div id="ask-unavailable" class="hidden" role="status"></div>
             <div id="ask-logging-banner" class="hidden" role="note">
                 Chat logging is ON for this server: your questions, the answers and the data tool calls
                 are written to the server logs (credentials are redacted). Don't submit personal or confidential information.
@@ -571,7 +582,7 @@
             if (chatEmpty) chatEmpty.style.display = 'none';
         };
     </script>
-    <script src="/js/ask.js?v=2"></script>
+    <script src="/js/ask.js?v=3"></script>
     <script>
         // Patch appendMessage to hide empty state on first message
         const _orig = window.appendMessage;

@@ -30,6 +30,9 @@ DEBUG = os.environ.get("TEMPO_DEBUG", "false").lower() in ("1", "true", "yes")
 
 # LLM agent (POST /api/ask) — disabled by default
 ASK_ENABLED        = os.environ.get("TEMPO_ASK_ENABLED", "false").lower() in ("1", "true", "yes")
+# Bring-your-own-key Ask is a separate switch, also off by default: Ask stays out
+# of the public alpha until its exposure gate passes (PA-01/PA-04).
+ASK_BYOK_ENABLED   = os.environ.get("TEMPO_ASK_BYOK_ENABLED", "false").lower() in ("1", "true", "yes")
 LLM_PROVIDER       = os.environ.get("TEMPO_LLM_PROVIDER", "anthropic")   # anthropic | openai | gemini
 LLM_MODEL          = os.environ.get("TEMPO_LLM_MODEL", "claude-sonnet-4-6")
 GEMINI_API_KEY     = os.environ.get("GEMINI_API_KEY", "")  # server-side Gemini key (optional)

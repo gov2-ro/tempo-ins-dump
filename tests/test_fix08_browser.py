@@ -21,7 +21,7 @@ KEY = "sk-ant-BROWSERSENTINEL0123456789"
 
 
 def _serve(env_extra):
-    env = {**os.environ, "TEMPO_ASK_ENABLED": "1", "PYTHONPATH": str(ROOT), **env_extra}
+    env = {**os.environ, "TEMPO_ASK_ENABLED": "1", "TEMPO_ASK_BYOK_ENABLED": "1", "PYTHONPATH": str(ROOT), **env_extra}
     proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "fix08_browser_app:app", "--app-dir", str(ROOT / "tests"),
          "--port", str(PORT), "--log-level", "warning"],

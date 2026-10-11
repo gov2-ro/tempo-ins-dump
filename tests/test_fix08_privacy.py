@@ -17,6 +17,7 @@ SENTINEL = "SENTINEL0123456789abcdef"
 @pytest.fixture(autouse=True)
 def _ask_on(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "ASK_ENABLED", True)
+    monkeypatch.setattr(config, "ASK_BYOK_ENABLED", True)
     monkeypatch.setattr(config, "ASK_LOG_DIR", tmp_path)
 
 

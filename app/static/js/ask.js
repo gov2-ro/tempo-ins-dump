@@ -12,6 +12,7 @@
 const history = [];   // [{role:'user'|'assistant', content: str}]
 let isLoading = false;
 let MAX_HISTORY_TURNS = 20;  // overwritten from /api/ask/config
+let ASK_UNAVAILABLE = false; // /api/ask/config: neither hosted nor own-key Ask
 
 /** Show the chat-logging disclosure before any question is submitted. */
 async function initServerNotices() {
@@ -20,7 +21,28 @@ async function initServerNotices() {
         if (cfg.limits && cfg.limits.max_history_turns) MAX_HISTORY_TURNS = cfg.limits.max_history_turns;
         const b = document.getElementById('ask-logging-banner');
         if (b) b.classList.toggle('hidden', !cfg.chat_logging);
+        if (cfg.available === false) showAskUnavailable();
     } catch { /* leave the banner hidden only if the config is unreachable */ }
+}
+
+/** Ask is switched off on this server (hosted and own-key): say so, point to
+ *  the manual routes, and disable input instead of leaving a dead page. */
+function showAskUnavailable() {
+    ASK_UNAVAILABLE = true;
+    let ro = true;
+    try { ro = (localStorage.getItem('lens_lang') || 'ro') !== 'en'; } catch { /* default ro */ }
+    const box = document.getElementById('ask-unavailable');
+    box.innerHTML = ro
+        ? 'Întrebările în limbaj natural nu sunt disponibile pe acest server. '
+          + 'Găsiți aceleași date prin <a href="/">căutare</a> sau <a href="/places">locuri</a>.'
+        : 'Natural-language questions are not available on this server. '
+          + 'Find the same data through <a href="/">search</a> or <a href="/places">places</a>.';
+    box.classList.remove('hidden');
+    document.getElementById('byok-notice')?.classList.add('hidden');
+    for (const el of [document.getElementById('chat-input'), document.getElementById('chat-send'),
+                      ...document.querySelectorAll('.chat-example')]) {
+        if (el) el.disabled = true;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -91,7 +113,7 @@ function updateKeyBadge() {
     const badge = document.getElementById('settings-badge');
     if (badge) badge.classList.toggle('hidden', !hasKey);
     const notice = document.getElementById('byok-notice');
-    if (notice) notice.classList.toggle('hidden', hasKey);
+    if (notice) notice.classList.toggle('hidden', hasKey || ASK_UNAVAILABLE);
 }
 
 /** Returns extra payload fields when a user key is stored, empty object otherwise. */
@@ -534,6 +556,7 @@ function scrollToBottom() {
 // ---------------------------------------------------------------------------
 
 async function sendMessage() {
+    if (ASK_UNAVAILABLE) return;
     const input = document.getElementById('chat-input');
     const question = input.value.trim();
     if (!question || isLoading) return;

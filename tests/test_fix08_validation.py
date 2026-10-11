@@ -9,6 +9,7 @@ from app.services.llm_client import LLMError, UnsupportedProvider, classify_prov
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(config, "ASK_ENABLED", True)
+    monkeypatch.setattr(config, "ASK_BYOK_ENABLED", True)
     return make_client()
 
 
@@ -98,11 +99,27 @@ def test_byok_works_and_is_distinct(client, calls):
 
 def test_byok_allowed_when_ask_disabled_but_server_call_404(monkeypatch):
     monkeypatch.setattr(config, "ASK_ENABLED", False)
+    monkeypatch.setattr(config, "ASK_BYOK_ENABLED", True)
     install(monkeypatch, lambda n, m, kw: text_resp())
     c = make_client()
     assert c.post("/api/ask", json={"question": "x"}).status_code == 404
     assert c.post("/api/ask", json={"question": "x", "api_key": FAKE_KEY,
                                     "provider": "anthropic", "model": "claude-sonnet-4-6"}).status_code == 200
+
+
+@pytest.mark.parametrize("hosted", [False, True])
+def test_byok_switched_off_rejects_own_key_calls(monkeypatch, hosted):
+    # PA-01: excluding Ask must close the BYOK path too, not just hosted calls.
+    monkeypatch.setattr(config, "ASK_ENABLED", hosted)
+    monkeypatch.setattr(config, "ASK_BYOK_ENABLED", False)
+    called = []
+    install(monkeypatch, lambda n, m, kw: called.append(1) or text_resp())
+    c = make_client()
+    r = c.post("/api/ask", json={"question": "x", "api_key": FAKE_KEY,
+                                 "provider": "anthropic", "model": "claude-sonnet-4-6"})
+    assert r.status_code == 404 and not called
+    cfg = c.get("/api/ask/config").json()
+    assert cfg["byok_enabled"] is False and cfg["available"] is hosted
 
 
 def test_allowlist_config_overrides(client, calls, monkeypatch):

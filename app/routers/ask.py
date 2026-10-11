@@ -68,6 +68,8 @@ def ask_config() -> dict:
     """Public, non-secret settings the chat UI needs (logging disclosure, limits)."""
     return {
         "enabled": config.ASK_ENABLED,
+        "byok_enabled": config.ASK_BYOK_ENABLED,
+        "available": config.ASK_ENABLED or config.ASK_BYOK_ENABLED,
         "chat_logging": config.ASK_LOG_CHATS,
         "limits": {
             "max_history_turns": config.ASK_MAX_HISTORY_TURNS,
@@ -86,9 +88,12 @@ def _http_from_llm(e: LLMError) -> HTTPException:
 
 @router.post("/ask")
 def ask(req: AskRequest) -> dict:
-    # Allow if server is enabled OR if user supplies their own key (BYOK)
+    # Hosted calls need TEMPO_ASK_ENABLED, own-key calls TEMPO_ASK_BYOK_ENABLED.
+    # A key does not reopen an Ask the server has switched off.
     byok = bool(req.api_key)
-    if not config.ASK_ENABLED and not byok:
+    if byok and not config.ASK_BYOK_ENABLED:
+        raise HTTPException(status_code=404, detail="Ask with your own key is not available on this server")
+    if not byok and not config.ASK_ENABLED:
         raise HTTPException(status_code=404, detail="Ask endpoint is disabled")
 
     # 1-2. Reject bad input before any provider work.

@@ -87,7 +87,8 @@ Other root scripts: `generate_sdmx_yaml.py`, `build-geo-regions.py`,
 
 `main.py` mounts routers, `/view-profiles`, and `static/` at `/`. `config.py`
 reads env: `TEMPO_DATA_DIR`, `TEMPO_MAX_ROWS` (50,000), `TEMPO_DEBUG`,
-`TEMPO_ASK_ENABLED` (off by default) and other `TEMPO_ASK_*`/`TEMPO_LLM_*`.
+`TEMPO_ASK_ENABLED` (hosted Ask) and `TEMPO_ASK_BYOK_ENABLED` (own-key Ask), both
+off by default (set the second for local Ask work), and other `TEMPO_ASK_*`/`TEMPO_LLM_*`.
 
 - **Routers:** `datasets` (catalog/search/detail), `dataset_data` (data, insights,
   CSV/XLSX download), `categories`, `sdmx` (SDMX 2.1 data/datastructure/dataflow),
