@@ -66,7 +66,7 @@ function compare(want, got) {
 }
 
 const rl = readline.createInterface({ input: fs.createReadStream(casesPath), crlfDelay: Infinity });
-let n = 0, ok = 0, ties = 0, fail = 0, shown = 0, resourceSkips = 0;
+let n = 0, ok = 0, ties = 0, fail = 0, shown = 0, resourceSkips = 0, budgetRefusals = 0;
 const byField = {};
 const t0 = Date.now();
 for await (const line of rl) {
@@ -87,6 +87,9 @@ for await (const line of rl) {
         if (!err || err.status !== c.error.status || err.message !== c.error.message) diffs = ['error'];
     } else if (err) {
         diffs = ['unexpected_error'];
+    } else if (got.aggregation && got.aggregation.reason === 'browser_budget') {
+        budgetRefusals++;          // deliberate: too many bytes for a browser
+        continue;
     } else {
         ({ diffs, tie } = compare(c.response, got));
         // DuckDB ran out of memory on the slice check (Python reports
@@ -117,6 +120,6 @@ for await (const line of rl) {
         }
     }
 }
-console.log(JSON.stringify({ cases: n, ok, tie_order: ties, python_resource_refusals: resourceSkips, fail, by_field: byField,
+console.log(JSON.stringify({ cases: n, ok, tie_order: ties, python_resource_refusals: resourceSkips, browser_budget_refusals: budgetRefusals, fail, by_field: byField,
                              seconds: (Date.now() - t0) / 1000 }));
 process.exit(fail ? 1 : 0);

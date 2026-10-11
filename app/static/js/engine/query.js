@@ -214,6 +214,11 @@ export async function runQuery(loader, code, filters = MISSING, groupBy = MISSIN
     let filterDict = validateFilters(filters, allowed);
     let groupCols = validateGroupBy(groupBy, allowed);
     const requested = new Set(Object.entries(filterDict).filter(([, v]) => v && v.length).map(([c]) => rename(c)));
+    if (policy.schema_mismatch) {
+        return unavailable(policy, (groupCols || []).map(rename), rowCount,
+            { outcome: 'unavailable', reason: 'schema_mismatch',
+              blocking_dimension: policy.schema_mismatch, method: 'none' });
+    }
 
     let aggregation = null;
     let aggFunc = 'SUM';
@@ -283,7 +288,16 @@ export async function runQuery(loader, code, filters = MISSING, groupBy = MISSIN
             return unavailable(policy, groupCols, rowCount, aggregation, pre);
         }
     }
-    const data = await loader.table(code, filterDict);
+    const data = await loader.table(code, filterDict, build.max_query_bytes || 0);
+    if (data.overBudget) {
+        // Static-only refusal: the rows exist but are too many to download.
+        aggregation = { ...(aggregation || {}), outcome: 'unavailable', reason: 'browser_budget',
+                        blocking_dimension: null, method: 'none' };
+        const cols = groupCols || dimensions.map(d => d.dim_column_name);
+        const resp = unavailable(policy, cols, rowCount, aggregation, grain);
+        resp.budget = { bytes: data.bytes, max_bytes: data.budget };
+        return resp;
+    }
     const table = data.table;
 
     if (groupCols) {

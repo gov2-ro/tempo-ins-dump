@@ -118,6 +118,15 @@ def _allowed_columns(dimensions, schema) -> set:
     return cols
 
 
+def schema_mismatch(schema, dimensions) -> str | None:
+    """The first recorded dimension that does not resolve to a file column."""
+    cols = set(schema.get("columns") or [])
+    if not cols:
+        return None
+    dims, _, _ = adapt_to_parquet(schema, dimensions)
+    return next((d['dim_column_name'] for d in dims if d['dim_column_name'] not in cols), None)
+
+
 def run_query(conn, matrix_code: str, filters=MISSING, group_by=MISSING,
               limit: int = MAX_DATA_ROWS, approximate: bool = False) -> dict:
     """Validate, decide and execute one data query; the REST, Ask and MCP shape.
@@ -179,6 +188,15 @@ def run_query(conn, matrix_code: str, filters=MISSING, group_by=MISSING,
     except InvalidRequest as e:
         raise QueryError(400, str(e))
     requested = {to_sdmx_name(schema, c) for c, v in filter_dict.items() if v}
+
+    # A recorded dimension the file does not carry (stale mapping, e.g. ART124A)
+    # used to surface as a 500 from the SQL binder: refuse it instead.
+    unresolved = schema_mismatch(schema, dimensions)
+    if unresolved:
+        aggregation = {'outcome': 'unavailable', 'reason': 'schema_mismatch',
+                       'blocking_dimension': unresolved, 'method': 'none'}
+        return _unavailable(matrix_code, [to_sdmx_name(schema, c) for c in group_by_cols or []],
+                            row_count, aggregation)
 
     # FIX-02: a grouped request collapses every dim it does not group by, so the
     # shared policy decides whether (and how) that is allowed. The decision's

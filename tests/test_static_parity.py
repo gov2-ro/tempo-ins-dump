@@ -46,9 +46,20 @@ def test_parity_on_synthetic_corpus(tmp_path):
     corpus = build_corpus(tmp_path / "data")
     _add_dataset(corpus, "DUPX", [("A", "2023", 10.0), ("A", "2023", 11.0), ("B", "2023", 5.0)])
     _add_dataset(corpus, "EQX", [("A", "2023", 10.0), ("A", "2023", 10.0), ("B", "2023", 5.0)])
+    # a recorded dimension the file does not carry (ART124A on the corpus)
+    _add_dataset(corpus, "STALEX", [("A", "2023", 10.0), ("B", "2023", 5.0)])
+    import duckdb
+    db = duckdb.connect(str(corpus / "metadata.duckdb"))
+    db.execute("UPDATE dimensions SET dim_column_name = 'categorie_nom_id' "
+               "WHERE matrix_code = 'STALEX' AND dim_column_name = 'CATEGORY'")
+    db.close()
     s = _parity(tmp_path / "data", tmp_path / "out",
-                ["POPX", "ADDX", "RATEX", "INCX", "DUPX", "EQX"], per_dataset=60)
+                ["POPX", "ADDX", "RATEX", "INCX", "DUPX", "EQX", "STALEX"], per_dataset=60)
     assert s["ok"] == s["cases"]
+    cases = [json.loads(l) for l in (tmp_path / "out" / "cases.jsonl").read_text().splitlines()]
+    stale = [c["response"]["aggregation"] for c in cases
+             if c["code"] == "STALEX" and "response" in c]
+    assert stale and all(a["reason"] == "schema_mismatch" for a in stale)
 
 
 def test_partitioned_layout_matches_whole_file(tmp_path):
@@ -65,6 +76,13 @@ def test_partitioned_layout_matches_whole_file(tmp_path):
     res = _run([NODE, "tools/static-engine/parity.mjs", "--build", str(out / "static"),
                 "--cases", str(out / "cases.jsonl")])
     assert json.loads(res.strip().splitlines()[-1])["fail"] == 0
+    # with a 1-byte budget every partitioned read is refused, never answered wrongly
+    _run([sys.executable, "scripts/build-static.py", "--out", str(out / "tiny"),
+          "--codes", "RATEX,POPX", "--partition-rows", "1", "--max-query-bytes", "1"], env)
+    res = _run([NODE, "tools/static-engine/parity.mjs", "--build", str(out / "tiny"),
+                "--cases", str(out / "cases.jsonl")])
+    s = json.loads(res.strip().splitlines()[-1])
+    assert s["fail"] == 0 and s["browser_budget_refusals"] > 0
 
 
 @pytest.mark.corpus

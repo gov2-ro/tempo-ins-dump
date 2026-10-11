@@ -34,6 +34,10 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
 PARTITION_ROWS = 200_000
+# Most a single query may download (compressed). Above it the browser refuses
+# with reason `browser_budget` instead of fetching (a deliberate divergence from
+# the server, which would answer): filter a county or fewer periods instead.
+MAX_QUERY_BYTES = 12_000_000
 SCHEMA = 1
 
 
@@ -130,16 +134,18 @@ def export_data(conn, code: str, out: Path, partition_rows: int) -> dict:
     for key, col in (("area", "REF_AREA"), ("time", "TIME_PERIOD")):
         if col not in cols:
             continue
-        files, counts = {}, {}
+        files, counts, sizes = {}, {}, {}
         rows_by = dict(conn.execute(f'SELECT "{col}", count(*) FROM read_parquet(?) GROUP BY 1',
                                     [path]).fetchall())
         for i, v in enumerate(index["distinct"][col]):
             name = f"{i:04d}.bin.gz"
-            total += _write(out / "data" / code / key / name,
-                            tcol(conn, path, f'WHERE "{col}" = ?', [v]))
+            size = _write(out / "data" / code / key / name,
+                          tcol(conn, path, f'WHERE "{col}" = ?', [v]))
+            total += size
             files[v] = f"{code}/{key}/{name}"
             counts[v] = rows_by.get(v, 0)
-        index["partitions"][key] = {"column": col, "files": files, "rows": counts}
+            sizes[v] = size
+        index["partitions"][key] = {"column": col, "files": files, "rows": counts, "bytes": sizes}
         nulls = conn.execute(f'SELECT count(*) FROM read_parquet(?) WHERE "{col}" IS NULL',
                              [path]).fetchone()[0]
         if nulls:          # rows with a NULL partition value must not be lost
@@ -203,6 +209,7 @@ def export_policy(conn, code: str) -> dict:
     return {
         "schema": SCHEMA, "code": code, "row_count": row_count, "dimensions": dims,
         "file_dimensions": file_dims, "allowed": allowed, "rename": rename, "time_col": time_col,
+        "schema_mismatch": dq.schema_mismatch(schema, dims),
         "context": pctx, "kpi_check": kpi, "kpi_table": kpi_table,
         "grain_file_status": grain_guard.file_status(code),
         "grain_check_max_rows": grain_guard.GRAIN_CHECK_MAX_ROWS,
@@ -218,6 +225,7 @@ def main(argv=None) -> int:
     ap.add_argument("--codes", help="comma-separated dataset codes (default: every served dataset)")
     ap.add_argument("--limit", type=int, help="first N served datasets (debug)")
     ap.add_argument("--partition-rows", type=int, default=PARTITION_ROWS)
+    ap.add_argument("--max-query-bytes", type=int, default=MAX_QUERY_BYTES)
     a = ap.parse_args(argv)
     from app.config import MAX_DATA_ROWS, LARGE_DATASET_THRESHOLD
     from app.db import get_conn
@@ -249,7 +257,7 @@ def main(argv=None) -> int:
     build = {"schema": SCHEMA, "generation": generation.summary(), "commit": commit,
              "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
              "max_data_rows": MAX_DATA_ROWS, "large_dataset_threshold": LARGE_DATASET_THRESHOLD,
-             "partition_rows": a.partition_rows, **stats}
+             "partition_rows": a.partition_rows, "max_query_bytes": a.max_query_bytes, **stats}
     _json_dump(build, out / "build.json")
     print(json.dumps({k: v for k, v in build.items() if k != "partitioned"}
                      | {"partitioned": len(stats["partitioned"])}, indent=1))

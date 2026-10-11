@@ -74,14 +74,23 @@ const emptyTable = columns => ({ columns: [...columns, 'OBS_VALUE'], dicts: {}, 
  * parsed JSON of a build-relative path or null when absent; binary(path) to the
  * decompressed bytes (Uint8Array/ArrayBuffer) of a .bin.gz file.
  */
-export function makeLoader({ json, binary }) {
+export function makeLoader({ json, binary, maxTables = 48 }) {
     const cache = new Map();
     const memo = (key, fn) => { if (!cache.has(key)) cache.set(key, fn()); return cache.get(key); };
+    // decoded tables are the memory cost: keep the most recently used ones
+    const tables = new Map();
+    const lru = (key, fn) => {
+        if (tables.has(key)) { const v = tables.get(key); tables.delete(key); tables.set(key, v); return v; }
+        const v = fn();
+        tables.set(key, v);
+        while (tables.size > maxTables) tables.delete(tables.keys().next().value);
+        return v;
+    };
     const getJSON = p => memo('j:' + p, () => json(p));
-    const getTable = p => memo('t:' + p, async () => decodeTcol(await binary(p)));
+    const getTable = p => lru('t:' + p, async () => decodeTcol(await binary(p)));
 
     async function whole(code) {
-        return memo('w:' + code, async () => {
+        return lru('w:' + code, async () => {
             const table = await getTable(`data/${code}.bin.gz`);
             const distinct = {};
             for (const c of table.columns) if (c !== 'OBS_VALUE') distinct[c] = [...table.dicts[c]];
@@ -101,7 +110,7 @@ export function makeLoader({ json, binary }) {
             return { distinct: index.distinct, hasNullTime: !!(t && t.null) };
         },
         /** The rows a query with these (file-column) filters can touch. */
-        async table(code, filters) {
+        async table(code, filters, budget = 0) {
             const index = await getJSON(`data/${code}.index.json`);
             if (!index) return whole(code);
             const parts = index.partitions || {};
@@ -120,6 +129,13 @@ export function makeLoader({ json, binary }) {
                 const p = parts.area || parts.time;
                 files = [...Object.values(p.files), ...(p.null ? [p.null] : [])];
             }
+            // bytes this query would download; the caller enforces the budget
+            const sizeOf = {};
+            for (const p of Object.values(parts)) {
+                for (const [v, f] of Object.entries(p.files)) sizeOf[f] = (p.bytes || {})[v] || 0;
+            }
+            const bytes = files.reduce((s, f) => s + (sizeOf[f] || 0), 0);
+            if (budget && bytes > budget) return { overBudget: true, bytes, budget };
             const tables = await Promise.all(files.map(f => getTable(`data/${f}`)));
             const t = (parts.time || {});
             return { table: tables.length ? mergeTables(tables) : emptyTable(index.columns),
