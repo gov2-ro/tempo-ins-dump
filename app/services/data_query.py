@@ -444,3 +444,56 @@ def _missing_values(conn, matrix_code, filter_dict, requested, legacy_to_sdmx) -
         if miss:
             out[name] = miss
     return out
+
+
+def dimension_values(conn, matrix_code: str, column: str, q: str | None = None,
+                     limit: int = 50, offset: int = 0) -> dict:
+    """Searchable, paginated actual values of one dimension (PA-02a, audit A07).
+
+    Values come from the data file (what can actually be selected), not from
+    metadata option lists. Time is newest first, everything else alphabetical.
+    `q` matches accent- and case-insensitively anywhere in the value. The
+    response says how many values match and whether more follow; time columns
+    also get the actual first/last period with an observation.
+    """
+    if not isinstance(limit, int) or not 1 <= limit <= 500:
+        raise QueryError(400, "Invalid limit: must be an integer in 1..500")
+    if not isinstance(offset, int) or offset < 0:
+        raise QueryError(400, "Invalid offset: must be a non-negative integer")
+    if q is not None and len(q) > 200:
+        raise QueryError(400, "Invalid q: at most 200 characters")
+    if not conn.execute("SELECT 1 FROM matrices WHERE matrix_code = ?", [matrix_code]).fetchone():
+        raise QueryError(404, f"Dataset {matrix_code} not found")
+    path = PARQUET_DIR / f"{matrix_code}.parquet"
+    if not path.exists():
+        raise QueryError(404, f"Dataset {matrix_code} has no data file — it may be "
+                              f"published as sub-datasets.")
+    schema = resolve_parquet_schema(conn, matrix_code)
+    file_cols = [r[0] for r in conn.execute(
+        "DESCRIBE SELECT * FROM read_parquet(?)", [str(path)]).fetchall()]
+    file_col = (schema.get("to_file") or {}).get(column, column)
+    if file_col not in file_cols or file_col in (schema["value_column"], "OBS_VALUE"):
+        raise QueryError(400, f"Invalid column: unknown column {column!r}")
+    col = quote_ident(file_col)
+    is_time = (schema.get("to_sdmx") or {}).get(file_col, file_col) == "TIME_PERIOD"
+    from app.services.concept_search import fold
+    rows = conn.execute(
+        f"SELECT DISTINCT CAST({col} AS VARCHAR) AS v FROM read_parquet(?) "
+        f"WHERE {col} IS NOT NULL", [str(path)]).fetchall()
+    values = [r[0] for r in rows]
+    if q:
+        fq = fold(q)
+        values = [v for v in values if fq in fold(v)]
+    values.sort(key=(lambda v: v) if is_time else (lambda v: (fold(v), v)), reverse=is_time)
+    page = values[offset:offset + limit]
+    out = {"matrix_code": matrix_code, "column": column, "q": q, "total": len(values),
+           "offset": offset, "limit": limit, "values": page,
+           "next_offset": offset + limit if offset + limit < len(values) else None,
+           "truncated": offset + limit < len(values)}
+    if is_time:
+        first, last, n = conn.execute(
+            f"SELECT min(CAST({col} AS VARCHAR)), max(CAST({col} AS VARCHAR)), "
+            f"count(DISTINCT {col}) FROM read_parquet(?) "
+            f"WHERE {quote_ident(schema['value_column'])} IS NOT NULL", [str(path)]).fetchone()
+        out["period_bounds"] = {"first": first, "last": last, "periods_with_data": n}
+    return out

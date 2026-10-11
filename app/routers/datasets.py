@@ -41,6 +41,24 @@ def list_datasets(
     )
 
 
+@router.get("/search")
+def search(
+    q: str = Query(..., min_length=1, max_length=200, description="Question, indicator, place or code"),
+    lang: str = Query("ro", pattern="^(ro|en)$"),
+    limit: int = Query(10, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+):
+    """Concept-first search (PA-02a): reviewed indicator concepts with their
+    definition, actual coverage, parsed place/level/period and alternatives,
+    then full-text results grouped by indicator family."""
+    from app.services.concept_search import search as concept_search
+    conn = get_conn()
+    try:
+        return concept_search(q, conn, lang=lang, limit=limit, offset=offset)
+    finally:
+        conn.close()
+
+
 @router.get("/datasets/{matrix_code}/related")
 def related_datasets(
     matrix_code: str,

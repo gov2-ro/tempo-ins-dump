@@ -142,29 +142,17 @@ class SiteChrome {
             this.searchIdx = -1;
             return;
         }
+        const seq = this._searchSeq = (this._searchSeq || 0) + 1;
         try {
-            const resp = await API.getDatasets({ q: query, limit: 12, lang: this.lang });
-            results.innerHTML = '';
+            const resp = await API.search(query, { limit: 10, lang: this.lang });
+            if (seq !== this._searchSeq) return;         // a newer keystroke owns the list
             this.searchIdx = -1;
-            if (!resp.datasets.length) {
+            if (!renderSearchResults(results, resp, {
+                lang: this.lang, onOpenCode: code => { window.location.href = this.dsHref(code); } })) {
                 results.innerHTML = `<div class="search-empty">${this.ui.searchNoResults}</div>`;
-                return;
-            }
-            for (const ds of resp.datasets) {
-                const item = document.createElement('div');
-                item.className = 'search-item';
-                item.addEventListener('click', () => {
-                    window.location.href = this.dsHref(ds.matrix_code);
-                });
-                item.innerHTML = `
-                    <span class="search-item-code">${ds.matrix_code}</span>
-                    <span class="search-item-name">${ds.matrix_name}</span>
-                    <span class="search-item-meta">${ds.time_range || ''}</span>
-                `;
-                results.appendChild(item);
             }
         } catch (_) {
-            results.innerHTML = `<div class="search-empty">${this.ui.searchError}</div>`;
+            if (seq === this._searchSeq) results.innerHTML = `<div class="search-empty">${this.ui.searchError}</div>`;
         }
     }
 

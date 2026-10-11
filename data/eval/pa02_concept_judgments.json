@@ -1,0 +1,27 @@
+{
+ "about": "Reviewed search judgments for the PA-00 questions (PA-02a). Truth, not a regression baseline: `concept` must be the first concept card, `code` its dataset, `ambiguous` whether alternatives must be offered, `places` the county slugs parsed. Reviewed 2026-10-11.",
+ "judgments": [
+  {"q": "Cum a evoluat populația rezidentă a județului Cluj?", "lang": "ro", "concept": "resident_population", "code": "POP105A_judete_grupe", "ambiguous": false, "places": ["cluj"]},
+  {"q": "populatia rezidenta cluj", "lang": "ro", "concept": "resident_population", "code": "POP105A_judete_grupe", "ambiguous": false, "places": ["cluj"]},
+  {"q": "câți locuitori are județul Iași", "lang": "ro", "concept": "resident_population", "code": "POP105A_judete_grupe", "ambiguous": false, "places": ["iasi"]},
+  {"q": "populatie", "lang": "ro", "concept": "resident_population", "ambiguous": true, "alternatives": ["domicile_population", "resident_population_july"]},
+  {"q": "How has Cluj county's resident population changed?", "lang": "en", "concept": "resident_population", "code": "POP105A_judete_grupe", "ambiguous": false, "places": ["cluj"]},
+  {"q": "population Bucharest", "lang": "en", "concept": "resident_population", "ambiguous": true, "places": ["municipiul-bucuresti"]},
+  {"q": "populatia dupa domiciliu cluj", "lang": "ro", "concept": "domicile_population", "code": "POP107A_judete_grupe", "ambiguous": false, "places": ["cluj"]},
+  {"q": "Cluj-Napoca populatie", "lang": "ro", "concept": "resident_population", "ambiguous": true, "places": ["cluj"], "place_ambiguous": true},
+  {"q": "Cum se compară salariul mediu net în Cluj, Iași și București?", "lang": "ro", "concept": "net_earnings", "code": "FOM106E_judete", "ambiguous": false, "places": ["cluj", "iasi", "municipiul-bucuresti"]},
+  {"q": "salariu mediu net judete", "lang": "ro", "concept": "net_earnings", "code": "FOM106E_judete", "ambiguous": false},
+  {"q": "Compare average net earnings in Cluj, Iasi and Bucharest", "lang": "en", "concept": "net_earnings", "code": "FOM106E_judete", "ambiguous": false, "places": ["cluj", "iasi", "municipiul-bucuresti"]},
+  {"q": "salariu", "lang": "ro", "concept": "net_earnings", "ambiguous": true, "alternatives": ["gross_earnings"]},
+  {"q": "salariu mediu brut bucuresti", "lang": "ro", "concept": "gross_earnings", "code": "FOM107E_judete", "ambiguous": false, "places": ["municipiul-bucuresti"]},
+  {"q": "În ce județe este cea mai mare rată a șomajului înregistrat?", "lang": "ro", "concept": "registered_unemployment_rate", "code": "SOM103A_judete", "ambiguous": false},
+  {"q": "somaj judete", "lang": "ro", "concept": "registered_unemployment_rate", "code": "SOM103A_judete", "ambiguous": false},
+  {"q": "Which counties have the highest registered unemployment rate?", "lang": "en", "concept": "registered_unemployment_rate", "code": "SOM103A_judete", "ambiguous": false},
+  {"q": "unemployment rate", "lang": "en", "concept": "registered_unemployment_rate", "ambiguous": true, "alternatives": ["ilo_unemployment_rate"]},
+  {"q": "rata somajului BIM", "lang": "ro", "concept": "ilo_unemployment_rate", "ambiguous": false},
+  {"q": "Ce județe au cele mai multe înnoptări turistice pe locuitor?", "lang": "ro", "concept": "tourist_overnight_stays", "code": "TUR105D_judete", "ambiguous": false},
+  {"q": "Which counties have the most tourist overnight stays per resident?", "lang": "en", "concept": "tourist_overnight_stays", "code": "TUR105D_judete", "ambiguous": false},
+  {"q": "innoptari 2024", "lang": "ro", "concept": "tourist_overnight_stays", "code": "TUR105D_judete", "ambiguous": false, "period": 2024}
+ ],
+ "no_concept": ["POP105A", "inflatie", "medici", "exporturi pe tari"]
+}

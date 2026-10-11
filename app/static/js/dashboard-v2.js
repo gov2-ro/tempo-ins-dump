@@ -19,6 +19,9 @@ const UI_STRINGS = {
         brief: 'Pe scurt:',
         noDataTile: 'Fără date pentru această selecție',
         latest: 'Ultima valoare', yoy: 'Față de perioada anterioară', overall: 'Schimbare totală',
+        selection: 'Selecția ta', wholeDataset: 'întregul set (fără selecție)',
+        vsPrev: p => `față de ${p}`, selUnavailable: 'Valoare indisponibilă pentru selecție',
+        noSelData: 'Fără date pentru selecție', commonPeriod: 'ultima perioadă comună',
         unavailAria: 'Valoare indisponibilă',
         unavailNote: 'Tabelul brut rămâne disponibil.',
         noDataGrid: 'Nicio vizualizare nu are date pentru filtrele curente',
@@ -84,6 +87,9 @@ const UI_STRINGS = {
         brief: 'In brief:',
         noDataTile: 'No data for this selection',
         latest: 'Latest value', yoy: 'vs. previous period', overall: 'Overall change',
+        selection: 'Your selection', wholeDataset: 'whole dataset (no selection)',
+        vsPrev: p => `vs ${p}`, selUnavailable: 'Value unavailable for the selection',
+        noSelData: 'No data for the selection', commonPeriod: 'latest common period',
         unavailAria: 'Value unavailable',
         unavailNote: 'The raw table is still available.',
         noDataGrid: 'No visualization has data for the current filters',
@@ -389,6 +395,7 @@ class DashboardV2 {
         this.syncURL();
         const slices = await this.fetchSlices();
         if (version !== this._version) return;
+        this.renderSelectionKPI(version);
         // Composer-time data holes answer no question — drop those tiles and
         // re-layout around the survivors. But once the USER has filtered
         // (globally or per-tile), every tile stays visible with an explicit
@@ -550,6 +557,83 @@ class DashboardV2 {
         </svg>`;
     }
 
+    /** Headline for the user's selection (PA-02b): the same shared /data
+     *  query as the charts, grouped by time (and by place when several are
+     *  selected), so "Cluj" shows Cluj's value, not the dataset total. A
+     *  refused aggregation shows its reason, never a client-side sum. */
+    async renderSelectionKPI(version) {
+        const filters = this.expandedUserFilters();
+        let host = document.getElementById('dbv2-sel-kpis');
+        if (!Object.keys(filters).length) { host?.remove(); return; }
+        const cfg = this.metadata.chart_config || {};
+        const timeCol = cfg.time_dim;
+        if (!timeCol) return;
+        const geoCol = cfg.geo_dim;
+        const picks = geoCol && Array.isArray(this.userFilters[geoCol]) ? this.userFilters[geoCol] : null;
+        const groupBy = [timeCol, ...(picks && picks.length > 1 ? [geoCol] : [])];
+        let data = null;
+        try {
+            data = await API.getDatasetData(this.code, filters, 5000, { groupBy });
+        } catch (e) { console.warn('Selection headline failed:', e); }
+        if (version !== this._version) return;
+        if (!host) {
+            host = document.createElement('div');
+            host.id = 'dbv2-sel-kpis';
+            host.className = 'dbv2-kpis dbv2-sel-kpis';
+            host.setAttribute('aria-live', 'polite');
+            document.getElementById('dbv2-kpis').before(host);
+        }
+        const label = Object.entries(this.userFilters).filter(([, v]) => v)
+            .map(([, v]) => (Array.isArray(v) ? v : [v]).map(x => String(x).trim()).join(', ')).join(' · ');
+        const card = (title, value, sub) => `<div class="dbv2-kpi dbv2-kpi-sel">
+                <div class="dbv2-kpi-label">${_escHtml(title)}</div>
+                <div class="dbv2-kpi-value">${value}</div>
+                ${sub ? `<div class="dbv2-kpi-sub">${sub}</div>` : ''}</div>`;
+        if (!data || data.unavailable) {
+            host.innerHTML = card(`${this.ui.selection}: ${label}`, '—',
+                _escHtml(data ? this.reasonText(data.aggregation, 'total') : this.ui.selUnavailable));
+            return;
+        }
+        const ti = data.columns.indexOf(timeCol), gi = groupBy.length > 1 ? data.columns.indexOf(geoCol) : -1;
+        const vi = data.columns.length - 1;
+        const series = new Map();          // place -> Map(period -> value)
+        for (const r of data.rows) {
+            if (r[vi] == null) continue;
+            const k = gi === -1 ? label : String(r[gi]).trim();
+            if (!series.has(k)) series.set(k, new Map());
+            series.get(k).set(String(r[ti]), r[vi]);
+        }
+        if (!series.size) { host.innerHTML = card(`${this.ui.selection}: ${label}`, '—', this.ui.noSelData); return; }
+        // One period for every card: the latest period all selected places have.
+        let common = null;
+        for (const m of series.values()) {
+            const ps = new Set(m.keys());
+            common = common ? new Set([...common].filter(p => ps.has(p))) : ps;
+        }
+        const periods = [...(common || [])].sort();
+        const latest = periods[periods.length - 1], prev = periods[periods.length - 2];
+        const pct = (cfg.primary_unit_type || '') === 'percentage';
+        const unit = (this.metadata.dimensions || []).find(d => d.dim_column_name === 'UNIT_MEASURE')
+            ?.options?.[0]?.label?.trim() || '';
+        const order = (picks || []).map(x => String(x).trim());
+        const rank = n => { const i = order.indexOf(n); return i === -1 ? order.length : i; };
+        host.innerHTML = [...series].sort((a, b) => rank(a[0]) - rank(b[0])).slice(0, 6).map(([name, m]) => {
+            if (latest == null) return card(name, '—', this.ui.noSelData);
+            const v = m.get(latest), p = prev != null ? m.get(prev) : null;
+            let change = '';
+            if (p != null && v != null) {
+                const d = pct ? v - p : (p ? (v - p) / Math.abs(p) * 100 : null);
+                if (d != null && Number.isFinite(d)) {
+                    const up = d >= 0;
+                    change = ` · <span class="${up ? 'dbv2-up' : 'dbv2-down'}">${up ? '▲' : '▼'} ${Math.abs(d).toFixed(1)}${pct ? ' p.p.' : '%'}</span> ${this.ui.vsPrev(prev)}`;
+                }
+            }
+            const sub = [unit, String(latest).replace(/^Anul\s+/i, '') + (series.size > 1 ? ` (${this.ui.commonPeriod})` : '')]
+                .filter(Boolean).map(_escHtml).join(' · ') + change;
+            return card(series.size > 1 ? name : `${this.ui.selection}: ${name}`, formatNumber(v), sub);
+        }).join('');
+    }
+
     renderInsights(ins) {
         if (!ins) return;
         const kpiEl = document.getElementById('dbv2-kpis');
@@ -561,6 +645,9 @@ class DashboardV2 {
                 // number reads as the dataset-wide value, which it isn't
                 sub = [k.unit, k.period, ...(k.context || [])].filter(Boolean).join(' · ');
                 sub += aggBadgeHTML(k.provenance, this.lang);
+                // The insight KPIs describe the whole dataset; with a selection
+                // they must not read as the selected place's value (PA-02b).
+                if (Object.keys(this.expandedUserFilters()).length) sub += ` · <em>${this.ui.wholeDataset}</em>`;
             } else if (k.format === 'pct') {
                 const up = k.direction === 'up';
                 value = `<span class="${up ? 'dbv2-up' : 'dbv2-down'}">${up ? '▲' : '▼'} ${Math.abs(k.value).toFixed(1)}%</span>`;

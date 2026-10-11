@@ -31,6 +31,16 @@ const API = {
         return this.fetch('/datasets', params);
     },
 
+    /** Concept-first search: reviewed concepts + parsed place/period + families. */
+    search(q, params = {}) {
+        return this.fetch('/search', { q, ...params });
+    },
+
+    /** Actual values of one dimension, searchable and paginated. */
+    getOptions(code, column, params = {}) {
+        return this.fetch(`/datasets/${code}/options`, { column, ...params });
+    },
+
     getDataset(code, params = {}) {
         return this.fetch(`/datasets/${code}`, params);
     },

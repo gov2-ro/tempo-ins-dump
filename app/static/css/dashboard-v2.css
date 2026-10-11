@@ -788,3 +788,7 @@ body.sidebar-open .dbv2-main {
 .dbv2-unavail-note { flex-basis: 100%; font-size: 0.75rem; color: var(--text-2); }
 .dbv2-empty-unavail { color: var(--amber, #b45309); text-align: center; padding: 0 12px; }
 .dbv2-sentence-unavail { color: var(--amber, #b45309); }
+
+/* Selection headline (PA-02b) */
+.dbv2-sel-kpis { margin-bottom: 8px; }
+.dbv2-kpi-sel { border-color: var(--accent); }

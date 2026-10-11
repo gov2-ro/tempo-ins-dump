@@ -125,6 +125,30 @@ def get_dataset_data(
         conn.close()
 
 
+@router.get("/datasets/{matrix_code}/options")
+def get_dimension_values(
+    matrix_code: str,
+    column: str = Query(..., max_length=64, description="Dimension column, e.g. REF_AREA or TIME_PERIOD"),
+    q: str = Query(None, max_length=200, description="Accent-insensitive substring match"),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """Actual values of one dimension, searchable and paginated (PA-02a).
+
+    Time columns are newest first and include `period_bounds` (first/last
+    period with an observation). `next_offset`/`truncated` say whether more
+    values follow. 4xx: 404 unknown dataset/no data file; 400 unknown column.
+    """
+    from app.services.data_query import QueryError, dimension_values
+    conn = get_conn()
+    try:
+        return dimension_values(conn, matrix_code, column, q, limit, offset)
+    except QueryError as e:
+        raise HTTPException(e.status, e.message)
+    finally:
+        conn.close()
+
+
 @router.get("/datasets/{matrix_code}/download")
 def download_dataset(
     matrix_code: str,

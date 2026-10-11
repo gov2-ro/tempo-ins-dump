@@ -251,8 +251,8 @@ const AGG_I18N = {
             source_total_unchecked: () => 'totalul nu a fost verificat cu INS',
             contains_aggregate: () => 'totalul este amestecat cu componentele',
             label_hierarchy: () => 'ierarhie codificată în etichete',
-            non_additive_measure: () => 'rată/indice fără ponderi',
-            missing_weights: () => 'rată/indice fără ponderi',
+            non_additive_measure: () => 'rată/medie/indice fără ponderi',
+            missing_weights: () => 'rată/medie/indice fără ponderi',
             mixed_units: () => 'unități de măsură diferite',
             slice_value_missing: () => 'valoare de filtrare inexistentă',
             declared_partition_invalid: () => 'partiție nevalidă',
@@ -284,8 +284,8 @@ const AGG_I18N = {
             source_total_unchecked: () => 'total not checked against INS',
             contains_aggregate: () => 'total mixed with its components',
             label_hierarchy: () => 'hierarchy encoded in labels',
-            non_additive_measure: () => 'rate/index without weights',
-            missing_weights: () => 'rate/index without weights',
+            non_additive_measure: () => 'rate/mean/index without weights',
+            missing_weights: () => 'rate/mean/index without weights',
             mixed_units: () => 'mixed units',
             slice_value_missing: () => 'filter value not in the data',
             declared_partition_invalid: () => 'invalid partition',
@@ -348,4 +348,108 @@ function aggMethodTitle(src, lang = 'ro') {
     if (!src) return '';
     const b = (AGG_I18N[lang] || AGG_I18N.ro).badges;
     return [b.methods[src.method], src.verification].filter(Boolean).join(' · ');
+}
+
+
+// ---------------------------------------------------------------------------
+// Concept-first search results (PA-02a), shared by every search overlay.
+// ---------------------------------------------------------------------------
+
+const SEARCH_I18N = {
+    ro: {
+        concept: 'Indicator', alt: 'Sau poate:', variants: n => `+${n} variante`,
+        generic: 'termen general: verificați definiția sau alegeți altul mai jos',
+        cityNotCounty: name => `${name} este și oraș; datele sunt pentru județul ${name}`,
+        periodUnavailable: (y, first, last) => `${y} nu are date (${first}–${last})`,
+        placeLevel: 'nu există date pe județe pentru acest indicator',
+        placeMissing: 'unele locuri nu apar în acest set',
+        quality: { conflicting: 'atenție: observații repetate în sursă', duplicate_keys: 'atenție: observații repetate' },
+        freq: { annual: 'anual', monthly: 'lunar', quarterly: 'trimestrial' },
+        other: 'Alte seturi de date', county: 'județ',
+    },
+    en: {
+        concept: 'Indicator', alt: 'Or did you mean:', variants: n => `+${n} variants`,
+        generic: 'broad term: check the definition or pick another below',
+        cityNotCounty: name => `${name} is also a city; the data is for ${name} county`,
+        periodUnavailable: (y, first, last) => `no data for ${y} (${first}–${last})`,
+        placeLevel: 'no county data for this indicator',
+        placeMissing: 'some places are not in this dataset',
+        quality: { conflicting: 'warning: repeated observations in the source', duplicate_keys: 'warning: repeated observations' },
+        freq: { annual: 'annual', monthly: 'monthly', quarterly: 'quarterly' },
+        other: 'Other datasets', county: 'county',
+    },
+};
+
+/** Render /api/search into `container`. Concept items open their dataset with
+ *  the parsed selection; family items call `onOpenCode(code)`. Every clickable
+ *  row is a `.search-item`, so overlay keyboard navigation keeps working.
+ *  Returns the number of clickable rows. */
+function renderSearchResults(container, resp, { lang = 'ro', onOpenCode } = {}) {
+    const t = SEARCH_I18N[lang] || SEARCH_I18N.ro;
+    container.innerHTML = '';
+    let n = 0;
+    const row = (cls, html, onClick) => {
+        const el = document.createElement('div');
+        el.className = `search-item ${cls}`;
+        el.setAttribute('role', 'option');
+        el.innerHTML = html;
+        el.addEventListener('click', onClick);
+        container.appendChild(el);
+        n++;
+        return el;
+    };
+    const cov = c => c ? `${c.first}–${c.last} · ${t.freq[c.frequency] || c.frequency || ''}` : '';
+    const places = resp.interpretation?.places || [];
+    for (const c of resp.concepts || []) {
+        const chips = [];
+        for (const p of places) chips.push(`<span class="search-chip">${_escHtml(p.name)}${p.type === 'county' ? ` · ${t.county}` : ''}</span>`);
+        if (c.selection?.TIME_PERIOD) chips.push(`<span class="search-chip">${_escHtml(c.selection.TIME_PERIOD)}</span>`);
+        const warn = [];
+        if (c.ambiguous) warn.push(t.generic);
+        for (const p of places) if (p.note === 'city_not_county') warn.push(t.cityNotCounty(p.name));
+        if (c.notes?.includes('period_unavailable')) warn.push(t.periodUnavailable(resp.interpretation.period, c.coverage?.first, c.coverage?.last));
+        if (c.notes?.includes('place_level_unavailable')) warn.push(t.placeLevel);
+        if (c.notes?.includes('place_not_in_dataset')) warn.push(t.placeMissing);
+        if (t.quality[c.quality]) warn.push(t.quality[c.quality]);
+        row('search-concept', `
+            <div class="search-concept-head">
+                <span class="search-concept-name">${_escHtml(c.name)}</span>
+                ${chips.join('')}
+                <span class="search-item-code">${_escHtml(c.code)}</span>
+            </div>
+            <div class="search-concept-note">${_escHtml(c.note)}</div>
+            <div class="search-concept-meta">${_escHtml(cov(c.coverage))}${c.unit ? ` · ${_escHtml(c.unit)}` : ''} · <span title="${_escHtml(c.title)}">${_escHtml(c.title)}</span></div>
+            ${warn.length ? `<div class="search-concept-warn">${warn.map(_escHtml).join(' · ')}</div>` : ''}`,
+            () => { window.location.href = c.href; });
+        if (c.alternatives?.length) {
+            const lab = document.createElement('div');
+            lab.className = 'search-alt-label';
+            lab.textContent = t.alt;
+            container.appendChild(lab);
+            for (const a of c.alternatives) {
+                row('search-alt', `
+                    <span class="search-concept-name">${_escHtml(a.name)}</span>
+                    <span class="search-alt-note">${_escHtml(a.note)}</span>
+                    <span class="search-item-meta">${_escHtml(cov(a.coverage))}</span>`,
+                    () => { window.location.href = a.href; });
+            }
+        }
+    }
+    const fams = resp.families?.items || [];
+    if (fams.length && (resp.concepts || []).length) {
+        const lab = document.createElement('div');
+        lab.className = 'search-alt-label';
+        lab.textContent = t.other;
+        container.appendChild(lab);
+    }
+    for (const f of fams) {
+        const extra = f.members.length > 1 ? `<span class="search-item-meta">${t.variants(f.members.length - 1)}</span>` : '';
+        row('search-family', `
+            <span class="search-item-code">${_escHtml(f.code)}</span>
+            <span class="search-item-name">${_escHtml(f.title)}</span>
+            ${extra}
+            <span class="search-item-meta">${_escHtml(f.time_range || '')}</span>`,
+            () => onOpenCode ? onOpenCode(f.code) : (window.location.href = `/dataset-v2.html?code=${encodeURIComponent(f.code)}`));
+    }
+    return n;
 }

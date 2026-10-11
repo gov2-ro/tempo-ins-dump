@@ -360,6 +360,24 @@ kbd {
     font-size: 13px;
 }
 
+/* --- Concept-first search (PA-02a) --- */
+.search-item.search-concept { display: block; padding: 12px; border: 1px solid var(--border); margin-bottom: 4px; }
+.search-concept-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.search-concept-name { font-size: 14px; font-weight: 600; color: var(--text-0); }
+.search-concept-head .search-item-code { margin-left: auto; min-width: 0; }
+.search-chip { font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--bg-3); color: var(--text-1); }
+.search-concept-note { font-size: 12px; color: var(--text-1); margin-top: 4px; }
+.search-concept-meta { font-size: 11px; color: var(--text-2); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-concept-warn { font-size: 11px; color: var(--warning, #b45309); margin-top: 4px; }
+.search-alt-label { font-size: 11px; color: var(--text-2); padding: 6px 12px 2px; text-transform: uppercase; letter-spacing: .03em; }
+.search-item.search-alt { flex-wrap: wrap; gap: 6px 12px; }
+.search-alt .search-concept-name { font-size: 13px; font-weight: 500; }
+.search-alt-note { flex: 1; min-width: 180px; font-size: 12px; color: var(--text-2); }
+@media (max-width: 480px) {
+    .search-item { flex-wrap: wrap; }
+    .search-item-name { white-space: normal; }
+}
+
 /* --- Browse View --- */
 .browse-view {
     max-width: 1200px;
