@@ -75,7 +75,8 @@ TOOLS = [
             "Returns up to 5,000 rows. Filters MUST use exact dimension values from get_dataset_schema. "
             "Use group_by to aggregate (e.g. ['TIME_PERIOD','REF_AREA']) — this is essential for "
             "large datasets; do not pull raw rows when a grouped summary suffices. "
-            "If 0 rows are returned, try removing 'Total'/'TOTAL' filters."
+            "Unknown columns or malformed filters return an error; an empty result names the "
+            "values that do not exist."
         ),
         "input_schema": {
             "type": "object",
@@ -88,7 +89,14 @@ TOOLS = [
                 "group_by": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Columns to SELECT + aggregate on. Other numeric columns are SUM'd (or AVG for percentages).",
+                    "description": "Columns to keep. Every other dimension is collapsed only if the "
+                                   "aggregation policy allows it (see `status`/`aggregation`).",
+                },
+                "approximate": {
+                    "type": "boolean",
+                    "description": "Default false. Set true only when the user accepts an unweighted "
+                                   "mean for rates/averages that have no weights; the result is "
+                                   "labelled an approximation.",
                 },
             },
             "required": ["matrix_code"],
@@ -134,10 +142,10 @@ Reply in the user's language (RO or EN). Dataset names in the catalog are Romani
 ## Query results: status, aggregation, warnings
 Every query_dataset_data result has `status`:
 - "ok" → numbers are valid for the filters/levels listed in `aggregation`. "Auto-applied aggregate/level filters" are already corrected; trust numbers.
-- "approximation" → an unweighted mean of rates/indices. State it is an approximation, never the official/national rate.
+- "approximation" → an unweighted mean of rates/indices, returned only when you set approximate=true. State it is an approximation, never the official/national rate.
 - "unavailable" → NO numbers exist for this grouped query (`reason`, `blocking_dimension`, `suggestion`). Do not state any figure for it. Re-query as the suggestion says (pin or choose one level/value), or explain the limitation.
 Only cite numbers that appear in a result with status ok/approximation. If no query succeeded, say so instead of giving figures.
-"Retried after removing Total" → your filter was empty; handler dropped it.
+An "error" result means the request was invalid (unknown column/value shape): fix it from get_dataset_schema. "EMPTY SELECTION" means no rows match; say so rather than silently answering a broader question.
 
 ## Answer format
 Plain-language summary in the user's language + cited matrix_code(s) in parentheses (e.g. AMG159E). Don't invent codes. Decline questions unrelated to Romanian statistics.
@@ -228,157 +236,77 @@ def _handle_get_dataset_schema(inp: dict, conn) -> dict:
 
 
 def _handle_query_dataset_data(inp: dict, conn) -> dict:
-    """Query tool. Grouped requests go through the shared aggregation policy
-    (FIX-02): the result carries `status` ("ok" | "approximation" |
-    "unavailable"), the decision under `aggregation` and reason codes, so the
-    model — and the deterministic answer check — see exactly what was allowed.
-    Ungrouped requests return raw observations (`aggregation` is null)."""
-    from app.services.query_builder import (
-        build_data_query, resolve_parquet_schema, adapt_to_parquet, to_sdmx_name)
-    from app.services.dataset_meta import get_aggregation_context, decide_grouped
-    from app.config import LARGE_DATASET_THRESHOLD
+    """Query tool: an adapter over the shared `data_query.run_query` (PA-01a),
+    so the model gets exactly what REST and MCP return for the same request.
+    Invalid input (unknown column, wrong shape) is an `error`, never a query
+    that ignores part of the request. Result `status` is "ok" | "approximation"
+    | "unavailable"; approximations only when the model sets `approximate`
+    because the user accepted one. An empty selection stays empty."""
+    from app.services.data_query import QueryError, run_query
+    from app.services.request_validation import MISSING
 
-    matrix_code = inp.get("matrix_code", "").strip()
-    filters = inp.get("filters") or {}
-    group_by = inp.get("group_by") or None
-    limit = 5000
-
+    matrix_code = str(inp.get("matrix_code") or "").strip()
     if not matrix_code:
         return {"error": "matrix_code is required"}
+    approximate = inp.get("approximate", False)
+    if not isinstance(approximate, bool):
+        return {"error": "approximate must be true or false"}
+    try:
+        res = run_query(conn, matrix_code, inp.get("filters", MISSING),
+                        inp.get("group_by", MISSING), limit=5000, approximate=approximate)
+    except QueryError as e:
+        out = {"error": e.message}
+        if e.status == 400:
+            out["suggestion"] = ("Use exact column names and values from get_dataset_schema; "
+                                 "filters is {column: [values]}, group_by is [columns].")
+        return out
 
-    # Check dataset exists
-    matrix = conn.execute(
-        "SELECT row_count FROM matrices WHERE matrix_code = ?", [matrix_code]
-    ).fetchone()
-    if not matrix:
-        return {"error": f"Dataset '{matrix_code}' not found"}
-
-    row_count = matrix[0] or 0
-
-    # Require filters or group_by for large datasets
-    if row_count > LARGE_DATASET_THRESHOLD and not filters and not group_by:
-        return {
-            "error": f"Dataset has {row_count:,} rows. Provide filters or group_by to narrow results.",
-            "suggestion": "Use get_dataset_schema to see available dimension values, then filter or group.",
-        }
-
-    # Get dimensions (with legacy column resolution)
-    dims = conn.execute(
-        "SELECT dim_code, dim_label, dim_column_name FROM dimensions WHERE matrix_code = ? ORDER BY dim_code",
-        [matrix_code],
-    ).fetchall()
-    dimensions = [{"dim_code": d[0], "dim_label": d[1], "dim_column_name": d[2]} for d in dims]
-
-    # Shared with dataset_data/insights: the file may be SDMX or legacy v2,
-    # and the recorded dim names may be either.
-    schema = resolve_parquet_schema(conn, matrix_code)
+    decision = res.get("aggregation") or {}
+    base = {"matrix_code": matrix_code, "columns": res["columns"], "rows": res["rows"],
+            "row_count": res["returned_rows"], "truncated": res["truncated"],
+            "aggregation": res.get("aggregation")}
+    if res.get("unavailable"):
+        reason, col = decision.get("reason"), decision.get("blocking_dimension")
+        return {**base, "status": "unavailable", "reason": reason, "blocking_dimension": col,
+                "warnings": [
+                    f"AGGREGATION UNAVAILABLE ({reason}"
+                    + (f", dimension {col}" if col else "")
+                    + "): this grouped total cannot be computed safely. Do not state a figure for it."],
+                "suggestion": _unavailable_hint(reason, col)}
 
     warnings: list[str] = []
-    aggregation = None
     status = "ok"
-    if group_by:
-        # FIX-02: the same decision composer tiles, insights and the grouped
-        # API use. Unavailable => no rows, a reason code and a way forward;
-        # never an unsafe sum. Unweighted means come back labelled
-        # "approximation" so the answer cannot call them an official rate.
-        ctx = get_aggregation_context(conn, matrix_code)
-        if ctx is not None:
-            sd_group = [to_sdmx_name(schema, c) for c in group_by]
-            sd_filters = {to_sdmx_name(schema, k): v for k, v in filters.items()}
-            decision = decide_grouped(ctx, sd_group, sd_filters, allow_approximation=True)
-            aggregation = decision.to_dict()
-            if not decision.available:
-                return {
-                    "matrix_code": matrix_code, "status": "unavailable",
-                    "columns": sd_group + ["OBS_VALUE"], "rows": [], "row_count": 0,
-                    "truncated": False, "aggregation": aggregation,
-                    "reason": decision.reason,
-                    "blocking_dimension": decision.blocking_dimension,
-                    "warnings": [
-                        f"AGGREGATION UNAVAILABLE ({decision.reason}"
-                        + (f", dimension {decision.blocking_dimension}" if decision.blocking_dimension else "")
-                        + "): this grouped total cannot be computed safely. Do not state a figure for it."],
-                    "suggestion": _unavailable_hint(decision),
-                }
-            filters = {k: list(v) for k, v in decision.effective_filters.items()}
-            group_by = sd_group
-            pins = {c: v for c, v in decision.effective_filters.items()
-                    if c not in sd_filters and c not in sd_group}
-            if pins:
-                warnings.append(
-                    "Auto-applied aggregate/level filters to avoid double-counting: "
-                    + ", ".join(f"{c}={_short(vs)}" for c, vs in pins.items()))
-            if decision.outcome == "approximation":
-                status = "approximation"
-                warnings.append(
-                    "APPROXIMATION: unweighted mean of non-additive values (rate/index/average) "
-                    "because no aligned weights exist. Say it is an approximation; never call it "
-                    "the official/national rate.")
-            for w in decision.warnings:
-                if w.get("code") == "time_collapsed":
-                    warnings.append(f"Values are aggregated across all periods of {w['column']}; "
-                                    "filter or group by time for a single-period figure.")
-
-    dimensions, group_by, filters = adapt_to_parquet(
-        schema, dimensions, group_by, filters)
-    agg_func = (aggregation or {}).get("agg_func") or "SUM"
-
-    def _execute_query(f):
-        sql = build_data_query(matrix_code, dimensions, f, limit + 1, group_by=group_by,
-                               agg_func=agg_func, value_column=schema['value_column'])
-        return conn.execute(sql).fetchall()
-
-    try:
-        rows = _execute_query(filters)
-    except Exception as e:
-        return {"error": f"Query failed: {e}"}
-
-    # Auto-retry: strip "Total"/"TOTAL" filter values if 0 rows (raw queries
-    # only: for grouped ones the policy already chose its pins).
-    if len(rows) == 0 and filters and not aggregation:
-        stripped = {
-            col: [v for v in vals if str(v).upper() != "TOTAL"]
-            for col, vals in filters.items()
-        }
-        stripped = {col: vals for col, vals in stripped.items() if vals}
-        if stripped != filters:
-            try:
-                rows = _execute_query(stripped)
-                if rows:
-                    warnings.append("Retried query after removing 'Total' filter values.")
-                    filters = stripped
-            except Exception:
-                pass
-
-    truncated = len(rows) > limit
-    rows = rows[:limit]
-
-    # Determine result columns
-    if group_by:
-        dim_by_col = {d["dim_column_name"]: d for d in dimensions}
-        result_dims = [dim_by_col[c] for c in group_by if c in dim_by_col]
-        if not result_dims:
-            result_dims = dimensions
-    else:
-        result_dims = dimensions
-
-    # Report SDMX names even when the file is legacy — get_dataset_schema
-    # showed the model canonical names, so returning `perioade_nom_id` here
-    # would contradict what it was told.
-    columns = [schema["to_sdmx"].get(d["dim_column_name"], d["dim_column_name"])
-               for d in result_dims] + ["OBS_VALUE"]
-    data_rows = [list(r) for r in rows]
-
-    return {
-        "matrix_code": matrix_code,
-        "status": status,
-        "columns": columns,
-        "rows": data_rows,
-        "row_count": len(data_rows),
-        "truncated": truncated,
-        "aggregation": aggregation,
-        "warnings": warnings,
-    }
+    if decision:
+        requested = set(inp.get("filters") or {}) | set(inp.get("group_by") or [])
+        pins = {c: v for c, v in (decision.get("filters") or {}).items() if c not in requested}
+        if pins:
+            warnings.append(
+                "Auto-applied aggregate/level filters to avoid double-counting: "
+                + ", ".join(f"{c}={_short(vs)}" for c, vs in pins.items()))
+        if decision.get("outcome") == "approximation":
+            status = "approximation"
+            warnings.append(
+                "APPROXIMATION: unweighted mean of non-additive values (rate/index/average) "
+                "because no aligned weights exist. Say it is an approximation; never call it "
+                "the official/national rate.")
+        for w in decision.get("warnings") or []:
+            if w.get("code") == "time_collapsed":
+                warnings.append(f"Values are aggregated across all periods of {w['column']}; "
+                                "filter or group by time for a single-period figure.")
+    if res.get("time_windowed"):
+        warnings.append("Only the most recent periods were returned (row cap); filter "
+                        "TIME_PERIOD to reach earlier periods.")
+    if res.get("partial_period_dropped"):
+        warnings.append(f"Period {res['partial_period_dropped']} was incomplete under the row "
+                        "cap and was dropped.")
+    sel = res.get("selection")
+    if sel and sel.get("empty"):
+        missing = sel.get("missing_values") or {}
+        warnings.append("EMPTY SELECTION: no rows match these filters"
+                        + (f"; values not in the data: {missing}" if missing else "")
+                        + ". Do not answer with a broader selection without saying so.")
+        base["selection"] = sel
+    return {**base, "status": status, "warnings": warnings}
 
 
 def _short(vs, n=3) -> str:
@@ -401,9 +329,9 @@ _REASON_HINTS = {
 }
 
 
-def _unavailable_hint(decision) -> str:
-    col = decision.blocking_dimension or "the blocking dimension"
-    tmpl = _REASON_HINTS.get(decision.reason or "", "Narrow the query with explicit filters.")
+def _unavailable_hint(reason, col) -> str:
+    col = col or "the blocking dimension"
+    tmpl = _REASON_HINTS.get(reason or "", "Narrow the query with explicit filters.")
     return tmpl.format(col=col) + " Raw rows (no group_by, with filters) remain available."
 
 

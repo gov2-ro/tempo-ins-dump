@@ -19,12 +19,14 @@ def env(tmp_path, monkeypatch):
     return monkeypatch
 
 
-def query_resp(code, group_by=None, filters=None, i=0):
+def query_resp(code, group_by=None, filters=None, i=0, approximate=None):
     inp = {"matrix_code": code}
     if group_by:
         inp["group_by"] = group_by
     if filters:
         inp["filters"] = filters
+    if approximate is not None:
+        inp["approximate"] = approximate
     return LLMResponse(stop_reason="tool_use", text=None,
                        tool_calls=[{"id": f"q{i}", "name": "query_dataset_data", "input": inp}])
 
@@ -54,10 +56,19 @@ def test_unavailable_result_is_structured_and_has_no_rows(env):
     assert "AGE" in r["suggestion"]
 
 
-def test_approximation_result_is_labelled(env):
+def test_approximation_is_opt_in(env):
+    # PA-01a: same default as REST — no unweighted mean unless asked for.
     from app.db import get_conn
     r = agent._handle_query_dataset_data(
         {"matrix_code": "RATEX", "group_by": ["TIME_PERIOD"]}, get_conn())
+    assert r["status"] == "unavailable" and r["rows"] == []
+    assert r["reason"] == "missing_weights"
+
+
+def test_approximation_result_is_labelled(env):
+    from app.db import get_conn
+    r = agent._handle_query_dataset_data(
+        {"matrix_code": "RATEX", "group_by": ["TIME_PERIOD"], "approximate": True}, get_conn())
     assert r["status"] == "approximation"
     assert r["aggregation"]["approximation"] is True
     assert any("APPROXIMATION" in w for w in r["warnings"])
@@ -125,7 +136,7 @@ def test_uncited_number_is_flagged(env):
 
 def test_approximation_is_never_relabelled_as_official(env):
     res, _ = run(env, [
-        query_resp("RATEX", ["TIME_PERIOD"]),
+        query_resp("RATEX", ["TIME_PERIOD"], approximate=True),
         text_resp("Rata somajului la nivel national in 2023 a fost 15% (RATEX)."),
     ], question="Care este rata somajului?")
     assert res.verification["approximations"] == ["RATEX"]
@@ -138,7 +149,7 @@ def test_approximation_is_never_relabelled_as_official(env):
 
 def test_model_that_qualifies_the_approximation_is_not_annotated_twice(env):
     res, _ = run(env, [
-        query_resp("RATEX", ["TIME_PERIOD"]),
+        query_resp("RATEX", ["TIME_PERIOD"], approximate=True),
         text_resp("Aproximativ 15% (medie neponderată, aproximare) (RATEX)."),
     ], question="Care este rata somajului?")
     assert "Notă:" not in res.answer

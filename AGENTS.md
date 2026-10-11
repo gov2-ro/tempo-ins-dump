@@ -93,7 +93,8 @@ reads env: `TEMPO_DATA_DIR`, `TEMPO_MAX_ROWS` (50,000), `TEMPO_DEBUG`,
   CSV/XLSX download), `categories`, `sdmx` (SDMX 2.1 data/datastructure/dataflow),
   `places`, `ask` (LLM Q&A).
 - **Services:** `dataset_search` + `dataset_meta` (shared by routes, dev MCP and
-  Ask agent), `query_builder`, `chart_selector` (+ `chart_selector_eval`),
+  Ask agent), `data_query` (the one validated `/data` query that REST, Ask and the
+  dev MCP all call; don't add a parallel path), `query_builder`, `chart_selector` (+ `chart_selector_eval`),
   `dashboard_composer` (tile composition), `insights` (KPIs, sentences),
   `headlines` (+ `headline_config.json`), `dimension_structure`,
   `place_service`, `agent` + `llm_client`, `agent_eval`.

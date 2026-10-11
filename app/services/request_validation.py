@@ -120,57 +120,80 @@ def _is_scalar(v) -> bool:
     return isinstance(v, (str, int, float)) and not isinstance(v, bool)
 
 
-def parse_filters(raw: str | None, allowed_columns) -> dict[str, list]:
-    """Parse the ``filters`` query parameter.
+class InvalidRequest(ValueError):
+    """A request that must be rejected before any query runs. Transport-neutral:
+    the REST routes turn it into a 400, the Ask/MCP adapters into a tool error."""
 
-    Required shape: a JSON object mapping a known column name to an array of
-    scalars (string, integer or float). An empty array means "no constraint
-    on that column". Anything else is a 400 - never silently ignored:
-    malformed JSON, a non-object (null, array, number...), an unknown column,
-    a non-array value, or a non-scalar array member (null, bool, object,
-    array).
-    """
+
+MISSING = object()  # an absent parameter (JSON ``null`` is a value, and invalid)
+
+
+def parse_json_param(raw: str | None, name: str):
+    """Decode a JSON query parameter; None/"" -> MISSING. Malformed -> InvalidRequest."""
     if raw is None or raw == "":
-        return {}
+        return MISSING
     try:
-        data = json.loads(raw)
+        return json.loads(raw)
     except (json.JSONDecodeError, RecursionError):
-        raise bad_request("Invalid filters: not valid JSON")
+        raise InvalidRequest(f"Invalid {name}: not valid JSON")
+
+
+def validate_filters(data, allowed_columns) -> dict[str, list]:
+    """Check decoded filters: a JSON object mapping a known column name to an
+    array of scalars (string, integer or float). An empty array means "no
+    constraint on that column". Anything else raises InvalidRequest - never
+    silently ignored: a non-object (null, array, number...), an unknown column,
+    a non-array value, or a non-scalar array member (null, bool, object, array).
+    ``MISSING`` means no filters; ``None`` (JSON null) is rejected."""
+    if data is MISSING:
+        return {}
     if not isinstance(data, dict):
-        raise bad_request(
+        raise InvalidRequest(
             "Invalid filters: expected a JSON object {column: [values]}")
     allowed = set(allowed_columns)
     total = 0
     out: dict[str, list] = {}
     for col, vals in data.items():
         if col not in allowed:
-            raise bad_request(f"Invalid filters: unknown column {col!r}")
+            raise InvalidRequest(f"Invalid filters: unknown column {col!r}")
         if not isinstance(vals, list):
-            raise bad_request(
+            raise InvalidRequest(
                 f"Invalid filters: values for {col!r} must be an array")
         if not all(_is_scalar(v) for v in vals):
-            raise bad_request(
+            raise InvalidRequest(
                 f"Invalid filters: values for {col!r} must be strings or numbers")
         total += len(vals)
         if total > MAX_FILTER_VALUES:
-            raise bad_request("Invalid filters: too many values")
+            raise InvalidRequest("Invalid filters: too many values")
         out[col] = vals
     return out
+
+
+def validate_group_by(data, allowed_columns) -> list[str] | None:
+    """Check decoded group_by: an array of known column names. MISSING/[] -> None."""
+    if data is MISSING:
+        return None
+    if not isinstance(data, list) or not all(isinstance(c, str) for c in data):
+        raise InvalidRequest("Invalid group_by: expected a JSON array of column names")
+    allowed = set(allowed_columns)
+    for c in data:
+        if c not in allowed:
+            raise InvalidRequest(f"Invalid group_by: unknown column {c!r}")
+    return data or None
+
+
+def parse_filters(raw: str | None, allowed_columns) -> dict[str, list]:
+    """Parse the ``filters`` query parameter (see `validate_filters`); 400 on error."""
+    try:
+        return validate_filters(parse_json_param(raw, "filters"), allowed_columns)
+    except InvalidRequest as e:
+        raise bad_request(str(e))
 
 
 def parse_group_by(raw: str | None, allowed_columns) -> list[str] | None:
     """Parse the ``group_by`` query parameter: a JSON array of known column
     names. Empty/absent -> None (no aggregation). Malformed -> 400."""
-    if raw is None or raw == "":
-        return None
     try:
-        data = json.loads(raw)
-    except (json.JSONDecodeError, RecursionError):
-        raise bad_request("Invalid group_by: not valid JSON")
-    if not isinstance(data, list) or not all(isinstance(c, str) for c in data):
-        raise bad_request("Invalid group_by: expected a JSON array of column names")
-    allowed = set(allowed_columns)
-    for c in data:
-        if c not in allowed:
-            raise bad_request(f"Invalid group_by: unknown column {c!r}")
-    return data or None
+        return validate_group_by(parse_json_param(raw, "group_by"), allowed_columns)
+    except InvalidRequest as e:
+        raise bad_request(str(e))

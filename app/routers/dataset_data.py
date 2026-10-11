@@ -4,16 +4,14 @@ import io
 import json
 import logging
 import os
-import re
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import Response, StreamingResponse
 from app.db import get_conn
-from app.config import MAX_DATA_ROWS, LARGE_DATASET_THRESHOLD, PARQUET_DIR
+from app.config import MAX_DATA_ROWS, PARQUET_DIR
 
 from app.services.query_builder import (
-    build_data_query_params, build_export_query_params, resolve_parquet_schema, adapt_to_parquet,
-    quote_ident, to_sdmx_name)
-from app.services.request_validation import parse_filters, parse_group_by
+    build_export_query_params, resolve_parquet_schema, adapt_to_parquet)
+from app.services.request_validation import parse_filters
 
 log = logging.getLogger(__name__)
 
@@ -76,88 +74,6 @@ def get_population_reference(level: str = Query("county", pattern="^(county|regi
     return _POP_REFERENCE_CACHE[level]
 
 
-# Legacy period labels that sort chronologically as plain strings. Annual
-# labels do ("Anul 1990" < "Anul 2024"); month names do not ("Aprilie" sorts
-# before "Ianuarie"), so those datasets keep the old unordered behaviour
-# rather than being given a confident but wrong idea of "newest".
-_ANNUAL_LABEL_RE = re.compile(r"^\s*Anul\s+\d{4}\s*$")
-
-
-def _resolve_time_column(conn, dimensions, schema, matrix_code: str) -> str | None:
-    """The parquet column holding time, or None if there isn't a usable one.
-
-    SDMX parquets name it TIME_PERIOD. The legacy ones carry a *_nom_id whose
-    SDMX counterpart is TIME_PERIOD, and store label strings rather than
-    dates — usable only while those labels sort chronologically.
-    """
-    cols = {d['dim_column_name'] for d in dimensions}
-    if 'TIME_PERIOD' in cols:
-        return 'TIME_PERIOD'
-    legacy = next((c for c in cols
-                   if schema['to_sdmx'].get(c) == 'TIME_PERIOD'), None)
-    if not legacy:
-        return None
-    path = PARQUET_DIR / f"{matrix_code}.parquet"
-    try:
-        vals = [r[0] for r in conn.execute(
-            f'SELECT DISTINCT {quote_ident(legacy)} FROM read_parquet(?) LIMIT 500',
-            [str(path)]
-        ).fetchall()]
-    except Exception:
-        return None
-    if vals and all(_ANNUAL_LABEL_RE.match(str(v or '')) for v in vals):
-        return legacy
-    return None
-
-
-def _rows_per_period(dimensions, group_by_cols, filter_dict, time_dim,
-                     row_count: int, n_periods: int) -> float:
-    """How many result rows one time period is expected to contribute.
-
-    Ungrouped, that is just the parquet's rows spread over its periods.
-    Grouped, the result is one row per surviving combination of the grouped
-    dimensions, so the estimate is the product of their cardinalities — a
-    filtered dimension contributes only the values the caller asked for.
-
-    Cardinalities come from `dimensions.option_count`, which is metadata and
-    therefore an upper bound: it counts every option the dataset declares,
-    including combinations that never occur in the data. Over-estimating is
-    the safe direction here — it windows a period or two more than strictly
-    needed rather than letting the query blow past the cap.
-    """
-    if not group_by_cols:
-        return row_count / max(n_periods, 1)
-
-    # A handful of datasets (INT109C) declare several dimensions under the
-    # same column name; take the widest, which is the bound that matters.
-    declared: dict[str, int] = {}
-    for d in dimensions:
-        col = d['dim_column_name']
-        declared[col] = max(declared.get(col, 1), d.get('option_count') or 1)
-
-    cells = 1
-    for col in group_by_cols:
-        if col == time_dim:
-            continue
-        picked = filter_dict.get(col)
-        n = len(picked) if picked else declared.get(col, 1)
-        cells *= max(n, 1)
-    return float(cells)
-
-
-def _allowed_columns(dimensions, schema) -> set:
-    """Every column name a request may legitimately mention for this dataset:
-    the recorded dimension names plus both spellings from the schema maps
-    (SDMX and legacy file names). The value column is excluded."""
-    cols = {d['dim_column_name'] for d in dimensions}
-    for m in (schema.get("to_file") or {}, schema.get("to_sdmx") or {}):
-        cols.update(m.keys())
-        cols.update(m.values())
-    cols.discard(schema.get("value_column"))
-    cols.discard("OBS_VALUE")
-    return cols
-
-
 @router.get("/datasets/{matrix_code}/data")
 def get_dataset_data(
     matrix_code: str,
@@ -189,271 +105,20 @@ def get_dataset_data(
     Raw (ungrouped) requests and valid explicit slices are unaffected, and
     `aggregation` is null for raw rows.
     """
+    from app.services.data_query import QueryError, run_query
+    from app.services.request_validation import InvalidRequest, parse_json_param
+    try:
+        f = parse_json_param(filters, "filters")
+        g = parse_json_param(group_by, "group_by")
+    except InvalidRequest as e:
+        raise HTTPException(400, str(e))
     conn = get_conn()
     try:
-        return _dataset_data(conn, matrix_code, filters, limit, group_by,
-                             approximate=bool(approximate))
+        return run_query(conn, matrix_code, f, g, limit, approximate=bool(approximate))
+    except QueryError as e:
+        raise HTTPException(e.status, e.message)
     finally:
         conn.close()
-
-
-def _dataset_data(conn, matrix_code: str, filters: str, limit: int, group_by: str,
-                  approximate: bool = False):
-    # Get matrix info
-    matrix = conn.execute(
-        "SELECT row_count FROM matrices WHERE matrix_code = ?", [matrix_code]
-    ).fetchone()
-    if not matrix:
-        raise HTTPException(404, f"Dataset {matrix_code} not found")
-
-    row_count = matrix[0] or 0
-
-    if not (PARQUET_DIR / f"{matrix_code}.parquet").exists():
-        # Split parents keep a `matrices` row but publish data only through
-        # their children. A large one used to be masked by the row-count gate
-        # and a small one leaked an absolute server path in a 500.
-        raise HTTPException(
-            404, f"Dataset {matrix_code} has no data file — it may be "
-                 f"published as sub-datasets."
-        )
-
-    # Get dimensions for this matrix
-    dims = conn.execute("""
-        SELECT dim_code, dim_label, dim_column_name, option_count
-        FROM dimensions
-        WHERE matrix_code = ?
-        ORDER BY dim_code
-    """, [matrix_code]).fetchall()
-
-    dimensions = [
-        {'dim_code': d[0], 'dim_label': d[1], 'dim_column_name': d[2],
-         'option_count': d[3] or 1}
-        for d in dims
-    ]
-
-    # Reconcile dim_column_name with the parquet's actual column names.
-    # The recorded name is sometimes SDMX-canonical, sometimes legacy v2
-    # (*_nom_id), depending on which pipeline phase last touched the row, and
-    # the file can be in either format too. resolve_parquet_schema owns that
-    # translation for every consumer — it used to be reimplemented here, in
-    # dataset_meta and in agent, and omitted in insights, which is why 188
-    # datasets published a single KPI.
-    schema = resolve_parquet_schema(conn, matrix_code)
-    legacy_to_sdmx = schema["to_sdmx"]
-    allowed = _allowed_columns(dimensions, schema)
-    filter_dict = parse_filters(filters, allowed)
-    group_by_cols = parse_group_by(group_by, allowed)
-
-    # FIX-02: a grouped request collapses every dim it does not group by, so the
-    # shared policy decides whether (and how) that is allowed. The decision's
-    # filters (aggregate pins, verified levels) are applied to the query.
-    aggregation = None
-    agg_func = "SUM"
-    if group_by_cols:
-        from app.services.dataset_meta import get_aggregation_context, decide_grouped
-        ctx = get_aggregation_context(conn, matrix_code)
-        if ctx is not None:
-            to_sdmx = lambda c: to_sdmx_name(schema, c)
-            sd_group = [to_sdmx(c) for c in group_by_cols]
-            sd_filters = {to_sdmx(k): v for k, v in filter_dict.items()}
-            decision = decide_grouped(ctx, sd_group, sd_filters,
-                                      allow_approximation=approximate)
-            aggregation = decision.to_dict()
-            # The headline series (every non-time dim collapsed, no caller
-            # filter) is the insights KPI's query: same source-total gate, so
-            # v1's headline card cannot show a sum INS contradicts.
-            time_cols = {d['dim_column_name'] for d in ctx['dimensions']
-                         if d.get('dim_type') == 'time'}
-            if decision.available and not sd_filters and len(sd_group) == 1 \
-                    and sd_group[0] in time_cols:
-                from app.services.dataset_meta import source_total_gate
-                reason, _ = source_total_gate(conn, matrix_code, decision)
-                if reason:
-                    aggregation.update(outcome='unavailable', reason=reason)
-                    return {
-                        'columns': sd_group + ['OBS_VALUE'], 'column_labels': {},
-                        'rows': [], 'total_rows': row_count, 'returned_rows': 0,
-                        'truncated': False, 'unavailable': True,
-                        'aggregation': aggregation,
-                    }
-            if not decision.available:
-                return {
-                    'columns': sd_group + ['OBS_VALUE'], 'column_labels': {},
-                    'rows': [], 'total_rows': row_count, 'returned_rows': 0,
-                    'truncated': False, 'unavailable': True,
-                    'aggregation': aggregation,
-                }
-            group_by_cols = sd_group
-            filter_dict = {k: list(v) for k, v in decision.effective_filters.items()}
-            agg_func = decision.agg_func or "SUM"
-    dimensions, group_by_cols, filter_dict = adapt_to_parquet(
-        schema, dimensions, group_by_cols, filter_dict)
-
-    # Auto time-window when the projected result would exceed MAX_DATA_ROWS and
-    # the user hasn't already constrained time. Threshold matches the row cap
-    # so we limit periods *before* the result gets silently truncated; the
-    # frontend can still page through earlier periods via the period browser.
-    #
-    # This used to skip grouped queries on the theory that GROUP BY already
-    # shrinks the output. It does not always: the output is the product of the
-    # grouped dimensions' cardinalities, which for POP107D grouped by
-    # (TIME_PERIOD, REF_AREA_2) is 34 x 3,182 = 108k rows — over the cap. And
-    # since every v2 chart query sets group_by, the guard never fired for the
-    # queries that need it most, leaving four concurrent full scans of a
-    # 21.6M-row parquet to race a 400MB memory limit.
-    TIME_WINDOW_THRESHOLD = MAX_DATA_ROWS
-    time_windowed = False
-    # The time column is TIME_PERIOD on SDMX parquets and a *_nom_id on the
-    # 67 legacy ones. Everything downstream — windowing, newest-first
-    # ordering, the partial-period drop — keys off this one name.
-    time_col = _resolve_time_column(conn, dimensions, schema, matrix_code)
-    if row_count > TIME_WINDOW_THRESHOLD and time_col:
-        time_dim = time_col if time_col not in filter_dict else None
-        if time_dim:
-            # Try parquet scan first (fast for moderate files), fall back to metadata
-            parquet_path = PARQUET_DIR / f"{matrix_code}.parquet"
-            time_vals = []
-            try:
-                time_vals = [r[0] for r in conn.execute(f"""
-                    SELECT DISTINCT {quote_ident(time_dim)}
-                    FROM read_parquet(?)
-                    ORDER BY {quote_ident(time_dim)} DESC
-                """, [str(parquet_path)]).fetchall()]
-            except Exception:
-                pass
-            # Fallback: generate year strings from metadata year range
-            if not time_vals:
-                yr_row = conn.execute(
-                    "SELECT time_year_min, time_year_max FROM matrix_profiles WHERE matrix_code = ?",
-                    [matrix_code]
-                ).fetchone()
-                if yr_row and yr_row[0] and yr_row[1]:
-                    time_vals = [str(y) for y in range(yr_row[1], yr_row[0] - 1, -1)]
-            if time_vals:
-                n_periods = len(time_vals)
-                rows_per_period = _rows_per_period(
-                    dimensions, group_by_cols, filter_dict, time_dim,
-                    row_count, n_periods)
-                # For extremely large datasets, allow a smaller minimum to avoid OOM
-                min_periods = 2 if row_count > 5_000_000 else 5
-                safe_periods = max(min_periods, int(MAX_DATA_ROWS / max(rows_per_period, 1)))
-                safe_periods = min(safe_periods, n_periods)
-                if safe_periods < n_periods:
-                    filter_dict[time_dim] = time_vals[:safe_periods]
-                    time_windowed = True
-
-    # Refuse only what is genuinely unbounded. This used to reject every
-    # unfiltered raw-row request on a large dataset, which also broke the
-    # dataset page's own table view: it asks for 1,000 rows and got a 400 on
-    # all 127 datasets above the threshold. A bounded request is safe now —
-    # the window above cuts to the newest periods, the query takes the newest
-    # rows, and DuckDB answers it with a streaming top-N. What remains
-    # unbounded is a big dataset with no filters, no grouping and no time
-    # dimension to window on.
-    if (row_count > LARGE_DATASET_THRESHOLD and not filter_dict
-            and not group_by_cols and not time_windowed):
-        raise HTTPException(
-            400,
-            f"Dataset has {row_count:,} rows. Please apply at least one filter "
-            f"to narrow results (max {MAX_DATA_ROWS:,} rows returned)."
-        )
-
-    # Build and execute query
-    sql, params = build_data_query_params(
-        matrix_code, dimensions, filter_dict, limit + 1,
-        group_by=group_by_cols, agg_func=agg_func,
-        value_column=schema["value_column"], time_column=time_col)
-
-    try:
-        result = conn.execute(sql, params).fetchall()
-    except Exception:
-        log.exception("data query failed matrix=%s", matrix_code)
-        raise HTTPException(500, "Query failed")
-
-    truncated = len(result) > limit
-    rows = result[:limit]
-
-    # Determine which dimension columns are in the result
-    if group_by_cols:
-        # Order must match SQL output: group_by order, filtered to valid cols
-        dim_by_col = {d['dim_column_name']: d for d in dimensions}
-        result_dims = [dim_by_col[c] for c in group_by_cols if c in dim_by_col]
-        if not result_dims:
-            result_dims = dimensions  # fallback
-    else:
-        result_dims = dimensions
-
-    # A truncated result is cut mid-period. The query now takes the NEWEST
-    # rows, so the incomplete one is the oldest period present — charting it
-    # draws a first point that dips for no reason, and any total computed over
-    # it is simply wrong. Drop it: a shorter honest series beats a longer one
-    # that lies at the edge. Keep it when it is the only period, where there
-    # is nothing better to show.
-    partial_period = None
-    if truncated:
-        tidx = next((i for i, d in enumerate(result_dims)
-                     if d['dim_column_name'] == time_col), None) if time_col else None
-        if tidx is not None:
-            periods = {r[tidx] for r in rows if r[tidx] is not None}
-            if len(periods) > 1:
-                partial_period = min(periods)
-                rows = [r for r in rows if r[tidx] != partial_period]
-
-    # Build column_labels: map data values to display labels.
-    column_labels = {}
-    for i, dim in enumerate(result_dims):
-        col = dim['dim_column_name']
-        values = set()
-        for row in rows:
-            if row[i] is not None:
-                values.add(row[i])
-
-        if not values:
-            continue
-
-        # Check if values are strings (v3 SDMX) or integers (v2 nomItemIds)
-        has_string_values = any(isinstance(v, str) for v in values)
-
-        if has_string_values:
-            # v3: values are human-readable labels — identity mapping
-            column_labels[col] = {str(v): str(v) for v in values}
-        else:
-            # v2 fallback: values are integer nomItemIds — resolve via DB
-            int_values = [int(v) for v in values if v is not None]
-            if int_values:
-                id_list = ",".join(str(x) for x in int_values)
-                labels = conn.execute(f"""
-                    SELECT nom_item_id, option_label
-                    FROM dimension_options
-                    WHERE nom_item_id IN ({id_list})
-                """).fetchall()
-                column_labels[col] = {str(nom_id): label for nom_id, label in labels}
-
-    # Format column names — legacy parquet columns are translated back to
-    # SDMX-canonical names so every client sees one schema.
-    def _out_col(c):
-        return legacy_to_sdmx.get(c, c)
-    columns = [_out_col(d['dim_column_name']) for d in result_dims] + ['OBS_VALUE']
-    if legacy_to_sdmx:
-        column_labels = {_out_col(c): v for c, v in column_labels.items()}
-
-    # Convert rows to plain lists
-    data_rows = [list(r) for r in rows]
-
-    resp = {
-        'columns': columns,
-        'column_labels': column_labels,
-        'rows': data_rows,
-        'total_rows': row_count,
-        'returned_rows': len(data_rows),
-        'truncated': truncated,
-        'aggregation': aggregation,
-    }
-    if time_windowed:
-        resp['time_windowed'] = True
-    if partial_period is not None:
-        resp['partial_period_dropped'] = str(partial_period)
-    return resp
 
 
 @router.get("/datasets/{matrix_code}/download")
@@ -516,6 +181,7 @@ def _download(conn, matrix_code: str, format: str, filters: str, lang: str,
 
     # Same parquet-schema reconciliation as /data endpoint
     schema = resolve_parquet_schema(conn, matrix_code)
+    from app.services.data_query import _allowed_columns
     filter_dict = parse_filters(filters, _allowed_columns(dimensions, schema))
     dimensions, _, filter_dict = adapt_to_parquet(
         schema, dimensions, None, filter_dict)

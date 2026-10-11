@@ -59,12 +59,10 @@ def _ensure_imports():
         return
     # These will be importable because REPO_ROOT is on sys.path
     global search_datasets, get_dataset_meta, build_signature, select_charts
-    global build_data_query
     global get_conn, PARQUET_DIR, CORPUS_DIR
     from app.services.dataset_search import search_datasets
     from app.services.dataset_meta import get_dataset_meta
     from app.services.chart_selector import build_signature, select_charts
-    from app.services.query_builder import build_data_query
     from app.db import get_conn
     from app.config import PARQUET_DIR, CORPUS_DIR
     _ready = True
@@ -221,24 +219,23 @@ def tempo_sample(
 
     Args:
         matrix_code: Dataset identifier
-        n:           Number of rows (default 10, max 100)
-        filters:     Optional JSON string: {"COLUMN": ["val1","val2"], ...}
+        n:           Number of rows (1..100, default 10)
+        filters:     Optional JSON string: {"COLUMN": ["val1","val2"], ...}.
+                     Unknown columns or malformed values are an error.
     """
     _ensure_imports()
-    n = min(n, 100)
-
-    filter_dict = {}
-    if filters:
-        try:
-            filter_dict = json.loads(filters)
-        except json.JSONDecodeError:
-            return json.dumps({"error": "Invalid JSON in filters parameter"})
-
-    meta = get_dataset_meta(matrix_code)
-    if meta is None:
-        return json.dumps({"error": f"Dataset {matrix_code} not found"})
-
-    rows = _sample_parquet(matrix_code, n=n, conn=None, meta=meta, filters=filter_dict)
+    from app.services.request_validation import InvalidRequest, MISSING, parse_json_param
+    try:
+        filter_data = parse_json_param(filters, "filters")
+        if filter_data is None:
+            raise InvalidRequest("Invalid filters: expected a JSON object {column: [values]}")
+        meta = get_dataset_meta(matrix_code)
+        if meta is None:
+            return json.dumps({"error": f"Dataset {matrix_code} not found"})
+        rows = _sample_parquet(matrix_code, n=n, conn=None, meta=meta,
+                               filters=None if filter_data is MISSING else filter_data)
+    except InvalidRequest as e:
+        return json.dumps({"error": str(e)})
     return json.dumps({
         "matrix_code": matrix_code,
         "row_count": len(rows),
@@ -247,7 +244,7 @@ def tempo_sample(
 
 
 # ---------------------------------------------------------------------------
-# 5. tempo_query — aggregated data queries
+# 5. tempo_query — the shared data query (same as REST / Ask)
 # ---------------------------------------------------------------------------
 @mcp.tool()
 def tempo_query(
@@ -255,70 +252,39 @@ def tempo_query(
     filters: str | None = None,
     group_by: str | None = None,
     limit: int = 1000,
+    approximate: bool = False,
 ) -> str:
-    """Query a dataset with filters and optional GROUP BY aggregation.
+    """Query a dataset through the app's shared data query (`data_query.run_query`).
 
-    Wraps query_builder.build_data_query() — SQL is never LLM-generated.
-    Use group_by to aggregate (e.g. SUM by TIME_PERIOD, REF_AREA).
-    Without group_by, returns raw rows.
+    Same validation, aggregation policy, effective filters and values as
+    `GET /api/datasets/{code}/data` and the Ask tool. Without group_by, returns
+    raw rows. A grouped query that cannot be computed safely returns
+    `unavailable: true` with `aggregation.reason` — never an unsafe sum.
 
     Args:
         matrix_code: Dataset identifier (e.g. 'POP101A', 'ACC101B_judete')
         filters:     Optional JSON string: {"COLUMN": ["val1","val2"], ...}
         group_by:    Optional JSON string: ["TIME_PERIOD", "SEX"]
-        limit:       Max rows (default 1000, max 5000)
+        limit:       Max rows (1..5000, default 1000)
+        approximate: Allow a labelled unweighted mean for rates/averages without weights
     """
     _ensure_imports()
-    limit = min(limit, 5000)
-
-    filter_dict = {}
-    if filters:
-        try:
-            filter_dict = json.loads(filters)
-        except json.JSONDecodeError:
-            return json.dumps({"error": "Invalid JSON in filters parameter"})
-
-    group_list = None
-    if group_by:
-        try:
-            group_list = json.loads(group_by)
-            if not isinstance(group_list, list):
-                return json.dumps({"error": "group_by must be a JSON array"})
-        except json.JSONDecodeError:
-            return json.dumps({"error": "Invalid JSON in group_by parameter"})
-
-    meta = get_dataset_meta(matrix_code)
-    if meta is None:
-        return json.dumps({"error": f"Dataset {matrix_code} not found"})
-
-    # Determine aggregation function based on unit type
-    unit_type = meta.get("profile", {}).get("primary_unit_type", "count")
-    agg_func = "AVG" if unit_type in ("percentage", "time_unit") else "SUM"
-
-    query_sql = build_data_query(
-        matrix_code,
-        meta["dimensions"],
-        filter_dict,
-        limit=limit,
-        group_by=group_list,
-        agg_func=agg_func,
-    )
-
+    from app.services.data_query import QueryError, run_query
+    from app.services.request_validation import InvalidRequest, parse_json_param
+    if not isinstance(limit, int) or not 1 <= limit <= 5000:
+        return json.dumps({"error": "limit must be an integer in 1..5000"})
     conn = get_conn()
     try:
-        rows = conn.execute(query_sql).fetchall()
-        cols = [d[0] for d in conn.description]
-        return json.dumps({
-            "matrix_code": matrix_code,
-            "columns": cols,
-            "rows": [dict(zip(cols, r)) for r in rows],
-            "row_count": len(rows),
-            "agg_func": agg_func if group_list else None,
-            "query_sql": query_sql.strip(),
-        }, default=str, ensure_ascii=False)
-    except Exception as e:
-        log.warning("Failed to query %s: %s", matrix_code, e)
-        return json.dumps({"error": f"Query failed: {e}"})
+        res = run_query(conn, matrix_code, parse_json_param(filters, "filters"),
+                        parse_json_param(group_by, "group_by"), limit,
+                        approximate=bool(approximate))
+    except InvalidRequest as e:
+        return json.dumps({"error": str(e)})
+    except QueryError as e:
+        return json.dumps({"error": e.message, "status": e.status})
+    finally:
+        conn.close()
+    return json.dumps({"matrix_code": matrix_code, **res}, default=str, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------
@@ -1044,32 +1010,37 @@ def tempo_eval_agent() -> str:
 # Helpers
 # ---------------------------------------------------------------------------
 def _sample_parquet(matrix_code, *, n=10, conn=None, meta=None, filters=None):
-    """Read n rows from the parquet, optionally filtered."""
+    """Read n rows from the parquet, optionally filtered.
+
+    Filters are validated against the file's own columns (unknown column or bad
+    shape -> InvalidRequest) and every value and the path are bound parameters.
+    """
     _ensure_imports()
+    from app.services.query_builder import quote_ident
+    from app.services.request_validation import InvalidRequest, MISSING, validate_filters
+    if not isinstance(n, int) or isinstance(n, bool) or not 1 <= n <= 100:
+        raise InvalidRequest("n must be an integer in 1..100")
     if conn is None:
         conn = get_conn()
     parquet_path = PARQUET_DIR / f"{matrix_code}.parquet"
     if not parquet_path.exists():
         return []
+    path = str(parquet_path)
+    cols = [r[0] for r in conn.execute(
+        "DESCRIBE SELECT * FROM read_parquet(?)", [path]).fetchall()]
+    allowed = [c for c in cols if c not in ("OBS_VALUE", "value")]
+    checked = validate_filters(MISSING if filters is None else filters, allowed)
 
-    where_parts = []
-    if filters:
-        dims = {d["dim_column_name"] for d in (meta or {}).get("dimensions", [])}
-        for col, vals in filters.items():
-            if col not in dims or not vals:
-                continue
-            safe = ", ".join(f"'{v}'" for v in vals)
-            where_parts.append(f'CAST("{col}" AS VARCHAR) IN ({safe})')
-
-    where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
-
+    where, params = [], [path]
+    for col, vals in checked.items():
+        if not vals:
+            continue
+        where.append(f"CAST({quote_ident(col)} AS VARCHAR) IN ({', '.join('?' for _ in vals)})")
+        params.extend(str(v) for v in vals)
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
     try:
-        rows = conn.execute(f"""
-            SELECT * FROM read_parquet('{parquet_path}')
-            {where_sql}
-            LIMIT {int(n)}
-        """).fetchall()
-        cols = [d[0] for d in conn.description]
+        rows = conn.execute(
+            f"SELECT * FROM read_parquet(?) {where_sql} LIMIT ?", [*params, n]).fetchall()
         return [dict(zip(cols, r)) for r in rows]
     except Exception as e:
         log.warning("Failed to sample %s: %s", matrix_code, e)

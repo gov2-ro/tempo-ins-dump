@@ -208,8 +208,8 @@ Sample rows from a dataset's parquet file. Values are human-readable SDMX string
 | Param | Type | Default | Description |
 |---|---|---|---|
 | `matrix_code` | `str` (required) | — | Dataset identifier |
-| `n` | `int` | `10` | Number of rows (max 100) |
-| `filters` | `str \| null` | `null` | JSON string: `{"COLUMN": ["val1", "val2"]}` |
+| `n` | `int` | `10` | Number of rows (1..100) |
+| `filters` | `str \| null` | `null` | JSON string: `{"COLUMN": ["val1", "val2"]}`; validated against the file's columns, values bound as parameters |
 
 **Returns** JSON:
 
@@ -233,38 +233,33 @@ Sample rows from a dataset's parquet file. Values are human-readable SDMX string
 
 ---
 
-### 5. `tempo_query(matrix_code, filters?, group_by?, limit?)`
+### 5. `tempo_query(matrix_code, filters?, group_by?, limit?, approximate?)`
 
-Aggregated data queries. Wraps `query_builder.build_data_query()` — SQL is never LLM-generated. Automatically picks the right aggregation function (SUM for counts/currency, AVG for percentages).
+Runs the app's shared data query (`app/services/data_query.run_query`), the same
+code as `GET /api/datasets/{code}/data` and the Ask tool. Validation, the
+aggregation policy, effective filters and values are identical across the three
+(PA-01a). SQL is never LLM-generated, and the tool never picks SUM/AVG itself.
 
 **Parameters:**
 
 | Param | Type | Default | Description |
 |---|---|---|---|
 | `matrix_code` | `str` (required) | — | Dataset identifier |
-| `filters` | `str \| null` | `null` | JSON string: `{"COLUMN": ["val1", "val2"]}` |
+| `filters` | `str \| null` | `null` | JSON string: `{"COLUMN": ["val1", "val2"]}`; unknown columns are an error |
 | `group_by` | `str \| null` | `null` | JSON string: `["TIME_PERIOD", "SEX"]` |
-| `limit` | `int` | `1000` | Max rows (max 5000) |
+| `limit` | `int` | `1000` | Max rows (1..5000) |
+| `approximate` | `bool` | `false` | Allow a labelled unweighted mean when weights are missing |
 
-**Returns** JSON:
+**Returns** the REST `/data` body plus `matrix_code`: `columns`, `rows` (arrays),
+`total_rows`, `returned_rows`, `truncated`, `aggregation` (decision; null for raw
+rows), and when relevant `unavailable`, `time_windowed`, `partial_period_dropped`,
+`selection` (`{"empty": true, "missing_values": {...}}`). Invalid input returns
+`{"error": ...}`.
 
-```json
-{
-  "matrix_code": "AMG157G",
-  "columns": ["TIME_PERIOD", "OBS_VALUE"],
-  "rows": [
-    {"TIME_PERIOD": "2004-01", "OBS_VALUE": 21.7},
-    {"TIME_PERIOD": "2004-02", "OBS_VALUE": 21.7}
-  ],
-  "row_count": 252,
-  "agg_func": "AVG",
-  "query_sql": "SELECT ... FROM read_parquet(...) ..."
-}
-```
-
-Without `group_by`, returns raw rows (like `tempo_sample` but with filters and higher limit). With `group_by`, aggregates — e.g. `group_by=["TIME_PERIOD"]` gives one value per period.
-
-**Example use case:** "What's the average unemployment rate per year?" — `tempo_query("AMG157G", group_by='["TIME_PERIOD"]', filters='{"SEX":["Total"],"AGE":["Total"]}')`.
+Without `group_by`, returns raw rows. With `group_by`, every other dimension is
+collapsed only where the policy allows it. Example: POP107A grouped by
+`TIME_PERIOD` returns `unavailable`, reason `overlapping_levels`, column `AGE`,
+exactly like REST.
 
 ---
 
