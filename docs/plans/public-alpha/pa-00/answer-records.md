@@ -11,8 +11,8 @@ and were cross-checked against the retained CSVs. They are not golden numbers.
 | Q | Status | Blocker / next step |
 |---|---|---|
 | Q1 population | `candidate` | Fetch INS Total cells for Cluj/Iași/Bucharest 2012–2025; explain the national 7,120 gap |
-| Q2 net earnings | `blocked` | No county all-activities × both-sexes cell in the corpus |
-| Q3 unemployment | `blocked` | No both-sexes rate in the corpus. Source decided: SOM103A (annual) |
+| Q2 net earnings | `candidate` (reconstructed) | Recipe `net_earnings_county` reproduces the INS national total. Fetch the county Total cells to confirm counties |
+| Q3 unemployment | `candidate` (reconstructed) | Recipe `registered_unemployment_county` reproduces the regional rates by sex. Bucharest is shown only as a range (0.6–0.7) until SOM101E is re-fetched |
 | Q4 tourism intensity | `candidate`, **feasible** | Denominator approved (1 January). Still needs county denominators verified, as in Q1 |
 | Q5 share/reproduce | `candidate` | Checklist below; acceptance is PA-03 |
 

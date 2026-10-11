@@ -36,7 +36,9 @@ const PLACE_UI = {
           units: { percent: '%', percentage_points: 'p.p.', per_mille_points: 'puncte ‰' },
           noteDiff: 'Atenție: perioade diferite în grafic —', nationalApprox: 'Medie națională (aproximare)',
           regionWord: '(regiune)', omitted: 'Indicatori indisponibili:',
-          omittedReasons: { no_all_activities_total: 'nu există rând de total pe activități', no_data: 'fără date', missing_weights: 'fără ponderi' }, },
+          omittedReasons: { no_all_activities_total: 'nu există rând de total pe activități', no_data: 'fără date', missing_weights: 'fără ponderi',
+              group_missing: 'lipsesc date pentru un sex' },
+          between: 'între', reconstructed: 'reconstituit', reconstructedTitle: 'Reconstituit din ponderile publicate de INS (vezi nota)', },
     en: { loading: 'Loading...', notFound: 'Place not found.', error: 'Loading error.',
           datasets: 'datasets available', themes: 'Datasets by theme',
           comparison: 'Comparison', national: 'National average', sameRegion: 'Same region:',
@@ -49,7 +51,9 @@ const PLACE_UI = {
           units: { percent: '%', percentage_points: 'pp', per_mille_points: '‰ points' },
           noteDiff: 'Note: different periods in the chart —', nationalApprox: 'National mean (approximation)',
           regionWord: '(region)', omitted: 'Unavailable indicators:',
-          omittedReasons: { no_all_activities_total: 'no all-activities total row in the source', no_data: 'no data', missing_weights: 'no weights' }, },
+          omittedReasons: { no_all_activities_total: 'no all-activities total row in the source', no_data: 'no data', missing_weights: 'no weights',
+              group_missing: 'data missing for one sex' },
+          between: 'between', reconstructed: 'reconstructed', reconstructedTitle: 'Reconstructed from weights INS publishes (see the note)', },
 };
 
 class PlaceProfileApp {
@@ -254,6 +258,7 @@ class PlaceProfileApp {
         const t = this.ui, m = kpi.method || {};
         if (m.approximation) return `<span class="kpi-badge approx" title="${_esc(t.approxTitle)}">${_esc(t.approx)}</span>`;
         if (m.code === 'weighted_mean') return `<span class="kpi-badge weighted">${_esc(t.weighted)}</span>`;
+        if (m.code === 'reconstruction') return `<span class="kpi-badge weighted" title="${_esc(t.reconstructedTitle)}">${_esc(t.reconstructed)}</span>`;
         return '';
     }
 
@@ -301,7 +306,7 @@ class PlaceProfileApp {
         if (omEl) {
             omEl.innerHTML = om.length
                 ? `${_esc(t.omitted)} ` + om.map(o => `${_esc(this.lang === 'en' ? (o.label_en || o.label) : o.label)}`
-                    + ` (${_esc(t.omittedReasons[o.reason] || o.reason)})`).join('; ')
+                    + ` (${_esc(t.omittedReasons[o.reason] || o.reason)}${o.bounds ? `; ${_esc(t.between)} ${o.bounds[0]}–${o.bounds[1]}` : ''})`).join('; ')
                 : '';
         }
 

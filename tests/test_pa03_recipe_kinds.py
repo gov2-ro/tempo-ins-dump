@@ -135,3 +135,17 @@ def test_q3_lies_between_the_sex_rates_and_bucharest_is_a_range(conn):
     assert r["excluded"] == [{"geo_id": "municipiul-bucuresti", "label": "Municipiul Bucuresti",
                               "reason": "group_missing", "bounds": [0.6, 0.7]}]
     assert r["rows"][0]["label"] == "Teleorman"
+
+
+@pytest.mark.corpus
+def test_place_pages_use_the_reconstructions():
+    from app.services import place_service as ps
+    ps._kpi_config = None
+    k = {x["key"]: x for x in ps.get_place_kpi_report("county", "cluj")["kpis"]}
+    assert k["net_monthly_wage"]["value"] == 5921.0 and k["net_monthly_wage"]["period"] == "2024"
+    assert k["registered_unemployment_rate"]["value"] == 1.4
+    assert k["net_monthly_wage"]["method"]["code"] == "reconstruction"
+    rep = ps.get_place_kpi_report("county", "municipiul-bucuresti")
+    assert [o for o in rep["omitted"] if o["key"] == "registered_unemployment_rate"][0]["bounds"] == [0.6, 0.7]
+    b = ps.get_kpi_baselines("county", "cluj", "net_monthly_wage")
+    assert round(b["national"][-1]["value"]) == 4959

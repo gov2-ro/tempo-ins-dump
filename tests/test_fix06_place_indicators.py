@@ -294,7 +294,9 @@ def test_som103a_never_labelled_bim_or_ilo_in_either_language():
             assert "BIM" not in blob and "ILO" not in blob, (level, blob)
             assert s["label"] == "Rata șomajului înregistrat"
             assert s["label_en"] == "Registered unemployment rate"
-            assert s["measure"] == "non_additive" and s.get("allow_approximation") is True
+            # county: the reviewed reconstruction; other levels: a named approximation
+            assert s["measure"] == "non_additive" and (
+                s.get("allow_approximation") is True or s.get("recipe") == "registered_unemployment_county")
 
 
 def test_old_label_still_resolves_and_baseline_route_accepts_it(env):
@@ -327,7 +329,7 @@ def test_real_config_is_consistent():
                                          and s["source_title"] and s["source_title_en"])
             if s["unit_kind"] in ("percent_rate", "per_mille_rate"):
                 assert s["measure"] == "non_additive"
-                assert s.get("weights") or s.get("allow_approximation")
+                assert s.get("weights") or s.get("allow_approximation") or s.get("recipe")
 
 
 def test_ui_does_not_label_change_with_the_value_unit():
@@ -346,13 +348,13 @@ def test_bihor_unemployment_uses_latest_source_period():
     k = next(x for x in rep["kpis"] if x["key"] == "registered_unemployment_rate")
     assert k["period"] == k["source_latest_period"]       # not the old oldest-30 window (2020)
     assert int(k["period"]) >= 2024
-    assert k["method"]["approximation"] is True
+    assert k["method"]["code"] == "reconstruction" and k["method"]["approximation"] is False
     assert "BIM" not in k["label"] and "BIM" not in k["label_en"]
     assert [r["year"] for r in k["sparkline"]] == sorted(r["year"] for r in k["sparkline"])
     # rates change in points, counts in relative percent
     for x in rep["kpis"]:
         assert x["change"]["unit"] == ("points" if x["unit_kind"].endswith("_rate") else "percent")
-    assert {o["key"] for o in rep["omitted"]} == {"net_monthly_wage"}
+    assert rep["omitted"] == []          # net earnings is the net_earnings_county recipe now
 
 
 @pytest.mark.corpus
@@ -360,6 +362,10 @@ def test_corpus_baseline_period_matches_place_period():
     rep = ps.get_place_kpi_report("county", "bihor")
     for k in rep["kpis"]:
         b = ps.get_kpi_baselines("county", "bihor", k["key"])
+        if k["method"]["code"] == "reconstruction" and not b["national"]:
+            # Q3: Bucharest has no SOM101E rows, so no complete national figure
+            assert b["national_meta"]["reason"] == "incomplete_areas", k["key"]
+            continue
         assert b["national"], k["key"]
         assert b["national"][-1]["year"] == k["period"], k["key"]
 

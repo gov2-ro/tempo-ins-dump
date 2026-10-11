@@ -132,10 +132,13 @@ def test_get_place_peers_self_excluded():
 
 @pytest.mark.corpus
 def test_get_kpi_baselines_returns_national():
-    baselines = get_kpi_baselines("county", "bihor", "Rata șomajului BIM")
+    baselines = get_kpi_baselines("county", "bihor", "net_monthly_wage")
     assert "national" in baselines
     assert isinstance(baselines["national"], list)
     assert len(baselines["national"]) > 0
+    # the unemployment reconstruction has no Bucharest row: no partial national figure
+    som = get_kpi_baselines("county", "bihor", "Rata șomajului BIM")
+    assert som["national"] == [] and som["national_meta"]["reason"] == "incomplete_areas"
 
 
 @pytest.mark.corpus

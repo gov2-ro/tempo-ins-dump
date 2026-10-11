@@ -1,5 +1,6 @@
 """Place profile service — resolves places and aggregates KPI/dataset data."""
 import json
+import threading
 import unicodedata
 import re
 from functools import lru_cache
@@ -372,6 +373,115 @@ def _resolve_series(spec: dict, areas: list[str] | None, geo_level: str, *,
     return _complete_series(rows), decision, info["last"]
 
 
+# ------------------------------------------------------------------ recipe KPIs
+#
+# A KPI may be a reviewed recipe (app/data/recipes.json) instead of one parquet:
+# Q2 earnings and Q3 unemployment are reconstructed from INS's own weights
+# because their total row is not in the corpus. Per year the recipe yields
+# every county; a place reads its row, and a group (region, country) is
+# recombined from the same rows: weighted_mean as Σ value·weight / Σ weight,
+# rate_from_counts as 100·Σ U / Σ base. A group year with any area excluded
+# is absent, never partial.
+
+_recipe_cache: dict = {}
+_recipe_lock = threading.Lock()
+
+
+def _recipe_run(rid: str, year=None):
+    from app.services import generation
+    from app.services.recipes import RecipeError, run
+    key = (generation.current()["id"], rid, year)
+    with _recipe_lock:
+        if key in _recipe_cache:
+            return _recipe_cache[key]
+    con = get_conn()
+    try:
+        try:
+            res = run(con, rid, year=year)
+        except RecipeError as e:
+            res = {"error": e.to_dict()}
+    finally:
+        con.close()
+    with _recipe_lock:
+        _recipe_cache[key] = res
+    return res
+
+
+def _recipe_combine(kind: str, rows: list[dict]) -> float | None:
+    if kind == "weighted_mean":
+        w = sum(r["weight_total"] for r in rows)
+        return sum(r["value"] * r["weight_total"] for r in rows) / w if w else None
+    if kind == "rate_from_counts":
+        b = sum(r["base_total"] for r in rows)
+        return 100 * sum(r["count_total"] for r in rows) / b if b else None
+    return None
+
+
+def _recipe_series(spec: dict, areas: list[str] | None, *, collapse: bool):
+    """(series, excluded entry for a single area or None, latest year)."""
+    from app.services.recipes import geo_id
+    latest = _recipe_run(spec["recipe"])
+    if "error" in latest:
+        return [], {"reason": latest["error"]["reason"]}, None
+    kind = latest["recipe"]["kind"]
+    want = None if areas is None else {geo_id(a) for a in areas}
+    series, last_excl = [], None
+    for y in latest["years_available"][-SERIES_CAP:]:
+        res = _recipe_run(spec["recipe"], y)
+        if "error" in res:
+            continue
+        rows = {r["geo_id"]: r for r in res["rows"]}
+        excl = {e["geo_id"]: e for e in res["excluded"]}
+        scope = set(rows) | {g for g, e in excl.items() if e["reason"] != "not_in_data"} \
+            if want is None else want
+        if not collapse:
+            g = next(iter(scope), None)
+            if g in rows:
+                series.append({"year": y, "value": rows[g]["value"]})
+            else:
+                last_excl = excl.get(g) or {"reason": "no_data"}
+            continue
+        if scope and scope <= set(rows):
+            v = _recipe_combine(kind, [rows[g] for g in scope])
+            if v is not None:
+                series.append({"year": y, "value": v})
+    if series:
+        last_excl = None
+    return series, last_excl, latest["years_available"][-1] if latest["years_available"] else None
+
+
+def _recipe_method(spec: dict, latest: dict) -> dict:
+    r = latest["recipe"]
+    return {"code": "reconstruction", "approximation": False, "outcome": "valid_total",
+            "reason": None, "weights_source": None, "recipe": r["id"],
+            "note": spec.get("method_note"), "note_en": spec.get("method_note_en")}
+
+
+def _recipe_kpi(spec: dict, place: dict, ident: dict):
+    """(kpi dict, None) or (None, omitted entry) for a recipe-backed KPI."""
+    series, excl, last = _recipe_series(spec, place["ref_area_values"][:1], collapse=False)
+    if not series:
+        om = {"key": spec["key"], "label": spec["label"], "label_en": spec.get("label_en"),
+              "reason": (excl or {}).get("reason", "no_data"), "note": None}
+        if excl and excl.get("bounds"):
+            om["bounds"] = excl["bounds"]
+        return None, om
+    latest = series[-1]
+    change = _change_for(ident["unit_kind"], series)
+    method = _recipe_method(spec, _recipe_run(spec["recipe"]))
+    prov = {"method": "reconstruction", "recipe": spec["recipe"], "outcome": "valid_total",
+            "source_code": spec.get("source_code"), "period": latest["year"],
+            "unit": spec.get("unit"), "comparison": agg.comparison_of(change)}
+    return {
+        **ident,
+        "value": round(latest["value"], 1),
+        "period": latest["year"], "source_latest_period": last,
+        "stale": bool(last and latest["year"] < last),
+        "change_yoy": change["value"] if change["status"] == "ok" else None,
+        "change": change, "method": method, "provenance": prov, "sparkline": series,
+    }, None
+
+
 def get_place_kpi_report(place_type: str, slug: str, *, conn=None) -> dict:
     """KPI cards for a place plus the indicators deliberately left out.
 
@@ -394,6 +504,13 @@ def get_place_kpi_report(place_type: str, slug: str, *, conn=None) -> dict:
             omitted.append({"key": spec["key"], "label": spec["label"],
                             "label_en": spec.get("label_en"), "reason": spec["suppress"],
                             "note": spec.get("suppress_note")})
+            continue
+        if spec.get("recipe"):
+            kpi, om = _recipe_kpi(spec, place, ident)
+            if kpi:
+                kpis.append(kpi)
+            else:
+                omitted.append(om)
             continue
         series, decision, last = _resolve_series(
             spec, place["ref_area_values"], place_type, collapse=False)
@@ -548,6 +665,8 @@ def get_kpi_baselines(place_type: str, slug: str, kpi_label: str) -> dict:
     if not spec or spec.get("suppress"):
         return {"national": [], "region": [], "kpi": None,
                 "national_meta": None, "region_meta": None}
+    if spec.get("recipe"):
+        return _recipe_baselines(spec, place_type, slug, via_alias)
 
     national, n_dec, _ = _resolve_series(spec, None, place_type, collapse=True)
     parquet = PARQUET_DIR / spec["parquet"]
@@ -573,6 +692,32 @@ def get_kpi_baselines(place_type: str, slug: str, kpi_label: str) -> dict:
         "region_meta": _baseline_meta(spec, r_dec, region_series, "region", r_count)
         if place_type == "county" else None,
     }
+
+
+def _recipe_baselines(spec: dict, place_type: str, slug: str, via_alias: bool) -> dict:
+    """get_kpi_baselines for a recipe KPI: country and region recombined from
+    the recipe's county rows (absent when any county in scope is excluded)."""
+    def meta(series, scope, n):
+        return {"scope": scope, "areas": n, "period": series[-1]["year"] if series else None,
+                "unit": spec.get("unit"), "available": bool(series),
+                "reason": None if series else "incomplete_areas",
+                "method": {"code": "reconstruction", "approximation": False,
+                           "note": spec.get("method_note"), "note_en": spec.get("method_note_en")},
+                "approximation": False}
+    national, _, _ = _recipe_series(spec, None, collapse=True)
+    region, r_count = [], None
+    if place_type == "county":
+        place = resolve_place(place_type, slug)
+        if place and place["parent_slug"]:
+            counties = [n for n, reg in COUNTY_REGION.items() if reg == place["parent_slug"]]
+            region, _, _ = _recipe_series(spec, counties, collapse=True)
+            r_count = len(counties)
+    return {"national": national, "region": region,
+            "kpi": {"key": spec["key"], "label": spec["label"], "label_en": spec.get("label_en"),
+                    "unit": spec.get("unit"), "unit_kind": spec.get("unit_kind"),
+                    "matched_legacy_alias": via_alias},
+            "national_meta": meta(national, "national", None),
+            "region_meta": meta(region, "region", r_count) if place_type == "county" else None}
 
 
 # Place-page themes keyed by stable TEMPO context codes (level 1, or level 0 for
