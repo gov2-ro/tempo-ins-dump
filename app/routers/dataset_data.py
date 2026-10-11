@@ -57,8 +57,12 @@ def get_population_reference(level: str = Query("county", pattern="^(county|regi
     path = PARQUET_DIR / f"{_POP_REFERENCE_FILES[level]}.parquet"
     if not path.exists():
         raise HTTPException(404, "Population reference unavailable")
+    from app.services import grain_guard
     conn = get_conn()
     try:
+        grain = grain_guard.check_slice(conn, path.stem, {}, path=str(path))
+        if not grain["ok"]:
+            raise HTTPException(503, f"Population reference unavailable ({grain['reason']})")
         rows = conn.execute(
             'SELECT "REF_AREA", "TIME_PERIOD", SUM("OBS_VALUE") '
             "FROM read_parquet(?) GROUP BY 1, 2", [str(path)]

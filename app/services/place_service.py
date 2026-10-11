@@ -7,6 +7,7 @@ from pathlib import Path
 from app.db import get_conn
 from app.config import PARQUET_DIR
 from app.services import aggregation_policy as agg
+from app.services import grain_guard
 
 import duckdb as _duckdb
 
@@ -324,6 +325,26 @@ def _kpi_identity(spec: dict) -> dict:
     }
 
 
+def _grain_refusal(spec: dict, parquet: Path, areas: list[str], decision) -> str | None:
+    """PA-01b: a KPI aggregates rows, so its slice (and any weights file) must
+    have a unique grain. Returns the grain_guard reason, or None."""
+    filters = {c: list(v) for c, v in decision.effective_filters.items() if c != "REF_AREA"}
+    filters["REF_AREA"] = list(areas)
+    con = _duckdb.connect()
+    try:
+        g = grain_guard.check_slice(con, parquet.stem, filters, path=str(parquet))
+        if not g["ok"]:
+            return g["reason"]
+        if decision.agg_func == "WEIGHTED_AVG":
+            w = PARQUET_DIR / spec["weights"]["parquet"]
+            g = grain_guard.check_slice(con, w.stem, {"REF_AREA": list(areas)}, path=str(w))
+            if not g["ok"]:
+                return g["reason"]
+    finally:
+        con.close()
+    return None
+
+
 def _resolve_series(spec: dict, areas: list[str] | None, geo_level: str, *,
                     collapse: bool):
     """Run the decided query. `areas=None` means every area in the parquet."""
@@ -339,6 +360,10 @@ def _resolve_series(spec: dict, areas: list[str] | None, geo_level: str, *,
     decision = _decide_for(spec, info, present, geo_level, collapse)
     if not decision.available:
         return [], decision, info["last"]
+    refusal = _grain_refusal(spec, parquet, present, decision)
+    if refusal:
+        return [], agg._unavailable(refusal, None, decision.dimensions,
+                                    decision.effective_filters), info["last"]
     rows = _series_query(spec, parquet, present, decision)
     return _complete_series(rows), decision, info["last"]
 

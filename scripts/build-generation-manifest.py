@@ -17,7 +17,8 @@ search.duckdb}. The manifest ties them together:
   search_index                  sha256/size, or null when search.duckdb is absent
   provenance                    max/min ultima_actualizare, matrices with a date
   audit                         audit summary counts, strict violation counts and the
-                                violating codes (what `audit-corpus.py --strict` flags)
+                                violating codes (what `audit-corpus.py --strict` flags);
+                                grain_findings lists duplicate/conflicting-key files
 
 generation_id = sha256 of the canonical JSON of
   {db_sha256, parquet_digest, view_profiles_digest, search_sha256}
@@ -138,6 +139,11 @@ def build(data_dir: Path, do_grain=True, built_at=None) -> dict:
                                           "schema_shapes")},
             "violation_counts": s["violation_counts"],
             "violations": rep["violations"],
+            # Every file (served or not) with a repeated full dimension key, and
+            # those whose repeats disagree. The app treats a file listed here as
+            # unsafe to aggregate without a slice check (app/services/grain_guard).
+            "grain_findings": ({k: rep["findings"][k] for k in ("duplicate_grain", "conflicting_grain")}
+                               if do_grain else None),
         },
     }
 

@@ -30,6 +30,7 @@ import time
 import logging
 
 from app.services import aggregation_policy as ap
+from app.services import grain_guard
 
 log = logging.getLogger(__name__)
 
@@ -111,6 +112,10 @@ def resolve_indicator(conn, parquet_dir: str, ind: dict, lang: str = "ro"):
         declared_aggregates=ind.get("aggregates"))
     if not decision.available:
         return None, decision.reason
+    grain = grain_guard.check_slice(conn, ind["code"], decision.effective_filters,
+                                    value_column=value_col, path=path)
+    if not grain["ok"]:
+        return None, grain["reason"]
 
     # SQL is built only from an approved decision.
     where, params = [], [path]

@@ -171,6 +171,7 @@ def make_client(tmp_path, monkeypatch, structure: bool = False):
     import app.db as appdb
     import app.routers.dataset_data as dd
     import app.services.data_query as dq
+    import app.services.grain_guard as gg
     import app.services.query_builder as qb
     import app.services.dataset_meta as dm
     import app.services.insights as ins
@@ -181,7 +182,7 @@ def make_client(tmp_path, monkeypatch, structure: bool = False):
     monkeypatch.setattr(config, "DB_PATH", corpus / "metadata.duckdb")
     monkeypatch.setattr(appdb, "DB_PATH", corpus / "metadata.duckdb")
     monkeypatch.setattr(appdb, "_conn", None)
-    for mod in (dd, dq, qb, dm):
+    for mod in (dd, dq, gg, qb, dm):
         monkeypatch.setattr(mod, "PARQUET_DIR", corpus / "parquet")
     dm.clear_context_cache()
     dstruct._cache.clear()

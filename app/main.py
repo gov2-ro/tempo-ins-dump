@@ -46,7 +46,8 @@ async def llms_txt():
 
 @app.get("/api/health", include_in_schema=False)
 def health():
-    """Release/ops status: FTS mode (observable production fallback) + manifest."""
+    """Release/ops status: FTS mode (observable production fallback), the staged
+    MANIFEST.json and the served corpus generation (corpus/generation-manifest.json)."""
     import json
     from app.services.dataset_search import search_status
     st = {k: v for k, v in search_status().items() if k != "path"}
@@ -63,8 +64,9 @@ def health():
             }
         except Exception:
             manifest = {"error": "unreadable"}
+    from app.services.generation import summary as generation_summary
     return {"status": "ok" if st["mode"] == "fts" else "degraded",
-            "search": st, "manifest": manifest}
+            "search": st, "manifest": manifest, "generation": generation_summary()}
 
 
 # Serve view profiles (must come before catch-all static mount)

@@ -15,10 +15,15 @@ from app.config import MAX_DATA_ROWS, LARGE_DATASET_THRESHOLD, PARQUET_DIR
 from app.services.query_builder import (
     build_data_query_params, resolve_parquet_schema, adapt_to_parquet,
     quote_ident, to_sdmx_name)
+from app.services import generation, grain_guard
 from app.services.request_validation import (
     MISSING, InvalidRequest, validate_filters, validate_group_by)
 
 log = logging.getLogger(__name__)
+
+# Version of the result shape below. Bump when a field changes meaning; adding a
+# field does not. PA-02/03 lock the serialized schema against this.
+CONTRACT = "tempo-query/1"
 
 
 class QueryError(Exception):
@@ -201,22 +206,18 @@ def run_query(conn, matrix_code: str, filters=MISSING, group_by=MISSING,
                 reason, _ = source_total_gate(conn, matrix_code, decision)
                 if reason:
                     aggregation.update(outcome='unavailable', reason=reason)
-                    return {
-                        'columns': sd_group + ['OBS_VALUE'], 'column_labels': {},
-                        'rows': [], 'total_rows': row_count, 'returned_rows': 0,
-                        'truncated': False, 'unavailable': True,
-                        'aggregation': aggregation,
-                    }
+                    return _unavailable(matrix_code, sd_group, row_count, aggregation)
             if not decision.available:
-                return {
-                    'columns': sd_group + ['OBS_VALUE'], 'column_labels': {},
-                    'rows': [], 'total_rows': row_count, 'returned_rows': 0,
-                    'truncated': False, 'unavailable': True,
-                    'aggregation': aggregation,
-                }
+                return _unavailable(matrix_code, sd_group, row_count, aggregation)
             group_by_cols = sd_group
             filter_dict = {k: list(v) for k, v in decision.effective_filters.items()}
             agg_func = decision.agg_func or "SUM"
+        else:
+            # No context means no decision; an unguarded SUM is not a fallback.
+            aggregation = {'outcome': 'unavailable', 'reason': 'no_aggregation_context',
+                           'blocking_dimension': None, 'method': 'none'}
+            return _unavailable(matrix_code, [to_sdmx_name(schema, c) for c in group_by_cols],
+                                row_count, aggregation)
     dimensions, group_by_cols, filter_dict = adapt_to_parquet(
         schema, dimensions, group_by_cols, filter_dict)
 
@@ -288,6 +289,19 @@ def run_query(conn, matrix_code: str, filters=MISSING, group_by=MISSING,
             f"Dataset has {row_count:,} rows. Please apply at least one filter "
             f"to narrow results (max {MAX_DATA_ROWS:,} rows returned)."
         )
+
+    # PA-01b: an aggregation needs a unique grain on the rows it reads (after
+    # pins and windowing). Raw rows are returned with the file's status instead.
+    grain = None
+    if group_by_cols:
+        grain = grain_guard.check_slice(conn, matrix_code, filter_dict, row_count,
+                                        schema["value_column"])
+        if not grain['ok']:
+            aggregation = {**(aggregation or {}), 'outcome': 'unavailable',
+                           'reason': grain['reason'], 'blocking_dimension': None,
+                           'method': 'none'}
+            return _unavailable(matrix_code, [legacy_to_sdmx.get(c, c) for c in group_by_cols],
+                                row_count, aggregation, grain)
 
     # Build and execute query
     sql, params = build_data_query_params(
@@ -379,6 +393,7 @@ def run_query(conn, matrix_code: str, filters=MISSING, group_by=MISSING,
         'returned_rows': len(data_rows),
         'truncated': truncated,
         'aggregation': aggregation,
+        **_envelope(matrix_code, grain),
     }
     if time_windowed:
         resp['time_windowed'] = True
@@ -390,6 +405,22 @@ def run_query(conn, matrix_code: str, filters=MISSING, group_by=MISSING,
         resp['selection'] = {'empty': True, 'missing_values': _missing_values(
             conn, matrix_code, filter_dict, requested, legacy_to_sdmx)}
     return resp
+
+
+def _envelope(matrix_code: str, grain: dict | None = None) -> dict:
+    """Contract version, generation and grain status carried by every result."""
+    quality = {'grain': grain_guard.file_status(matrix_code)}
+    if grain is not None:
+        quality['slice'] = {k: grain.get(k) for k in
+                            ('ok', 'reason', 'evidence', 'duplicate_keys', 'conflicting_keys')}
+    return {'contract': CONTRACT, 'generation': generation.summary(), 'quality': quality}
+
+
+def _unavailable(matrix_code, columns, row_count, aggregation, grain=None) -> dict:
+    return {'columns': list(columns) + ['OBS_VALUE'], 'column_labels': {}, 'rows': [],
+            'total_rows': row_count, 'returned_rows': 0, 'truncated': False,
+            'unavailable': True, 'aggregation': aggregation,
+            **_envelope(matrix_code, grain)}
 
 
 def _missing_values(conn, matrix_code, filter_dict, requested, legacy_to_sdmx) -> dict:

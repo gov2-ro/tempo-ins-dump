@@ -17,6 +17,7 @@ from app.services.dataset_meta import source_total_gate as _source_total_gate
 from app.services.dashboard_composer import (
     _build_slice, _effective, _total_entry, primary_time_dim, spec_decision)
 from app.services import aggregation_policy as ap
+from app.services import grain_guard
 from app.services.query_builder import (
     build_data_query, resolve_parquet_schema, adapt_to_parquet)
 from app.services import dimension_structure as dstruct
@@ -91,18 +92,27 @@ def _fetch_slice(conn, matrix_code, dimensions, spec, agg_func, schema=None):
     and name them `*_nom_id` with a `value` column. Without this translation
     every one of those datasets logged a Binder Error here and fell back to a
     single coverage KPI with no headline and no sentences.
+
+    Returns ``(rows, refusal)``: refusal is a grain_guard reason when the slice
+    has repeated observation keys (PA-01b) and then rows is empty.
     """
     schema = schema or resolve_parquet_schema(conn, matrix_code)
     dims, group_by, filters = adapt_to_parquet(
         schema, dimensions, spec['group_by'], spec.get('filters', {}))
+    rc = conn.execute("SELECT row_count FROM matrices WHERE matrix_code = ?",
+                      [matrix_code]).fetchone()
+    grain = grain_guard.check_slice(conn, matrix_code, filters, (rc or [0])[0] or 0,
+                                    schema['value_column'])
+    if not grain['ok']:
+        return [], grain['reason']
     sql = build_data_query(matrix_code, dims, filters, 50000,
                            group_by=group_by, agg_func=agg_func,
                            value_column=schema['value_column'])
     try:
-        return conn.execute(sql).fetchall()
+        return conn.execute(sql).fetchall(), None
     except Exception as e:
         log.warning("Insights slice failed for %s: %s", matrix_code, e)
-        return []
+        return [], None
 
 
 def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
@@ -163,8 +173,11 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
         decision = spec_decision(spec, dimensions, actual_values, struct,
                                  non_additive)
         if decision.available:
-            rows = _fetch_slice(conn, matrix_code, dimensions, spec,
-                                decision.agg_func or 'SUM', schema)
+            rows, refusal = _fetch_slice(conn, matrix_code, dimensions, spec,
+                                         decision.agg_func or 'SUM', schema)
+            if refusal:
+                suppressed.append({'key': 'latest', 'outcome': ap.UNAVAILABLE,
+                                   'reason': refusal, 'column': None})
             period_totals = sorted(
                 [(str(r[0]), r[1]) for r in rows
                  if r[0] is not None and r[1] is not None])
@@ -178,7 +191,7 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
             pinned_context = [
                 str(spec['filters'][a['column']][0]).strip()
                 for a in decision.dimensions if a['treatment'] == 'pinned_value']
-            if pinned_context:
+            if pinned_context and not refusal:
                 suppressed.append({'key': 'latest', 'outcome': ap.UNAVAILABLE,
                                    'reason': 'arbitrary_pin', 'column': None})
                 period_totals = []
@@ -309,8 +322,11 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
         rank_decision = spec_decision(spec, dimensions, actual_values, struct,
                                       non_additive)
         if rank_decision.available:
-            rows = _fetch_slice(conn, matrix_code, dimensions, spec,
-                                rank_decision.agg_func or 'SUM', schema)
+            rows, refusal = _fetch_slice(conn, matrix_code, dimensions, spec,
+                                         rank_decision.agg_func or 'SUM', schema)
+            if refusal:
+                suppressed.append({'key': 'ranking', 'outcome': ap.UNAVAILABLE,
+                                   'reason': refusal, 'column': None})
         else:
             rows = []
             suppressed.append({'key': 'ranking', 'outcome': rank_decision.outcome,

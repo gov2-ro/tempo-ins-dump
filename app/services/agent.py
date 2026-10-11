@@ -264,7 +264,8 @@ def _handle_query_dataset_data(inp: dict, conn) -> dict:
     decision = res.get("aggregation") or {}
     base = {"matrix_code": matrix_code, "columns": res["columns"], "rows": res["rows"],
             "row_count": res["returned_rows"], "truncated": res["truncated"],
-            "aggregation": res.get("aggregation")}
+            "aggregation": res.get("aggregation"), "quality": res.get("quality"),
+            "generation": res.get("generation")}
     if res.get("unavailable"):
         reason, col = decision.get("reason"), decision.get("blocking_dimension")
         return {**base, "status": "unavailable", "reason": reason, "blocking_dimension": col,
@@ -293,6 +294,10 @@ def _handle_query_dataset_data(inp: dict, conn) -> dict:
             if w.get("code") == "time_collapsed":
                 warnings.append(f"Values are aggregated across all periods of {w['column']}; "
                                 "filter or group by time for a single-period figure.")
+    grain = ((res.get("quality") or {}).get("grain") or {}).get("status")
+    if grain in ("conflicting", "duplicate_keys"):
+        warnings.append(f"DATA QUALITY: this dataset has repeated observation keys ({grain}); "
+                        "raw rows may disagree with each other. Do not total or rank them.")
     if res.get("time_windowed"):
         warnings.append("Only the most recent periods were returned (row cap); filter "
                         "TIME_PERIOD to reach earlier periods.")
@@ -326,6 +331,13 @@ _REASON_HINTS = {
     "mixed_units": "Filter {col} to exactly one unit.",
     "slice_value_missing": "A filter value for {col} does not exist; use exact values from get_dataset_schema.",
     "declared_partition_invalid": "Pin {col} to one explicit value.",
+    "conflicting_grain": "This dataset repeats the same observation with different values in "
+                         "the selected slice; no total exists. Show raw rows with their status, "
+                         "or choose another dataset.",
+    "duplicate_keys": "This dataset repeats observations in the selected slice, so a total would "
+                      "double-count. Show raw rows or choose another dataset.",
+    "grain_unverified": "The slice is too large to verify; filter it (e.g. one area or period).",
+    "no_aggregation_context": "Query raw rows with filters instead of group_by.",
 }
 
 

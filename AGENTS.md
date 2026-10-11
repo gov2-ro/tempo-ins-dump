@@ -94,7 +94,9 @@ reads env: `TEMPO_DATA_DIR`, `TEMPO_MAX_ROWS` (50,000), `TEMPO_DEBUG`,
   `places`, `ask` (LLM Q&A).
 - **Services:** `dataset_search` + `dataset_meta` (shared by routes, dev MCP and
   Ask agent), `data_query` (the one validated `/data` query that REST, Ask and the
-  dev MCP all call; don't add a parallel path), `query_builder`, `chart_selector` (+ `chart_selector_eval`),
+  dev MCP all call; don't add a parallel path), `grain_guard` + `generation`
+  (unique-grain gate for every aggregation, from the served generation manifest),
+  `query_builder`, `chart_selector` (+ `chart_selector_eval`),
   `dashboard_composer` (tile composition), `insights` (KPIs, sentences),
   `headlines` (+ `headline_config.json`), `dimension_structure`,
   `place_service`, `agent` + `llm_client`, `agent_eval`.
@@ -171,6 +173,10 @@ bash scripts/prepare-deploy-data.sh                # stage deploy data
 - `dataset_relationships` predates splitting, so split children have no rows.
   `get_related` falls back to parent + siblings.
 - `is_composition` is a runtime-only parquet probe, so it scores `None` in the chart eval.
+- **Repeated observation keys:** any new code path that aggregates parquet rows
+  must call `grain_guard.check_slice` first (A04). The evidence is
+  `corpus/generation-manifest.json` `audit.grain_findings`. Without it, slices are
+  checked at query time, and unfiltered checks above 1M rows are refused.
 - `do` is a reserved word in DuckDB SQL — alias `dimension_options` as `dopt`.
 - `11-build-sdmx-codes.py` **without `--matrix`** drops and rebuilds both mapping
   tables and destroys canonical mappings. Use `--matrix`.
