@@ -630,7 +630,7 @@ class LensApp {
                 'Cum a evoluat populația rezidentă a județului Cluj?',
                 'Cum se compară salariul mediu net în Cluj, Iași și București?',
                 'În ce județe este cea mai mare rată a șomajului înregistrat?',
-                'Ce județe au cele mai multe înnoptări turistice?',
+                'Ce județe au cele mai multe înnoptări turistice pe locuitor?',
             ],
         } : {
             ask: 'Ask a question', askHint: 'Your own words: indicator, place, year',
@@ -641,7 +641,7 @@ class LensApp {
                 "How has Cluj county's resident population changed?",
                 'Compare average net earnings in Cluj, Iași and Bucharest',
                 'Which counties have the highest registered unemployment rate?',
-                'Which counties have the most tourist overnight stays?',
+                'Which counties have the most tourist overnight stays per resident?',
             ],
         };
         const langQ = ro ? '' : '&lang=en';

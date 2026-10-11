@@ -75,7 +75,7 @@ def test_every_concept_variant_and_alternative_resolves():
     ids = {c["id"] for c in concepts}
     for c in concepts:
         assert set(c.get("alternatives", [])) <= ids
-        assert c["variants"] and c["name"]["ro"] and c["name"]["en"] and c["note"]["en"]
+        assert (c.get("variants") or c.get("recipe")) and c["name"]["ro"] and c["name"]["en"] and c["note"]["en"]
 
 
 # ------------------------------------------------------------ option lookup
@@ -127,7 +127,8 @@ def test_api_search_meets_judgments(j):
     if "code" in j:
         assert top["code"] == j["code"]
     if j.get("places") and top["level"] == "county":
-        assert top["selection"].get("REF_AREA"), "place not carried into the selection"
+        assert top["selection"].get("REF_AREA") or top["selection"].get("areas"), \
+            "place not carried into the selection"
     assert top["family"] not in {f["family"] for f in d["families"]["items"]}
 
 

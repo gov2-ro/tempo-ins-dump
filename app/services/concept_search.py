@@ -260,7 +260,45 @@ def _href(code: str, lang: str, filters: dict | None = None) -> str:
     return h + ("&lang=en" if lang == "en" else "")
 
 
+def recipe_card(conn, concept: dict, parsed: dict, lang: str, alias=None, generic=False) -> dict | None:
+    """A concept answered by a reviewed recipe: link to its page with the parsed
+    places and year; coverage is the latest year both sources share."""
+    from app.services.recipes import load_recipes
+    r = load_recipes().get(concept["recipe"])
+    if not r:
+        return None
+    num, den = (dataset_facts(conn, r[k]["dataset"], lang) for k in ("numerator", "denominator"))
+    if not num or not den:
+        return None
+    first = max(str(num["coverage"]["first"]), str(den["coverage"]["first"]))
+    last = min(str(num["coverage"]["last"])[:4], str(den["coverage"]["last"])[:4])
+    params, notes = {"recipe": r["id"]}, []
+    if parsed.get("places"):
+        params["areas"] = json.dumps([p["name"] for p in parsed["places"]], ensure_ascii=False)
+    year = parsed.get("period")
+    if year:
+        if int(first[:4]) <= year <= int(last):
+            params["year"] = str(year)
+        else:
+            notes.append("period_unavailable")
+    if lang == "en":
+        params["lang"] = "en"
+    from urllib.parse import urlencode
+    pick = lambda d: d.get(lang) or d["ro"]
+    return {"id": concept["id"], "question": concept.get("question"), "name": pick(concept["name"]),
+            "note": pick(concept["note"]), "matched": alias, "ambiguous": bool(generic),
+            "code": f"{r['numerator']['dataset']} ÷ {r['denominator']['dataset']}",
+            "family": None, "title": pick(r["name"]), "definition": pick(r["definition"]),
+            "unit": pick(r["unit"]), "coverage": {"first": first[:4], "last": last, "frequency": "annual"},
+            "quality": "unique", "level": "county", "selection": {k: v for k, v in params.items()
+                                                                if k in ("areas", "year")},
+            "notes": notes, "href": "/compare.html?" + urlencode(params), "variants": [],
+            "recipe": r["id"], "status": pick(r["status"])}
+
+
 def concept_card(conn, concept: dict, parsed: dict, lang: str, alias=None, generic=False) -> dict | None:
+    if concept.get("recipe"):
+        return recipe_card(conn, concept, parsed, lang, alias, generic)
     variants = concept.get("variants") or {}
     level = parsed.get("level")
     code = variants.get(level) or variants.get("county") or next(iter(variants.values()), None)
@@ -326,7 +364,7 @@ def search(q: str, conn, lang: str = "ro", limit: int = 10, offset: int = 0) -> 
         card["alternatives"] = alts
         concepts.append(card)
     families = family_results(parsed["fts"], conn, lang, limit, offset,
-                              exclude={card["family"] for card in concepts})
+                              exclude={card["family"] for card in concepts if card.get("family")})
     return {"query": q, "lang": lang,
             "interpretation": {k: parsed[k] for k in ("places", "level", "period", "latest", "fts")},
             "concepts": concepts, "families": families,

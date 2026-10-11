@@ -4,7 +4,7 @@ import io
 import json
 import logging
 import os
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from app.db import get_conn
 from app.config import MAX_DATA_ROWS, PARQUET_DIR
@@ -147,6 +147,48 @@ def get_dimension_values(
         raise HTTPException(e.status, e.message)
     finally:
         conn.close()
+
+
+@router.get("/datasets/{matrix_code}/evidence")
+def get_dataset_evidence(
+    request: Request,
+    matrix_code: str,
+    filters: str = Query("{}", description="JSON object: {column_name: [scalar, ...]}"),
+    group_by: str = Query("", description="JSON array, as for /data"),
+    approximate: int = Query(0, ge=0, le=1),
+    lang: str = Query("ro", pattern="^(ro|en)$"),
+):
+    """ZIP evidence bundle for one /data selection (PA-03a): unrounded result,
+    the raw observations behind an aggregation, the decision, definition,
+    source and a manifest with hashes. Complete or 413, never cut."""
+    from urllib.parse import urlencode
+    from app.services import export as ex
+    from app.services.evidence import EvidenceError, dataset_bundle
+    from app.services.request_validation import InvalidRequest, parse_json_param
+    try:
+        f = parse_json_param(filters, "filters")
+        g = parse_json_param(group_by, "group_by")
+    except InvalidRequest as e:
+        raise HTTPException(400, str(e))
+    slot = ex.try_acquire("csv")
+    if slot is None:
+        raise ex.busy_error()
+    conn = get_conn()
+    try:
+        q = {"code": matrix_code}
+        if filters and filters != "{}":
+            q["f"] = filters
+        if lang != "ro":
+            q["lang"] = lang
+        link = f"{str(request.base_url).rstrip('/')}/dataset-v2.html?{urlencode(q)}"
+        data = dataset_bundle(conn, matrix_code, f, g, bool(approximate), lang, link)
+    except EvidenceError as e:
+        raise HTTPException(e.status, e.message)
+    finally:
+        conn.close()
+        slot()
+    return Response(data, media_type="application/zip", headers={
+        "Content-Disposition": f"attachment; filename={matrix_code}_evidence.zip"})
 
 
 @router.get("/datasets/{matrix_code}/download")

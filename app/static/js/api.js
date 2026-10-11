@@ -14,7 +14,8 @@ const API = {
         const resp = await fetch(url);
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-            throw new Error(err.detail || `HTTP ${resp.status}`);
+            const d = err.detail;
+            throw new Error((d && typeof d === 'object') ? (d.message || JSON.stringify(d)) : (d || `HTTP ${resp.status}`));
         }
         return resp.json();
     },

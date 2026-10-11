@@ -73,6 +73,9 @@ class ComparePage {
         if (!CMP_UI[this.lang]) this.lang = 'ro';
         this.ui = CMP_UI[this.lang];
         this.charts = [];
+        this.recipe = params.get('recipe');
+        this.recipeYear = params.get('year');           // absent = latest common year
+        try { this.recipeAreas = JSON.parse(params.get('areas') || 'null'); } catch { this.recipeAreas = null; }
     }
 
     showError(msg) {
@@ -84,6 +87,10 @@ class ComparePage {
 
     async init() {
         document.getElementById('cmp-loader').textContent = this.ui.loading;
+        if (this.recipe) {
+            await this.renderRecipe();
+            return;
+        }
         if (!this.a || !this.b) {
             this.showError(this.ui.missing);
             return;
@@ -114,6 +121,108 @@ class ComparePage {
         window.addEventListener('resize', () => {
             this.charts.forEach(c => c && c.resize && c.resize());
         });
+    }
+
+    // ------------------------------------------------------------ recipe (PA-03b)
+
+    /** A reviewed cross-dataset recipe (tourism intensity): computed by the
+     *  server from two validated series, shown as chart + table with the
+     *  definition, sources, exclusions, a live link and an evidence bundle. */
+    async renderRecipe() {
+        const ro = this.lang !== 'en';
+        const T = ro ? {
+            year: 'An', latest: 'ultimul an comun', all: 'toate județele', areas: 'Județe',
+            rank: '#', area: 'Județ', stays: 'Înnoptări', pop: 'Populație rezidentă 1 ian.', value: 'Înnoptări / locuitor',
+            evidence: 'Descarcă dovezile (ZIP)', copy: 'Copiază linkul', copied: 'Link copiat',
+            sources: 'Surse', excluded: 'Excluse', reasons: { numerator_missing: 'fără înnoptări', denominator_missing: 'fără populație',
+                denominator_not_positive: 'populație ≤ 0', nonfinite: 'valoare invalidă', not_in_denominator: 'nu are populație rezidentă pe județ',
+                not_in_data: 'nu există în date' },
+            linkNote: 'Linkul recalculează pe datele curente; fișierul ZIP păstrează rezultatul de acum.',
+            unavailable: 'Rezultat indisponibil', generation: 'Generația datelor',
+        } : {
+            year: 'Year', latest: 'latest common year', all: 'all counties', areas: 'Counties',
+            rank: '#', area: 'County', stays: 'Overnight stays', pop: 'Resident pop. 1 Jan', value: 'Stays / resident',
+            evidence: 'Download evidence (ZIP)', copy: 'Copy link', copied: 'Link copied',
+            sources: 'Sources', excluded: 'Excluded', reasons: { numerator_missing: 'no stays', denominator_missing: 'no population',
+                denominator_not_positive: 'population ≤ 0', nonfinite: 'invalid value', not_in_denominator: 'no county resident population',
+                not_in_data: 'not in the data' },
+            linkNote: 'The link recomputes on current data; the ZIP keeps this result.',
+            unavailable: 'Result unavailable', generation: 'Data generation',
+        };
+        const params = { lang: this.lang };
+        if (this.recipeYear) params.year = this.recipeYear;
+        if (this.recipeAreas?.length) params.areas = JSON.stringify(this.recipeAreas);
+        const host = document.getElementById('cmp-recipe');
+        let r;
+        try {
+            r = await API.fetch(`/recipes/${encodeURIComponent(this.recipe)}`, params);
+        } catch (e) {
+            document.getElementById('cmp-loader').classList.add('hidden');
+            this.showError(`${T.unavailable}: ${e.message}`);
+            return;
+        }
+        document.getElementById('cmp-loader').classList.add('hidden');
+        document.title = `${r.recipe.name} — INS+`;
+        const dec = r.recipe.display_decimals ?? 3;
+        const fmt = v => v.toLocaleString(ro ? 'ro-RO' : 'en-GB', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+        const qs = o => new URLSearchParams(Object.entries(o).filter(([, v]) => v != null && v !== '')).toString();
+        const yearOpts = [`<option value="">${T.latest} (${r.years_available.at(-1)})</option>`]
+            .concat([...r.years_available].reverse().map(y => `<option value="${y}" ${y === this.recipeYear ? 'selected' : ''}>${y}</option>`)).join('');
+        const src = r.sources.map(s => {
+            const f = JSON.stringify({ TIME_PERIOD: r.year });
+            return `<li><a href="/dataset/${encodeURIComponent(s.dataset)}?${qs({ f, lang: ro ? null : 'en' })}">${_escHtml(s.dataset)}</a> — ${_escHtml(s.title || '')}
+                (${_escHtml(s.reference || '')}; ${_escHtml(s.unit || '')}${s.source_updated ? `; ${ro ? 'actualizat' : 'updated'} ${_escHtml(s.source_updated)}` : ''})</li>`;
+        }).join('');
+        const excl = r.excluded.length
+            ? `<p class="rcp-excluded">${T.excluded}: ${r.excluded.map(e => `${_escHtml(e.label)} (${T.reasons[e.reason] || e.reason})`).join(', ')}</p>` : '';
+        const evidenceHref = `/api/recipes/${encodeURIComponent(this.recipe)}/evidence?${qs({ year: r.year, areas: params.areas, lang: this.lang })}`;
+        host.innerHTML = `
+            <h1>${_escHtml(r.recipe.name)} · ${_escHtml(r.year)}</h1>
+            <p class="rcp-def">${_escHtml(r.recipe.definition)}</p>
+            <p class="rcp-status">${_escHtml(r.recipe.status)}</p>
+            <div class="rcp-controls">
+                <label>${T.year} <select id="rcp-year">${yearOpts}</select></label>
+                <span>${T.areas}: ${this.recipeAreas?.length ? _escHtml(this.recipeAreas.join(', ')) : T.all} (${r.rows.length}/${r.universe})</span>
+                <a class="rcp-btn primary" id="rcp-evidence" href="${evidenceHref}" download>${T.evidence}</a>
+                <button class="rcp-btn" id="rcp-copy" type="button">${T.copy}</button>
+            </div>
+            <p class="rcp-meta">${_escHtml(T.linkNote)} ${T.generation}: <code>${_escHtml((r.generation?.id || '').slice(0, 12))}</code> · ${_escHtml(r.recipe.formula)}</p>
+            ${excl}
+            <section class="dbv2-tile"><div class="dbv2-tile-chart" id="rcp-chart" role="img"
+                aria-label="${_escHtml(r.recipe.name)} ${_escHtml(r.year)}"></div></section>
+            <div class="rcp-table-wrap"><table class="rcp-table">
+                <thead><tr><th>${T.rank}</th><th>${T.area}</th><th>${T.stays}</th><th>${T.pop}</th><th>${T.value}</th></tr></thead>
+                <tbody>${r.rows.map(x => `<tr><td>${x.rank}</td><td>${_escHtml(x.label)}</td>
+                    <td>${formatNumber(x.stays)}</td><td>${formatNumber(x.population)}</td><td>${fmt(x.intensity)}</td></tr>`).join('')}</tbody>
+            </table></div>
+            <div class="rcp-meta">${T.sources}:<ul>${src}</ul>INS — TEMPO Online.</div>`;
+        host.classList.remove('hidden');
+        document.getElementById('rcp-year').addEventListener('change', e => {
+            const url = new URL(window.location);
+            if (e.target.value) url.searchParams.set('year', e.target.value); else url.searchParams.delete('year');
+            window.location.href = url.toString();
+        });
+        document.getElementById('rcp-copy').addEventListener('click', async e => {
+            try { await navigator.clipboard.writeText(window.location.href); e.target.textContent = T.copied; }
+            catch { e.target.textContent = window.location.href; }
+        });
+        const rows = [...r.rows].reverse();
+        const chart = echarts.init(document.getElementById('rcp-chart'));
+        chart.setOption({
+            title: { text: `${r.recipe.name} · ${r.year}`, subtext: `${r.recipe.unit} · INS TEMPO ${r.sources.map(s => s.dataset).join(', ')}`,
+                     left: 0, textStyle: { fontSize: 13 }, subtextStyle: { fontSize: 11 } },
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' },
+                formatter: p => { const x = rows[p[0].dataIndex];
+                    return `<b>${_escHtml(x.label)}</b><br>${T.value}: ${fmt(x.intensity)}<br>${T.stays}: ${formatNumber(x.stays)}<br>${T.pop}: ${formatNumber(x.population)}`; } },
+            grid: { left: 8, right: 56, top: 52, bottom: 8, containLabel: true },
+            xAxis: { type: 'value' },
+            yAxis: { type: 'category', data: rows.map(x => x.label), axisLabel: { fontSize: 11 } },
+            series: [{ type: 'bar', data: rows.map(x => x.intensity),
+                       label: { show: true, position: 'right', fontSize: 10, formatter: p => fmt(p.value) } }],
+            toolbox: { feature: { saveAsImage: { title: 'PNG', name: `${this.recipe}_${r.year}` } }, right: 0 },
+        });
+        this.charts.push(chart);
+        window.addEventListener('resize', () => chart.resize());
     }
 
     renderHeader() {

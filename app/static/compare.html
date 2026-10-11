@@ -19,6 +19,26 @@
         })();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <style>
+        .cmp-recipe { margin-top: 8px; }
+        .cmp-recipe h1 { font-size: 1.35rem; margin: 0 0 6px; }
+        .cmp-recipe .rcp-def { max-width: 90ch; font-size: 13px; color: var(--text-1); line-height: 1.5; margin: 0 0 6px; }
+        .cmp-recipe .rcp-status { font-size: 12px; color: var(--warning, #b45309); margin: 0 0 10px; }
+        .rcp-controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 8px 0 12px; font-size: 13px; }
+        .rcp-controls select { padding: 6px 8px; font: inherit; background: var(--bg-2); color: var(--text-0); border: 1px solid var(--border); border-radius: 6px; min-height: 36px; }
+        .rcp-controls a, .rcp-controls button { font: inherit; font-size: 13px; }
+        .rcp-btn { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-1); color: var(--text-0); cursor: pointer; text-decoration: none; }
+        .rcp-btn.primary { border-color: var(--accent); color: var(--accent); }
+        .rcp-table-wrap { overflow-x: auto; }
+        .rcp-table { border-collapse: collapse; font-size: 13px; min-width: 100%; }
+        .rcp-table th, .rcp-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+        .rcp-table th:nth-child(2), .rcp-table td:nth-child(2) { text-align: left; }
+        .rcp-meta { font-size: 12px; color: var(--text-2); margin: 8px 0; }
+        .rcp-meta a { color: var(--accent); }
+        .rcp-excluded { font-size: 12px; color: var(--warning, #b45309); }
+        #rcp-chart { height: 760px; flex: none; }
+        @media (max-width: 640px) { #rcp-chart { height: 900px; } }
+    </style>
 </head>
 <body class="dbv2-body">
     <!-- Top bar (site chrome — mirrors index.html, wired by site-chrome.js) -->
@@ -90,6 +110,7 @@
             <div class="dbv2-tile-chart cmp-chart" id="cmp-line-chart"></div>
         </section>
         <div class="dbv2-notice hidden" id="cmp-notice"></div>
+        <section class="cmp-recipe hidden" id="cmp-recipe" aria-live="polite"></section>
         <section class="dbv2-tile cmp-section hidden" id="cmp-scatter">
             <div class="dbv2-tile-bar">
                 <span class="dbv2-tile-title" id="cmp-scatter-title"></span>
@@ -100,9 +121,9 @@
     </main>
 
     <script src="/js/utils.js?v=30"></script>
-    <script src="/js/api.js?v=28"></script>
+    <script src="/js/api.js?v=29"></script>
     <script src="/js/site-chrome.js?v=2"></script>
     <script src="/js/echarts-theme.js?v=1"></script>
-    <script src="/js/compare.js?v=3"></script>
+    <script src="/js/compare.js?v=5"></script>
 </body>
 </html>

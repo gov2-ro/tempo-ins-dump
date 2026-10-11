@@ -23,6 +23,8 @@ const UI_STRINGS = {
         vsPrev: p => `față de ${p}`, selUnavailable: 'Valoare indisponibilă pentru selecție',
         noSelData: 'Fără date pentru selecție', commonPeriod: 'ultima perioadă comună',
         placeMissing: p => `Locul „${p}" nu apare în acest set de date; se afișează toate zonele.`,
+        evidence: 'Dovezi', evidenceTitle: 'Arhivă ZIP cu rezultatul selecției, datele din care e calculat, metoda și sursa',
+        evidenceFailed: 'Dovezile nu au putut fi generate',
         unavailAria: 'Valoare indisponibilă',
         unavailNote: 'Tabelul brut rămâne disponibil.',
         noDataGrid: 'Nicio vizualizare nu are date pentru filtrele curente',
@@ -40,7 +42,9 @@ const UI_STRINGS = {
         seasonal: 'Sezonier',
         seasonalTooltip: 'Suprapune anii: o linie pe an, luni/trimestre pe axa X',
         perCapita: '‰',
-        perCapitaTooltip: 'La 1.000 de locuitori',
+        perCapitaTooltip: 'La 1.000 de locuitori (populația rezidentă la 1 ianuarie a aceluiași an)',
+        perCapitaDropped: n => `${n} valori fără populație în același an`,
+        perCapitaDroppedTip: 'Se împarte doar la populația din același an (județele au date din 2012); restul nu se afișează.',
         logScale: 'log',
         logTooltip: 'Scară logaritmică (valori foarte inegale)',
         transpose: '⇄',
@@ -92,6 +96,8 @@ const UI_STRINGS = {
         vsPrev: p => `vs ${p}`, selUnavailable: 'Value unavailable for the selection',
         noSelData: 'No data for the selection', commonPeriod: 'latest common period',
         placeMissing: p => `"${p}" is not in this dataset; showing all areas.`,
+        evidence: 'Evidence', evidenceTitle: 'ZIP with the selection result, the data it is computed from, the method and the source',
+        evidenceFailed: 'Evidence could not be built',
         unavailAria: 'Value unavailable',
         unavailNote: 'The raw table is still available.',
         noDataGrid: 'No visualization has data for the current filters',
@@ -109,7 +115,9 @@ const UI_STRINGS = {
         seasonal: 'Seasonal',
         seasonalTooltip: 'Overlay years: one line per year, months/quarters on X',
         perCapita: '‰',
-        perCapitaTooltip: 'Per 1,000 inhabitants',
+        perCapitaTooltip: 'Per 1,000 residents (resident population on 1 January of the same year)',
+        perCapitaDropped: n => `${n} values without same-year population`,
+        perCapitaDroppedTip: 'Divided only by the same year\'s population (county data from 2012); other values are not shown.',
         logScale: 'log',
         logTooltip: 'Logarithmic scale (highly unequal values)',
         transpose: '⇄',
@@ -294,6 +302,40 @@ class DashboardV2 {
     }
 
     /** Non-fatal notice (e.g. insights failed) — dismissible, page stays usable. */
+    /** Evidence bundle (PA-03a) for the current selection's headline series:
+     *  the same shared query as the selection card, with its raw inputs, the
+     *  decision, definition and source. Refusals (too large, unavailable) are
+     *  shown, never a cut file. */
+    async downloadEvidence(btn) {
+        const cfg = this.metadata.chart_config || {};
+        const filters = this.expandedUserFilters();
+        const geoCol = cfg.geo_dim;
+        const picks = geoCol && Array.isArray(this.userFilters[geoCol]) ? this.userFilters[geoCol] : null;
+        const groupBy = cfg.time_dim ? [cfg.time_dim, ...(picks && picks.length > 1 ? [geoCol] : [])] : null;
+        const url = new URL(`/api/datasets/${encodeURIComponent(this.code)}/evidence`, window.location.origin);
+        url.searchParams.set('filters', JSON.stringify(filters));
+        if (groupBy) url.searchParams.set('group_by', JSON.stringify(groupBy));
+        url.searchParams.set('lang', this.lang);
+        btn.disabled = true;
+        try {
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                this.showNotice(`${this.ui.evidenceFailed}: ${err.detail || resp.status}`);
+                return;
+            }
+            const blob = await resp.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `${this.code}_evidence.zip`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
     /** Carry a place from a place page into the effective selection (PA-02b).
      *  If the dataset has no such area, say so instead of silently showing
      *  national or all-area data. */
@@ -546,6 +588,7 @@ class DashboardV2 {
                     <a class="dl-btn" href="/sdmx/2.1/data/INS,${m.matrix_code}/" target="_blank" rel="noopener" title="SDMX-ML 2.1 data feed">SDMX ↗</a>
                     <button class="dl-btn" id="dbv2-csv-btn">↓ CSV</button>
                     <button class="dl-btn" id="dbv2-xlsx-btn">↓ XLSX</button>
+                    <button class="dl-btn" id="dbv2-evidence-btn" title="${this.ui.evidenceTitle}">↓ ${this.ui.evidence}</button>
                     <button class="dl-btn" id="dbv2-table-btn">☰ ${this.ui.table}</button>
                 </div>
             </div>
@@ -565,6 +608,8 @@ class DashboardV2 {
             API.download(m.matrix_code, fmt, this.lang, this.expandedUserFilters(), ev.currentTarget));
         dlBtn('dbv2-csv-btn', 'csv');
         dlBtn('dbv2-xlsx-btn', 'xlsx');
+        document.getElementById('dbv2-evidence-btn').addEventListener('click',
+            ev => this.downloadEvidence(ev.currentTarget));
         document.getElementById('dbv2-table-btn').addEventListener('click',
             () => this.toggleTable());
         // Theme & language toggles live in the site chrome topbar —
@@ -943,6 +988,13 @@ class DashboardV2 {
      *  viewer sees a line starting in 2011 and has no way to know the dataset
      *  goes back to 1992. */
     coverageNote(data) {
+        if (data?.per_capita_dropped) {
+            const el = document.createElement('span');
+            el.className = 'dbv2-coverage';
+            el.textContent = this.ui.perCapitaDropped(data.per_capita_dropped);
+            el.title = this.ui.perCapitaDroppedTip;
+            return el;
+        }
         if (!data || (!data.time_windowed && !data.truncated)) return null;
         // Read the time column off the slice itself: a tile whose group_by
         // omits time still gets narrowed server-side, and asking the chart's
@@ -1201,7 +1253,14 @@ class DashboardV2 {
                 valueFormat = transform === 'index' ? 'index' : 'pct_change';
             }
             if (this.tileNorms[chart.id] && !seasonalMode) {
-                tileData = await this.normalizePerCapita(tileData, roles, chart) || tileData;
+                // Never fall back to raw counts under a per-1,000 label: no
+                // matching population means no rows, with the reason shown.
+                tileData = await this.normalizePerCapita(tileData, roles, chart)
+                    || { ...tileData, rows: [], per_capita_dropped: tileData.rows.length };
+                if (tileData.per_capita_dropped) {
+                    bar0?.insertBefore(this.coverageNote({ per_capita_dropped: tileData.per_capita_dropped }),
+                                       bar0.querySelector('.dbv2-tile-type'));
+                }
             }
 
             let tileRoles = seasonalMode
@@ -1290,9 +1349,8 @@ class DashboardV2 {
     }
 
     /** Divide count values by population/1000 of the row's area+year.
-     *  Population comes from /api/reference/population (POP105A), matched
-     *  by clean geo name with nearest-year fallback (population moves
-     *  slowly; dropping pre-coverage years would break map timelines). */
+     *  Population comes from /api/reference/population (POP105A, resident on
+     *  1 January), matched by clean geo name and the SAME year only. */
     async normalizePerCapita(data, roles, chart) {
         if (!data?.rows?.length) return null;
         if (!this._popRef) {
@@ -1328,31 +1386,27 @@ class DashboardV2 {
             if (o.sdmx_value) toClean[clean(o.sdmx_value)] = c;
             toClean[c] = c;
         }
+        // Same-year resident population only (PA-03): a nearest-year
+        // denominator silently changes the measure. Rows without one are
+        // dropped and counted, and the tile says so.
         const popFor = (area, year) => {
             const series = popByArea[toClean[clean(area)] || clean(area)];
-            if (!series) return null;
-            if (year && series[year] != null) return series[year];
-            const years = Object.keys(series);
-            if (!years.length) return null;
-            if (!year) return series[years.sort()[years.length - 1]];
-            let best = years[0];
-            for (const y of years) {
-                if (Math.abs(+y - +year) < Math.abs(+best - +year)) best = y;
-            }
-            return series[best];
+            if (!series || !year) return null;
+            return series[year] ?? null;
         };
         const rows = [];
+        let dropped = 0;
         for (const r of data.rows) {
             const year = ti !== -1
                 ? ((/(\d{4})/.exec(String(r[ti])) || [])[1] || pinnedYear)
                 : pinnedYear;
             const p = popFor(r[gi], year);
-            if (!p) continue;
+            if (!p || p <= 0) { dropped++; continue; }
             const nr = [...r];
             nr[vi] = r[vi] != null ? r[vi] / (p / 1000) : null;
             rows.push(nr);
         }
-        return rows.length ? { ...data, rows } : null;
+        return rows.length ? { ...data, rows, per_capita_dropped: dropped } : null;
     }
 
     /** Caption chip on spatial tiles listing outlier counties from trends.
