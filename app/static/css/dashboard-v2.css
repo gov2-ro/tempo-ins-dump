@@ -792,3 +792,5 @@ body.sidebar-open .dbv2-main {
 /* Selection headline (PA-02b) */
 .dbv2-sel-kpis { margin-bottom: 8px; }
 .dbv2-kpi-sel { border-color: var(--accent); }
+.dbv2-rel-kind { display: inline-block; margin-top: 4px; font-size: 11px; color: var(--text-2); }
+.dbv2-rel-kind:not(.dbv2-rel-same_theme):not(.dbv2-rel-alternate_breakdown) { color: var(--warning, #b45309); }

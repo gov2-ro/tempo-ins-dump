@@ -436,5 +436,58 @@ def get_related(matrix_code: str, lang: str = 'ro', limit: int = 5,
     tags = [t for t in cleaned
             if not any(o != t and t.lower() in o.lower() for o in cleaned)][:8]
 
+    names = {matrix_code: None}
+    codes = [r['matrix_code'] for r in related[:limit]] + [matrix_code]
+    for code, name in conn.execute(
+            "SELECT matrix_code, matrix_name FROM matrices WHERE list_contains(?, matrix_code)",
+            [codes]).fetchall():
+        names[code] = name
+    for r in related[:limit]:
+        r['relation'] = relation_between(matrix_code, names.get(matrix_code), r['matrix_code'],
+                                         names.get(r['matrix_code']), r['relationship_type'])
+
     return {'matrix_code': matrix_code, 'related': related[:limit],
             'tags': tags}
+
+
+# How two related datasets differ, in words (PA-02a, audit A11). A shared set of
+# dimensions ("100%") says nothing about whether two population counts measure
+# the same thing; these name the difference that matters before comparing.
+_REL_CUES = [
+    # (pattern in one name, pattern in the other, relation id)
+    (r'domiciliu', r'rezident', 'different_population_definition'),
+    (r'\b1 ianuarie\b', r'\b1 iulie\b', 'same_concept_different_date'),
+    (r'\bbrut\b', r'\bnet\b', 'gross_vs_net'),
+    (r'\bbim\b', r'somaj', 'survey_vs_registered'),
+    (r'\blunar', r'\banual', 'different_frequency'),
+]
+RELATION_LABELS = {
+    'alternate_breakdown': ('alt nivel sau altă defalcare', 'other level or breakdown'),
+    'different_population_definition': ('altă definiție a populației', 'different population definition'),
+    'same_concept_different_date': ('același indicator, altă dată de referință', 'same concept, different reference date'),
+    'gross_vs_net': ('brut față de net', 'gross vs net'),
+    'survey_vs_registered': ('anchetă (BIM) față de înregistrat', 'survey (ILO) vs registered'),
+    'different_frequency': ('altă frecvență', 'different frequency'),
+    'same_theme': ('aceeași temă', 'same theme'),
+}
+
+
+def relation_between(code_a, name_a, code_b, name_b, rtype=None) -> dict:
+    """{id, ro, en}: the difference a user must know before comparing."""
+    import re as _re
+    import unicodedata as _ud
+    fold = lambda t: ''.join(c for c in _ud.normalize('NFKD', t or '')
+                             if not _ud.combining(c)).lower()
+    a, b = fold(name_a), fold(name_b)
+    rid = None
+    if rtype == 'sibling':
+        rid = 'alternate_breakdown'
+    else:
+        for pa, pb, r in _REL_CUES:
+            if (_re.search(pa, a) and _re.search(pb, b) and not _re.search(pa, b)) or \
+               (_re.search(pa, b) and _re.search(pb, a) and not _re.search(pa, a)):
+                rid = r
+                break
+    rid = rid or 'same_theme'
+    ro, en = RELATION_LABELS[rid]
+    return {'id': rid, 'ro': ro, 'en': en}

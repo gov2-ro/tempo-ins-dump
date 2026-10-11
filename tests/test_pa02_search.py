@@ -129,3 +129,23 @@ def test_api_search_meets_judgments(j):
     if j.get("places") and top["level"] == "county":
         assert top["selection"].get("REF_AREA"), "place not carried into the selection"
     assert top["family"] not in {f["family"] for f in d["families"]["items"]}
+
+
+# ------------------------------------------------------------ related labels
+
+@pytest.mark.parametrize("a,b,rtype,rid", [
+    ("Populatia rezidenta la 1 ianuarie ...", "POPULATIA DUPA DOMICILIU la 1 ianuarie ...", "same_topic",
+     "different_population_definition"),
+    ("Populatia rezidenta la 1 ianuarie ...", "Populatia rezidenta la 1 iulie ...", "same_topic",
+     "same_concept_different_date"),
+    ("Castigul salarial nominal mediu net lunar", "Castigul salarial nominal mediu brut lunar", "same_topic",
+     "gross_vs_net"),
+    ("Rata somajului pe sexe, judete", "AMIGO - Rata somajului BIM pe grupe de varsta", "same_topic",
+     "survey_vs_registered"),
+    ("X [judete]", "X [regiuni]", "sibling", "alternate_breakdown"),
+    ("Productia de grau", "Suprafata cultivata", "same_topic", "same_theme"),
+])
+def test_related_datasets_name_their_difference(a, b, rtype, rid):
+    from app.services.dataset_search import relation_between
+    r = relation_between("A", a, "B", b, rtype)
+    assert r["id"] == rid and r["ro"] and r["en"]

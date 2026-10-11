@@ -173,8 +173,17 @@
         }
 
         /* ── Responsive ──────────────────────────────────────────────────── */
+        .dims-mobile-pick { display: none; margin: 0 0 12px; }
+        .dims-mobile-pick label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
+        .dims-mobile-pick select { width: 100%; min-height: 44px; padding: 8px 10px; font: inherit; font-size: 14px;
+            color: var(--text-0); background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; }
+        .dims-sub-mobile { display: none; }
         @media (max-width: 640px) {
+            /* A10: the sidebar is too wide here; a labelled select replaces it. */
             .dims-sidebar { display: none; }
+            .dims-mobile-pick { display: block; }
+            .dims-sub-desktop { display: none; }
+            .dims-sub-mobile { display: inline; }
         }
     </style>
 </head>
@@ -209,7 +218,11 @@
         <!-- Right: filter bar + dataset list -->
         <main class="dims-main">
             <h1 class="dims-main-title">Dimension Browser</h1>
-            <p class="dims-main-sub">Select a dimension on the left to filter datasets that share it.</p>
+            <p class="dims-main-sub"><span class="dims-sub-desktop">Select a dimension on the left to filter datasets that share it.</span><span class="dims-sub-mobile">Choose a dimension to list the datasets that share it.</span></p>
+            <div class="dims-mobile-pick">
+                <label for="dims-mobile-select">Dimension</label>
+                <select id="dims-mobile-select"><option value="">All datasets</option></select>
+            </div>
 
             <!-- Filter bar -->
             <div id="dims-filter-bar"></div>
@@ -236,7 +249,7 @@
 
     <script src="/js/utils.js?v=30"></script>
     <script src="/js/api.js?v=28"></script>
-    <script src="/js/dims-explorer.js?v=5"></script>
+    <script src="/js/dims-explorer.js?v=6"></script>
 <style>
     #zelogo:after { opacity: .5;
 content: "α WIP"; font-weight: normal; font-size: 11px; color: #FFF; background-color: #C99; line-height: 1; padding: 1px 3px;

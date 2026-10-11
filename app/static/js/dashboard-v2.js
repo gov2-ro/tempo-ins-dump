@@ -1416,12 +1416,13 @@ class DashboardV2 {
         const langQ = this.lang !== 'ro' ? `&lang=${this.lang}` : '';
         const cards = related.map(r => {
             const href = `/dataset-v2.html?code=${r.matrix_code}${langQ}`;
-            const simPct = r.similarity != null ? Math.round(r.similarity * 100) : null;
+            // Name the difference, not a similarity score: "100%" across two
+            // population definitions read as "the same thing" (audit A11).
+            const rel = r.relation ? (this.lang === 'en' ? r.relation.en : r.relation.ro) : '';
             const badge = r.relationship_type === 'sibling'
                 ? `<span class="dbv2-rel-sim sibling" title="${this.ui.sibling}">＝</span>`
-                : simPct != null
-                    ? `<span class="dbv2-rel-sim" title="${this.ui.similarity}">${simPct}%</span>`
-                    : '';
+                : '';
+            const relTag = rel ? `<span class="dbv2-rel-kind dbv2-rel-${r.relation.id}">${_escHtml(rel)}</span>` : '';
             const dims = (r.shared_dims || [])
                 .map(d => `<span class="dbv2-rel-dim">${d}</span>`).join('');
             const compare = r.can_compare
@@ -1434,6 +1435,7 @@ class DashboardV2 {
                 <div class="dbv2-rel-top">${badge}<span class="dbv2-rel-code">${r.matrix_code}</span>
                     ${r.time_range ? `<span class="dbv2-rel-time">${r.time_range}</span>` : ''}</div>
                 <div class="dbv2-rel-name">${r.name}</div>
+                ${relTag}
                 <div class="dbv2-rel-foot">${dims}${compare}</div>
             </div>`;
         }).join('');

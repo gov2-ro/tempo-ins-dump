@@ -251,6 +251,23 @@ function renderDimList() {
     }
 
     if (activeDim) highlightDimPill(activeDim);
+    renderMobileSelect(mainDims, unitDims);
+}
+
+/** Mobile (≤640px) replacement for the sidebar: one labelled native select
+ *  with every dimension, keyboard and screen-reader accessible (A10). */
+function renderMobileSelect(mainDims, unitDims) {
+    const sel = document.getElementById('dims-mobile-select');
+    if (!sel) return;
+    const opt = (d, prefix = '') => `<option value="${escHtml(d.label)}">${escHtml(prefix && d.label.startsWith(prefix) ? d.label.slice(prefix.length) : d.label)} (${d.dataset_count})</option>`;
+    sel.innerHTML = `<option value="">All datasets</option>
+        <optgroup label="Dimensions">${mainDims.map(d => opt(d)).join('')}</optgroup>
+        ${unitDims.length ? `<optgroup label="Units of measure">${unitDims.map(d => opt(d, 'UM: ')).join('')}</optgroup>` : ''}`;
+    sel.value = activeDim || '';
+    if (!sel.dataset.bound) {
+        sel.dataset.bound = '1';
+        sel.addEventListener('change', () => setActiveDim(sel.value || null));
+    }
 }
 
 function makeDimPill(d, stripPrefix = '') {
@@ -270,6 +287,8 @@ function highlightDimPill(label) {
     document.querySelectorAll('.dim-pill').forEach(el => {
         el.classList.toggle('active', el.dataset.label === label);
     });
+    const sel = document.getElementById('dims-mobile-select');
+    if (sel && sel.value !== (label || '')) sel.value = label || '';
 }
 
 function setActiveDim(label) {
