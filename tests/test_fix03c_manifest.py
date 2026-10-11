@@ -151,3 +151,29 @@ def test_release_check_detects_wrong_id_and_db_counts(tmp_path):
         out = tmp_path / f"dd_{label}"
         r = prepare(root / "corpus", out)
         assert r.returncode != 0 and "generation manifest vs staged files" in r.stdout, (label, r.stdout)
+
+
+@needs_fts
+def test_accepted_restriction_requires_enforceable_evidence(tmp_path):
+    # PA-04: a strict gate may accept conflicting grain only as a restriction the
+    # app enforces (grain_findings in the manifest + grain_guard in the release).
+    root = make_corpus(tmp_path / "d", nofile=False)
+    build_manifest(root, tmp_path / "gm.json")
+    shutil.copy(tmp_path / "gm.json", root / "corpus" / "generation-manifest.json")
+    out = tmp_path / "dd"
+    assert prepare(root / "corpus", out).returncode == 0
+    strict = ("--require-clean-audit", "--accept-restriction", "conflicting_grain")
+    c = check(out, *strict)
+    # conflicting_grain is accepted and listed; the time violation still blocks
+    assert "accepted restriction conflicting_grain" in c.stdout
+    assert "restriction: conflicting_grain (2 files)" in c.stdout
+    assert c.returncode == 1 and "time_invalid_gt_20pct" in c.stdout
+    assert check(out, "--require-clean-audit", "--accept-restriction", "null_dims").returncode == 1
+    # a manifest without grain_findings cannot back the restriction
+    gm = json.loads((tmp_path / "gm.json").read_text())
+    gm["audit"]["grain_findings"] = None
+    (root / "corpus" / "generation-manifest.json").write_text(json.dumps(gm))
+    out2 = tmp_path / "dd2"
+    assert prepare(root / "corpus", out2).returncode == 0
+    c2 = check(out2, *strict)
+    assert c2.returncode == 1 and "lacks audit.grain_findings" in c2.stdout

@@ -10,6 +10,7 @@ Search strategy:
   2. Fallback to LIKE-based search if sidecar is missing or FTS returns nothing.
 """
 import logging
+import os
 import threading
 
 from app.db import get_conn
@@ -79,7 +80,9 @@ def _get_search_conn():
             return None
         try:
             import duckdb
-            conn = duckdb.connect(str(SEARCH_DB_PATH), read_only=True)
+            conn = duckdb.connect(str(SEARCH_DB_PATH), read_only=True,
+                                   config={"memory_limit": os.environ.get("TEMPO_SEARCH_MEMORY", "192MB"),
+                                           "threads": 2})
             conn.execute("LOAD fts;")
             _search_conn = conn
             _set_status("fts", None)

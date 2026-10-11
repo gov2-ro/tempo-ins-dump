@@ -25,6 +25,7 @@ const UI_STRINGS = {
         placeMissing: p => `Locul „${p}" nu apare în acest set de date; se afișează toate zonele.`,
         evidence: 'Dovezi', evidenceTitle: 'Arhivă ZIP cu rezultatul selecției, datele din care e calculat, metoda și sursa',
         evidenceFailed: 'Dovezile nu au putut fi generate',
+        feedback: 'Semnalează', feedbackTitle: 'Deschide o problemă publică pe GitHub cu acest set și selecția ta (tu decizi dacă o trimiți)',
         unavailAria: 'Valoare indisponibilă',
         unavailNote: 'Tabelul brut rămâne disponibil.',
         noDataGrid: 'Nicio vizualizare nu are date pentru filtrele curente',
@@ -98,6 +99,7 @@ const UI_STRINGS = {
         placeMissing: p => `"${p}" is not in this dataset; showing all areas.`,
         evidence: 'Evidence', evidenceTitle: 'ZIP with the selection result, the data it is computed from, the method and the source',
         evidenceFailed: 'Evidence could not be built',
+        feedback: 'Report', feedbackTitle: 'Opens a public GitHub issue with this dataset and your selection (you decide whether to submit it)',
         unavailAria: 'Value unavailable',
         unavailNote: 'The raw table is still available.',
         noDataGrid: 'No visualization has data for the current filters',
@@ -589,6 +591,7 @@ class DashboardV2 {
                     <button class="dl-btn" id="dbv2-csv-btn">↓ CSV</button>
                     <button class="dl-btn" id="dbv2-xlsx-btn">↓ XLSX</button>
                     <button class="dl-btn" id="dbv2-evidence-btn" title="${this.ui.evidenceTitle}">↓ ${this.ui.evidence}</button>
+                    <button class="dl-btn" id="dbv2-feedback-btn" title="${this.ui.feedbackTitle}">${this.ui.feedback}</button>
                     <button class="dl-btn" id="dbv2-table-btn">☰ ${this.ui.table}</button>
                 </div>
             </div>
@@ -610,6 +613,9 @@ class DashboardV2 {
         dlBtn('dbv2-xlsx-btn', 'xlsx');
         document.getElementById('dbv2-evidence-btn').addEventListener('click',
             ev => this.downloadEvidence(ev.currentTarget));
+        document.getElementById('dbv2-feedback-btn').addEventListener('click', () => openFeedback({
+            title: `${m.matrix_code}: `, dataset: m.matrix_code,
+            selection: this.expandedUserFilters(), lang: this.lang }));
         document.getElementById('dbv2-table-btn').addEventListener('click',
             () => this.toggleTable());
         // Theme & language toggles live in the site chrome topbar —

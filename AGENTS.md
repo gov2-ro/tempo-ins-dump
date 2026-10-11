@@ -87,6 +87,7 @@ Other root scripts: `generate_sdmx_yaml.py`, `build-geo-regions.py`,
 
 `main.py` mounts routers, `/view-profiles`, and `static/` at `/`. `config.py`
 reads env: `TEMPO_DATA_DIR`, `TEMPO_MAX_ROWS` (50,000), `TEMPO_DEBUG`,
+`TEMPO_DB_MEMORY` / `TEMPO_SEARCH_MEMORY` / `TEMPO_SCRATCH_MEMORY` (DuckDB budgets),
 `TEMPO_ASK_ENABLED` (hosted Ask) and `TEMPO_ASK_BYOK_ENABLED` (own-key Ask), both
 off by default (set the second for local Ask work), and other `TEMPO_ASK_*`/`TEMPO_LLM_*`.
 
@@ -213,7 +214,8 @@ Fly.io app `tempo-ins-explorer` (shared-cpu-1x, 512MB, Amsterdam, 1 worker):
 `Dockerfile` + `fly.toml` bake a `deploy-data/` snapshot from
 `scripts/prepare-deploy-data.sh` (atomic staging incl. `search.duckdb` +
 `MANIFEST.json`, previous kept as `deploy-data.prev`). Gate with
-`python scripts/release-check.py [--docker] [--rollback]`; it deploys only with an
+`python scripts/release-check.py [--docker] [--rollback]` (strict: `--require-clean-audit
+--accept-restriction conflicting_grain`; load: `scripts/alpha-workload.py`, never against production); it deploys only with an
 explicit `--deploy`. The image won't build without a staged manifest and search
 index. Only `.github/workflows/ci.yml` is tracked (synthetic tests).
 Oracle/HF Spaces templates live in `scripts/deploy/`. Validated release gates: FIX-05.

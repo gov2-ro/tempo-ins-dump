@@ -185,6 +185,7 @@ class ComparePage {
                 <span>${T.areas}: ${this.recipeAreas?.length ? _escHtml(this.recipeAreas.join(', ')) : T.all} (${r.rows.length}/${r.universe})</span>
                 <a class="rcp-btn primary" id="rcp-evidence" href="${evidenceHref}" download>${T.evidence}</a>
                 <button class="rcp-btn" id="rcp-copy" type="button">${T.copy}</button>
+                <button class="rcp-btn" id="rcp-feedback" type="button">${ro ? 'Semnalează o problemă' : 'Report a problem'}</button>
             </div>
             <p class="rcp-meta">${_escHtml(T.linkNote)} ${T.generation}: <code>${_escHtml((r.generation?.id || '').slice(0, 12))}</code> · ${_escHtml(r.recipe.formula)}</p>
             ${excl}
@@ -202,6 +203,10 @@ class ComparePage {
             if (e.target.value) url.searchParams.set('year', e.target.value); else url.searchParams.delete('year');
             window.location.href = url.toString();
         });
+        document.getElementById('rcp-feedback').addEventListener('click', () => openFeedback({
+            title: `${this.recipe} ${r.year}: `, dataset: r.sources.map(s => s.dataset).join(' / '),
+            selection: { recipe: this.recipe, year: r.year, areas: this.recipeAreas || undefined },
+            generation: r.generation?.id, lang: this.lang }));
         document.getElementById('rcp-copy').addEventListener('click', async e => {
             try { await navigator.clipboard.writeText(window.location.href); e.target.textContent = T.copied; }
             catch { e.target.textContent = window.location.href; }

@@ -125,8 +125,42 @@ def generation_summary(stage_corpus: Path, files: dict) -> dict:
         return {"status": f"unreadable: {e}", "id": "unreadable"}
 
 
+# Audit violations the app enforces at query time, per generation (PA-04). A
+# restriction is accepted only when the manifest lists the affected files where
+# the enforcing code reads them, and that code is present in the release.
+ENFORCED_RESTRICTIONS = {
+    "conflicting_grain": {"findings": "conflicting_grain", "enforcer": "app/services/grain_guard.py"},
+}
+
+
+def accept_restrictions(g: dict, viol: dict, accepted: list, rep: "Report") -> dict:
+    """Return the violations still blocking after accepted, enforceable ones."""
+    left = dict(viol)
+    for name in accepted or []:
+        rule = ENFORCED_RESTRICTIONS.get(name)
+        if rule is None:
+            rep.fail(f"--accept-restriction {name}: no enforcement is defined for this violation")
+            continue
+        if name not in left:
+            continue
+        listed = set((g.get("audit", {}).get("grain_findings") or {}).get(rule["findings"]) or [])
+        violating = set(g.get("audit", {}).get("violations", {}).get(name) or [])
+        if not listed or not violating <= listed:
+            rep.fail(f"restriction {name}: generation manifest lacks audit.grain_findings for "
+                     f"{len(violating - listed)} violating files; the app could not enforce it")
+            continue
+        if not (ROOT / rule["enforcer"]).is_file():
+            rep.fail(f"restriction {name}: enforcer {rule['enforcer']} missing from this release")
+            continue
+        rep.ok(f"accepted restriction {name}: {len(violating)} served files; aggregations over them "
+               f"are refused by {rule['enforcer']} (generation-bound)")
+        rep.restrictions.append({"violation": name, "files": len(violating), "enforcer": rule["enforcer"]})
+        left.pop(name)
+    return left
+
+
 def check_generation(stage: Path, listed: dict, canon_db_counts: dict, rep: "Report",
-                     allow_missing: bool, require_clean: bool):
+                     allow_missing: bool, require_clean: bool, accepted=None):
     """Verify corpus/generation-manifest.json against the staged files."""
     key = "corpus/" + GEN_NAME
     gp = stage / "corpus" / GEN_NAME
@@ -181,6 +215,8 @@ def check_generation(stage: Path, listed: dict, canon_db_counts: dict, rep: "Rep
                f"{len(staged_pq)} parquets, {len(staged_vp)} profiles, search index")
     viol = {k: n for k, n in g.get("audit", {}).get("violation_counts", {}).items() if n}
     if viol:
+        viol = accept_restrictions(g, viol, accepted, rep)
+    if viol:
         (rep.fail if require_clean else rep.warn)(f"generation audit has violations: {viol}")
     return g
 
@@ -222,7 +258,7 @@ def cmd_manifest(stage: Path, corpus: Path):
 # ------------------------------------------------------------------ validation
 class Report:
     def __init__(self):
-        self.failures, self.warnings, self.info = [], [], []
+        self.failures, self.warnings, self.info, self.restrictions = [], [], [], []
 
     def ok(self, msg):
         print(f"  ok    {msg}")
@@ -237,7 +273,8 @@ class Report:
 
 
 def check_stage(stage: Path, rep: Report, source: Path | None = None,
-                allow_missing_generation: bool = False, require_clean_audit: bool = False) -> dict | None:
+                allow_missing_generation: bool = False, require_clean_audit: bool = False,
+                accepted_restrictions=None) -> dict | None:
     print(f"== staged artifacts: {stage}")
     mp = stage / MANIFEST_NAME
     if not mp.exists():
@@ -310,7 +347,8 @@ def check_stage(stage: Path, rep: Report, source: Path | None = None,
         r[0] for r in meta.execute("SELECT table_name FROM information_schema.tables "
                                    "WHERE table_schema='main' AND table_type='BASE TABLE'").fetchall()}}
     meta.close()
-    check_generation(stage, listed, counts, rep, allow_missing_generation, require_clean_audit)
+    check_generation(stage, listed, counts, rep, allow_missing_generation, require_clean_audit,
+                     accepted_restrictions)
 
     if source is not None:
         cur = {n: sha256(source / n) for n in DB_FILES if (source / n).exists()}
@@ -417,6 +455,9 @@ def main():
                     help="downgrade a missing generation manifest to a warning (staging step only)")
     ap.add_argument("--require-clean-audit", action="store_true",
                     help="fail when the generation manifest records audit violations")
+    ap.add_argument("--accept-restriction", action="append", default=[], metavar="VIOLATION",
+                    help="treat an audit violation as an accepted, app-enforced restriction "
+                         f"(supported: {', '.join(ENFORCED_RESTRICTIONS)}); listed in the result")
     ap.add_argument("--docker", action="store_true", help="build image and smoke it")
     ap.add_argument("--port", type=int, default=8095)
     ap.add_argument("--deploy", action="store_true",
@@ -434,12 +475,14 @@ def main():
 
     rep = Report()
     check_stage(stage, rep, Path(a.source) if a.source else None,
-                a.allow_missing_generation, a.require_clean_audit)
+                a.allow_missing_generation, a.require_clean_audit, a.accept_restriction)
     if not a.skip_tests:
         run_tests(rep)
     if a.docker and not rep.failures:
         docker_smoke(rep, stage, a.port)
     print("\n== result")
+    for r in rep.restrictions:
+        print(f"  restriction: {r['violation']} ({r['files']} files) enforced by {r['enforcer']}")
     for w in rep.warnings:
         print(f"  warn: {w}")
     if rep.failures:

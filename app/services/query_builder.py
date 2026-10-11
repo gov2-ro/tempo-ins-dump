@@ -191,8 +191,14 @@ def _build_sql(matrix_code: str, dimensions: list, filters: dict,
         {group_clause}
     """
 
+    # Every query orders by its output columns, so identical requests return
+    # identical rows in identical order (and a truncated result is always cut
+    # at the same place). The scan order used to leak through (PA-04 workload).
     if not time_column or time_column not in output_cols:
-        return f"{body} LIMIT {int(limit)}"
+        order = ", ".join(quote_ident(c) for c in output_cols)
+        return f"{body} ORDER BY {order} LIMIT {int(limit)}"
+    rest = [quote_ident(c) for c in output_cols if c != time_column]
+    tie = "".join(f", {c}" for c in rest)
 
     # Ordering ASC and then LIMITing throws away the NEWEST periods whenever
     # truncation fires — the exact opposite of what a first overview needs.
@@ -202,10 +208,10 @@ def _build_sql(matrix_code: str, dimensions: list, filters: dict,
     return f"""
         SELECT * FROM (
             {body}
-            ORDER BY {quote_ident(time_column)} DESC
+            ORDER BY {quote_ident(time_column)} DESC{tie}
             LIMIT {int(limit)}
         )
-        ORDER BY {quote_ident(time_column)} ASC
+        ORDER BY {quote_ident(time_column)} ASC{tie}
     """
 
 

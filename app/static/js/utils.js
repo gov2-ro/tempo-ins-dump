@@ -453,3 +453,30 @@ function renderSearchResults(container, resp, { lang = 'ro', onOpenCode } = {}) 
     }
     return n;
 }
+
+
+// ---------------------------------------------------------------------------
+// Feedback route (PA-04): a prefilled public issue for the exact result the
+// user is looking at. Opening it is the user's action; nothing is sent
+// automatically and no browsing history is attached.
+// ---------------------------------------------------------------------------
+
+const FEEDBACK_REPO = 'https://github.com/gov2-ro/tempo-ins-dump/issues/new';
+
+async function openFeedback({ title, dataset = null, selection = null, generation = null, lang = 'ro' } = {}) {
+    if (!generation) {
+        try { generation = (await (await fetch('/api/health')).json()).generation?.id || null; } catch { /* optional */ }
+    }
+    const ro = lang !== 'en';
+    const body = [
+        ro ? '**Ce ai observat?**' : '**What did you notice?**', '', '',
+        ro ? '**Ce te așteptai să vezi?**' : '**What did you expect?**', '', '',
+        '---',
+        `Page: ${window.location.href}`,
+        dataset ? `Dataset: ${dataset}` : null,
+        selection && Object.keys(selection).length ? `Selection: ${JSON.stringify(selection)}` : null,
+        generation ? `Data generation: ${generation}` : null,
+    ].filter(x => x !== null).join('\n');
+    const url = `${FEEDBACK_REPO}?title=${encodeURIComponent(title || 'Feedback')}&labels=alpha-feedback&body=${encodeURIComponent(body)}`;
+    window.open(url, '_blank', 'noopener');
+}

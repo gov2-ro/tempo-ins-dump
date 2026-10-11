@@ -41,7 +41,48 @@ GET /api/datasets/{matrix_code}/data?filters={json}&limit={n}&group_by={json}
 - `filters`: JSON object mapping column names to value arrays, e.g., `{"REF_AREA":["Bucuresti"],"TIME_PERIOD":["2023"]}`
 - `group_by`: JSON array of columns to aggregate by, e.g., `["TIME_PERIOD","SEX"]`
 - `limit`: Max 50,000 rows. Datasets over 50k rows require at least one filter.
-- Returns `{columns, rows[][], column_labels, total_rows, returned_rows, truncated}`.
+- `approximate=1`: allow a labelled unweighted mean for rates/averages without weights (off by default).
+- Returns `{columns, rows[][], column_labels, total_rows, returned_rows, truncated, aggregation, contract, generation, quality}`.
+- Unknown columns or malformed filters are a 400, never ignored. A grouped total that cannot be computed safely (overlapping levels, missing weights, repeated observation keys, a sum INS contradicts) returns `unavailable: true`, `rows: []` and `aggregation.reason`. Do not compute it yourself from raw rows.
+- `truncated: true` or `time_windowed: true` means the result is incomplete: do not rank, total or correlate it. An empty selection reports `selection.missing_values`.
+- `generation.id` identifies the data version; `quality.grain` says whether the file's observations are unique.
+
+### Concept search (ordinary questions)
+
+```
+GET /api/search?q={question}&lang={ro|en}
+```
+
+Reviewed concepts (resident population, net/gross earnings, registered/ILO unemployment, overnight stays, tourism intensity) with definition, actual coverage, parsed places/year, the dataset link carrying that selection, and alternatives when the wording is ambiguous. Then full-text results grouped by indicator family.
+
+### Dimension values
+
+```
+GET /api/datasets/{matrix_code}/options?column={COLUMN}&q={text}&limit={n}&offset={n}
+```
+
+Actual values with accent-insensitive search and `next_offset`/`truncated`. Time columns are newest first, with `period_bounds` (first/last period with data).
+
+### Tourism intensity recipe
+
+```
+GET /api/recipes/tourism_intensity?year={YYYY}&areas={json array of counties}&lang={ro|en}
+GET /api/recipes/tourism_intensity/evidence?...
+```
+
+Overnight stays (TUR105D) / resident population on 1 January of the same year (POP105A), by county, for the latest year both have (or `year`). Exclusions are listed with reasons. `/evidence` is a ZIP with the result, input series, method, attribution, hashes and an offline `recompute.py`.
+
+### Evidence for any selection
+
+```
+GET /api/datasets/{matrix_code}/evidence?filters={json}&group_by={json}&lang={ro|en}
+```
+
+ZIP with the unrounded result, the raw observations behind an aggregation, the decision, definition and source. Returns 413 if the selection is too large; it never cuts the file.
+
+### Human-readable pages
+
+`/dataset/{matrix_code}` is the canonical dataset page (definition, unit, coverage and source in the HTML). `/sitemap.xml` lists them.
 
 ### Download data
 

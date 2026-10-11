@@ -4,7 +4,7 @@ import unicodedata
 import re
 from functools import lru_cache
 from pathlib import Path
-from app.db import get_conn
+from app.db import get_conn, scratch_conn
 from app.config import PARQUET_DIR
 from app.services import aggregation_policy as agg
 from app.services import grain_guard
@@ -156,7 +156,7 @@ def _sql_list(values) -> str:
 @lru_cache(maxsize=256)
 def _parquet_info(path: str, mtime: float) -> dict:
     """Columns, distinct dimension values and last period of a place parquet."""
-    con = _duckdb.connect()
+    con = scratch_conn()
     try:
         cols = [r[0] for r in con.execute(
             "DESCRIBE SELECT * FROM read_parquet(?)", [path]).fetchall()]
@@ -251,7 +251,7 @@ def _series_query(spec: dict, parquet: Path, areas: list[str] | None,
                    COUNT(v.OBS_VALUE) AS n_obs, COUNT(v.OBS_VALUE) AS n_w
             FROM read_parquet(?) v WHERE {where_sql}
             GROUP BY 1 ORDER BY 1 DESC LIMIT {SERIES_CAP * 2}"""
-    con = _duckdb.connect()
+    con = scratch_conn()
     try:
         return con.execute(sql, params).fetchall()
     except Exception:
@@ -330,7 +330,7 @@ def _grain_refusal(spec: dict, parquet: Path, areas: list[str], decision) -> str
     have a unique grain. Returns the grain_guard reason, or None."""
     filters = {c: list(v) for c, v in decision.effective_filters.items() if c != "REF_AREA"}
     filters["REF_AREA"] = list(areas)
-    con = _duckdb.connect()
+    con = scratch_conn()
     try:
         g = grain_guard.check_slice(con, parquet.stem, filters, path=str(parquet))
         if not g["ok"]:
@@ -439,7 +439,7 @@ def _get_county_population(county_name: str) -> float | None:
     parquet_path = PARQUET_DIR / "POP105A_judete_grupe.parquet"
     if not parquet_path.exists():
         return None
-    con = _duckdb.connect()
+    con = scratch_conn()
     rows: list = []
     try:
         rows = con.execute("""
