@@ -523,6 +523,7 @@ class LensApp {
         this.headlines = summary.headlines || [];
         this.renderNoticeBar();
         this.renderBrowseHeader(summary.corpus);
+        this.renderEntryPoints();
         this.renderHeadlines(this.headlines);
         this.renderRecentlyUpdated(summary.recently_updated);
         const catLabel = document.getElementById('categories-label');
@@ -610,6 +611,69 @@ class LensApp {
             bar.classList.add('hidden');
             localStorage.setItem('notice-dismissed', '1');
         };
+    }
+
+    /** Three ways in (PA-02b): ask a question (guided examples open the
+     *  concept search with the question prefilled, as a shareable /?q= link),
+     *  pick a county, or browse indicators by theme. No key or account. */
+    async renderEntryPoints() {
+        const host = document.getElementById('entry-points');
+        if (!host || host.dataset.ready) return;
+        host.dataset.ready = '1';
+        const ro = this.lang !== 'en';
+        const t = ro ? {
+            ask: 'Pune o întrebare', askHint: 'Scrieți cu cuvintele dvs.: indicator, loc, an',
+            place: 'Alege un județ', placeHint: 'Profilul județului, cu definiții și surse',
+            pick: 'Județ…', indicator: 'Răsfoiește indicatorii', indicatorHint: 'Pe teme, ca în TEMPO',
+            browse: 'Vezi temele ↓',
+            questions: [
+                'Cum a evoluat populația rezidentă a județului Cluj?',
+                'Cum se compară salariul mediu net în Cluj, Iași și București?',
+                'În ce județe este cea mai mare rată a șomajului înregistrat?',
+                'Ce județe au cele mai multe înnoptări turistice?',
+            ],
+        } : {
+            ask: 'Ask a question', askHint: 'Your own words: indicator, place, year',
+            place: 'Pick a county', placeHint: 'County profile with definitions and sources',
+            pick: 'County…', indicator: 'Browse indicators', indicatorHint: 'By theme, as in TEMPO',
+            browse: 'See themes ↓',
+            questions: [
+                "How has Cluj county's resident population changed?",
+                'Compare average net earnings in Cluj, Iași and Bucharest',
+                'Which counties have the highest registered unemployment rate?',
+                'Which counties have the most tourist overnight stays?',
+            ],
+        };
+        const langQ = ro ? '' : '&lang=en';
+        host.innerHTML = `
+            <div class="entry-card entry-ask">
+                <div class="entry-title">${t.ask}</div>
+                <button class="entry-search" type="button" id="entry-search-btn">${t.askHint}</button>
+                <ul class="entry-questions">${t.questions.map(q =>
+                    `<li><a href="/?q=${encodeURIComponent(q)}${langQ}">${_escHtml(q)}</a></li>`).join('')}</ul>
+            </div>
+            <div class="entry-card entry-place">
+                <div class="entry-title">${t.place}</div>
+                <label class="entry-hint" for="entry-county">${t.placeHint}</label>
+                <select id="entry-county" class="entry-select"><option value="">${t.pick}</option></select>
+            </div>
+            <div class="entry-card entry-indicator">
+                <div class="entry-title">${t.indicator}</div>
+                <div class="entry-hint">${t.indicatorHint}</div>
+                <a class="entry-link" href="#categories-label">${t.browse}</a>
+            </div>`;
+        document.getElementById('entry-search-btn').addEventListener('click', () => this.openSearch());
+        const sel = document.getElementById('entry-county');
+        sel.addEventListener('change', () => {
+            if (sel.value) window.location.href = `/place/county/${sel.value}${ro ? '' : '?lang=en'}`;
+        });
+        try {
+            const resp = await API.fetch('/places');
+            const counties = (resp.places || []).filter(p => p.type === 'county')
+                .sort((a, b) => a.name.localeCompare(b.name, 'ro'));
+            sel.insertAdjacentHTML('beforeend', counties.map(p =>
+                `<option value="${_escHtml(p.slug)}">${_escHtml(p.name)}</option>`).join(''));
+        } catch (e) { console.warn('Places unavailable:', e); }
     }
 
     renderBrowseHeader(corpus) {

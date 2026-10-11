@@ -8,31 +8,19 @@ function alignToYears(seriesData, years) {
     return years.map(y => map[y] ?? null);
 }
 
+// Display metadata for the server's stable theme ids (place_service.PLACE_THEMES).
 const THEMES = [
-  { id: 'demografie',   label: 'Demografie',      icon: '👥',
-    kpi_keys: ['resident_population', 'birth_rate', 'death_rate'],
-    categories: ['Populație', 'Demografie', 'Natalitate', 'Mortalitate', 'Decese', 'Fertilitate'] },
-  { id: 'munca',        label: 'Forță de muncă',  icon: '💼',
-    kpi_keys: ['registered_unemployment_rate', 'net_monthly_wage'],
-    categories: ['Forța de muncă', 'Muncă', 'Salarii', 'Șomaj', 'Ocupare'] },
-  { id: 'economie',     label: 'Economie',        icon: '📈',
-    kpi_keys: [],
-    categories: ['Economie', 'Conturi naționale', 'Prețuri', 'Finanțe', 'Comerț'] },
-  { id: 'educatie',     label: 'Educație',        icon: '🎓',
-    kpi_keys: [],
-    categories: ['Educație', 'Învățământ', 'Școli', 'Elevi'] },
-  { id: 'sanatate',     label: 'Sănătate',        icon: '🏥',
-    kpi_keys: [],
-    categories: ['Sănătate', 'Asistență medicală', 'Spitale'] },
-  { id: 'agricultura',  label: 'Agricultură',     icon: '🌾',
-    kpi_keys: [],
-    categories: ['Agricultură', 'Silvicultură', 'Fond funciar'] },
-  { id: 'industrie',    label: 'Industrie',       icon: '🏭',
-    kpi_keys: [],
-    categories: ['Industrie', 'Producție industrială', 'Construcții'] },
-  { id: 'turism',       label: 'Turism',          icon: '🏨',
-    kpi_keys: [],
-    categories: ['Turism', 'Cazare', 'Hoteluri'] },
+  { id: 'demografie',  label: 'Demografie',           label_en: 'Population',         icon: '👥',
+    kpi_keys: ['resident_population', 'birth_rate', 'death_rate'] },
+  { id: 'munca',       label: 'Forță de muncă',       label_en: 'Labour',             icon: '💼',
+    kpi_keys: ['registered_unemployment_rate', 'net_monthly_wage'] },
+  { id: 'economie',    label: 'Economie',             label_en: 'Economy',            icon: '📈', kpi_keys: [] },
+  { id: 'educatie',    label: 'Educație',             label_en: 'Education',          icon: '🎓', kpi_keys: [] },
+  { id: 'sanatate',    label: 'Sănătate',             label_en: 'Health',             icon: '🏥', kpi_keys: [] },
+  { id: 'agricultura', label: 'Agricultură',          label_en: 'Agriculture',        icon: '🌾', kpi_keys: [] },
+  { id: 'industrie',   label: 'Industrie',            label_en: 'Industry',           icon: '🏭', kpi_keys: [] },
+  { id: 'turism',      label: 'Turism',               label_en: 'Tourism',            icon: '🏨', kpi_keys: [] },
+  { id: 'durabila',    label: 'Dezvoltare durabilă',  label_en: 'Sustainable development', icon: '🌱', kpi_keys: [] },
 ];
 
 const PLACE_UI = {
@@ -386,16 +374,31 @@ class PlaceProfileApp {
         const grid = document.getElementById('indicator-grid');
         let html = '';
 
+        const en = this.lang === 'en';
+        const item = d => `
+                <a class="accordion-item" href="/dataset-v2.html?code=${encodeURIComponent(d.code)}&place=${encodeURIComponent(`${this.data.place.type}:${this.data.place.slug}`)}${en ? '&lang=en' : ''}">
+                    <span class="acc-title">${_esc(d.title)}</span>
+                    <span class="acc-code">${_esc(d.code)}</span>
+                </a>`;
+        const section = (id, icon, label, list, chartsHtml = '') => `
+                <div class="theme-section" id="theme-${id}">
+                    <button type="button" class="theme-header" aria-expanded="false" aria-controls="accordion-${id}"
+                            onclick="app._toggleThemeAccordion('${id}')">
+                        <span class="theme-icon">${icon}</span>
+                        <span class="theme-label">${_esc(label)}</span>
+                        <span class="theme-count">${list.length}</span>
+                        <span class="theme-chevron" aria-hidden="true">▼</span>
+                    </button>
+                    ${chartsHtml ? `<div class="theme-charts">${chartsHtml}</div>` : ''}
+                    <div class="theme-accordion hidden" id="accordion-${id}">${list.map(item).join('')}</div>
+                </div>`;
+
         for (const theme of THEMES) {
-            const themeDatasets = datasets.filter(d =>
-                theme.categories.some(cat => d.category.toLowerCase().includes(cat.toLowerCase()))
-            );
+            const themeDatasets = datasets.filter(d => d.theme === theme.id);
             const themeKpis = theme.kpi_keys
                 .map(key => this.data.kpis.find(k => k.key === key))
                 .filter(Boolean);
-
             if (themeDatasets.length === 0 && themeKpis.length === 0) continue;
-
             const chartsHtml = themeKpis.slice(0, 3).map((kpi, i) => `
                 <div class="mini-chart-cell">
                     <div class="mini-chart-title">${_esc(this._kl(kpi))}</div>
@@ -403,58 +406,21 @@ class PlaceProfileApp {
                     <div class="mini-chart-stat">${this._fmtValue(kpi, kpi.value)} ${_esc(this._ku(kpi))} · ${_esc(kpi.period || '')}${kpi.method && kpi.method.approximation ? ` · ${_esc(this.ui.approx)}` : ''}</div>
                 </div>
             `).join('');
-
-            const accordionItems = themeDatasets.map(d => `
-                <a class="accordion-item" href="/dataset-v2.html?code=${d.code}">
-                    <span class="acc-title">${_esc(d.title)}</span>
-                    <span class="acc-code">${_esc(d.code)}</span>
-                </a>
-            `).join('');
-
-            html += `
-                <div class="theme-section" id="theme-${theme.id}">
-                    <div class="theme-header" onclick="app._toggleThemeAccordion('${theme.id}')">
-                        <span class="theme-icon">${theme.icon}</span>
-                        <span class="theme-label">${theme.label}</span>
-                        <span class="theme-count">${themeDatasets.length}</span>
-                        <span class="theme-chevron">▼</span>
-                    </div>
-                    ${chartsHtml ? `<div class="theme-charts">${chartsHtml}</div>` : ''}
-                    <div class="theme-accordion hidden" id="accordion-${theme.id}">
-                        ${accordionItems}
-                    </div>
-                </div>
-            `;
+            html += section(theme.id, theme.icon, en ? theme.label_en : theme.label, themeDatasets, chartsHtml);
         }
 
-        // Catch-all for datasets not in any theme
-        const unmatchedDatasets = datasets.filter(d =>
-            !THEMES.some(theme =>
-                theme.categories.some(cat => d.category.toLowerCase().includes(cat.toLowerCase()))
-            )
-        );
-
-        if (unmatchedDatasets.length > 0) {
-            const items = unmatchedDatasets.map(d => `
-                <a class="accordion-item" href="/dataset-v2.html?code=${d.code}">
-                    <span class="acc-title">${_esc(d.title)}</span>
-                    <span class="acc-code">${_esc(d.code)}</span>
-                </a>
-            `).join('');
-
-            html += `
-                <div class="theme-section" id="theme-altele">
-                    <div class="theme-header" onclick="app._toggleThemeAccordion('altele')">
-                        <span class="theme-icon">📋</span>
-                        <span class="theme-label">Alte seturi de date</span>
-                        <span class="theme-count">${unmatchedDatasets.length}</span>
-                        <span class="theme-chevron">▼</span>
-                    </div>
-                    <div class="theme-accordion hidden" id="accordion-altele">
-                        ${items}
-                    </div>
-                </div>
-            `;
+        // Contexts without a curated theme keep their own TEMPO group (by
+        // stable context code), so nothing disappears into one "Other" bucket.
+        const groups = new Map();
+        for (const d of datasets) {
+            if (d.theme) continue;
+            const g = d.group || { code: 'other', name: 'Alte seturi de date', name_en: 'Other datasets' };
+            if (!groups.has(g.code)) groups.set(g.code, { g, list: [] });
+            groups.get(g.code).list.push(d);
+        }
+        const cap = s => s ? s.charAt(0) + s.slice(1).toLowerCase() : s;
+        for (const { g, list } of [...groups.values()].sort((a, b) => b.list.length - a.list.length)) {
+            html += section(`ctx-${g.code}`, '📋', cap(en ? g.name_en : g.name), list);
         }
 
         grid.innerHTML = html;
@@ -480,6 +446,7 @@ class PlaceProfileApp {
         const isOpen = !accordion.classList.contains('hidden');
         accordion.classList.toggle('hidden', isOpen);
         chevron.textContent = isOpen ? '▼' : '▲';
+        document.querySelector(`#theme-${id} .theme-header`)?.setAttribute('aria-expanded', String(!isOpen));
     }
 
     _renderComparison() {

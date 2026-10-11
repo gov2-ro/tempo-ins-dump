@@ -6,7 +6,7 @@
     <title>Profil loc — INS+</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/explore.css?v=43">
+    <link rel="stylesheet" href="/css/explore.css?v=44">
     <script>
         (function(){
             var t=localStorage.getItem('lens_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');
@@ -62,7 +62,8 @@
         }
         .indicator-grid { display:flex; flex-direction:column; gap:0.75rem; }
         .theme-section { border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-        .theme-header { display:flex; align-items:center; gap:0.6rem; padding:0.75rem 1rem; cursor:pointer; background:var(--bg-3); transition:background 0.1s; }
+        .theme-header { display:flex; align-items:center; gap:0.6rem; padding:0.75rem 1rem; cursor:pointer; background:var(--bg-3); transition:background 0.1s; width:100%; border:0; text-align:left; font:inherit; color:inherit; }
+        .theme-header:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
         .theme-header:hover { background:var(--bg-hover); }
         .theme-icon { font-size:1.1rem; }
         .theme-label { font-weight:600; font-size:0.9rem; color:var(--text-primary); flex:1; }
@@ -224,6 +225,6 @@
         </div>
     </div>
 
-    <script src="/js/place-page.js?v=4"></script>
+    <script src="/js/place-page.js?v=6"></script>
 </body>
 </html>

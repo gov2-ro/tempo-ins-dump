@@ -22,6 +22,7 @@ const UI_STRINGS = {
         selection: 'Selecția ta', wholeDataset: 'întregul set (fără selecție)',
         vsPrev: p => `față de ${p}`, selUnavailable: 'Valoare indisponibilă pentru selecție',
         noSelData: 'Fără date pentru selecție', commonPeriod: 'ultima perioadă comună',
+        placeMissing: p => `Locul „${p}" nu apare în acest set de date; se afișează toate zonele.`,
         unavailAria: 'Valoare indisponibilă',
         unavailNote: 'Tabelul brut rămâne disponibil.',
         noDataGrid: 'Nicio vizualizare nu are date pentru filtrele curente',
@@ -90,6 +91,7 @@ const UI_STRINGS = {
         selection: 'Your selection', wholeDataset: 'whole dataset (no selection)',
         vsPrev: p => `vs ${p}`, selUnavailable: 'Value unavailable for the selection',
         noSelData: 'No data for the selection', commonPeriod: 'latest common period',
+        placeMissing: p => `"${p}" is not in this dataset; showing all areas.`,
         unavailAria: 'Value unavailable',
         unavailNote: 'The raw table is still available.',
         noDataGrid: 'No visualization has data for the current filters',
@@ -208,6 +210,9 @@ class DashboardV2 {
         try {
             this.userFilters = JSON.parse(params.get('f') || '{}');
         } catch { /* malformed ?f= — ignore */ }
+        // ?place=county:cluj (from place pages): resolved to this dataset's own
+        // geo value once metadata is loaded (names differ by diacritics).
+        this.placeParam = params.get('place');
         try {
             this.userLevels = JSON.parse(params.get('g') || '{}');
         } catch { /* malformed ?g= — ignore */ }
@@ -239,6 +244,7 @@ class DashboardV2 {
             return;
         }
         this.composition = this.metadata.chart_config?.composition;
+        this.applyPlaceParam();
         this.renderHeader();
         // Correspondences load in the background — never block the dashboard
         this.loadRelated();
@@ -286,6 +292,26 @@ class DashboardV2 {
     }
 
     /** Non-fatal notice (e.g. insights failed) — dismissible, page stays usable. */
+    /** Carry a place from a place page into the effective selection (PA-02b).
+     *  If the dataset has no such area, say so instead of silently showing
+     *  national or all-area data. */
+    applyPlaceParam() {
+        const m = /^(county|region|macroregion):([a-z0-9-]+)$/.exec(this.placeParam || '');
+        if (!m) return;
+        const geoCol = this.metadata.chart_config?.geo_dim;
+        if (!geoCol) { this.showNotice(this.ui.placeMissing(m[2])); return; }
+        if (this.userFilters[geoCol]) return;
+        const slug = s => String(s ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase().replace(/^regiunea\s+/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        const dim = (this.metadata.dimensions || []).find(d => d.dim_column_name === geoCol);
+        const hit = (dim?.options || []).find(o => slug(o.sdmx_value ?? o.label) === m[2] || slug(o.label) === m[2]);
+        if (hit) {
+            this.userFilters[geoCol] = String(hit.sdmx_value ?? hit.label);
+        } else {
+            this.showNotice(this.ui.placeMissing(m[2]));
+        }
+    }
+
     showNotice(msg) {
         const el = document.getElementById('dbv2-notice');
         if (!el) return;
@@ -1735,6 +1761,7 @@ class DashboardV2 {
 
     syncURL() {
         const url = new URL(window.location);
+        url.searchParams.delete('place');   // resolved into ?f= by applyPlaceParam
         const active = Object.fromEntries(
             Object.entries(this.userFilters).filter(([, v]) => v));
         if (Object.keys(active).length) {

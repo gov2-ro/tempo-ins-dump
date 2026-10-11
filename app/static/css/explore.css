@@ -440,6 +440,22 @@ kbd {
     /* font-style: italic; */
 }
 
+/* --- Entry points (PA-02b) --- */
+.entry-points { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; margin: 8px 0 20px; }
+.entry-card { background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; min-width: 0; }
+.entry-title { font-size: 14px; font-weight: 600; color: var(--text-0); margin-bottom: 8px; }
+.entry-hint { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 8px; }
+.entry-search { width: 100%; text-align: left; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg-2); color: var(--text-2); font: inherit; font-size: 13px; cursor: text; }
+.entry-search:hover, .entry-search:focus-visible { border-color: var(--accent); }
+.entry-questions { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.entry-questions a { color: var(--accent); text-decoration: none; font-size: 13px; }
+.entry-questions a:hover { text-decoration: underline; }
+.entry-select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg-2); color: var(--text-0); font: inherit; font-size: 13px; }
+.entry-link { color: var(--accent); text-decoration: none; font-size: 13px; }
+@media (max-width: 760px) { .entry-points { grid-template-columns: 1fr; } }
+
 /* --- Section Labels --- */
 .section-label {
     font-size: 11px;

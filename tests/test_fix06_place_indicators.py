@@ -376,3 +376,28 @@ def test_place_name_with_diacritics_matches_ascii_data(env, monkeypatch):
     rows = _count_rows({2024: 1000}, areas=("Municipiul Bucuresti", "Ilfov"))
     rep = _kpi(tmp, install, spec, COUNT_COLS, rows)
     assert [k["value"] for k in rep["kpis"]] == [1000.0] and not rep["omitted"]
+
+
+# ---- PA-02b: themes from stable context codes ---------------------------------
+
+def test_themes_use_context_codes_not_label_substrings():
+    con = duckdb.connect()
+    con.execute("CREATE TABLE contexts (context_code VARCHAR, parent_code VARCHAR, level INTEGER,"
+                " context_name VARCHAR, context_name_en VARCHAR)")
+    con.executemany("INSERT INTO contexts VALUES (?, ?, ?, ?, ?)", [
+        ("1", "0", 0, "A. STATISTICA SOCIALA", "A. SOCIAL STATISTICS"),
+        ("10", "1", 1, "A.1 POPULATIE SI STRUCTURA DEMOGRAFICA", "A.1 POPULATION"),
+        ("1010", "10", 2, "1. POPULATIA REZIDENTA", "1. USUALLY RESIDENT POPULATION"),
+        ("32", "1", 1, "A.10 CULTURA", "A.10 CULTURE"),
+        ("3210", "32", 2, "1. BIBLIOTECI", "1. LIBRARIES"),
+        ("7", "0", 0, "G. DEZVOLTARE DURABILA", "G. SUSTAINABLE DEVELOPMENT"),
+        ("705", "7", 1, "G.1 OBIECTIVUL 1", "G.1 GOAL 1"),
+        ("70510", "705", 2, "x", "x"),
+    ])
+    lin = ps._context_lineage(con)
+    # upper-case unaccented source label, still the population theme
+    assert ps.theme_for_context("1010", lin) == ("demografie", None)
+    assert ps.theme_for_context("70510", lin) == ("durabila", None)
+    # an uncurated context keeps a named group of its own, never vanishes
+    assert ps.theme_for_context("3210", lin) == (None, {"code": "32", "name": "CULTURA", "name_en": "CULTURE"})
+    assert ps.theme_for_context("unknown", lin) == (None, None)

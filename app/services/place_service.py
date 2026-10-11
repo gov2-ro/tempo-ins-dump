@@ -575,8 +575,60 @@ def get_kpi_baselines(place_type: str, slug: str, kpi_label: str) -> dict:
     }
 
 
+# Place-page themes keyed by stable TEMPO context codes (level 1, or level 0 for
+# the SDG trees), not by matching accented label substrings: the source labels
+# are upper-case and unaccented, so substring matching left ~87% of Cluj's
+# datasets in "Other". Contexts without a theme still get their own group.
+PLACE_THEMES = {
+    "demografie": {"10", "11", "12"},
+    "munca": {"15"},
+    "economie": {"35", "40", "54", "55", "56", "60", "62", "64", "65"},
+    "educatie": {"25", "27"},
+    "sanatate": {"30"},
+    "agricultura": {"45", "47"},
+    "industrie": {"50", "51", "52"},
+    "turism": {"63"},
+    "durabila": {"7", "8"},
+}
+
+
+def _context_lineage(conn) -> dict:
+    """context_code -> (level1_code, level0_code, {code: (name, name_en)})."""
+    rows = conn.execute(
+        "SELECT context_code, parent_code, level, context_name, context_name_en FROM contexts").fetchall()
+    parent = {r[0]: r[1] for r in rows}
+    level = {r[0]: r[2] for r in rows}
+    names = {r[0]: (r[3], r[4]) for r in rows}
+    out = {}
+    for code in parent:
+        c, l1, l0, seen = code, None, None, set()
+        while c is not None and c not in seen:
+            seen.add(c)
+            if level.get(c) == 1:
+                l1 = c
+            if level.get(c) == 0:
+                l0 = c
+            c = parent.get(c)
+        out[code] = (l1, l0)
+    return {"lineage": out, "names": names}
+
+
+def theme_for_context(context_code, lineage: dict) -> tuple[str | None, dict | None]:
+    """(theme id | None, fallback group {code, name, name_en} | None)."""
+    l1, l0 = lineage["lineage"].get(context_code, (None, None))
+    for theme, codes in PLACE_THEMES.items():
+        if l1 in codes or l0 in codes:
+            return theme, None
+    key = l1 or l0
+    if key is None:
+        return None, None
+    name, name_en = lineage["names"].get(key, (key, key))
+    clean = lambda n: re.sub(r"^[A-Z](\.\d+)?\s+", "", (n or "").strip()).rstrip(" ;")
+    return None, {"code": key, "name": clean(name), "name_en": clean(name_en or name)}
+
+
 def get_place_datasets(place_type: str, slug: str, *, conn=None) -> list[dict]:
-    """Return all datasets that have data for this place."""
+    """Return all datasets that have data for this place, with a stable theme."""
     if conn is None:
         conn = get_conn()
 
@@ -599,13 +651,17 @@ def get_place_datasets(place_type: str, slug: str, *, conn=None) -> list[dict]:
         [place_type] + place["ref_area_values"]
     ).fetchall()
 
-    return [
-        {
+    lineage = _context_lineage(conn)
+    out = []
+    for r in rows:
+        theme, group = theme_for_context(r[2], lineage)
+        out.append({
             "code": r[0],
             "title": r[1],
             "context_code": r[2],
             "category": r[3] or "Altele",
+            "theme": theme,
+            "group": group,
             "has_data": True,
-        }
-        for r in rows
-    ]
+        })
+    return out
