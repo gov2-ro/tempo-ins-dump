@@ -88,6 +88,16 @@ Fixed during the workload:
 4. **Staged artifact after the last commits:** if code changes again, re-run
    the strict gate. The data stage itself is current.
 
+## Static alternative (2026-10-11)
+
+The site also builds as static files for shared hosting. This removes open
+point 2 (image and resource gate) if that path is chosen. Gate:
+`release-check.py --static` (manifest, generation, completeness, 991/991 API
+parity). Browser smoke: 20 pages × RO/EN × 3 widths, no errors and no `/api`
+requests. Not uploaded. See [DEPLOY-STATIC.md](../../../DEPLOY-STATIC.md).
+Q2/Q3 are now reconstructed answers (`pa-00/answer-records.md`); only
+Bucharest's Q3 value still waits for INS.
+
 ## Commands (for later, after the gates)
 
 ```bash

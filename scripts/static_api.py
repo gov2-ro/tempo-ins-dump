@@ -55,6 +55,45 @@ def shard_of(term: str) -> int:
     return h % SHARDS
 
 
+# ------------------------------------------------------------------ tile answers
+
+QUERY_LIMIT = 50000      # what the dashboard asks for each tile
+
+
+def query_key(code: str, filters: dict, group_by, limit: int, approximate: bool) -> str:
+    """Stable id of a /data request; mirrored by queryKey in engine/static-api.js."""
+    import hashlib
+    canon = json.dumps([code, {k: filters[k] for k in sorted(filters)}, list(group_by) if group_by else None,
+                        int(limit), bool(approximate)], ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canon.encode("utf-8")).hexdigest()[:24]
+
+
+def record_tile_queries(conn, code: str, out: Path) -> list[str]:
+    """The server's answers to the dashboard's default tile queries, for a
+    dataset too large to load whole in the browser: the page's first view is
+    then answered exactly, and any other selection goes to the engine (and the
+    byte budget)."""
+    from app.services.data_query import QueryError, run_query
+    from app.services.dataset_meta import get_dataset_meta
+    from app.services.request_validation import MISSING
+    keys = {}
+    for lang in LANGS:
+        meta = get_dataset_meta(code, lang=lang, conn=conn) or {}
+        comp = (meta.get("chart_config") or {}).get("composition") or {}
+        for ch in comp.get("charts") or []:
+            d = ch.get("data") or {}
+            f, g = dict(d.get("filters") or {}), d.get("group_by") or None
+            k = query_key(code, f, g, QUERY_LIMIT, False)
+            if k in keys:
+                continue
+            try:
+                res = run_query(conn, code, f, g if g else MISSING, QUERY_LIMIT)
+            except QueryError:
+                continue
+            keys[k] = gz_json(res, out / "rec" / "query" / code / f"{k}.json.gz")
+    return sorted(keys)
+
+
 # ------------------------------------------------------------------ catalog
 
 def export_catalog(conn) -> dict:

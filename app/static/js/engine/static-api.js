@@ -76,6 +76,15 @@ export function toCsv(columns, rows) {
     return [columns, ...rows].map(line).join('\r\n') + '\r\n';
 }
 
+/** static_api.query_key: sha256 of the canonical request, 24 hex digits. */
+export async function queryKey(code, filters, groupBy, limit, approximate) {
+    const sorted = {};
+    for (const k of Object.keys(filters).sort()) sorted[k] = filters[k];
+    const canon = JSON.stringify([code, sorted, groupBy && groupBy.length ? groupBy : null, limit, !!approximate]);
+    const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canon)));
+    return [...h].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 24);
+}
+
 export function makeStaticApi(io) {
     const memo = new Map();
     const json = rel => {
@@ -103,8 +112,23 @@ export function makeStaticApi(io) {
         const build = await loader.build();
         const limit = intParam(p.limit, build.max_data_rows, 1, build.max_data_rows, 'limit');
         const approximate = intParam(p.approximate, 0, 0, 1, 'approximate') === 1;
+        // A large dataset's default tiles were answered by the server at build time.
+        const recorded = (build.recorded_queries || {})[code];
+        if (recorded && recorded.length && f && typeof f === 'object' && !Array.isArray(f)
+            && (g === MISSING || Array.isArray(g))) {
+            const k = await queryKey(code, f, g, limit, approximate);
+            if (recorded.includes(k)) {
+                const r = await json(`rec/query/${code}/${k}.json.gz`);
+                if (r) return structuredClone(r);
+            }
+        }
         try {
-            return await runQuery(loader, code, f, g, limit, approximate);
+            const res = await runQuery(loader, code, f, g, limit, approximate);
+            if (res.aggregation && res.aggregation.reason === 'browser_budget' && typeof console !== 'undefined') {
+                console.info(`[static] ${code}: refused, needs ${res.budget?.bytes} bytes (budget ${res.budget?.max_bytes})`,
+                             JSON.stringify({ filters: f ?? null, group_by: g ?? null }));
+            }
+            return res;
         } catch (e) {
             if (e instanceof QueryError) throw new ApiError(e.status, e.message);
             throw e;

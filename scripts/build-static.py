@@ -391,6 +391,8 @@ def main(argv=None) -> int:
         stats["data_bytes"] += d["bytes"]
         if d["partitioned"]:
             stats["partitioned"].append(code)
+            if not a.no_record:
+                stats.setdefault("recorded_queries", {})[code] = static_api.record_tile_queries(conn, code, out)
         if i % 200 == 0:
             print(f"  {i}/{len(codes)} ({time.time() - t0:.0f}s)", flush=True)
     try:

@@ -1,5 +1,51 @@
 # Activity History
 
+## 2026-10-11 — Static site S3–S4: every page on shared hosting, proven equal to the server
+
+The whole site now builds as static files (`scripts/build-static.py`, see
+`docs/DEPLOY-STATIC.md`). The same pages run in either mode, chosen by
+`js/config.js`.
+- **Recorded answers:** bounded endpoints are answered once at build time by
+  the real app.
+- **Computed in the browser:** the catalog, concept search, options, CSV,
+  dataset evidence and recipe area subsets. Search uses the FTS sidecar's exact
+  BM25 index.
+- **Proven equal:** `api-parity.mjs` checks these against FastAPI, as
+  `parity.mjs` does for queries.
+- **Pages:** pre-rendered in ro and en, plus `.htaccess`, sitemap, robots,
+  llms.txt and a sha256 manifest.
+- **Gate:** `release-check.py --static`. Upload: `deploy-static.sh`, a dry run
+  unless `--go`.
+
+Full build of the copy:
+- 18 minutes; 45,704 files, 643 MB;
+- largest file 0.9 MB; 15 MB is the gate's limit.
+
+Gate and checks:
+- The gate passes with 991/991 API parity cases.
+- The browser smoke ran 20 pages × RO/EN × 1280/390/320 on `serve.py` (the
+  `.htaccess` rules, no Python): no page errors, no 4xx, no `/api` request.
+- The one overflow, the category page's sort pills at 320 px, predates this
+  work and also happens in server mode.
+
+The 12 MB browser budget refused four default tiles on the largest families. A
+partitioned dataset's default tile queries are now answered by the server at
+build time: 136 answers, 1.8 MB. Other selections still go to the engine and
+the budget.
+
+Server changes that came out of this:
+- BM25 ties are deterministic (`round(score, 8)`); the top 10 of the 17 eval
+  questions is unchanged.
+- Recipes list every common year.
+- A missing recipe source returns 422, not 500.
+- ART124A's stale mapping is refused as `schema_mismatch`.
+- County place pages show net earnings and the both-sexes unemployment rate
+  from the Q2/Q3 recipes, labelled "reconstituit". Region and country
+  baselines are recombined from the same rows. Bucharest's unemployment is
+  listed as unavailable with its range.
+
+Not done: no upload (needs authorization).
+
 ## 2026-10-11 — Static S2 corpus parity; Q2/Q3 reconstructions as recipes
 
 Static S2 replayed the full corpus: 70,708 recorded server answers, with 70,663

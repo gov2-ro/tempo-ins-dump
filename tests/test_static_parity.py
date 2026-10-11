@@ -107,9 +107,9 @@ def _api_parity(data_dir: Path, out: Path, codes: list[str], n=40):
     return summary
 
 
-def test_static_api_matches_server_on_synthetic_corpus(tmp_path):
-    """Catalog, search, options, downloads, evidence and recipes answered by the
-    static site (engine/static-api.js) equal the FastAPI answers."""
+def _catalog_corpus(tmp_path):
+    """The synthetic corpus plus the catalog columns and a generation id that
+    a full static build (with recorded API answers) needs."""
     import duckdb
     from fix02b_corpus import build_corpus
     corpus = build_corpus(tmp_path / "data")
@@ -127,6 +127,13 @@ def test_static_api_matches_server_on_synthetic_corpus(tmp_path):
     db.close()
     from test_pa01_grain_guard import _manifest
     _manifest(corpus)                     # a generation id, as a real build has
+    return corpus
+
+
+def test_static_api_matches_server_on_synthetic_corpus(tmp_path):
+    """Catalog, search, options, downloads, evidence and recipes answered by the
+    static site (engine/static-api.js) equal the FastAPI answers."""
+    corpus = _catalog_corpus(tmp_path)
     s = _api_parity(tmp_path / "data", tmp_path / "out", ["POPX", "ADDX", "RATEX", "INCX"])
     assert s["ok"] == s["cases"] - s.get("browser_budget_refusals", 0)
     site = tmp_path / "out" / "static"
@@ -154,3 +161,25 @@ def test_static_api_matches_server_on_real_sample(tmp_path):
     data_dir = Path(os.environ.get("TEMPO_DATA_DIR", ROOT / "data"))
     _api_parity(data_dir, tmp_path, ["POP105A_judete_grupe", "FOM106E_judete", "FOM104F_judete",
                                      "SOM103A_judete", "SOM101E", "TUR105D_judete", "ART124A"], n=80)
+
+
+def test_large_datasets_default_tiles_are_answered_without_loading(tmp_path):
+    """Partitioned datasets get the server's answers to their default tile
+    queries at build time: with a 1-byte budget those still answer, exactly."""
+    _catalog_corpus(tmp_path)
+    env = {"TEMPO_DATA_DIR": str(tmp_path / "data")}
+    out = tmp_path / "out"
+    _run([sys.executable, "scripts/build-static.py", "--out", str(out / "static"), "--codes", "POPX,RATEX",
+          "--partition-rows", "1", "--max-query-bytes", "1"], env)
+    build = json.loads((out / "static" / "build.json").read_text())
+    assert set(build["recorded_queries"]) == {"POPX", "RATEX"} and all(build["recorded_queries"].values())
+    _run([sys.executable, "scripts/gen-api-cases.py", "--out", str(out / "all.jsonl"), "--n", "5",
+          "--codes", "POPX,RATEX"], env)
+    tiles = [l for l in (out / "all.jsonl").read_text().splitlines()
+             if '"/data"' not in l and json.loads(l)["path"].endswith("/data")
+             and json.loads(l)["params"].get("limit") == 50000]
+    (out / "tiles.jsonl").write_text("\n".join(tiles) + "\n")
+    res = _run([NODE, "tools/static-engine/api-parity.mjs", "--build", str(out / "static"),
+                "--cases", str(out / "tiles.jsonl")])
+    s = json.loads(res.strip().splitlines()[-1])
+    assert s["cases"] > 0 and s["ok"] == s["cases"] and not s.get("browser_budget_refusals"), res

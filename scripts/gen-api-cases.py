@@ -150,6 +150,18 @@ def main(argv=None) -> int:
         add(f"/api/datasets/{code}/download", {"format": "csv", "safe": 0, "filters": "{}"})
     add("/api/datasets/POP105A_judete_grupe/download", {"filters": "not json"})
 
+    # ---- the dashboard's default tile requests (recorded for partitioned datasets)
+    for code in codes:
+        meta = client.get(f"/api/datasets/{code}", params={"lang": "ro"})
+        comp = ((meta.json().get("chart_config") or {}).get("composition") or {}) if meta.status_code == 200 else {}
+        for ch in comp.get("charts") or []:
+            d = ch.get("data") or {}
+            p = {"filters": json.dumps(d.get("filters") or {}, ensure_ascii=False, separators=(",", ":")),
+                 "limit": 50000}
+            if d.get("group_by"):
+                p["group_by"] = json.dumps(d["group_by"], ensure_ascii=False)
+            add(f"/api/datasets/{code}/data", p)
+
     # ---- dataset evidence (compared file by file)
     ev = [(c, {}, ["TIME_PERIOD"]) for c in codes] + [(c, {}, None) for c in codes[:2]]
     if not a.codes:

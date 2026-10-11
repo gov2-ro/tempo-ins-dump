@@ -29,14 +29,25 @@ see also [charting-ideas.md](charting-ideas.md)
   `sdmx_column_map` still name `*_nom_id` columns. It is now refused as
   `schema_mismatch`. Repair it with `11-build-sdmx-codes --matrix ART124A` on a
   copy.
-- [ ] **Place pages Q2/Q3:** the earnings and unemployment KPIs should use the
-  `net_earnings_county` / `registered_unemployment_county` recipes (labelled
-  reconstructed) instead of omitting the value or showing an unweighted mean.
-- [ ] **Static S3:**
-  - record the three recipe results (every year) and their evidence ZIPs;
-  - gzip the policy files;
-  - default the big families to recent years or precomputed county × year
-    aggregates, to cut `browser_budget` refusals.
+- [x] **Place pages Q2/Q3:** county KPIs now come from the recipes (2026-10-11).
+- [ ] **Static site, before a public upload:**
+  - choose the host and document root (owner);
+  - run `release-check.py --static` on the build that will be uploaded;
+  - smoke it on the real Apache: `.htaccess` rewrites, gzip handling,
+    `Cache-Control`;
+  - `deploy-static.sh … --go` only with authorization.
+
+  Non-default selections on the biggest families (whole country, all years)
+  are still refused over 12 MB. If users hit that, precompute county × year
+  rollups.
+- [ ] **Category page overflows at 320 px:** the facet sort pills
+  (`.facet-group`, 377 px wide) overflow in server and static mode alike.
+- [ ] **Agent search eval baseline is stale:** 13 of 17 top-10 sets differ on
+  the 2026-10-05 copy because the baseline predates its search index. Rebuild
+  it with `scripts/build_agent_search_baseline.py` after reviewing the
+  differences.
+- [ ] **ART124A insights still fail:** they log binder errors from the stale
+  mapping; `/data` already refuses it. Same repair as the mapping item above.
 
 ## Public-alpha audit — 2026-10-11 (latest local integration)
 
