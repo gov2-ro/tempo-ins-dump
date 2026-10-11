@@ -290,6 +290,73 @@ def assemble_site(out: Path, build: dict) -> dict:
     return {"assets": n}
 
 
+LLMS_STATIC = """# INS+ (static edition)
+
+> Romanian National Institute of Statistics (INS) TEMPO Online datasets, served as
+> static files. The pages compute in the browser with the same rules as the INS+
+> API; there is no server API on this host.
+
+## Data files (per generation; see /build.json)
+
+- /build.json: generation id, commit, limits, the list of partitioned datasets.
+- /rec/catalog.json.gz: every dataset with names (ro/en), coverage, filters.
+- /rec/datasets/{code}.{ro|en}.json.gz: dataset metadata (dimensions, options,
+  definition, chart configuration), as GET /api/datasets/{code} returns it.
+- /data/{code}.bin.gz: the observations in TCOL1 format (gzip; dictionary-encoded
+  dimension codes + values; see scripts/build-static.py `tcol`). Datasets above
+  200k rows are split by county and by period: /data/{code}.index.json lists the files.
+- /policy/{code}.json.gz: the aggregation context the safety rules need.
+- /rec/recipe/{id}/{year}.{ro|en}.json.gz and .zip: reviewed cross-dataset
+  results (tourism intensity, net earnings, registered unemployment) and their
+  evidence bundles with an offline recompute.py.
+
+Totals the rules refuse (overlapping levels, missing weights, repeated keys, a
+sum INS contradicts) are refused here too: do not compute them from raw rows.
+Source: INS — TEMPO Online, http://statistici.insse.ro:8077/tempo-online/
+"""
+
+
+def export_pages(conn, out: Path, codes: list[str], base_url: str) -> dict:
+    """Pre-rendered dataset pages (ro + en), sitemap, robots, llms.txt and .htaccess."""
+    import shutil
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.routers.pages import dataset_page_html
+    base = base_url.rstrip("/")
+    n = 0
+    for code in codes:
+        for lang, name in (("ro", "index.html"), ("en", "en.html")):
+            html = dataset_page_html(code, lang, base, indexable=True, static=True)
+            if html is not None:
+                p = out / "dataset" / code / name
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(html, encoding="utf-8")
+                n += 1
+    client = TestClient(app, base_url=base or "http://testserver", raise_server_exceptions=False)
+    r = client.get("/sitemap.xml")
+    if r.status_code == 200:
+        (out / "sitemap.xml").write_text(r.text, encoding="utf-8")
+    (out / "robots.txt").write_text(
+        "User-agent: *\nDisallow: /rec/\nDisallow: /data/\nDisallow: /policy/\nDisallow: /search/\n"
+        "Allow: /\n" + (f"Sitemap: {base}/sitemap.xml\n" if base else ""), encoding="utf-8")
+    (out / "llms.txt").write_text(LLMS_STATIC, encoding="utf-8")
+    shutil.copy2(REPO / "deploy" / "static" / ".htaccess", out / ".htaccess")
+    return {"dataset_pages": n}
+
+
+def write_manifest(out: Path) -> dict:
+    """static-manifest.json: sha256 and size of every file (release-check --static)."""
+    import hashlib
+    files = {}
+    for p in sorted(out.rglob("*")):
+        if p.is_file() and p.name != "static-manifest.json":
+            files[str(p.relative_to(out))] = [hashlib.sha256(p.read_bytes()).hexdigest(), p.stat().st_size]
+    manifest = {"schema": 1, "files": files, "count": len(files),
+                "bytes": sum(v[1] for v in files.values())}
+    (out / "static-manifest.json").write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf-8")
+    return {"count": manifest["count"], "bytes": manifest["bytes"]}
+
+
 # ------------------------------------------------------------------ main
 
 def main(argv=None) -> int:
@@ -341,8 +408,11 @@ def main(argv=None) -> int:
                                 base_url=a.base_url)
         srch = static_api.export_search(conn, out)
         site = assemble_site(out, build)
+        site.update(export_pages(conn, out, codes, a.base_url))
         build.update(recorded=rec, search=srch, site=site)
     _json_dump(build, out / "build.json")
+    if not a.no_record:
+        build["manifest"] = write_manifest(out)
     print(json.dumps({k: v for k, v in build.items() if k != "partitioned"}
                      | {"partitioned": len(stats["partitioned"])}, indent=1))
     return 0

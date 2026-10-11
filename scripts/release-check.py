@@ -368,6 +368,81 @@ def check_stage(stage: Path, rep: Report, source: Path | None = None,
     return m
 
 
+STATIC_MAX_FILE = 15_000_000      # shared hosts and phones: no single file above this
+
+
+def check_static(site: Path, rep: Report, source: Path | None = None, cases: Path | None = None):
+    """Gate a static build (scripts/build-static.py): manifest hashes, generation,
+    every dataset complete (data, policy, metadata ro/en, pages), site files,
+    and optionally the API parity cases (tools/static-engine/api-parity.mjs)."""
+    import gzip
+    print(f"== static build {site}")
+    build_p = site / "build.json"
+    if not build_p.exists():
+        rep.fail("build.json missing"); return
+    build = json.loads(build_p.read_text())
+    gid = (build.get("generation") or {}).get("id")
+    if not gid:
+        rep.fail("build.json has no generation id")
+    else:
+        rep.ok(f"generation {gid[:12]} (commit {str(build.get('commit'))[:12]})")
+    if source is not None:
+        gm = source / "generation-manifest.json"
+        want = json.loads(gm.read_text()).get("generation_id") if gm.exists() else None
+        (rep.ok if want == gid else rep.fail)(f"generation equals the source corpus ({str(want)[:12]})")
+    cfg = (site / "js" / "config.js").read_text() if (site / "js" / "config.js").exists() else ""
+    (rep.ok if '"mode": "static"' in cfg and (not gid or gid in cfg) else rep.fail)(
+        "js/config.js switches the pages to static mode for this generation")
+    mp = site / "static-manifest.json"
+    if not mp.exists():
+        rep.fail("static-manifest.json missing"); return
+    files = json.loads(mp.read_text())["files"]
+    bad, big = [], []
+    for rel, (h, size) in files.items():
+        p = site / rel
+        if not p.exists() or p.stat().st_size != size or sha256(p) != h:
+            bad.append(rel)
+        if size > STATIC_MAX_FILE:
+            big.append(rel)
+    extra = [str(p.relative_to(site)) for p in site.rglob("*")
+             if p.is_file() and p.name != "static-manifest.json" and str(p.relative_to(site)) not in files]
+    (rep.ok if not bad else rep.fail)(f"{len(files)} files match static-manifest.json"
+                                      + (f" ({len(bad)} differ, e.g. {bad[:3]})" if bad else ""))
+    (rep.ok if not extra else rep.fail)("no files outside the manifest" + (f": {extra[:3]}" if extra else ""))
+    (rep.ok if not big else rep.fail)(f"no file over {STATIC_MAX_FILE // 1_000_000} MB" + (f": {big[:3]}" if big else ""))
+    parts = set(build.get("partitioned") or [])
+    missing = []
+    for pol in sorted((site / "policy").glob("*.json.gz")):
+        code = pol.name[:-len(".json.gz")]
+        need = [f"data/{code}.index.json" if code in parts else f"data/{code}.bin.gz",
+                f"rec/datasets/{code}.ro.json.gz", f"rec/datasets/{code}.en.json.gz",
+                f"rec/insights/{code}.ro.json.gz", f"dataset/{code}/index.html", f"dataset/{code}/en.html"]
+        missing += [n for n in need if n not in files]
+    n_ds = len(list((site / "policy").glob("*.json.gz")))
+    (rep.ok if not missing and n_ds == build.get("datasets") else rep.fail)(
+        f"{n_ds} datasets complete (data, policy, metadata ro/en, insights, pages)"
+        + (f"; missing {missing[:4]}" if missing else ""))
+    for rel in (".htaccess", "robots.txt", "sitemap.xml", "llms.txt", "index.html", "dataset-v2.html",
+                "rec/catalog.json.gz", "search/concepts.json.gz", "search/index.json.gz"):
+        (rep.ok if rel in files else rep.fail)(f"{rel} present")
+    idx = json.loads(gzip.decompress((site / "search" / "index.json.gz").read_bytes())) \
+        if "search/index.json.gz" in files else {}
+    (rep.ok if idx.get("mode") == "fts" else rep.warn)(
+        f"full-text index exported (mode {idx.get('mode')}); otherwise search falls back to name matching")
+    for rp in sorted(site.glob("rec/recipe/*/latest.ro.json.gz")):
+        r = json.loads(gzip.decompress(rp.read_bytes()))
+        (rep.ok if "__status" not in r else rep.fail)(f"recipe {rp.parent.name} recorded ({r.get('year')})")
+    if cases is not None:
+        node = shutil.which("node")
+        if not node:
+            rep.fail("node not installed: cannot run the API parity cases")
+        else:
+            r = subprocess.run([node, "--max-old-space-size=6000", str(ROOT / "tools/static-engine/api-parity.mjs"),
+                                "--build", str(site), "--cases", str(cases)], capture_output=True, text=True)
+            last = (r.stdout.strip().splitlines() or ["{}"])[-1]
+            (rep.ok if r.returncode == 0 else rep.fail)(f"API parity: {last}")
+
+
 def run_tests(rep: Report):
     print("== tests")
     r = subprocess.run([sys.executable, "-m", "pytest", "tests", "-q", "-rs"],
@@ -463,6 +538,10 @@ def main():
     ap.add_argument("--deploy", action="store_true",
                     help="run `fly deploy` after ALL gates pass (never implicit)")
     ap.add_argument("--rollback", action="store_true")
+    ap.add_argument("--static", metavar="DIR",
+                    help="gate a static build (scripts/build-static.py) instead of the Docker stage")
+    ap.add_argument("--api-cases", metavar="JSONL",
+                    help="with --static: replay these scripts/gen-api-cases.py cases")
     a = ap.parse_args()
 
     if a.cmd == "snapshot":
@@ -472,6 +551,23 @@ def main():
     stage = Path(a.stage)
     if a.rollback:
         cmd_rollback(stage); return
+
+    if a.static:
+        rep = Report()
+        check_static(Path(a.static), rep, Path(a.source) if a.source else None,
+                     Path(a.api_cases) if a.api_cases else None)
+        if not a.skip_tests:
+            run_tests(rep)
+        print("\n== result")
+        for w in rep.warnings:
+            print(f"  warn: {w}")
+        if rep.failures:
+            print(f"STATIC RELEASE BLOCKED ({len(rep.failures)} failure(s))")
+            for f in rep.failures:
+                print(f"  - {f}")
+            sys.exit(1)
+        print("STATIC RELEASE CHECK PASSED (not deploying: see scripts/deploy-static.sh)")
+        return
 
     rep = Report()
     check_stage(stage, rep, Path(a.source) if a.source else None,

@@ -60,7 +60,7 @@ def _facts(code: str, lang: str) -> dict | None:
             "coverage": None, "source_updated": str(row[3]) if row[3] else None}
 
 
-def _head(base: str, code: str, facts: dict, lang: str, indexable: bool) -> str:
+def _head(base: str, code: str, facts: dict, lang: str, indexable: bool, static: bool = False) -> str:
     canonical = f"{base}/dataset/{quote(code)}"
     e = html.escape
     desc = (facts.get("definition") or facts["title"]).strip()
@@ -76,13 +76,14 @@ def _head(base: str, code: str, facts: dict, lang: str, indexable: bool) -> str:
         "creator": {"@type": "Organization", "name": "Institutul Național de Statistică (INS)",
                     "url": "https://insse.ro"},
         "spatialCoverage": {"@type": "Place", "name": "Romania"},
-        "distribution": [
+    }
+    if not static:      # the static site writes CSV in the browser: no download URL
+        ld["distribution"] = [
             {"@type": "DataDownload", "encodingFormat": "text/csv",
              "contentUrl": f"{base}/api/datasets/{quote(code)}/download?format=csv"},
             {"@type": "DataDownload", "encodingFormat": "application/vnd.sdmx.genericdata+xml;version=2.1",
              "contentUrl": f"{base}/sdmx/2.1/data/INS,{quote(code)}/"},
-        ],
-    }
+        ]
     if cov.get("first") and cov.get("last"):
         ld["temporalCoverage"] = f"{cov['first']}/{cov['last']}"
     if facts.get("source_updated"):
@@ -104,7 +105,7 @@ def _head(base: str, code: str, facts: dict, lang: str, indexable: bool) -> str:
     ])
 
 
-def _summary(code: str, facts: dict, lang: str) -> str:
+def _summary(code: str, facts: dict, lang: str, static: bool = False) -> str:
     """Server-rendered dataset facts, readable without JavaScript."""
     e = html.escape
     en = lang == "en"
@@ -126,9 +127,10 @@ def _summary(code: str, facts: dict, lang: str) -> str:
             f'<h1 class="dbv2-ssr-title">{e(facts["title"])}</h1>'
             + (_definition_html(definition, en) if definition else "")
             + f'<dl class="dbv2-ssr-facts">{dl}</dl>'
-            + f'<p class="dbv2-ssr-links"><a href="/api/datasets/{quote(code)}/download?format=csv">CSV</a> · '
-              f'<a href="/sdmx/2.1/data/INS,{quote(code)}/">SDMX</a> · '
-              f'<a href="{INS_URL}" rel="noopener">TEMPO Online</a></p>'
+            + ('<p class="dbv2-ssr-links">'
+               + ("" if static else f'<a href="/api/datasets/{quote(code)}/download?format=csv">CSV</a> · '
+                                    f'<a href="/sdmx/2.1/data/INS,{quote(code)}/">SDMX</a> · ')
+               + f'<a href="{INS_URL}" rel="noopener">TEMPO Online</a></p>')
             + "</section>")
 
 
@@ -148,20 +150,29 @@ def _definition_html(definition: str, en: bool) -> str:
             f'<p>{e(text)}</p></details>')
 
 
-def render_dataset_page(request: Request, code: str, *, canonical_route: bool) -> Response:
-    lang = "en" if request.query_params.get("lang") == "en" else "ro"
+def dataset_page_html(code: str, lang: str, base: str, indexable: bool,
+                      static: bool = False) -> str | None:
+    """The dataset page with its facts in the HTML, or None for an unknown code.
+    `static` drops the server-only links (CSV/SDMX endpoints) for the static site."""
     page = _page_template()
     facts = _facts(code, lang) if _CODE_RE.match(code or "") else None
     if not facts:
-        return HTMLResponse(page, status_code=404)
-    indexable = canonical_route and not any(p in request.query_params for p in _STATE_PARAMS)
-    base = str(request.base_url).rstrip("/")
+        return None
     page = re.sub(r"<title>.*?</title>\s*<meta name=\"robots\" content=\"noindex\">",
-                  lambda _m: _head(base, code, facts, lang, indexable), page, count=1, flags=re.S)
+                  lambda _m: _head(base, code, facts, lang, indexable, static), page, count=1, flags=re.S)
     page = page.replace('<html lang="ro">', f'<html lang="{lang}">', 1)
     page = page.replace('<header class="dash-header" id="dbv2-header"></header>',
                         '<header class="dash-header" id="dbv2-header"></header>\n        '
-                        + _summary(code, facts, lang), 1)
+                        + _summary(code, facts, lang, static), 1)
+    return page
+
+
+def render_dataset_page(request: Request, code: str, *, canonical_route: bool) -> Response:
+    lang = "en" if request.query_params.get("lang") == "en" else "ro"
+    indexable = canonical_route and not any(p in request.query_params for p in _STATE_PARAMS)
+    page = dataset_page_html(code, lang, str(request.base_url).rstrip("/"), indexable)
+    if page is None:
+        return HTMLResponse(_page_template(), status_code=404)
     return HTMLResponse(page)
 
 

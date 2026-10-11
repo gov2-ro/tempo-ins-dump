@@ -217,6 +217,12 @@ FTS mode (`degraded` = name-matching fallback, also logged at ERROR). Search use
 per-request FTS cursors and `total` counts the full match set. The Docker smoke
 has not been run yet. Oracle/HF templates live under `scripts/deploy/`.
 
+**Static alternative (2026-10-11, not deployed).** `scripts/build-static.py`
+builds the whole site as static files for shared hosting. A browser port of
+the query rules is proven equal to the server by parity suites. The gate is
+`release-check.py --static`, and the upload is `scripts/deploy-static.sh`, a dry
+run by default. See [DEPLOY-STATIC.md](DEPLOY-STATIC.md).
+
 Ask is disabled by default (`TEMPO_ASK_ENABLED`) and accepts BYOK. FIX-08: history
 is validated before any provider call (user/assistant text only, 20 turns, 8k
 chars per turn, 40k total). Providers/models come from an allowlist

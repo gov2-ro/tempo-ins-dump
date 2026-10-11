@@ -125,11 +125,28 @@ def test_static_api_matches_server_on_synthetic_corpus(tmp_path):
                 "matrix_profiles ADD COLUMN has_residence BOOLEAN DEFAULT FALSE"):
         db.execute("ALTER TABLE " + ddl.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS"))
     db.close()
+    from test_pa01_grain_guard import _manifest
+    _manifest(corpus)                     # a generation id, as a real build has
     s = _api_parity(tmp_path / "data", tmp_path / "out", ["POPX", "ADDX", "RATEX", "INCX"])
     assert s["ok"] == s["cases"] - s.get("browser_budget_refusals", 0)
     site = tmp_path / "out" / "static"
     assert "static" in (site / "js" / "config.js").read_text()
     assert (site / "rec" / "catalog.json.gz").exists() and (site / "search" / "concepts.json.gz").exists()
+    page = (site / "dataset" / "POPX" / "index.html").read_text()
+    assert "/api/" not in page and "/sdmx/" not in page and (site / "dataset" / "POPX" / "en.html").exists()
+
+    # the static release gate: everything but the recipes (no recipe sources here)
+    from importlib import util
+    spec = util.spec_from_file_location("rc", ROOT / "scripts" / "release-check.py")
+    rc = util.module_from_spec(spec)
+    spec.loader.exec_module(rc)
+    rep = rc.Report()
+    rc.check_static(site, rep, corpus, tmp_path / "out" / "api.jsonl")
+    assert [f for f in rep.failures if not f.startswith("recipe ")] == [], rep.failures
+    (site / "rec" / "catalog.json.gz").write_bytes(b"tampered")
+    rep = rc.Report()
+    rc.check_static(site, rep)
+    assert any("static-manifest.json" in f for f in rep.failures)
 
 
 @pytest.mark.corpus

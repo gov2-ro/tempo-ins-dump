@@ -1,0 +1,43 @@
+# INS+ static site (scripts/build-static.py). Apache 2.4, mod_rewrite + mod_headers.
+# Copied into the build root; tools/static-engine/serve.py mirrors these rules.
+
+Options -Indexes -MultiViews
+DirectoryIndex index.html
+AddDefaultCharset utf-8
+
+# Data files are fetched as bytes and gunzipped by the page itself, so the
+# server must not label them as an encoding (works either way, but this keeps
+# proxies from re-compressing or mangling them).
+RemoveEncoding .gz
+AddType application/octet-stream .gz
+AddType application/json .json .geojson
+AddType text/javascript .js .mjs
+
+<IfModule mod_headers.c>
+    # One release is one consistent generation: revalidate everything, so a
+    # page never mixes files from two releases (304s keep this cheap).
+    Header set Cache-Control "no-cache"
+    Header set X-Content-Type-Options "nosniff"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/css text/javascript application/json application/xml text/plain
+</IfModule>
+
+RewriteEngine On
+
+# The static site has no server API.
+RewriteRule ^(api|sdmx)(/|$) - [R=404,L]
+
+# Old dataset URL, kept for saved links.
+RewriteRule ^dataset\.html$ /dataset-v2.html [R=301,L]
+
+# Canonical dataset pages, pre-rendered in Romanian and English.
+RewriteCond %{QUERY_STRING} (^|&)lang=en(&|$)
+RewriteRule ^dataset/([A-Za-z0-9_]+)/?$ dataset/$1/en.html [L]
+RewriteRule ^dataset/([A-Za-z0-9_]+)/?$ dataset/$1/index.html [L]
+
+# Place pages are one page that reads the URL.
+RewriteRule ^place/[a-z]+/[a-z0-9-]+/?$ place.html [L]
+RewriteRule ^places/?$ places.html [L]

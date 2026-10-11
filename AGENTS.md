@@ -78,7 +78,7 @@ Read-only corpus audit: `python scripts/audit-corpus.py --data-dir data`.
 their label matching agrees), `split_rules.py` (split-rule engine for stage 12).
 
 Other root scripts: `generate_sdmx_yaml.py`, `build-geo-regions.py`,
-`build-static-site.py`, `duckdb-browser.py` (Flask DB/parquet explorer, :5000),
+`duckdb-browser.py` (Flask DB/parquet explorer, :5000),
 `test_chart_selector.py` (a report, not a test). Helpers live in `scripts/`
 (audit, eval baselines, search index, canonicalize, normalize); one-offs in
 `scripts/utils/`. Details in [readme.md](readme.md).
@@ -219,6 +219,25 @@ Fly.io app `tempo-ins-explorer` (shared-cpu-1x, 512MB, Amsterdam, 1 worker):
 explicit `--deploy`. The image won't build without a staged manifest and search
 index. Only `.github/workflows/ci.yml` is tracked (synthetic tests).
 Oracle/HF Spaces templates live in `scripts/deploy/`. Validated release gates: FIX-05.
+
+## Static site (shared hosting, no Python process)
+`scripts/build-static.py` turns a generation into a static site:
+- data and policies per dataset;
+- bounded API answers recorded from the real app;
+- the search index and pre-rendered pages, with `js/config.js` set to static mode.
+
+The same pages then answer `/api` paths in the browser (`app/static/js/engine/`).
+Python stays the specification. Any change to `data_query`, `aggregation_policy`,
+`dataset_meta`, `concept_search`, `dataset_search`, `recipes`, `evidence` or
+`export` must keep these passing:
+- `tools/static-engine/parity.mjs` (query engine);
+- `tools/static-engine/api-parity.mjs` (catalog, search, options, CSV, evidence,
+  recipes).
+
+`tests/test_static_parity.py` runs both on synthetic corpora; they skip without
+Node. Gate with `python scripts/release-check.py --static DIR --api-cases FILE`.
+Upload only with explicit authorization: `scripts/deploy-static.sh`, dry run by
+default. Details: [docs/DEPLOY-STATIC.md](docs/DEPLOY-STATIC.md).
 
 ## Audit remediation handoff
 - Start at [docs/fixes/README.md](docs/fixes/README.md). Implement one scoped package at a time.

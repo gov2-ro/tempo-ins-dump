@@ -4,7 +4,7 @@ makes (dev and tests only; no Python app, no /api).
 
   python tools/static-engine/serve.py _static [--port 8090]
 
-  /dataset/{code}        -> dataset/{code}/index.html when pre-rendered, else dataset-v2.html
+  /dataset/{code}        -> dataset/{code}/index.html (en.html with lang=en)
   /place/{type}/{slug}   -> place.html          /places -> places.html
   /dataset.html?…        -> 301 /dataset-v2.html?…
   /api/…, /sdmx/…        -> 404 (and logged: a static page must never ask)
@@ -37,9 +37,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         m = re.fullmatch(r"/dataset/([A-Za-z0-9_]+)/?", path)
         if m:
-            pre = Path(self.directory) / "dataset" / m.group(1) / "index.html"
-            self.path = (f"/dataset/{m.group(1)}/index.html" if pre.exists() else "/dataset-v2.html") \
-                + (f"?{query}" if query else "")
+            en = re.search(r"(^|&)lang=en(&|$)", query)
+            page = f"/dataset/{m.group(1)}/{'en' if en else 'index'}.html"
+            if not (Path(self.directory) / page.lstrip("/")).exists():
+                page = "/dataset-v2.html"          # partial builds: no pre-rendered page
+            self.path = page + (f"?{query}" if query else "")
         elif re.fullmatch(r"/place/[a-z]+/[a-z0-9-]+/?", path):
             self.path = "/place.html" + (f"?{query}" if query else "")
         elif path in ("/places", "/places/"):

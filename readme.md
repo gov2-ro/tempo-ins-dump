@@ -149,7 +149,7 @@ deterministic corpus audit (categories, schema, NULL dims, time validity, grain,
 | `generate_view_profiles.py` | Generates per-dataset JSON view profiles → `data/corpus/view-profiles/` |
 | `generate_sdmx_yaml.py` | Generates SDMX dashboard YAML configs → `data/sdmx-dashboards/` |
 | `build-geo-regions.py` | Dissolves county GeoJSON into regions + macroregions |
-| `build-static-site.py` | Builds static HTML site from corpus |
+| `scripts/build-static.py` | Builds the static site (shared hosting) from a generation; see [docs/DEPLOY-STATIC.md](docs/DEPLOY-STATIC.md) |
 | `split_rules.py` | Split rules engine — classifies datasets needing structural splits |
 | `sdmx_labels.py` | Shared `norm_label`/`parse_time_period` used by stages 9 and 11 so their label matching agrees |
 | `detect_trends.py` | Detects trends, YoY growth, seasonality → `dataset_trends` DuckDB table |
@@ -290,7 +290,8 @@ Clean checkout (no corpus, no secrets): `pip install -r requirements-dev.txt && 
 - **[PROFILING_AND_EXPLORER.md](docs/PROFILING_AND_EXPLORER.md)** — Guide to the CSV profiler and Explorer UI: output paths, validation flags, API endpoints.
 
 ### UI / Legacy
-- **[STATIC-CONVERSION-SUMMARY.md](docs/STATIC-CONVERSION-SUMMARY.md)** — Documents conversion from server-based to static site explorer.
+- **[DEPLOY-STATIC.md](docs/DEPLOY-STATIC.md)** — The static site: build, parity-proven browser engine, gate, Apache hosting.
+- **[STATIC-CONVERSION-SUMMARY.md](docs/STATIC-CONVERSION-SUMMARY.md)** — Superseded earlier static scaffold (historical).
 - **[STATIC-VS-PYTHON-COMPARISON.md](docs/STATIC-VS-PYTHON-COMPARISON.md)** — Test results showing 100% feature parity between Python and static versions.
 - **[JUDET-SPLIT-IMPLEMENTATION.md](docs/JUDET-SPLIT-IMPLEMENTATION.md)** — How large datasets are split by county (judet) to stay under the 30k-cell API limit.
 

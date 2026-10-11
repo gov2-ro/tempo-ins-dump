@@ -1,5 +1,7 @@
 # Static Site Conversion Summary
 
+> **Superseded (2026-10-11)** by [DEPLOY-STATIC.md](DEPLOY-STATIC.md): the old `build-static-site.py` scaffold was removed.
+
 > Historical design/reference. Paths, counts, thresholds and implementation status
 > below may describe earlier generations. Use [CURRENT_STATE.md](CURRENT_STATE.md)
 > for current operation and [fixes/README.md](fixes/README.md) for accepted remediation
