@@ -1,5 +1,14 @@
 # Activity History
 
+## 2026-10-12 — Methodology note on computed totals, averages and rates
+
+New [METHODOLOGY.md](METHODOLOGY.md), linked from the readme with a short note:
+Total rows are not in our downloads; summed counts equal INS exactly; means and
+rates are never summed, only reconstructed with INS-published weights, and can
+differ from INS's total by one unit in the last digit because the published parts
+are rounded (bound and observed rates included). Backlog item for a per-dataset
+note, computed in the pipeline, which mostly disappears if Total rows are kept.
+
 ## 2026-10-12 — Refreshed POP105A, SOM103A, TUR105D in a new generation copy
 
 New copy `~/devbox/gov2/tempo-gen-20261012` (APFS clone of the 10-05 repair copy,

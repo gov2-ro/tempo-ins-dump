@@ -11,6 +11,13 @@ Agent-ready remediation packages: [docs/fixes/README.md](docs/fixes/README.md).
 The 2026-10-03 audit found unresolved aggregation, API safety and export issues;
 see the prioritized backlog before relying on derived totals or full downloads.
 
+**Totals and averages.** INS's "Total" rows are not in our downloads, so every total
+shown is computed. Summed counts (people, stays) equal INS's totals exactly. Averages
+and rates (wages, unemployment rate) are never summed. Where shown, they are weighted
+reconstructions from INS-published parts, which are rounded, so they can differ from
+INS's own total by one unit in the last digit (e.g. 5,097 vs 5,098 lei). Details:
+[docs/METHODOLOGY.md](docs/METHODOLOGY.md).
+
 -----
 
 ## Running
@@ -273,6 +280,7 @@ Clean checkout (no corpus, no secrets): `pip install -r requirements-dev.txt && 
 ## docs/ Summary
 
 ### Core Architecture
+- **[METHODOLOGY.md](docs/METHODOLOGY.md)** — How computed totals, averages and rates relate to the values INS publishes.
 - **[CURRENT_STATE.md](docs/CURRENT_STATE.md)** — Current paths, dependency order, serving behavior and unresolved operating limits.
 - **[DUCKDB_SPECS.md](docs/DUCKDB_SPECS.md)** — Historical schema design; actual DB introspection is authoritative.
 - **[DUCKDB_GUIDE.md](docs/DUCKDB_GUIDE.md)** — Historical query examples; use current paths and verify aggregation grain.
