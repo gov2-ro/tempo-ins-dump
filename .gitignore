@@ -206,3 +206,6 @@ deploy-data.prev/
 deploy-data.tmp.*/
 deploy-data.tar.gz.tmp
 mcp-eval-runs/
+
+# local Codex settings (absolute paths, like .mcp.json)
+.codex/
