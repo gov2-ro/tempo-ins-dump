@@ -94,31 +94,82 @@
    },
    "evidence": {
     "corpus_equals_retained_csv": true,
-    "independent_ins_cell": null,
-    "open": "INS Total cells for these counties not retained; national 2025 differs from the INS cell fetched 2026-10-05 by 7,120"
+    "independent_ins_cell": {
+     "fetched": "2026-10-12",
+     "dir": "tempo-gen-20261005/reports/pa00-reference-cells",
+     "file": "POP105A-total-counties-2012-2025.csv",
+     "equal": "all 43 areas 2012-2023",
+     "differ": "2024-2025: INS revised POP105A on 10-09-2026 (retained export 02-09-2025)",
+     "ins_2024": {
+      "Cluj": 693413,
+      "Iasi": 778694,
+      "Municipiul Bucuresti": 1721475
+     },
+     "ins_2025": {
+      "Cluj": 697374,
+      "Iasi": 780271,
+      "Municipiul Bucuresti": 1709191,
+      "national": 19043151
+     }
+    },
+    "open": "refresh POP105A (INS now publishes 1 Jan 2026 and revised 2024-2025)"
    }
   },
   "Q2": {
-   "status": "blocked",
+   "status": "candidate",
    "version": 1,
    "source": {
     "dataset": "FOM106E_judete",
     "parent": "FOM106E"
    },
-   "blocker": "source export has no TOTAL-activity x Total-sex cells; app refuses (missing_weights), approximation is unweighted"
+   "method": "reconstructed by recipe net_earnings_county",
+   "evidence": {
+    "independent_ins_cell": {
+     "fetched": "2026-10-12",
+     "dir": "tempo-gen-20261005/reports/pa00-reference-cells",
+     "file": "FOM106E-total-counties-2008-2024.csv",
+     "within": "1.2 lei, 714/714",
+     "rounded_equal": "649/714",
+     "ins_2024": {
+      "Cluj": 5921,
+      "Iasi": 5098,
+      "Municipiul Bucuresti": 6730,
+      "national": 4959
+     }
+    },
+    "open": "owner decision: serve INS Total cells instead of the reconstruction"
+   }
   },
   "Q3": {
-   "status": "blocked",
+   "status": "candidate",
    "version": 1,
    "source": {
     "dataset": "SOM103A_judete",
     "parent": "SOM103A"
    },
-   "blocker": "source export has no Total-sex rate; app refuses (missing_weights) or shows a labelled unweighted mean",
    "decision": {
     "source": "SOM103A",
     "frequency": "annual",
     "decided": "2026-10-11"
+   },
+   "method": "reconstructed by recipe registered_unemployment_county",
+   "evidence": {
+    "independent_ins_cell": {
+     "fetched": "2026-10-12",
+     "dir": "tempo-gen-20261005/reports/pa00-reference-cells",
+     "file": "SOM103A-total-counties-1991-2024.csv",
+     "within": "0.09 pp, 615/615 (2010-2024)",
+     "rounded_equal": "512/615",
+     "ins_2024": {
+      "Cluj": 1.4,
+      "Iasi": 3.6,
+      "Municipiul Bucuresti": 0.7,
+      "national": 3.3,
+      "Teleorman": 9.6
+     },
+     "note": "reconstructed 2024 ranking order differs from INS; INS now publishes 2025"
+    },
+    "open": "owner decision: serve INS Total cells instead of the reconstruction"
    }
   },
   "Q4": {
@@ -148,7 +199,26 @@
    "evidence": {
     "numerator_national_2024": 30837328,
     "ins_TUR105C_total_2024": 30837328,
-    "ins_cell_fetched": "2026-10-05"
+    "ins_cell_fetched": "2026-10-05",
+    "county_numerator_ins_cells": {
+     "fetched": "2026-10-12",
+     "dir": "tempo-gen-20261005/reports/pa00-reference-cells",
+     "file": "TUR105D-total-counties-2012-2024.csv",
+     "equal": "559/559 county-years 2012-2024"
+    },
+    "with_ins_denominators_2024": {
+     "ranking_identical": true,
+     "max_abs_diff": 0.0005,
+     "changed_at_3_decimals": {
+      "Valcea": 4.263,
+      "Caras-Severin": 2.709,
+      "Municipiul Bucuresti": 2.306,
+      "Harghita": 1.818,
+      "Cluj": 1.743,
+      "Maramures": 1.39
+     }
+    },
+    "open": "INS now publishes 2025 stays (TUR105D updated 08-04-2026)"
    },
    "values_2024": [
     {

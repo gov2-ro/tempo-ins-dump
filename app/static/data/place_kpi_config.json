@@ -1,8 +1,8 @@
 {
   "_notes": {
     "schema": "Per KPI: key (stable id), label/label_en, aliases (old labels still accepted by the baselines route), parquet, unit/unit_en/unit_kind (count|percent_rate|per_mille_rate|currency), source_code/source_title(_en), definition(_en), measure additive|non_additive, partitions = columns collapsed (declared complete disjoint partitions, FIX-02 declared_partitions), weights = aligned weight parquet for non-additive measures, allow_approximation = permit a named unweighted mean when no weights exist, suppress = reason the KPI is not shown.",
-    "unemployment": "SOM103A has only Masculin/Feminin rows. The both-sexes rate is the registered_unemployment_county recipe (SOM101E year-end counts recover the active population by sex); Bucharest lacks SOM101E rows in the fetch and is omitted with its range.",
-    "wage": "FOM106E has no all-activities total row; the net_earnings_county recipe weights CAEN sections × sex by FOM104F employees and reproduces the INS national total.",
+    "unemployment": "Our SOM103A export has only Masculin/Feminin rows (INS publishes Total; the fetch dropped it). The both-sexes rate is the registered_unemployment_county recipe (SOM101E year-end counts recover the active population by sex); Bucharest lacks SOM101E rows in the fetch and is omitted with its range.",
+    "wage": "Our FOM106E export has no all-activities total row (INS publishes it; the fetch dropped it); the net_earnings_county recipe weights CAEN sections × sex by FOM104F employees and reproduces the INS national total.",
     "rates": "Birth/death rates are published for Urban/Rural only; they are combined with POP105A resident-population weights per residence area and year (so periods before POP105A starts in 2012 are not shown)."
   },
   "county": [
@@ -201,8 +201,8 @@
       "source_code": "SOM103A",
       "source_title": "Rata șomajului pe sexe, macroregiuni, regiuni de dezvoltare și județe",
       "source_title_en": "Unemployment rate by gender, macroregions, development regions and counties",
-      "definition": "Rata șomajului înregistrat (șomeri înregistrați în evidența agențiilor de ocupare, față de populația activă civilă), publicată separat pe sexe. Nu există rând pentru ambele sexe.",
-      "definition_en": "Registered unemployment rate (unemployed persons registered with the employment agencies, relative to the civilian active population), published separately for males and females. There is no both-sexes row.",
+      "definition": "Rata șomajului înregistrat (șomeri înregistrați în evidența agențiilor de ocupare, față de populația activă civilă), în datele noastre doar pe sexe. INS publică și rata pentru ambele sexe, dar descărcarea noastră nu o conține.",
+      "definition_en": "Registered unemployment rate (unemployed persons registered with the employment agencies, relative to the civilian active population), available in our data only for males and females. INS also publishes the both-sexes rate, but our download does not include it.",
       "measure": "non_additive",
       "partitions": [
         "SEX"
@@ -220,7 +220,7 @@
       "category": "Muncă",
       "source_code": "FOM106E",
       "suppress": "no_all_activities_total",
-      "suppress_note": "FOM106E has no all-activities total row (only CAEN sections/divisions by sex); averaging them would not be the average wage."
+      "suppress_note": "Our FOM106E export has no all-activities total row (INS publishes it; the fetch dropped it; only CAEN sections/divisions by sex); averaging them would not be the average wage."
     },
     {
       "key": "live_births",
@@ -355,8 +355,8 @@
       "source_code": "SOM103A",
       "source_title": "Rata șomajului pe sexe, macroregiuni, regiuni de dezvoltare și județe",
       "source_title_en": "Unemployment rate by gender, macroregions, development regions and counties",
-      "definition": "Rata șomajului înregistrat (șomeri înregistrați în evidența agențiilor de ocupare, față de populația activă civilă), publicată separat pe sexe. Nu există rând pentru ambele sexe.",
-      "definition_en": "Registered unemployment rate (unemployed persons registered with the employment agencies, relative to the civilian active population), published separately for males and females. There is no both-sexes row.",
+      "definition": "Rata șomajului înregistrat (șomeri înregistrați în evidența agențiilor de ocupare, față de populația activă civilă), în datele noastre doar pe sexe. INS publică și rata pentru ambele sexe, dar descărcarea noastră nu o conține.",
+      "definition_en": "Registered unemployment rate (unemployed persons registered with the employment agencies, relative to the civilian active population), available in our data only for males and females. INS also publishes the both-sexes rate, but our download does not include it.",
       "measure": "non_additive",
       "partitions": [
         "SEX"
@@ -374,7 +374,7 @@
       "category": "Muncă",
       "source_code": "FOM106E",
       "suppress": "no_all_activities_total",
-      "suppress_note": "FOM106E has no all-activities total row (only CAEN sections/divisions by sex); averaging them would not be the average wage."
+      "suppress_note": "Our FOM106E export has no all-activities total row (INS publishes it; the fetch dropped it; only CAEN sections/divisions by sex); averaging them would not be the average wage."
     },
     {
       "key": "live_births",

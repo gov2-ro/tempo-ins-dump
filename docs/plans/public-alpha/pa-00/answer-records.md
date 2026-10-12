@@ -1,19 +1,19 @@
 # PA-00 answer records, Q1–Q5
 
-Version 1, 2026-10-11, generation `a6737a263a34…` (see [baseline](baseline.md)).
+Version 1, 2026-10-11 (INS reference cells added 2026-10-12), generation `a6737a263a34…` (see [baseline](baseline.md)).
 Machine-readable expectations: [answers.json](answers.json).
 
 **No record is `verified`.** Verification needs a reviewer and an independent INS
-cell. INS could not be reached today, and the retained exports contain no total
-rows (stage 6 drops options labelled "Total"). Values below come from the corpus
-and were cross-checked against the retained CSVs. They are not golden numbers.
+cell. The independent cells now exist (see
+[INS reference cells](#ins-reference-cells-2026-10-12)); a reviewer has not signed
+any record. Values below come from the corpus. They are not golden numbers.
 
 | Q | Status | Blocker / next step |
 |---|---|---|
-| Q1 population | `candidate` | Fetch INS Total cells for Cluj/Iași/Bucharest 2012–2025; explain the national 7,120 gap |
-| Q2 net earnings | `candidate` (reconstructed) | Recipe `net_earnings_county` reproduces the INS national total. Fetch the county Total cells to confirm counties |
-| Q3 unemployment | `candidate` (reconstructed) | Recipe `registered_unemployment_county` reproduces the regional rates by sex. Bucharest is shown only as a range (0.6–0.7) until SOM101E is re-fetched |
-| Q4 tourism intensity | `candidate`, **feasible** | Denominator approved (1 January). Still needs county denominators verified, as in Q1 |
+| Q1 population | `candidate`, evidence complete to 2023 | 2012–2023 equal INS in all 43 areas. **INS revised 2024–2025 on 10-09-2026** and added 1 Jan 2026; refresh POP105A, then review |
+| Q2 net earnings | `candidate` (reconstructed) | Within 1.2 lei of INS's county total everywhere, but equal after rounding in only 649/714 cells (Iași 2024: 5,097 vs INS 5,098). Decide: serve INS's own Total cells |
+| Q3 unemployment | `candidate` (reconstructed) | Within 0.09 pp, equal after rounding in 512/615 cells; the 2024 ranking order differs from INS. Bucharest 2024 = **0.7** (INS). Same decision as Q2. INS also has 2025 now |
+| Q4 tourism intensity | `candidate`, **feasible** | Numerator equals INS in all 559 county-year cells. 2024 ranking unchanged with INS's revised denominators; 6 areas move by 0.001. INS has 2025 stays now |
 | Q5 share/reproduce | `candidate` | Checklist below; acceptance is PA-03 |
 
 **Decisions (owner, 2026-10-11):** the reference-cell fetch is approved; Q3 uses
@@ -31,7 +31,7 @@ the corpus would be a separate FIX-03-style repair.
 | SOM103A | Total sex × {TOTAL, 42 counties} × 1991–2024 | 1 |
 | TUR105D | Total × Total × {TOTAL, 42 counties} × 2012–2024 (numerator per county) | 1 |
 
-Spec: [reference-cells.json](reference-cells.json). Command (not yet run: INS
+Spec: [reference-cells.json](reference-cells.json). Run on 2026-10-12 (INS was
 offline on 2026-10-11):
 
 ```bash
@@ -57,18 +57,61 @@ nationally, with Cluj 1.6 and Teleorman 8.3, from SOM101B_judete. SOM101B carrie
 Those figures were the women's rate, not the both-sexes rate. The national
 both-sexes 3.3 % cannot be checked from downloaded data without Bucharest.
 
-What the INS fetch still adds:
-- Q3: Bucharest's both-sexes rate (or its SOM101E rows) and a national check;
-- independent county-level confirmation of both reconstructions and of the
-  Q1/Q4 population sums;
-- an explanation for the 7,120 national population gap.
-
-Only Bucharest's Q3 value is blocked. Rounding limits the reconstructions:
+The INS reference cells (next section) settle Bucharest's Q3 value and check both
+reconstructions by county. Rounding limits the reconstructions:
 earnings are published in whole lei, and rates to 0.1. A sex's recovered active
 population is U / rate, so its error is up to ±0.05 / rate (±8 % at 0.6 %). That
 moves a county's both-sexes rate only within its two sex rates. The recipes are
 labelled "reconstituit" and carry these checks as tests
 (`tests/test_pa03_recipe_kinds.py`).
+
+## INS reference cells (2026-10-12)
+
+Four requests, all `labels_ok`, no blank cells. Evidence directory
+`tempo-gen-20261005/reports/pa00-reference-cells/`: the CSVs, `manifest.json`
+(payload, fetch time, sha256), INS's current matrix metadata
+(`ins-metadata-2026-10-12/`), and `compare_pa00.py` → `compare.json`.
+
+| Cells | sha256 |
+|---|---|
+| `POP105A-total-counties-2012-2025.csv` (602) | `46fd2812c136407a34b73469b36b1e835a643ad6fe945c331dc0b885f2d805b5` |
+| `FOM106E-total-counties-2008-2024.csv` (731) | `595d88ac9b0e8e77907f026a402b6ccf5789197d5ad95e1a0acec75ce22f49f2` |
+| `SOM103A-total-counties-1991-2024.csv` (1,456) | `3fd7eb2ac9f2ec0469d63b865b9fc21b86cab225970dd7351b0b0d36b20d81f0` |
+| `TUR105D-total-counties-2012-2024.csv` (559) | `a3d8442508e43ad487e60959d5b00c150d5af5f6e531081eb2acd53d5b616096` |
+
+| Check | Result |
+|---|---|
+| Q1 POP105A, summed partition vs INS Total, 43 areas | 2012–2023: **516/516 equal**. 2024: 43 differ (−321…+309). 2025: 43 differ (national −7,120). INS's county cells sum to its national cell in every year |
+| Q4 TUR105D, summed partition vs INS Total | **559/559 equal**, 2012–2024 |
+| Q4 2024 ratio, INS cells on both sides | Same ranking for 42 areas; max difference 0.0005. At 3 decimals: Vâlcea 4.263, Caraș-Severin 2.709, Bucharest 2.306, Harghita 1.818, Cluj 1.743, Maramureș 1.390 |
+| Q2 `net_earnings_county` vs INS Total, 2008–2024 | all 714 within ±1.2 lei; **649/714** equal once rounded to whole lei. 2024 misses: Iași (5,097 vs 5,098), Bistrița-Năsăud, Satu Mare, Botoșani, Teleorman, Dolj (all ±1) |
+| Q3 `registered_unemployment_county` vs INS Total-sex rate, 2010–2024 | all 615 within ±0.09 pp; **512/615** equal once rounded to 0.1. 10 misses in 2024 (e.g. Dolj 8.7 vs 8.8, Ilfov 0.3 vs 0.4), so the reconstructed ranking order differs from INS's. INS publishes 1991–2024; the recipe covers 2010–2024 only (SOM101E) |
+
+**Why Q1 2024–2025 differ: a source revision, not a corpus defect.** INS's
+current POP105A metadata says last updated **10-09-2026**; our export is the
+02-09-2025 version. INS now publishes 1 January 2026 and revised 2024 and 2025.
+The 2025 national gap (19,036,031 vs 19,043,151) is that revision. Earlier years
+are unchanged.
+
+**The generation is behind INS for three of the four sources.** Current INS
+metadata (2026-10-12) vs retained:
+
+| Matrix | Retained `ultimaActualizare` | INS now | New periods |
+|---|---|---|---|
+| POP105A | 02-09-2025 | 10-09-2026 | 1 Jan 2026; 2024–2025 revised |
+| SOM103A | 15-10-2025 | 09-02-2026 | 2025 |
+| TUR105D | 02-04-2025 | 08-04-2026 | 2025 |
+| FOM106E | 04-09-2025 | 04-09-2025 | none |
+
+**What this means for the records.** Q2 and Q3 reconstructions are close but are
+not INS's published statistic: the rounded value differs in 9 % (Q2) and 17 % (Q3)
+of cells, and a ranking question is sensitive to that. INS publishes the exact
+cell. Two owner decisions are open:
+1. **Refresh** POP105A, SOM103A and TUR105D in a new generation (re-fetch, stages
+   B–D on a copy), so the latest year is 2025/2026 and Q1's 2024–2025 match INS.
+2. **Serve INS's Total cells** for Q2/Q3 (keep "Total" options at fetch for these
+   matrices, or register the reference cells as a reviewed source) and keep the
+   reconstructions as cross-checks. Either way is a FIX-03-style corpus change.
 
 ## Source files
 
@@ -118,10 +161,11 @@ Recompute with the `shasum` line in [Reproduction](#reproduction). Retained INS 
   quality report.* INS says 2023 was revised and earlier years are final.
 - **Verification:** **Observed:** 42 county-year sums equal the retained CSV
   exactly. The partition is complete by construction (groups tile 0–85+, both
-  sexes, both residence types; Bucharest has no rural rows). **Missing:** an INS
-  Total cell per county. National 2025: ours 19,036,031, INS cell (fetched
-  2026-10-05) 19,043,151. Unexplained. Possibly a later revision; retained
-  metadata is the 2 Sep 2025 version. Tolerance for counts: 0.
+  sexes, both residence types; Bucharest has no rural rows). **INS Total cells
+  (2026-10-12):** equal for every area 2012–2023. 2024–2025 differ because INS
+  revised them on 10-09-2026 (Cluj 2024 693,413, 2025 697,374; Iași 778,694 /
+  780,271; Bucharest 1,721,475 / 1,709,191). Tolerance for counts: 0, so 2024–2025
+  need a POP105A refresh.
 - **Quality:** unique grain (no duplicate keys); not in the conflicting-grain
   list; source-total check `match` only under a 0.5 % tolerance (see above).
 - **Interaction:** line chart 2012–2025 with the break marked; latest value and
@@ -136,7 +180,7 @@ Recompute with the `shasum` line in [Reproduction](#reproduction). Retained INS 
 
 ## Q2 — County net earnings comparison
 
-- **Identity:** Q2 v1, **`blocked`**.
+- **Identity:** Q2 v1, `candidate` (reconstructed by recipe; was `blocked`).
 - **Intent:** RO “Cum se compară salariul mediu net în Cluj, Iași și București?”,
   “salariu mediu net cluj iasi bucuresti”. EN “Compare average net earnings in
   Cluj, Iași and Bucharest”, “average salary by county”. Ambiguity: net vs gross
@@ -151,15 +195,16 @@ Recompute with the `shasum` line in [Reproduction](#reproduction). Retained INS 
   returns an unweighted mean (Cluj 5,522, Iași 4,880, Bucharest 6,890 for 2024).
   That is not the statistic. The place page omits the KPI with a note blaming
   the source. It should blame our fetch.
-- **Unblock:** fetch the reference cells (1 request), then approve the record.
-  Latest common period in this generation would be 2024. INS national TOTAL 2024 =
-  4,959 lei (retained cell).
+- **INS Total cells (2026-10-12):** 2024 Cluj **5,921**, Iași **5,098**,
+  Bucharest **6,730**, national 4,959. The recipe gives 5,921 / 5,097 / 6,730.
+- **Unblock:** decide whether to serve INS's Total cells (see
+  [INS reference cells](#ins-reference-cells-2026-10-12)), then approve the record.
 - **Negative cases:** gross vs net; averaging divisions; mixing FOM106A Rev.1 with
   FOM106E Rev.2 across 2008; a county with a missing year.
 
 ## Q3 — Registered unemployment ranking
 
-- **Identity:** Q3 v1, **`blocked`**.
+- **Identity:** Q3 v1, `candidate` (reconstructed by recipe; was `blocked`).
 - **Intent:** RO “În ce județe este cea mai mare rată a șomajului înregistrat?”,
   “somaj judete”. EN “Which counties have the highest registered unemployment
   rate?”, “unemployment rate by county”. Ambiguity: registered (ANOFM) vs ILO/BIM
@@ -175,7 +220,10 @@ Recompute with the `shasum` line in [Reproduction](#reproduction). Retained INS 
 - **Universe:** 41 counties + Municipiul Bucuresti (42). Bucharest was labelled
   "Mun. Bucuresti -incl. SAI" for 1991–1996 only; it needs one identity across
   that relabelling.
-- **Unblock:** fetch the reference cells (1 request), rank 42 areas in 2024,
+- **INS Total-sex cells (2026-10-12), 2024:** Teleorman 9.6, Vaslui 9.2, Dolj 8.8,
+  Mehedinți 8.5, Suceava 6.6 … Timiș 1.1, Bucharest **0.7**, Ilfov 0.4. Cluj 1.4,
+  Iași 3.6, national 3.3. INS now also has 2025.
+- **Unblock:** decide whether to serve INS's Total cells, then rank 42 areas,
   percent with one decimal as published, ties broken by area name, changes in
   percentage points.
 - **Negative cases:** BIM rate; an unweighted sex average; ranking each county's
@@ -207,7 +255,9 @@ Recompute with the `shasum` line in [Reproduction](#reproduction). Retained INS 
   **30,837,328**, equal to the INS `TUR105C` Total cell (fetched 2026-10-05). That
   is independent evidence that types × tourist types × counties is a complete,
   disjoint partition for 2024. Unique grain; 42 areas; 5 zero cells, no nulls.
-  Denominator: same status as Q1 (no county INS cell yet).
+  **INS county cells (2026-10-12):** numerator equals INS in all 559 county-year
+  cells 2012–2024. Denominator: as Q1 (2024 revised by INS; the ranking is
+  unchanged, 6 areas move by 0.001).
 - **Candidate result 2024** (feasibility only, not approved): Constanța 8.465,
   Brașov 5.270, Vâlcea 4.264, Covasna 3.123, Bihor 2.784 … Bucharest 2.305, Cluj
   1.742, Iași 0.774 … Teleorman 0.019. All 42 areas match on both sides; no ties

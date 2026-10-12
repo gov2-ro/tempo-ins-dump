@@ -1,5 +1,27 @@
 # Activity History
 
+## 2026-10-12 — PA-00: INS reference cells fetched and compared
+
+INS came back online, so the approved fetch ran: 4 pivot requests (POP105A,
+FOM106E, SOM103A, TUR105D Total cells for TOTAL + 42 counties), all labels
+confirmed, retained with sha256 in `tempo-gen-20261005/reports/pa00-reference-cells/`
+together with INS's current matrix metadata and the comparison (`compare_pa00.py`
+→ `compare.json`). Nothing was written to the corpus.
+
+Results: Q1 population equals INS in every area 2012–2023; Q4's numerator equals
+INS in all 559 county-years. Q1 2024–2025 differ because INS revised POP105A on
+10-09-2026 — that explains the 7,120 national gap. The Q2/Q3 reconstructions stay
+within 1.2 lei / 0.09 pp of INS's Total cells but round differently in 9 % / 17 % of
+cells (Iași 2024 earnings 5,097 vs 5,098; the 2024 unemployment ranking order
+differs). Bucharest's 2024 rate is 0.7.
+
+Non-obvious: the generation is behind INS for three of the four sources
+(2025/2026 periods now published), so "latest year" answers are stale. Recorded two
+owner decisions in the answer records and backlog — refresh those matrices, and
+serve INS's own Total cells for Q2/Q3 instead of the reconstruction. Updated the
+recipe status texts and the place-KPI definitions that said INS has no total.
+No record is marked verified (needs a reviewer).
+
 ## 2026-10-11 — Time × category tiles: lines, honest stacking, a view toggle
 
 This follows the category × category bars toggle (`2f45ac8`) to the tiles with

@@ -6,8 +6,8 @@
    "version": 1,
    "question": "Q4",
    "status": {
-    "ro": "în verificare: numitorul (populația la 1 ianuarie) e aprobat; valorile pe județe nu au fost încă verificate cu celulele INS",
-    "en": "under review: the denominator (population on 1 January) is approved; county values not yet checked against INS cells"
+    "ro": "în verificare: numitorul (populația la 1 ianuarie) e aprobat; înnoptările pe județe sunt egale cu totalurile INS (2012–2024); populația pe județe e egală cu totalurile INS până în 2023, iar 2024–2025 au fost revizuite de INS după descărcarea noastră",
+    "en": "under review: the denominator (population on 1 January) is approved; county stays equal the INS totals (2012–2024); county population equals the INS totals up to 2023, and INS revised 2024–2025 after our download"
    },
    "name": {
     "ro": "Intensitatea turistică: înnoptări pe locuitor",
@@ -94,8 +94,8 @@
    "question": "Q2",
    "kind": "weighted_mean",
    "status": {
-    "ro": "reconstituit din ponderi publicate de INS; verificat la nivel național (2024: 4.959 lei = totalul INS); valorile pe județe nu au fost încă verificate cu celulele INS",
-    "en": "reconstructed from INS's published weights; checked nationally (2024: 4,959 lei = the INS total); county values not yet checked against INS cells"
+    "ro": "reconstituit din ponderi publicate de INS; verificat la nivel național (2024: 4.959 lei = totalul INS); pe județe, 2008–2024, diferă de totalul publicat de INS cu cel mult 1,2 lei (rotunjirea câștigurilor publicate)",
+    "en": "reconstructed from INS's published weights; checked nationally (2024: 4,959 lei = the INS total); by county, 2008–2024, within 1.2 lei of the total INS publishes (rounding of the published earnings)"
    },
    "name": {
     "ro": "Câștigul salarial mediu net lunar, pe județe",
@@ -175,8 +175,8 @@
    "question": "Q3",
    "kind": "rate_from_counts",
    "status": {
-    "ro": "reconstituit din ratele pe sexe și numărul de șomeri la sfârșitul anului; metoda reproduce ratele regionale publicate pe sexe (2022–2024, la rotunjire); Bucureștiul nu are numărul de șomeri în datele descărcate și apare doar ca interval; valorile pe județe nu au fost încă verificate cu celulele INS",
-    "en": "reconstructed from the rates by sex and the year-end registered unemployed; the method reproduces the published regional rates by sex (2022–2024, to rounding); Bucharest lacks the unemployed count in the downloaded data and is shown only as a range; county values not yet checked against INS cells"
+    "ro": "reconstituit din ratele pe sexe și numărul de șomeri la sfârșitul anului; metoda reproduce ratele regionale publicate pe sexe (2022–2024, la rotunjire); Bucureștiul nu are numărul de șomeri în datele descărcate și apare doar ca interval; pe județe, 2010–2024, diferă de rata publicată de INS cu cel mult 0,09 puncte procentuale, deci rotunjit poate diferi cu 0,1",
+    "en": "reconstructed from the rates by sex and the year-end registered unemployed; the method reproduces the published regional rates by sex (2022–2024, to rounding); Bucharest lacks the unemployed count in the downloaded data and is shown only as a range; by county, 2010–2024, within 0.09 percentage points of the rate INS publishes, so it can differ by 0.1 once rounded"
    },
    "name": {
     "ro": "Rata șomajului înregistrat (ambele sexe), pe județe",
