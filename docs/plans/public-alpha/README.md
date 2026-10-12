@@ -51,10 +51,10 @@ and completed work must not be implemented again.
 
 | Package | Deliverable | Dependencies | Completion evidence |
 |---|---|---|---|
-| [PA-00](00-baseline-and-answer-key.md) | Reproducible baseline and reviewed answers | None | Source-backed answer records and exposure inventory. **In progress:** [baseline](pa-00/baseline.md), [records](pa-00/answer-records.md) |
+| [PA-00](00-baseline-and-answer-key.md) | Reproducible baseline and reviewed answers | None | Source-backed answer records and exposure inventory. **Done 2026-10-12:** Q1–Q4 verified against INS cells and owner-reviewed ([records](pa-00/answer-records.md)); Q5 acceptance is PA-03 |
 | [PA-01](01-consistent-answers.md) | Consistent query decisions and rendered facts | PA-00 baseline; answer fixtures as they are verified | Numerical parity, quality refusals and browser race tests. **In progress:** [record](pa-01/record.md) |
 | [PA-02](02-discovery-and-county-journey.md) | Find, understand and compare the reviewed indicators | PA-00 answers; PA-01 contract before integration | Reviewed search results and complete county journeys. **In progress:** [record](pa-02/record.md) |
-| [PA-03](03-tourism-and-evidence.md) | Tourism intensity and portable evidence | Q4 source approval; PA-01 contract; PA-02 selection state | Independent recalculation and share/export round trips. **Implemented, pending Q4 source gate:** [record](pa-03/record.md) |
+| [PA-03](03-tourism-and-evidence.md) | Tourism intensity and portable evidence | Q4 source approval; PA-01 contract; PA-02 selection state | Independent recalculation and share/export round trips. **Implemented; Q4 source gate passed 2026-10-12:** [record](pa-03/record.md) |
 | [PA-04](04-release-and-user-validation.md) | Tested release candidate and formative user evidence | Integrated PA-01/02/03; PA-00 manifest | Image/resource checks, session findings and release record. **In preparation:** [record](pa-04/release-record.md) |
 
 Execute small functional increments in this order:

@@ -12,6 +12,9 @@ What a dimension's options *mean*, as opposed to how many there are:
                    counties), so it is a drill-down, not a filter dropdown.
   additive         whether options can be SUMmed, decided per dataset rather
                    than guessed from the unit type.
+  source_mismatch  INS's own options of this dimension do not add up to INS's
+                   Total (kpi_dimension_checks, scripts/check-kpi-totals.py dims):
+                   it must not be collapsed by summing, whatever the profiler says.
 
 Every accessor returns None/empty when the profiler has no verified answer, so
 callers fall back to their existing behaviour and an unprofiled dataset renders
@@ -78,10 +81,31 @@ def load(conn, matrix_code: str) -> dict:
                 'source': source,
             }
 
+    for col, info in _source_mismatches(conn, matrix_code).items():
+        out.setdefault(col, {'levels': [], 'default_level': None, 'n_levels': 0,
+                             'aggregate_value': None, 'additive': None, 'nests_in': None,
+                             'discrimination': None, 'dominance': None, 'confidence': None,
+                             'source': None})['source_mismatch'] = info
+
     if len(_cache) > CACHE_MAX:
         _cache.clear()
     _cache[matrix_code] = out
     return out
+
+
+def _source_mismatches(conn, matrix_code: str) -> dict:
+    """{dim_column: {period, parts_sum, total}} where INS's parts miss INS's total."""
+    try:
+        rows = conn.execute(
+            "SELECT dim_column, period, parts_sum, total FROM kpi_dimension_checks "
+            "WHERE matrix_code = ? AND status = 'mismatch'", [matrix_code]).fetchall()
+    except Exception:                    # older generations have no such table
+        return {}
+    return {c: {'period': p, 'parts_sum': s, 'total': tot} for c, p, s, tot in rows}
+
+
+def source_mismatch(struct: dict, col: str) -> dict | None:
+    return ((struct or {}).get(col) or {}).get('source_mismatch')
 
 
 def _verified_levels(struct: dict, col: str) -> list:

@@ -29,6 +29,8 @@ Reasons (`reason`, machine-readable)
     slice_value_missing     a requested filter value is not in the data
     declared_partition_invalid  curated partition has total-like/tree labels or
                             a non-additive measure
+    source_total_mismatch   INS's own options of the dimension do not add up to
+                            INS's Total (kpi_dimension_checks): never summed
     ambiguous_slice         (headlines) more rows than the declared method allows
     no_data                 (headlines) slice returned nothing
     comparator_missing / comparator_zero   (changes) no usable comparison base
@@ -497,6 +499,9 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
                 continue
             if _equals_level(struct, col, matched):
                 # exactly one verified level: a complete partition, not a slice
+                if dstruct.source_mismatch(struct, col):
+                    # INS's own parts of this dimension miss its total
+                    return _unavailable('source_total_mismatch', col, audit, out_filters)
                 summed = True
                 out_levels[col] = _applied_level(struct, col, sel)
                 note(col, 'level', 'verified')
@@ -517,6 +522,9 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
             out_filters[col] = [dv if dv is not None else (o.get('label') or '')]
             note(col, 'pinned_aggregate', _total_verif(dim, struct))
             continue
+
+        if dstruct.source_mismatch(struct, col):
+            return _unavailable('source_total_mismatch', col, audit, out_filters)
 
         verified = dstruct._verified_levels(struct, col)
         if verified:

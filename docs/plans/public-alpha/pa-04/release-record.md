@@ -77,9 +77,9 @@ Fixed during the workload:
 
 ## Open gates
 
-1. **INS reference cells:** Q2/Q3 are blocked and Q1/Q4 denominators are not
-   verified. INS was unreachable all day; the fetch script and spec are ready
-   (`pa-00/reference-cells.json`).
+1. ~~**INS reference cells**~~ — **closed 2026-10-12:** Q1–Q4 verified against INS
+   cells and owner-reviewed. The candidate moves to the refreshed copy
+   `tempo-gen-20261012` (see the release update below).
 2. **Image and resource gate:** `release-check.py --docker` plus the workload
    under 512 MiB / 1 worker on Linux. The local RSS peak (1.2 GiB) makes this a
    likely blocker until measured.

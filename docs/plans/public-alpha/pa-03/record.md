@@ -53,8 +53,10 @@ commit).
 
 ## Remaining restrictions
 
-- **Not yet verified:** the Q4 county denominators against INS cells (the
-  fetch is pending; INS offline). The recipe page shows this status.
+- **Verified 2026-10-12:** Q4 numerator (602 county-years) and denominator (645
+  area-years) equal INS's own Total cells; the owner approved the definition,
+  2 decimals and the coverage label. Q2/Q3 recipes now serve INS's published
+  totals with the reconstruction as a cross-check (see the PA-00 records).
 - **Comparison:** no compatibility preview for arbitrary pairs; the recipe is
   the one reviewed join.
 - **Evidence for the dataset page:** it follows the selection headline's

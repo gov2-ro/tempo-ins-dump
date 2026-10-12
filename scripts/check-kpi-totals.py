@@ -18,14 +18,23 @@ split fixed (e.g. UNIT_MEASURE) recovered by matching sampled child rows to the
 parent parquet. A KPI is `unresolved` when that, a value's option or a Total option
 cannot be determined; nothing is guessed.
 
+  dims     for KPIs that disagree with INS, find which summed dimension is not a
+           partition: per dimension, ask INS for its Total and the very options the
+           KPI summed (other summed dimensions at Total, pins as in the KPI) and
+           compare INS's own parts with INS's own total. Stored as
+           kpi_dimension_checks; the app refuses to collapse a mismatched dimension.
+
   python scripts/check-kpi-totals.py collect --data-dir DIR --out kpis.json [--codes-file F]
   python scripts/check-kpi-totals.py check --data-dir DIR --kpis kpis.json --cache DIR \
       --out report.json [--md report.md] [--tol 0.005] [--delay 0.7] [--limit N] [--offline]
       [--write-db COPY/corpus/metadata.duckdb]
+  python scripts/check-kpi-totals.py dims --data-dir DIR --kpis kpis.json --cache DIR \
+      --out dims.json [--tol 0.005] [--delay 0.7] [--offline] [--write-db COPY/corpus/metadata.duckdb]
 """
 import argparse
 import collections
 import hashlib
+import io
 import json
 import os
 import re
@@ -151,6 +160,17 @@ class Resolver:
 
     def resolve(self, code, kpi):
         """One INS cell for a KPI: {'matrix', 'ids', 'labels'} or {'unresolved': reason}."""
+        got = self.resolve_choice(code, kpi)
+        if "unresolved" in got:
+            return got
+        meta, choice, parent = got["meta"], got["choice"], got["parent"]
+        dims = meta["dimensionsMap"]
+        return {"matrix": parent, "ids": [choice[d["dimCode"]]["nomItemId"] for d in dims],
+                "labels": [choice[d["dimCode"]]["label"].strip() for d in dims],
+                "details": {k: meta["details"].get(k) for k in ("matMaxDim", "matUMSpec", "matRegJ")}}
+
+    def resolve_choice(self, code, kpi):
+        """{'meta', 'choice' (dim_code -> option), 'parent', 'pcols'} or {'unresolved': reason}."""
         parent = self.parent.get(code, code)
         meta_f = self.data_dir / "2-metas" / "ro" / f"{parent}.json"
         if not meta_f.exists():
@@ -201,10 +221,21 @@ class Resolver:
         missing = [d["label"] for d in meta["dimensionsMap"] if d.get("dimCode") not in choice]
         if missing:
             return {"unresolved": f"dimension_not_covered:{missing[0][:40]}"}
-        dims = meta["dimensionsMap"]
-        return {"matrix": parent, "ids": [choice[d["dimCode"]]["nomItemId"] for d in dims],
-                "labels": [choice[d["dimCode"]]["label"].strip() for d in dims],
-                "details": {k: meta["details"].get(k) for k in ("matMaxDim", "matUMSpec", "matRegJ")}}
+        return {"meta": meta, "choice": choice, "parent": parent, "pcols": pcols}
+
+    def members(self, code, kpi, col, opts):
+        """The options the KPI summed over `col`: its level filter, else every value
+        the dataset has there. None when one cannot be matched to the metadata."""
+        vals = kpi["filters"].get(col)
+        if not vals:
+            vals = [r[0] for r in self.pcon.execute(
+                f'SELECT DISTINCT "{col}" FROM read_parquet(?) WHERE "{col}" IS NOT NULL',
+                [str(self.pq / f"{code}.parquet")]).fetchall()]
+        out = [_match_option(opts, v) for v in vals]
+        if any(o is None for o in out):
+            return None
+        # deterministic order (DISTINCT has none): the request and its cache key
+        return sorted({o["nomItemId"]: o for o in out}.values(), key=lambda o: o["nomItemId"])
 
 
 # ------------------------------------------------------------------ fetch
@@ -224,6 +255,8 @@ def fetch_cell(q, cache: Path, delay: float, offline: bool):
         "Content-Type": "application/json", "Referer": "http://statistici.insse.ro:8077/tempo-online/"})
     r.raise_for_status()
     text = r.content.decode("utf-8", errors="replace")
+    if not text.strip():
+        raise RuntimeError("empty answer from INS")     # never cache a failed answer
     f.write_text(text, encoding="utf-8")
     return text, False
 
@@ -309,6 +342,159 @@ def summarize(results: dict, tol: float) -> dict:
             "rel_quantiles": {q: rel[int(q * (len(rel) - 1))] for q in (0.5, 0.9, 0.95, 0.99)} if rel else {}}
 
 
+# ------------------------------------------------------------------ dims
+MAX_DIM_MEMBERS = 400        # a locality list is not tested this way (and nests in counties)
+
+
+def fetch_cells(matrix, ids_per_dim, details, cache: Path, delay: float, offline: bool):
+    """INS answer for several options per dimension (cached by request)."""
+    enc = ":".join(",".join(str(i) for i in ids) for ids in ids_per_dim)
+    # key on the option sets, not their order
+    key = hashlib.sha1(f"{matrix}:{[sorted(ids) for ids in ids_per_dim]}".encode()).hexdigest()[:20]
+    f = cache / f"{matrix}-dims-{key}.csv"
+    if f.exists():
+        return f.read_text(encoding="utf-8")
+    if offline:
+        return None
+    import requests
+    payload = {"language": "ro", "encQuery": enc, "matCode": matrix,
+               "matMaxDim": details["matMaxDim"], "matUMSpec": details["matUMSpec"],
+               "matRegJ": details.get("matRegJ") or 0}
+    time.sleep(delay)
+    r = requests.post(PIVOT_URL, json=payload, timeout=90, headers={
+        "Content-Type": "application/json", "Referer": "http://statistici.insse.ro:8077/tempo-online/"})
+    r.raise_for_status()
+    text = r.content.decode("utf-8", errors="replace")
+    if not text.strip():
+        # an empty body is a server failure, not "no data": never cache it
+        raise RuntimeError("empty answer from INS")
+    f.write_text(text, encoding="utf-8")
+    return text
+
+
+def parse_dim_answer(text, dim_index):
+    """{option label: value} from a pivot CSV where only dimension `dim_index` varies."""
+    import csv as _csv
+    rows = list(_csv.reader(io.StringIO(text)))
+    out = {}
+    for r in rows[1:]:
+        if len(r) < 2:
+            continue
+        label = r[dim_index].strip()
+        try:
+            out[label] = float(r[-1])
+        except ValueError:
+            out[label] = None
+    return out
+
+
+def compare_parts(total, parts, tol):
+    """'match' | 'mismatch' | 'unresolved:<why>' for INS parts against INS's total."""
+    if total is None:
+        return "unresolved:ins_total_blank", None
+    vals = [v for v in parts if v is not None]
+    if not vals:
+        return "unresolved:ins_parts_blank", None
+    s = sum(vals)
+    rel = abs(s - total) / abs(total) if total else (0.0 if s == 0 else float("inf"))
+    return ("match" if rel <= tol else "mismatch"), {"parts_sum": s, "total": total, "rel": rel,
+                                                     "parts": len(parts), "blank_parts": len(parts) - len(vals)}
+
+
+def check_dims(data_dir: Path, kpis: dict, codes, cache: Path, tol: float, delay: float, offline=False):
+    """Per summed dimension of each listed KPI: does INS's own partition add up?"""
+    cache.mkdir(parents=True, exist_ok=True)
+    res = Resolver(data_dir)
+    nested = dict(res.con.execute(
+        "SELECT matrix_code || '|' || dim_column, nests_in FROM dimension_structure "
+        "WHERE nests_in IS NOT NULL").fetchall()) if res.con.execute(
+        "SELECT count(*) FROM information_schema.tables WHERE table_name = 'dimension_structure'"
+    ).fetchone()[0] else {}
+    out = {}
+    for code in codes:
+        k = kpis.get(code)
+        if not k or "error" in k:
+            continue
+        got = res.resolve_choice(code, k)
+        if "unresolved" in got:
+            for d in k["dimensions"]:
+                if d.get("treatment") in SUMMED:
+                    out[f"{code}|{d['column']}"] = {"matrix_code": code, "dim_column": d["column"],
+                                                   "status": "unresolved", "reason": got["unresolved"]}
+            continue
+        meta, choice, parent, pcols = got["meta"], got["choice"], got["parent"], got["pcols"]
+        dims = meta["dimensionsMap"]
+        details = {x: meta["details"].get(x) for x in ("matMaxDim", "matUMSpec", "matRegJ")}
+        for d in k["dimensions"]:
+            if d.get("treatment") not in SUMMED:
+                continue
+            col = d["column"]
+            rec = {"matrix_code": code, "dim_column": col, "period": k["period"], "matrix": parent}
+            out[f"{code}|{col}"] = rec
+            if f"{code}|{col}" in nested:
+                rec.update(status="unresolved", reason="nested_dimension")
+                continue
+            dcode = pcols.get(col)
+            idx = next(i for i, m in enumerate(dims) if m.get("dimCode") == dcode)
+            opts = dims[idx]["options"]
+            members = res.members(code, k, col, opts)
+            if members is None:
+                rec.update(status="unresolved", reason="member_not_in_metadata")
+                continue
+            if len(members) > MAX_DIM_MEMBERS:
+                rec.update(status="unresolved", reason="too_many_members")
+                continue
+            total = choice[dcode]
+            ids = [[choice[m["dimCode"]]["nomItemId"]] for m in dims]
+            ids[idx] = [total["nomItemId"]] + [m["nomItemId"] for m in members
+                                               if m["nomItemId"] != total["nomItemId"]]
+            try:
+                text = fetch_cells(parent, ids, details, cache, delay, offline)
+            except Exception as e:
+                rec.update(status="fetch_error", reason=f"{type(e).__name__}: {str(e)[:100]}")
+                continue
+            if text is None:
+                rec.update(status="not_fetched")
+                continue
+            got_vals = parse_dim_answer(text, idx)
+            status, info = compare_parts(got_vals.get(total["label"].strip()),
+                                         [got_vals.get(m["label"].strip()) for m in members], tol)
+            rec.update(status=status.split(":")[0], **({"reason": status.split(":", 1)[1]} if ":" in status else {}),
+                       **(info or {}))
+    return out
+
+
+DIMS_DDL = """CREATE TABLE IF NOT EXISTS kpi_dimension_checks (
+    matrix_code VARCHAR, dim_column VARCHAR, period VARCHAR, status VARCHAR, reason VARCHAR,
+    parts_sum DOUBLE, total DOUBLE, rel DOUBLE, parts INTEGER, source_matrix VARCHAR,
+    checked_at TIMESTAMP, PRIMARY KEY (matrix_code, dim_column))"""
+
+
+def write_dims_db(db: Path, results: dict) -> int:
+    """Replace these datasets' rows in kpi_dimension_checks (a COPY's DB only)."""
+    import datetime
+    import duckdb
+    live = (REPO / "data" / "corpus").resolve()
+    if db.resolve() == live or live in db.resolve().parents:
+        raise SystemExit(f"refusing to write {db}: that is the repository's own corpus")
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    rows = [(r["matrix_code"], r["dim_column"], r.get("period"), r["status"], r.get("reason"),
+             r.get("parts_sum"), r.get("total"), r.get("rel") if r.get("rel") != float("inf") else None,
+             r.get("parts"), r.get("matrix"), now) for r in results.values()]
+    codes = sorted({r[0] for r in rows})
+    con = duckdb.connect(str(db))
+    try:
+        con.execute("BEGIN")
+        con.execute(DIMS_DDL)
+        if codes:
+            con.execute(f"DELETE FROM kpi_dimension_checks WHERE matrix_code IN ({','.join('?' * len(codes))})", codes)
+        con.executemany("INSERT INTO kpi_dimension_checks VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows)
+        con.execute("COMMIT")
+    finally:
+        con.close()
+    return len(rows)
+
+
 TABLE_DDL = """CREATE OR REPLACE TABLE kpi_total_checks (
     matrix_code VARCHAR PRIMARY KEY, period VARCHAR, ours DOUBLE, ins DOUBLE, rel DOUBLE,
     status VARCHAR, reason VARCHAR, source_matrix VARCHAR, cell VARCHAR, checked_at TIMESTAMP)"""
@@ -373,6 +559,16 @@ def main(argv=None):
     k.add_argument("--offline", action="store_true", help="use cached answers only")
     k.add_argument("--write-db", help="store results as kpi_total_checks in this metadata.duckdb "
                                       "(a copy; replaces the table)")
+    m = sub.add_parser("dims")
+    m.add_argument("--data-dir", required=True)
+    m.add_argument("--kpis", required=True)
+    m.add_argument("--cache", required=True)
+    m.add_argument("--out", required=True)
+    m.add_argument("--codes-file", help="these datasets (default: every KPI that disagrees with INS)")
+    m.add_argument("--tol", type=float, default=0.005)
+    m.add_argument("--delay", type=float, default=0.7)
+    m.add_argument("--offline", action="store_true")
+    m.add_argument("--write-db", help="store as kpi_dimension_checks in this metadata.duckdb (a copy)")
     a = ap.parse_args(argv)
     data_dir = Path(a.data_dir).resolve()
     corpus = data_dir / "corpus"
@@ -386,6 +582,24 @@ def main(argv=None):
         print(f"{len(rep['kpis'])} summed latest KPIs of {rep['datasets']} datasets ({rep['errors']} errors)")
         return 0
     kpis = json.loads(Path(a.kpis).read_text())["kpis"]
+    if a.cmd == "dims":
+        if a.codes_file:
+            codes = [l.strip() for l in open(a.codes_file) if l.strip()]
+        else:
+            import duckdb
+            con = duckdb.connect(str(corpus / "metadata.duckdb"), read_only=True)
+            codes = [r[0] for r in con.execute(
+                "SELECT matrix_code FROM kpi_total_checks WHERE status = 'mismatch' ORDER BY 1").fetchall()]
+            con.close()
+        results = check_dims(data_dir, kpis, codes, Path(a.cache), a.tol, a.delay, a.offline)
+        st = collections.Counter(r["status"] for r in results.values())
+        Path(a.out).write_text(json.dumps({"status": dict(st), "results": results}, indent=1,
+                                          sort_keys=True, default=str) + "\n")
+        if a.write_db:
+            print(f"wrote {write_dims_db(Path(a.write_db), results)} rows to kpi_dimension_checks",
+                  file=sys.stderr)
+        print(json.dumps(dict(st)))
+        return 0
     if a.codes_file:
         keep = {l.strip() for l in open(a.codes_file) if l.strip()}
         kpis = {c: v for c, v in kpis.items() if c in keep}
