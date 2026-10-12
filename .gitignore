@@ -202,3 +202,6 @@ cython_debug/
 deploy-data.prev/
 deploy-data.tmp.*/
 deploy-data.tar.gz.tmp
+
+# local Codex settings (absolute paths, like .mcp.json)
+.codex/
