@@ -6,7 +6,7 @@
  "note": "Candidate expectations only. No record is verified; values are NOT golden numbers until a reviewer signs the record in answer-records.md. Do not freeze them in tests as truth.",
  "records": {
   "Q1": {
-   "status": "candidate",
+   "status": "verified",
    "version": 2,
    "source": {
     "dataset": "POP105A_judete_grupe",
@@ -104,11 +104,20 @@
      "equal": "645/645 (43 areas x 2012-2026, incl. national)"
     },
     "revision": "INS revised 2024-2025 on 10-09-2026; v1 held the 02-09-2025 values (national 2025 19,036,031 -> 19,043,151)"
+   },
+   "review": {
+    "by": "owner",
+    "date": "2026-10-12",
+    "requirements": [
+     "mark the 2021-2022 break as a change of census basis",
+     "label 2025-2026 as not final",
+     "Cluj = county"
+    ]
    }
   },
   "Q2": {
    "status": "candidate",
-   "version": 1,
+   "version": 2,
    "source": {
     "dataset": "FOM106E_judete",
     "parent": "FOM106E"
@@ -129,11 +138,19 @@
      }
     },
     "open": "owner decision: serve INS Total cells instead of the reconstruction"
+   },
+   "review": {
+    "by": "owner",
+    "date": "2026-10-12",
+    "decision": "definition approved; serve INS's published Total cells, keep the reconstruction as a cross-check",
+    "requirements": [
+     "do not join FOM106A (Rev.1) with FOM106E (Rev.2)"
+    ]
    }
   },
   "Q3": {
    "status": "candidate",
-   "version": 1,
+   "version": 2,
    "source": {
     "dataset": "SOM103A_judete",
     "parent": "SOM103A"
@@ -167,10 +184,15 @@
      }
     },
     "open": "owner decision: serve INS Total cells instead of the reconstruction"
+   },
+   "review": {
+    "by": "owner",
+    "date": "2026-10-12",
+    "decision": "definition approved; serve INS's published Total cells, keep the reconstruction as a cross-check"
    }
   },
   "Q4": {
-   "status": "candidate",
+   "status": "verified",
    "version": 2,
    "feasibility": "feasible, pending denominator verification and definition approval",
    "numerator": {
@@ -714,7 +736,17 @@
      "resident_pop_2024_01_01": 315505,
      "stays_per_resident": 0.019
     }
-   ]
+   ],
+   "review": {
+    "by": "owner",
+    "date": "2026-10-12",
+    "requirements": [
+     "display 2 decimals",
+     "label states coverage: >=5 bed-places, Romanian and foreign tourists",
+     "TUR105E_judet/TUR105H_judet excluded (our split drops locality)"
+    ]
+   },
+   "display_decimals": 2
   },
   "Q5": {
    "status": "candidate",

@@ -6,12 +6,12 @@
    "version": 1,
    "question": "Q4",
    "status": {
-    "ro": "în verificare: numitorul (populația la 1 ianuarie) e aprobat; înnoptările (2012–2025) și populația (2012–2026) pe județe sunt egale cu totalurile publicate de INS (verificat 12.10.2026)",
-    "en": "under review: the denominator (population on 1 January) is approved; county stays (2012–2025) and county population (2012–2026) equal the totals INS publishes (checked 2026-10-12)"
+    "ro": "verificat 12.10.2026: înnoptările (2012–2025) și populația (2012–2026) pe județe sunt egale cu totalurile publicate de INS",
+    "en": "verified 2026-10-12: county stays (2012–2025) and county population (2012–2026) equal the totals INS publishes"
    },
    "name": {
-    "ro": "Intensitatea turistică: înnoptări pe locuitor",
-    "en": "Tourism intensity: overnight stays per resident"
+    "ro": "Intensitatea turistică: înnoptări pe locuitor (structuri cu cel puțin 5 locuri-pat, turiști români și străini)",
+    "en": "Tourism intensity: overnight stays per resident (establishments with at least 5 bed-places, Romanian and foreign tourists)"
    },
    "unit": {
     "ro": "înnoptări pe locuitor",
@@ -58,7 +58,7 @@
     "Mii": 1000,
     "Mii persoane": 1000
    },
-   "display_decimals": 3,
+   "display_decimals": 2,
    "missing_policy": "A county without stays, without population, or with population <= 0 is excluded with its reason; zero stays with a positive population is a valid 0. No nearest-year substitution, no zero filling.",
    "kind": "ratio",
    "columns": [

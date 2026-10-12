@@ -6,17 +6,16 @@ Version 1 (2026-10-11) was recorded on generation `a6737a263a34…` (see [baseli
 sections below that cite 2024 as the latest year describe v1.
 Machine-readable expectations: [answers.json](answers.json).
 
-**No record is `verified`.** Verification needs a reviewer and an independent INS
-cell. The independent cells now exist (see
-[INS reference cells](#ins-reference-cells-2026-10-12)); a reviewer has not signed
-any record. Values below come from the corpus. They are not golden numbers.
+**Q1 and Q4 are `verified`** (owner review, 2026-10-12; see
+[Review decisions](#review-decisions-2026-10-12)). Q2 and Q3 have approved
+definitions and are waiting for the app to serve INS's own Total cells.
 
 | Q | Status | Blocker / next step |
 |---|---|---|
-| Q1 population | `candidate`, **evidence complete** | v2: equal to INS in all 645 area-years 2012–2026 (incl. the 2024–2025 revision). Needs a reviewer |
-| Q2 net earnings | `candidate` (reconstructed) | Within 1.2 lei of INS's county total everywhere, but equal after rounding in only 649/714 cells (Iași 2024: 5,097 vs INS 5,098). Decide: serve INS's own Total cells |
-| Q3 unemployment | `candidate` (reconstructed) | Within 0.09 pp, equal after rounding in 548/656 cells (2010–2025); the ranking order differs from INS. Bucharest = **0.7** (2024), **0.5** (2025) per INS. Same decision as Q2. Latest year now 2025 |
-| Q4 tourism intensity | `candidate`, **evidence complete** | v2: latest year **2025**. Numerator (602/602) and denominator (645/645) equal INS by county. Needs a reviewer |
+| Q1 population | **`verified`** (2026-10-12) | Equal to INS in all 645 area-years 2012–2026. Presentation requirements below |
+| Q2 net earnings | `candidate`, definition approved | **Serve INS's own Total cells** (decided); the reconstruction stays as a cross-check. Verified once served |
+| Q3 unemployment | `candidate`, definition approved | Same as Q2. Bucharest = **0.7** (2024), **0.5** (2025) per INS. Latest year 2025 |
+| Q4 tourism intensity | **`verified`** (2026-10-12) | Latest year **2025**; 2 decimals; coverage in the label; TUR105E/H exclusion approved |
 | Q5 share/reproduce | `candidate` | Checklist below; acceptance is PA-03 |
 
 **Decisions (owner, 2026-10-11):** the reference-cell fetch is approved; Q3 uses
@@ -68,6 +67,33 @@ moves a county's both-sexes rate only within its two sex rates. The recipes are
 labelled "reconstituit" and carry these checks as tests
 (`tests/test_pa03_recipe_kinds.py`).
 
+## Review decisions (2026-10-12)
+
+Owner review of v2. "Verified" means the definition, scope and presentation were
+approved and every expected value equals an independent INS cell.
+
+- **Q1 — verified.** Resident population (POP105A, usual residence ≥ 12 months),
+  not domicile (POP107A). "Cluj" is the county, never Cluj-Napoca. Required in the
+  presentation: mark the 2021→2022 break as a change of census basis (2011 → 2021),
+  not population loss; label 2025–2026 as not final (INS: data before 2024 is final,
+  2024 is revised, later years may still change).
+- **Q2 — definition approved; use INS values.** Average net monthly earnings from the
+  annual survey (FOM106E), nominal lei, latest 2024; includes back pay, so it differs
+  from the monthly release. Do not join FOM106A (CAEN Rev.1, to 2007) with FOM106E
+  (Rev.2, from 2008). Notes to carry on the dataset: series start and classification,
+  annual vs monthly, 2019–2024 tax facilities for some employee groups.
+- **Q3 — definition approved; use INS values.** Registered unemployment (ANOFM), not
+  the ILO rate; SOM103A annual, latest 2025; 41 counties + Bucharest, one decimal,
+  ties by name, changes in percentage points.
+- **Q4 — verified.** Display **2 decimals** (2025 has two display ties, 1.79 and 0.70;
+  ranks follow the unrounded values). The label states the coverage: structures with
+  at least 5 bed-places, Romanian and foreign tourists. Excluding TUR105E_judet and
+  TUR105H_judet is approved. Their conflict is ours, not INS's: the county split
+  drops the locality column, so a county-year repeats once per locality (FIX-03 queue).
+- **Decision log for INS.** Every note above is recorded per dataset in
+  `app/data/dataset_notes.json`; `docs/reports/ins-notes.md` lists them, with the
+  points to raise with INS.
+
 ## INS reference cells (2026-10-12)
 
 Four requests, all `labels_ok`, no blank cells. Evidence directory
@@ -111,7 +137,7 @@ not INS's published statistic: the rounded value differs in 9 % (Q2) and 17 % (Q
 of cells, and a ranking question is sensitive to that. INS publishes the exact
 cell. Owner decisions:
 1. **Refresh** POP105A, SOM103A and TUR105D — **done 2026-10-12**, see below.
-2. **Open: serve INS's Total cells** for Q2/Q3 (keep "Total" options at fetch for these
+2. **Serve INS's Total cells** — **decided 2026-10-12** for Q2/Q3 (keep "Total" options at fetch for these
    matrices, or register the reference cells as a reviewed source) and keep the
    reconstructions as cross-checks. Either way is a FIX-03-style corpus change.
 
@@ -183,7 +209,7 @@ Recompute with the `shasum` line in [Reproduction](#reproduction). Retained INS 
 
 ## Q1 — Resident population over time
 
-- **Identity:** Q1 v1, `candidate`, unreviewed.
+- **Identity:** Q1 v2, **`verified`**, owner, 2026-10-12.
 - **Intent:** RO “Cum a evoluat populația rezidentă a județului Cluj?”, “populatia
   rezidenta Cluj”, “câți locuitori are județul Cluj”. EN “How has Cluj county's
   resident population changed?”, “Cluj population over time”. Ambiguity:
@@ -225,7 +251,7 @@ Recompute with the `shasum` line in [Reproduction](#reproduction). Retained INS 
 
 ## Q2 — County net earnings comparison
 
-- **Identity:** Q2 v1, `candidate` (reconstructed by recipe; was `blocked`).
+- **Identity:** Q2 v2, `candidate`; definition approved 2026-10-12; to be served from INS's Total cells.
 - **Intent:** RO “Cum se compară salariul mediu net în Cluj, Iași și București?”,
   “salariu mediu net cluj iasi bucuresti”. EN “Compare average net earnings in
   Cluj, Iași and Bucharest”, “average salary by county”. Ambiguity: net vs gross
@@ -249,7 +275,7 @@ Recompute with the `shasum` line in [Reproduction](#reproduction). Retained INS 
 
 ## Q3 — Registered unemployment ranking
 
-- **Identity:** Q3 v1, `candidate` (reconstructed by recipe; was `blocked`).
+- **Identity:** Q3 v2, `candidate`; definition approved 2026-10-12; to be served from INS's Total cells.
 - **Intent:** RO “În ce județe este cea mai mare rată a șomajului înregistrat?”,
   “somaj judete”. EN “Which counties have the highest registered unemployment
   rate?”, “unemployment rate by county”. Ambiguity: registered (ANOFM) vs ILO/BIM
@@ -276,7 +302,7 @@ Recompute with the `shasum` line in [Reproduction](#reproduction). Retained INS 
 
 ## Q4 — Tourism intensity
 
-- **Identity:** Q4 v1, `candidate`. **Feasibility: feasible.** PA-03 may plan
+- **Identity:** Q4 v2, **`verified`**, owner, 2026-10-12. **Feasibility: feasible.** PA-03 may plan
   against it once the denominator is approved and verified.
 - **Intent:** RO “Ce județe au cele mai multe înnoptări turistice pe locuitor?”,
   “innoptari pe locuitor judete”. EN “Which counties have the most tourist
