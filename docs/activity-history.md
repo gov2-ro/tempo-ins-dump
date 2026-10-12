@@ -1,5 +1,27 @@
 # Activity History
 
+## 2026-10-12 — Re-fetched 69 locality-level matrices; pipeline fixes for copies
+
+Ran `update-pipeline.py --matrix` on the copy (`TEMPO_PIPELINE_DATA_DIR`) for the 69
+matrices that lacked Bucharest: 69/69 ok, Bucharest in every CSV, +297k rows; same
+child sets and the same 160 conflicting-grain files. Generation `c307f28a8c7b`.
+
+Fixes found on the way, all in code with tests:
+- stage 6 now fetches localities the SIRUTA file cannot place (new or merged
+  communes, 53 matrices) against every county, and fails instead of skipping a
+  county that errors or hits the cell limit; per-county temp files are removed;
+- `10-classify-dimensions` parsed `179132 MUNICIPIUL BUCURESTI` as a county, so a
+  locality dimension looked like two levels and every collapse was refused (157
+  datasets, incl. the Q3 counts); SIRUTA-coded options are localities first;
+- the orchestrator copied parent definitions into ~2,000 split children, which
+  degraded search (e.g. "rata somajului" lost SOM103A_judete); it now copies only
+  the update date (pages already fall back to the parent's text).
+
+Checks: chart-selector primary unchanged for all 4,110 datasets (16 secondary
+score changes); search eval identical to before the run on all 17 questions after
+the definition fix; summed KPIs re-checked against INS for the 255 affected
+datasets (36 mismatch→match). The Q3 reconstruction now includes Bucharest.
+
 ## 2026-10-12 — Owner review of Q1–Q4, INS totals served, dataset notes
 
 Owner review: Q1 and Q4 approved as recorded (census break and provisional years

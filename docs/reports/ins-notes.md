@@ -15,7 +15,7 @@ How totals, averages and rates are computed: [METHODOLOGY](../METHODOLOGY.md).
 
 ## Source issues (ours or INS's)
 
-- **locality-fetch-bucharest** (`AGR101B`, `AGR108B`, `AGR109B`, `AGR112B`, `AGR115B`, `AGR201B`, `AGR202B`, `ART101B` and 61 more): Bucharest's locality rows are missing from our download (a fetch error, not INS's). They are being re-fetched. Evidence: Generation tempo-gen-20261012: these locality-level CSVs have no Bucharest row although the matrix lists 179132 MUNICIPIUL BUCURESTI; probe SOM101E Dec 2024 Bucharest = 8,702 at INS. Fixed in 6-fetch-csv.py (f81c586); refetch pending. Remove the note per dataset once refetched.
+- **locality-fetch-bucharest** (`AGR101B`, `AGR108B`, `AGR109B`, `AGR112B`, `AGR115B`, `AGR201B`, `AGR202B`, `ART101B` and 61 more): Bucharest's rows were missing from the locality-level downloads (our fetch error, not INS's): the SIRUTA file says 'Bucuresti', INS says 'Municipiul Bucuresti'. New or merged localities were lost the same way. Fixed and re-fetched on 2026-10-12. Evidence: Generation tempo-gen-20261012: all 69 now have Bucharest rows; 53 also gained localities the SIRUTA file cannot place (fetched against every county). Summed KPI checks for these datasets: 36 mismatches became matches.
 - **pivot-header-only-large-dims** (`EXP101F`, `EXP102F`): The TEMPO pivot API answers with a header-only CSV when a dimension has over 1,000 selected options; the data was fetched in chunks. Evidence: FIX-03 repair, 2026-10-05: EXP101F/EXP102F checked cell by cell against the website export.
 - **metadata-stale-periods** (`EXP102F`): The matrix metadata lagged behind the data: its period list ended in 2024 while INS already published newer data. Evidence: FIX-03 repair, 2026-10-05.
 
@@ -30,6 +30,7 @@ How totals, averages and rates are computed: [METHODOLOGY](../METHODOLOGY.md).
 - **SOM103A-registered-not-ilo** [definition] (`SOM103A`, `SOM103B`): Registered unemployment rate: unemployed people registered with the employment agencies (ANOFM) relative to the civilian active population. It is not the ILO unemployment rate from the labour force survey. Decided by owner, 2026-10-12 (PA-00 Q3).
 - **TUR105D-coverage** [coverage] (`TUR105D`, `TUR105E`, `TUR105H`): Covers only accommodation establishments with at least 5 bed-places; Romanian and foreign tourists. Decided by owner, 2026-10-12 (PA-00 Q4).
 - **TUR105EH-county-split** [excluded] (`TUR105E_judet`, `TUR105H_judet`): This county set lost its locality column in processing, so a county appears once per locality. Its values cannot be added up per county, and the set is not used for the stays-per-resident indicator. The problem is ours, not INS's, and is queued for repair. Decided by owner, 2026-10-12 (PA-00 Q4).
+- **locality-fetch-bucharest** [source_issue] (`AGR101B`, `AGR108B`, `AGR109B`, `AGR112B`, `AGR115B`, `AGR201B`, `AGR202B`, `ART101B` and 61 more): Bucharest's rows were missing from the locality-level downloads (our fetch error, not INS's): the SIRUTA file says 'Bucuresti', INS says 'Municipiul Bucuresti'. New or merged localities were lost the same way. Fixed and re-fetched on 2026-10-12. Decided by owner, 2026-10-12 (re-fetch of the 69 affected matrices).
 - **totals-not-in-download** [decision] (`FOM106E`, `SOM103A`, `POP105A`, `TUR105D`): Our download omits the 'Total' options; the totals shown are computed (exact sums for counts) or fetched separately from INS (means and rates). See docs/METHODOLOGY.md. Decided by owner, 2026-10-12.
 
 ## All notes by kind
@@ -87,6 +88,6 @@ How totals, averages and rates are computed: [METHODOLOGY](../METHODOLOGY.md).
 
 | Note | Datasets | Public | Text (en) |
 |---|---|---|---|
-| locality-fetch-bucharest | `AGR101B`, `AGR108B`, `AGR109B`, `AGR112B` and 65 more | yes | Bucharest's locality rows are missing from our download (a fetch error, not INS's). They are being re-fetched. |
+| locality-fetch-bucharest | `AGR101B`, `AGR108B`, `AGR109B`, `AGR112B` and 65 more | no | Bucharest's rows were missing from the locality-level downloads (our fetch error, not INS's): the SIRUTA file says 'Bucuresti', INS says 'Municipiul Bucuresti'. New or merged localities were lost the same way. Fixed and re-fetched on 2026-10-12. |
 | pivot-header-only-large-dims | `EXP101F`, `EXP102F` | no | The TEMPO pivot API answers with a header-only CSV when a dimension has over 1,000 selected options; the data was fetched in chunks. |
 | metadata-stale-periods | `EXP102F` | no | The matrix metadata lagged behind the data: its period list ended in 2024 while INS already published newer data. |

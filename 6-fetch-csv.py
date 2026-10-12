@@ -464,6 +464,12 @@ def fetch_by_judet_split(matrix_code: str, matrix_def: Dict, output_dir: str,
 
     tqdm.write(f"SUCCESS: Combined {len(all_data_rows)} rows from {len(partial_files)} Judete")
     tqdm.write(f"Saved to {combined_file}")
+    # The per-county files duplicate the combined CSV; keep only the result.
+    for f in partial_files:
+        try:
+            os.remove(f)
+        except OSError:
+            pass
 
     # Log success
     judet_logger.info(f"{matrix_code} - Successfully fetched using Judet-split approach ({len(partial_files)} Judete, {len(all_data_rows)} rows)")

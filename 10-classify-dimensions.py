@@ -268,6 +268,15 @@ def parse_geo(label: str) -> dict:
     if sn.startswith('regiunea') or re.search(r'\bregiunea\s+\w', sn):
         return {'dim_type': 'geo', 'geo_level': 'region', 'geo_name_clean': s, 'parse_confidence': 1.0}
 
+    # SIRUTA code: 4–6 leading digits + name. Checked before the București case:
+    # "179132 MUNICIPIUL BUCURESTI" is a locality option, and a county-level
+    # parse put it next to the other localities as a second geographic level.
+    m = re.match(r'^(\d{4,6})\s+(.+)', s)
+    if m:
+        return {'dim_type': 'geo', 'geo_level': 'locality',
+                'siruta_code': int(m.group(1)), 'geo_name_clean': m.group(2).strip(),
+                'parse_confidence': 1.0}
+
     # București special cases
     if re.search(r'(municipiul\s+)?bucuresti', sn):
         return {'dim_type': 'geo', 'geo_level': 'county', 'geo_name_clean': 'Municipiul București', 'parse_confidence': 1.0}
@@ -279,13 +288,6 @@ def parse_geo(label: str) -> dict:
     # County name lookup (normalized)
     if sn in COUNTIES_NORM:
         return {'dim_type': 'geo', 'geo_level': 'county', 'geo_name_clean': s, 'parse_confidence': 1.0}
-
-    # SIRUTA code: 4–6 leading digits + name
-    m = re.match(r'^(\d{4,6})\s+(.+)', s)
-    if m:
-        return {'dim_type': 'geo', 'geo_level': 'locality',
-                'siruta_code': int(m.group(1)), 'geo_name_clean': m.group(2).strip(),
-                'parse_confidence': 1.0}
 
     # Urban / Rural
     if re.search(r'\burban\b', sn):

@@ -165,7 +165,7 @@ def sync_ultima_actualizare(codes: list[str], lang: str, dry_run: bool = False) 
 
     log.info(f"Synced ultima_actualizare for {updated}/{len(codes)} matrices")
 
-    # Propagate dates (and text metadata) from parents to split children
+    # Propagate dates from parents to split children
     if updated > 0:
         propagate_split_metadata(db_path, dry_run=False)
 
@@ -173,7 +173,12 @@ def sync_ultima_actualizare(codes: list[str], lang: str, dry_run: bool = False) 
 
 
 def propagate_split_metadata(db_path, dry_run: bool = False) -> int:
-    """Copy ultima_actualizare, definitie, metodologie, observatii from parent to split children."""
+    """Copy ultima_actualizare from parent to split children.
+
+    Definitions and methodology are deliberately not copied: pages and the API
+    already fall back to the parent's text, and copying it into ~2,000 children
+    floods the full-text search index (2026-10-12: "rata somajului" lost
+    SOM103A_judete from its top 10, "salariu mediu net" ranked CLV106A first)."""
     if dry_run:
         log.info("[DRY-RUN] propagate_split_metadata skipped")
         return 0
@@ -192,19 +197,6 @@ def propagate_split_metadata(db_path, dry_run: bool = False) -> int:
             )
             WHERE matrix_code IN (SELECT sub_matrix_code FROM dataset_splits)
             AND ultima_actualizare IS NULL
-        """)
-        conn.execute("""
-            UPDATE matrices
-            SET definitie = sub.definitie,
-                metodologie = sub.metodologie,
-                observatii = sub.observatii
-            FROM (
-                SELECT ds.sub_matrix_code, parent.definitie, parent.metodologie, parent.observatii
-                FROM dataset_splits ds
-                JOIN matrices parent ON ds.parent_matrix_code = parent.matrix_code
-            ) sub
-            WHERE matrices.matrix_code = sub.sub_matrix_code
-            AND matrices.definitie IS NULL
         """)
         r = conn.execute(
             "SELECT COUNT(*) FROM matrices WHERE is_canonical = TRUE AND ultima_actualizare >= '2026-01-01'"
@@ -793,7 +785,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--state-file", metavar="PATH", default=None,
                         help=f"Checkpoint JSON (default: {STATE_FILE})")
     parser.add_argument("--propagate-splits", action="store_true",
-                        help="Propagate parent metadata (ultima_actualizare, definitie, etc.) to split children, then exit")
+                        help="Propagate the parent's ultima_actualizare to split children, then exit")
     return parser
 
 

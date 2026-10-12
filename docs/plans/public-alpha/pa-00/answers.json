@@ -2,7 +2,7 @@
  "schema": 1,
  "kind": "pa00-answer-expectations",
  "recorded": "2026-10-12",
- "generation": "7751ed9edd306406bbb8047f5c3e412ee6b2460b1a4e07541921b1cf2304647d",
+ "generation": "c307f28a8c7b7a687a72f62f4babf6962c6ec99ed03dd0651c88dc50f3ebe86b",
  "note": "Candidate expectations only. No record is verified; values are NOT golden numbers until a reviewer signs the record in answer-records.md. Do not freeze them in tests as truth.",
  "records": {
   "Q1": {

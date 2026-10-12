@@ -201,12 +201,16 @@ def test_q3_lies_between_the_sex_rates_and_bucharest_is_a_range(conn):
     by_area = {}
     for sex, area, v in res["rows"]:
         by_area.setdefault(rc.geo_id(area), []).append(v)
-    assert len(r["rows"]) == 41
     for x in r["rows"]:
         lo, hi = min(by_area[x["geo_id"]]), max(by_area[x["geo_id"]])
         assert lo - 1e-9 <= x["value"] <= hi + 1e-9, x
-    assert r["excluded"] == [{"geo_id": "municipiul-bucuresti", "label": "Municipiul Bucuresti",
-                              "reason": "group_missing", "bounds": [0.6, 0.7]}]
+    # Generations fetched before the 2026-10-12 locality fix have no Bucharest
+    # SOM101E rows: Bucharest is then a range, otherwise a row like the others.
+    if len(r["rows"]) == 41:
+        assert r["excluded"] == [{"geo_id": "municipiul-bucuresti", "label": "Municipiul Bucuresti",
+                                  "reason": "group_missing", "bounds": [0.6, 0.7]}]
+    else:
+        assert len(r["rows"]) == 42 and r["excluded"] == []
     assert r["rows"][0]["label"] == "Teleorman"
 
 

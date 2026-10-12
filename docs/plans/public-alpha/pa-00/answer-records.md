@@ -1,6 +1,6 @@
 # PA-00 answer records, Q1–Q5
 
-Version 2, 2026-10-12, generation `7751ed9edd30…` (copy `tempo-gen-20261012`,
+Version 2, 2026-10-12, generation `c307f28a8c7b…` (copy `tempo-gen-20261012`,
 POP105A/SOM103A/TUR105D refreshed from INS; see [refresh](#refreshed-generation-2026-10-12)).
 Version 1 (2026-10-11) was recorded on generation `a6737a263a34…` (see [baseline](baseline.md));
 sections below that cite 2024 as the latest year describe v1.
@@ -161,8 +161,10 @@ counts are slightly different weights from INS's own.
 
 Copy `~/devbox/gov2/tempo-gen-20261012/data`, an APFS clone of `tempo-gen-20261005`
 with only POP105A, SOM103A and TUR105D refreshed (metadata + CSV from INS, stages B–D
-for the 3 parents and 12 children), generation `7751ed9edd30…` (after the
-published totals were loaded and the children re-profiled). Not published.
+for the 3 parents and 12 children), generation `c307f28a8c7b…` (after the
+published totals, the children's re-profiling and the re-fetch of 69 locality-level
+matrices that lacked Bucharest). Not published. Q1–Q4 values are unchanged by the
+re-fetch; the Q3 reconstruction now covers Bucharest (2024: 0.654 vs INS 0.7).
 
 - **Source diff:** POP105A 25,832 cells revised (2024–2025 only), 22,042 new (2026);
   SOM103A +108 cells (2025); TUR105D +1,086 (2025). No other cell changed or vanished.

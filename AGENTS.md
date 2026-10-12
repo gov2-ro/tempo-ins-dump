@@ -68,12 +68,13 @@ Full rebuild order:
 (`get-news.py` → `data/insse_news.csv`). Per matrix, in order: meta → CSV →
 `10-import-metadata --matrix` → `10-classify-dimensions --matrix` →
 `11-build-sdmx-codes --matrix` → stage 9 → `12 --matrix` → `10-import-metadata
---stats-only` → stage 13 + view profiles for parent and children (optional) →
-validate; then meta index + date sync. Every return code is checked. Outcomes and
-the retry set live in `data/logs/update-pipeline-state.json`; a required failure
-exits 1 and freezes the watermark. Coverage, trends, value profiles and the search
-index are global-only: touched matrices are listed under `stale` in the state file
-and `--global-profiles` runs them. Child scripts 3/6/12/13 exit nonzero on handled
+--stats-only` → optional: re-classify split children, stage 13, view profiles,
+scoped value profiles/trends/coverage, INS published totals (if listed) → validate;
+then meta index + date sync. Every return code is checked. Outcomes and the retry
+set live in `data/logs/update-pipeline-state.json`; a required failure exits 1 and
+freezes the watermark. The search index is global-only: touched matrices are listed
+under `stale` in the state file and `--global-profiles` rebuilds it. The
+orchestrator honours `TEMPO_PIPELINE_DATA_DIR` (a copied generation's `.../data`). Child scripts 3/6/12/13 exit nonzero on handled
 errors (`6-fetch-csv` exit 3 = empty dataset); 1/2/4 still always exit 0.
 Read-only corpus audit: `python scripts/audit-corpus.py --data-dir data`.
 
@@ -152,11 +153,12 @@ bash scripts/prepare-deploy-data.sh                # stage deploy data
   and network tab. `npx playwright` is available; see `scripts/dbv2-screenshot.mjs`.
 
 ## Gotchas
-- **Don't probe scripts with `--help`:** `11-coverage-profiler.py`,
-  `scripts/profile-values.py` and `detect_trends.py` take no arguments and rebuild
-  their tables in the live DB. Read the argparse block first. `3-fetch-metas.py`
-  writes the repo's `data/2-metas` regardless of env; `6-fetch-csv.py` resolves
-  `data/` from the cwd; `9-csv-to-parquet.py --matrix` takes one code.
+- **Profilers rebuild whole tables without `--matrix`:** `11-coverage-profiler.py`,
+  `scripts/profile-values.py` and `detect_trends.py` now take `--matrix A,B` (replace
+  only those rows) and `--help`; run bare, they rebuild every row. Read a script's
+  argparse block before probing it. `3-fetch-metas.py` writes the repo's
+  `data/2-metas` regardless of env; `6-fetch-csv.py` resolves `data/` from the cwd;
+  `9-csv-to-parquet.py --matrix` takes one code.
 - **Stored `parquet_path` values are absolute and stale** (some point at the deleted
   `parquet-v3/`). Resolve files by code (`duckdb_config.corpus_parquet`), never by
   the stored path — following it from a copied corpus touches the live one.
