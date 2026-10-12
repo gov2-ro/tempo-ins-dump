@@ -261,6 +261,11 @@ def group_localities_by_judet(localitati_dim: Dict, judete_dim: Dict, siruta_map
                 'nomItemId': opt["nomItemId"],
                 'original_name': judet_label
             }
+    # The SIRUTA file calls Bucharest "Bucuresti"; TEMPO's Judete option is
+    # "Municipiul Bucuresti". Without this alias every Bucharest locality was
+    # unmatched and silently left out of the download.
+    if "municipiul bucuresti" in judet_name_to_id:
+        judet_name_to_id.setdefault("bucuresti", judet_name_to_id["municipiul bucuresti"])
 
     # Group localities by Judet
     judet_localities = {}

@@ -89,6 +89,18 @@ def fake_post(body: bytes):
     return post
 
 
+def test_bucharest_localities_are_grouped_under_their_county(fetch_csv):
+    """SIRUTA says 'Bucuresti', TEMPO says 'Municipiul Bucuresti': same county."""
+    judete = {"options": [{"label": "Total", "nomItemId": 1}, {"label": "Cluj", "nomItemId": 2},
+                          {"label": "Municipiul Bucuresti", "nomItemId": 3}]}
+    locs = {"options": [{"label": "54975 MUNICIPIUL CLUJ-NAPOCA", "nomItemId": 10},
+                        {"label": "179132 MUNICIPIUL BUCURESTI", "nomItemId": 11}]}
+    siruta = {"54975": "Cluj", "179132": "Bucuresti"}
+    groups = fetch_csv.group_localities_by_judet(locs, judete, siruta)
+    assert {g["judet_name"]: [o["nomItemId"] for o in g["localities"]] for g in groups.values()} == \
+        {"Cluj": [10], "Municipiul Bucuresti": [11]}
+
+
 def test_fetch_csv_success_exit_zero(fetch_csv, monkeypatch):
     monkeypatch.setattr(fetch_csv.requests, "post", fake_post(b"a,b\n1,2\n3,4\n"))
     assert fetch_csv.main(["--matrix", "AAA1", "--force"]) == 0
