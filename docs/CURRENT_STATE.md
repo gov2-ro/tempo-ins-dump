@@ -277,9 +277,10 @@ latest KPIs (1,525 → 2,274 of 3,368), all on split children; 584 of those rest
 on `profile_flat` verification and need an independent additivity check.
 
 Refreshed generation, 2026-10-12 (copy at `~/devbox/gov2/tempo-gen-20261012/data`,
-generation `d957e2919750`, not published): the 10-05 repair copy below with POP105A,
+generation `7751ed9edd30`, not published): the 10-05 repair copy below with POP105A,
 SOM103A and TUR105D re-fetched from INS (1 Jan 2026 population, 2025 unemployment and
-stays); details in the PA-00 answer records.
+stays), and `published_totals` (INS's Total cells for FOM106E and SOM103A); details in
+the PA-00 answer records.
 
 Repair generation, 2026-10-05 (copy at `~/devbox/gov2/tempo-gen-20261005/data`,
 not published; branch `fix/03-corpus-repair`, FIX-02 changes on

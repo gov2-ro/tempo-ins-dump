@@ -17,6 +17,7 @@ matrix dimension, in dimension order:
   {"pick": "labels", "labels": [...]}     exact labels (trimmed)
   {"pick": "counties", "total": true}     41 counties + Bucharest (+ TOTAL)
   {"pick": "years", "from": Y1, "to": Y2} "Anul Y" options in that range
+  {"pick": "years", "from": Y1}           every "Anul Y" from Y1 that the metadata lists
 
 Option ids come from the retained metadata (--meta-dir). INS's answer echoes labels,
 so `labels_ok` in the manifest records whether every returned row names a requested
@@ -29,6 +30,7 @@ import csv
 import hashlib
 import io
 import json
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -67,6 +69,10 @@ def pick_options(dim: dict, pick: dict) -> list[dict]:
         out = [o for o in opts if _is_county(o["label"])]
         if pick.get("total"):
             out = [o for o in opts if _is_total(o["label"])] + out
+    elif kind == "years" and pick.get("to") is None:
+        # open-ended: every annual period from `from` that the metadata lists
+        out = [o for o in opts if re.fullmatch(r"Anul (\d{4})", o["label"].strip())
+               and int(o["label"].strip()[5:]) >= int(pick["from"])]
     elif kind == "years":
         want = {f"Anul {y}" for y in range(int(pick["from"]), int(pick["to"]) + 1)}
         out = [o for o in opts if o["label"].strip() in want]

@@ -376,12 +376,13 @@ def _resolve_series(spec: dict, areas: list[str] | None, geo_level: str, *,
 # ------------------------------------------------------------------ recipe KPIs
 #
 # A KPI may be a reviewed recipe (app/data/recipes.json) instead of one parquet:
-# Q2 earnings and Q3 unemployment are reconstructed from INS's own weights
-# because their total row is not in the corpus. Per year the recipe yields
-# every county; a place reads its row, and a group (region, country) is
-# recombined from the same rows: weighted_mean as Σ value·weight / Σ weight,
-# rate_from_counts as 100·Σ U / Σ base. A group year with any area excluded
-# is absent, never partial.
+# Q2 earnings and Q3 unemployment, whose total row is not in the corpus. When the
+# generation has INS's published totals the recipe serves them, for counties and
+# for the country and regions (`aggregates`). Otherwise it reconstructs them from
+# INS's own weights, and a group (region, country) is recombined from the county
+# rows: weighted_mean as Σ value·weight / Σ weight, rate_from_counts as
+# 100·Σ U / Σ base. A recombined group year with any area excluded is absent,
+# never partial.
 
 _recipe_cache: dict = {}
 _recipe_lock = threading.Lock()
@@ -408,6 +409,10 @@ def _recipe_run(rid: str, year=None):
 
 
 def _recipe_combine(kind: str, rows: list[dict]) -> float | None:
+    if any(r.get(k) is None for r in rows
+           for k in {"weighted_mean": ("weight_total",),
+                     "rate_from_counts": ("count_total", "base_total")}.get(kind, ())):
+        return None
     if kind == "weighted_mean":
         w = sum(r["weight_total"] for r in rows)
         return sum(r["value"] * r["weight_total"] for r in rows) / w if w else None
@@ -417,8 +422,10 @@ def _recipe_combine(kind: str, rows: list[dict]) -> float | None:
     return None
 
 
-def _recipe_series(spec: dict, areas: list[str] | None, *, collapse: bool):
-    """(series, excluded entry for a single area or None, latest year)."""
+def _recipe_series(spec: dict, areas: list[str] | None, *, collapse: bool, group: str | None = None):
+    """(series, excluded entry for a single area or None, latest year).
+    `group` names the published aggregate a collapsed scope stands for
+    ("total" for the country, "regiunea-<slug>" for a region)."""
     from app.services.recipes import geo_id
     latest = _recipe_run(spec["recipe"])
     if "error" in latest:
@@ -441,7 +448,12 @@ def _recipe_series(spec: dict, areas: list[str] | None, *, collapse: bool):
             else:
                 last_excl = excl.get(g) or {"reason": "no_data"}
             continue
-        if scope and scope <= set(rows):
+        aggs = {a["geo_id"]: a["value"] for a in res.get("aggregates") or []}
+        if group and group in aggs:
+            series.append({"year": y, "value": aggs[group]})
+        elif res.get("value_source") == "ins_published":
+            continue            # never recombine published values into a group
+        elif scope and scope <= set(rows):
             v = _recipe_combine(kind, [rows[g] for g in scope])
             if v is not None:
                 series.append({"year": y, "value": v})
@@ -452,6 +464,10 @@ def _recipe_series(spec: dict, areas: list[str] | None, *, collapse: bool):
 
 def _recipe_method(spec: dict, latest: dict) -> dict:
     r = latest["recipe"]
+    if r.get("value_source") == "ins_published":
+        return {"code": "source_total", "approximation": False, "outcome": "valid_total",
+                "reason": None, "weights_source": None, "recipe": r["id"],
+                "note": spec.get("published_note"), "note_en": spec.get("published_note_en")}
     return {"code": "reconstruction", "approximation": False, "outcome": "valid_total",
             "reason": None, "weights_source": None, "recipe": r["id"],
             "note": spec.get("method_note"), "note_en": spec.get("method_note_en")}
@@ -469,7 +485,7 @@ def _recipe_kpi(spec: dict, place: dict, ident: dict):
     latest = series[-1]
     change = _change_for(ident["unit_kind"], series)
     method = _recipe_method(spec, _recipe_run(spec["recipe"]))
-    prov = {"method": "reconstruction", "recipe": spec["recipe"], "outcome": "valid_total",
+    prov = {"method": method["code"], "recipe": spec["recipe"], "outcome": "valid_total",
             "source_code": spec.get("source_code"), "period": latest["year"],
             "unit": spec.get("unit"), "comparison": agg.comparison_of(change)}
     return {
@@ -701,16 +717,20 @@ def _recipe_baselines(spec: dict, place_type: str, slug: str, via_alias: bool) -
         return {"scope": scope, "areas": n, "period": series[-1]["year"] if series else None,
                 "unit": spec.get("unit"), "available": bool(series),
                 "reason": None if series else "incomplete_areas",
-                "method": {"code": "reconstruction", "approximation": False,
-                           "note": spec.get("method_note"), "note_en": spec.get("method_note_en")},
+                "method": method,
                 "approximation": False}
-    national, _, _ = _recipe_series(spec, None, collapse=True)
+    latest = _recipe_run(spec["recipe"])
+    method = _recipe_method(spec, latest) if "error" not in latest else \
+        {"code": "reconstruction", "approximation": False,
+         "note": spec.get("method_note"), "note_en": spec.get("method_note_en")}
+    national, _, _ = _recipe_series(spec, None, collapse=True, group="total")
     region, r_count = [], None
     if place_type == "county":
         place = resolve_place(place_type, slug)
         if place and place["parent_slug"]:
             counties = [n for n, reg in COUNTY_REGION.items() if reg == place["parent_slug"]]
-            region, _, _ = _recipe_series(spec, counties, collapse=True)
+            region, _, _ = _recipe_series(spec, counties, collapse=True,
+                                          group=f"regiunea-{place['parent_slug']}")
             r_count = len(counties)
     return {"national": national, "region": region,
             "kpi": {"key": spec["key"], "label": spec["label"], "label_en": spec.get("label_en"),

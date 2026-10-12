@@ -90,9 +90,22 @@
   },
   {
    "id": "net_earnings_county",
-   "version": 1,
+   "version": 2,
    "question": "Q2",
    "kind": "weighted_mean",
+   "published": {
+    "matrix": "FOM106E",
+    "cells": "TOTAL activity x Total sex, every area",
+    "formula": "earnings(area, Y) = INS's published TOTAL x Total cell (FOM106E)",
+    "reference": {
+     "ro": "anul Y, medie lunară; totalul publicat de INS",
+     "en": "year Y, monthly average; the total INS publishes"
+    },
+    "status": {
+     "ro": "valori publicate de INS (total pe activități și sexe), preluate separat de restul datelor; reconstituirea ponderată apare doar ca verificare și poate diferi cu 1 leu din rotunjire",
+     "en": "values published by INS (total over activities and sexes), fetched separately from the rest of the data; the weighted reconstruction is shown only as a check and can differ by 1 lei from rounding"
+    }
+   },
    "status": {
     "ro": "reconstituit din ponderi publicate de INS; verificat la nivel național (2024: 4.959 lei = totalul INS); pe județe, 2008–2024, diferă de totalul publicat de INS cu cel mult 1,2 lei (rotunjirea câștigurilor publicate)",
     "en": "reconstructed from INS's published weights; checked nationally (2024: 4,959 lei = the INS total); by county, 2008–2024, within 1.2 lei of the total INS publishes (rounding of the published earnings)"
@@ -106,8 +119,8 @@
     "en": "lei"
    },
    "definition": {
-    "ro": "Câștigul salarial mediu net lunar al tuturor salariaților din județ (toate activitățile, ambele sexe), calculat ca medie a câștigurilor pe secțiuni CAEN și sexe, ponderată cu numărul mediu de salariați din fiecare celulă. INS publică acest total, dar nu face parte din datele noastre; reconstituirea reproduce totalul național publicat.",
-    "en": "Average net monthly earnings of all employees in the county (all activities, both sexes), computed as the mean of earnings by CAEN section and sex weighted by the average number of employees in each cell. INS publishes this total but it is not in our data; the reconstruction reproduces the published national total."
+    "ro": "Câștigul salarial mediu net lunar al tuturor salariaților din județ (toate activitățile, ambele sexe), așa cum îl publică INS. Pentru verificare îl reconstituim și ca medie a câștigurilor pe secțiuni CAEN și sexe, ponderată cu numărul mediu de salariați; câștigurile publicate sunt rotunjite, deci reconstituirea poate diferi cu 1 leu.",
+    "en": "Average net monthly earnings of all employees in the county (all activities, both sexes), as published by INS. As a check we also rebuild it as the mean of earnings by CAEN section and sex weighted by the average number of employees; the published earnings are rounded, so the reconstruction can differ by 1 lei."
    },
    "formula": "earnings(county, Y) = Σ_{section, sex} net_earnings × employees / Σ employees",
    "values": {
@@ -158,6 +171,14 @@
      "format": "int"
     },
     {
+     "key": "reconstructed",
+     "label": {
+      "ro": "Reconstituit (verificare)",
+      "en": "Reconstructed (check)"
+     },
+     "format": "int"
+    },
+    {
      "key": "weight_total",
      "label": {
       "ro": "Salariați (medie)",
@@ -171,9 +192,22 @@
   },
   {
    "id": "registered_unemployment_county",
-   "version": 1,
+   "version": 2,
    "question": "Q3",
    "kind": "rate_from_counts",
+   "published": {
+    "matrix": "SOM103A",
+    "cells": "Total sex, every area",
+    "formula": "rate(area, Y) = INS's published Total-sex cell (SOM103A)",
+    "reference": {
+     "ro": "anul Y; rata publicată de INS pentru ambele sexe",
+     "en": "year Y; the both-sexes rate INS publishes"
+    },
+    "status": {
+     "ro": "valori publicate de INS (ambele sexe), preluate separat de restul datelor; reconstituirea din ratele pe sexe apare doar ca verificare (2010 încoace) și poate diferi cu 0,1 din rotunjire",
+     "en": "values published by INS (both sexes), fetched separately from the rest of the data; the reconstruction from the rates by sex is shown only as a check (from 2010) and can differ by 0.1 from rounding"
+    }
+   },
    "status": {
     "ro": "reconstituit din ratele pe sexe și numărul de șomeri la sfârșitul anului; metoda reproduce ratele regionale publicate pe sexe (2022–2024, la rotunjire); Bucureștiul nu are numărul de șomeri în datele descărcate și apare doar ca interval; pe județe, 2010–2025, diferă de rata publicată de INS cu cel mult 0,09 puncte procentuale, deci rotunjit poate diferi cu 0,1",
     "en": "reconstructed from the rates by sex and the year-end registered unemployed; the method reproduces the published regional rates by sex (2022–2024, to rounding); Bucharest lacks the unemployed count in the downloaded data and is shown only as a range; by county, 2010–2025, within 0.09 percentage points of the rate INS publishes, so it can differ by 0.1 once rounded"
@@ -187,8 +221,8 @@
     "en": "%"
    },
    "definition": {
-    "ro": "Șomerii înregistrați la agențiile de ocupare față de populația activă civilă, pentru ambele sexe. INS publică ratele pe sexe; populația activă a fiecărui sex se obține din numărul de șomeri împărțit la rata lui, apoi rata totală = total șomeri / total populație activă. Nu este rata BIM (din anchetă).",
-    "en": "Unemployed people registered with the employment agencies relative to the civilian active population, both sexes. INS publishes the rates by sex; each sex's active population is the number of unemployed divided by its rate, then the total rate = total unemployed / total active population. Not the ILO (survey) rate."
+    "ro": "Șomerii înregistrați la agențiile de ocupare față de populația activă civilă, pentru ambele sexe, așa cum o publică INS. Pentru verificare o reconstituim din ratele pe sexe și numărul de șomeri de la sfârșitul anului; ratele publicate sunt rotunjite, deci reconstituirea poate diferi cu 0,1. Nu este rata BIM (din anchetă).",
+    "en": "Unemployed people registered with the employment agencies relative to the civilian active population, both sexes, as published by INS. As a check we rebuild it from the rates by sex and the year-end registered unemployed; the published rates are rounded, so the reconstruction can differ by 0.1. Not the ILO (survey) rate."
    },
    "formula": "rate(county, Y) = 100 × Σ_sex U / Σ_sex (U / (rate_sex / 100))",
    "rates": {
@@ -227,6 +261,14 @@
      "label": {
       "ro": "Rata șomajului (%)",
       "en": "Unemployment rate (%)"
+     },
+     "format": "rate"
+    },
+    {
+     "key": "reconstructed",
+     "label": {
+      "ro": "Reconstituit (verificare)",
+      "en": "Reconstructed (check)"
      },
      "format": "rate"
     },

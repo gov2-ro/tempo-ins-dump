@@ -1,5 +1,31 @@
 # Activity History
 
+## 2026-10-12 — Owner review of Q1–Q4, INS totals served, dataset notes
+
+Owner review: Q1 and Q4 approved as recorded (census break and provisional years
+labelled; Q4 at 2 decimals with coverage in the label, TUR105E/H excluded); Q2 and Q3
+definitions approved with INS's own totals as the value. All four are now
+`verified` on generation `7751ed9edd30` (copy `tempo-gen-20261012`).
+
+INS totals: `app/data/published_totals.json` lists the Total cells to fetch (every
+geographic level, open-ended years); `scripts/load-published-totals.py` loads them
+into `published_totals` with provenance. Recipes v2 serve them and keep the
+reconstruction as `reconstructed` plus a `check` summary; generations without the
+table fall back to the reconstruction. Place pages show an "INS" badge, and
+country/region baselines come from INS's cells instead of recombined counties. The
+evidence bundle's `recompute.py` checks values against `inputs/published.csv` and the
+reconstruction separately. Static parity holds.
+
+Dataset notes: `app/data/dataset_notes.json` (curated caveats, breaks, coverage,
+decisions, source issues; parents cover split children), shown under the definition
+on dataset pages and in `/api/datasets/{code}`; `scripts/build-notes-report.py`
+renders `docs/reports/ins-notes.md`, including the questions to raise with INS.
+
+Found while checking: TUR105E/H's conflict is ours (the county split dropped
+locality), and Bucharest was missing from 69 locality-level downloads because the
+SIRUTA map says "Bucuresti" (fixed in stage 6; refetch pending). Split children's
+`matrix_profiles` also needed re-classification after the refresh.
+
 ## 2026-10-12 — Methodology note on computed totals, averages and rates
 
 New [METHODOLOGY.md](METHODOLOGY.md), linked from the readme with a short note:

@@ -59,6 +59,10 @@ Full rebuild order:
   write the same canonical outputs. Neither `--lang en`, `TEMPO_LANG` nor
   `TEMPO_DATA_DIR` isolates pipeline writes — use a copied checkout for experiments.
 - Most processing scripts accept `--matrix CODE`; flags differ, check `--help`.
+- **Published totals:** INS Total cells the app serves directly (Q2/Q3 recipes) are
+  listed in `app/data/published_totals.json`; fetch them with
+  `scripts/fetch-ins-reference-cells.py` and load with `scripts/load-published-totals.py`
+  into the generation's DB. Re-run both when those matrices are refreshed.
 
 **Orchestrator** `update-pipeline.py`: incremental runs from the INS news feed
 (`get-news.py` → `data/insse_news.csv`). Per matrix, in order: meta → CSV →

@@ -1,20 +1,20 @@
 # PA-00 answer records, Q1–Q5
 
-Version 2, 2026-10-12, generation `d957e2919750…` (copy `tempo-gen-20261012`,
+Version 2, 2026-10-12, generation `7751ed9edd30…` (copy `tempo-gen-20261012`,
 POP105A/SOM103A/TUR105D refreshed from INS; see [refresh](#refreshed-generation-2026-10-12)).
 Version 1 (2026-10-11) was recorded on generation `a6737a263a34…` (see [baseline](baseline.md));
 sections below that cite 2024 as the latest year describe v1.
 Machine-readable expectations: [answers.json](answers.json).
 
-**Q1 and Q4 are `verified`** (owner review, 2026-10-12; see
-[Review decisions](#review-decisions-2026-10-12)). Q2 and Q3 have approved
-definitions and are waiting for the app to serve INS's own Total cells.
+**Q1–Q4 are `verified`** (owner review, 2026-10-12; see
+[Review decisions](#review-decisions-2026-10-12)). Q2 and Q3 are served from INS's
+own Total cells, with the reconstruction as a cross-check.
 
 | Q | Status | Blocker / next step |
 |---|---|---|
 | Q1 population | **`verified`** (2026-10-12) | Equal to INS in all 645 area-years 2012–2026. Presentation requirements below |
-| Q2 net earnings | `candidate`, definition approved | **Serve INS's own Total cells** (decided); the reconstruction stays as a cross-check. Verified once served |
-| Q3 unemployment | `candidate`, definition approved | Same as Q2. Bucharest = **0.7** (2024), **0.5** (2025) per INS. Latest year 2025 |
+| Q2 net earnings | **`verified`** (2026-10-12) | INS's Total cells (`published_totals`). 2024: Cluj 5,921, Iași 5,098, Bucharest 6,730, national 4,959 |
+| Q3 unemployment | **`verified`** (2026-10-12) | INS's Total cells. 2025: Teleorman 9.3 (rank 1), Iași 3.4, Cluj 1.5, Bucharest 0.5, national 3.3 |
 | Q4 tourism intensity | **`verified`** (2026-10-12) | Latest year **2025**; 2 decimals; coverage in the label; TUR105E/H exclusion approved |
 | Q5 share/reproduce | `candidate` | Checklist below; acceptance is PA-03 |
 
@@ -90,6 +90,10 @@ approved and every expected value equals an independent INS cell.
   at least 5 bed-places, Romanian and foreign tourists. Excluding TUR105E_judet and
   TUR105H_judet is approved. Their conflict is ours, not INS's: the county split
   drops the locality column, so a county-year repeats once per locality (FIX-03 queue).
+- **Served (2026-10-12):** `published_totals` holds INS's Total cells for FOM106E and
+  SOM103A at every level (2,854 cells); they equal the independently fetched
+  reference cells in all 2,230 shared cells. Recipes v2 serve them; place pages show
+  them with an "INS" badge, and country/region baselines come from INS's own cells.
 - **Decision log for INS.** Every note above is recorded per dataset in
   `app/data/dataset_notes.json`; `docs/reports/ins-notes.md` lists them, with the
   points to raise with INS.
@@ -157,7 +161,8 @@ counts are slightly different weights from INS's own.
 
 Copy `~/devbox/gov2/tempo-gen-20261012/data`, an APFS clone of `tempo-gen-20261005`
 with only POP105A, SOM103A and TUR105D refreshed (metadata + CSV from INS, stages B–D
-for the 3 parents and 12 children), generation `d957e2919750…`. Not published.
+for the 3 parents and 12 children), generation `7751ed9edd30…` (after the
+published totals were loaded and the children re-profiled). Not published.
 
 - **Source diff:** POP105A 25,832 cells revised (2024–2025 only), 22,042 new (2026);
   SOM103A +108 cells (2025); TUR105D +1,086 (2025). No other cell changed or vanished.
@@ -251,7 +256,7 @@ Recompute with the `shasum` line in [Reproduction](#reproduction). Retained INS 
 
 ## Q2 — County net earnings comparison
 
-- **Identity:** Q2 v2, `candidate`; definition approved 2026-10-12; to be served from INS's Total cells.
+- **Identity:** Q2 v2, **`verified`**, owner, 2026-10-12; served from INS's Total cells.
 - **Intent:** RO “Cum se compară salariul mediu net în Cluj, Iași și București?”,
   “salariu mediu net cluj iasi bucuresti”. EN “Compare average net earnings in
   Cluj, Iași and Bucharest”, “average salary by county”. Ambiguity: net vs gross
@@ -275,7 +280,7 @@ Recompute with the `shasum` line in [Reproduction](#reproduction). Retained INS 
 
 ## Q3 — Registered unemployment ranking
 
-- **Identity:** Q3 v2, `candidate`; definition approved 2026-10-12; to be served from INS's Total cells.
+- **Identity:** Q3 v2, **`verified`**, owner, 2026-10-12; served from INS's Total cells.
 - **Intent:** RO “În ce județe este cea mai mare rată a șomajului înregistrat?”,
   “somaj judete”. EN “Which counties have the highest registered unemployment
   rate?”, “unemployment rate by county”. Ambiguity: registered (ANOFM) vs ILO/BIM

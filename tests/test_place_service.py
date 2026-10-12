@@ -136,9 +136,11 @@ def test_get_kpi_baselines_returns_national():
     assert "national" in baselines
     assert isinstance(baselines["national"], list)
     assert len(baselines["national"]) > 0
-    # the unemployment reconstruction has no Bucharest row: no partial national figure
     som = get_kpi_baselines("county", "bihor", "Rata șomajului BIM")
-    assert som["national"] == [] and som["national_meta"]["reason"] == "incomplete_areas"
+    if som["national_meta"]["method"]["code"] == "source_total":
+        assert som["national"]          # INS publishes the national rate
+    else:   # the reconstruction has no Bucharest row: no partial national figure
+        assert som["national"] == [] and som["national_meta"]["reason"] == "incomplete_areas"
 
 
 @pytest.mark.corpus

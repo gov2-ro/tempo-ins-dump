@@ -138,7 +138,8 @@ class ComparePage {
             sources: 'Surse', excluded: 'Excluse', reasons: { numerator_missing: 'fără înnoptări', denominator_missing: 'fără populație',
                 denominator_not_positive: 'populație ≤ 0', nonfinite: 'valoare invalidă', not_in_denominator: 'nu are populație rezidentă pe județ',
                 not_in_data: 'nu există în date', value_missing: 'lipsește o valoare ponderată', no_weights: 'fără ponderi',
-                group_missing: 'lipsesc date pentru un sex', rate_zero: 'rată zero cu șomeri', no_base: 'fără bază' },
+                group_missing: 'lipsesc date pentru un sex', rate_zero: 'rată zero cu șomeri', no_base: 'fără bază', not_published: 'INS nu publică valoarea' },
+            check: (k, n, d) => `Verificare: reconstituirea din date pe categorii dă aceeași valoare, după rotunjire, în ${k} din ${n} județe (diferență maximă ${d}); diferențele vin din rotunjirea valorilor publicate.`,
             linkNote: 'Linkul recalculează pe datele curente; fișierul ZIP păstrează rezultatul de acum.',
             unavailable: 'Rezultat indisponibil', generation: 'Generația datelor',
         } : {
@@ -148,7 +149,8 @@ class ComparePage {
             sources: 'Sources', excluded: 'Excluded', reasons: { numerator_missing: 'no stays', denominator_missing: 'no population',
                 denominator_not_positive: 'population ≤ 0', nonfinite: 'invalid value', not_in_denominator: 'no county resident population',
                 not_in_data: 'not in the data', value_missing: 'a weighted value is missing', no_weights: 'no weights',
-                group_missing: 'data missing for one sex', rate_zero: 'zero rate with unemployed', no_base: 'no base' },
+                group_missing: 'data missing for one sex', rate_zero: 'zero rate with unemployed', no_base: 'no base', not_published: 'not published by INS' },
+            check: (k, n, d) => `Check: rebuilding the value from the published breakdown gives the same value, once rounded, in ${k} of ${n} counties (largest gap ${d}); the gaps come from rounding of the published values.`,
             linkNote: 'The link recomputes on current data; the ZIP keeps this result.',
             unavailable: 'Result unavailable', generation: 'Data generation',
         };
@@ -183,6 +185,9 @@ class ComparePage {
         const excl = r.excluded.length
             ? `<p class="rcp-excluded">${T.excluded}: ${r.excluded.map(e => `${_escHtml(e.label)} (${T.reasons[e.reason] || e.reason}${
                 e.bounds ? `; ${T.between} ${fmt(e.bounds[0])} – ${fmt(e.bounds[1])}` : ''})`).join(', ')}</p>` : '';
+        const chk = r.check && r.check.compared
+            ? `<p class="rcp-meta">${_escHtml(T.check(r.check.equal_when_rounded, r.check.compared,
+                r.check.max_abs_diff.toLocaleString(ro ? 'ro-RO' : 'en-GB', { maximumFractionDigits: dec + 2 })))}</p>` : '';
         const evidenceHref = API.recipeEvidenceHref(this.recipe, { year: r.year, areas: params.areas, lang: this.lang });
         host.innerHTML = `
             <h1>${_escHtml(r.recipe.name)} · ${_escHtml(r.year)}</h1>
@@ -196,7 +201,7 @@ class ComparePage {
                 <button class="rcp-btn" id="rcp-feedback" type="button">${ro ? 'Semnalează o problemă' : 'Report a problem'}</button>
             </div>
             <p class="rcp-meta">${_escHtml(T.linkNote)} ${T.generation}: <code>${_escHtml((r.generation?.id || '').slice(0, 12))}</code> · ${_escHtml(r.recipe.formula)}</p>
-            ${excl}
+            ${excl}${chk}
             <section class="dbv2-tile"><div class="dbv2-tile-chart" id="rcp-chart" role="img"
                 aria-label="${_escHtml(r.recipe.name)} ${_escHtml(r.year)}"></div></section>
             <div class="rcp-table-wrap"><table class="rcp-table">

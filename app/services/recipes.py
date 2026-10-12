@@ -321,13 +321,166 @@ def compute_rate_from_counts(rates, counts, *, by: str, year=None, areas=None) -
             "universe": len(geos)}
 
 
+# ------------------------------------------------------------------ published totals
+#
+# A recipe with `published: {"matrix": M}` serves INS's own Total cell for each
+# area and year (table `published_totals`, scripts/load-published-totals.py) and
+# keeps its reconstruction as a cross-check: a mean or rate rebuilt from rounded
+# published parts can differ from INS's total by one unit (docs/METHODOLOGY.md §4).
+
+def _published_cells(conn, matrix: str) -> dict:
+    """{(geo_id, year): row} for one matrix, or {} when the generation has none."""
+    try:
+        rows = conn.execute(
+            "SELECT ref_area, time_period, value, unit, query_id, fetched_at, file_sha256, "
+            "ins_updated FROM published_totals WHERE matrix_code = ?", [matrix]).fetchall()
+    except Exception:           # older generations have no published_totals table
+        return {}
+    return {(geo_id(a), y): {"label": a, "year": y, "value": v, "unit": u, "query_id": q,
+                             "fetched_at": f, "sha256": s, "ins_updated": iu}
+            for a, y, v, u, q, f, s, iu in rows}
+
+
+def _county_ids(conn, code: str) -> set:
+    from app.services.data_query import QueryError, dimension_values
+    try:
+        vals = dimension_values(conn, code, "REF_AREA", limit=500)["values"]
+    except QueryError as e:
+        raise RecipeError("source_failed", f"{code}: {e.message}")
+    return {geo_id(v) for v in vals}
+
+
+def compute_published(cells: dict, counties: set, *, year=None, areas=None,
+                      reconstruction: dict | None = None, decimals: int = 0) -> dict:
+    """Pure: INS's published value per county for one year, ranked, with the
+    non-county cells (country, regions) as `aggregates` and, when a
+    reconstruction for the same year is given, each row's `reconstructed`
+    value and a summary `check` over every county of that year (not only the
+    requested areas: the check describes the year's data)."""
+    years = sorted({y for (g, y), c in cells.items() if g in counties and c["value"] is not None})
+    if not years:
+        raise RecipeError("no_published_data", "no published county values")
+    if year is not None:
+        year = _year(year)
+        if year not in years:
+            raise RecipeError("year_unavailable", f"no common data for {year}", years_available=years)
+    else:
+        year = years[-1]
+    rec = {x["geo_id"]: x for x in (reconstruction or {}).get("rows", [])}
+    rows, excluded, aggregates = [], [], []
+    for (g, y), c in sorted(cells.items()):
+        if y != year:
+            continue
+        if g not in counties:
+            if c["value"] is not None:
+                aggregates.append({"geo_id": g, "label": c["label"], "value": c["value"]})
+            continue
+        if c["value"] is None:
+            excluded.append({"geo_id": g, "label": c["label"], "reason": "not_published"})
+            continue
+        row = {"geo_id": g, "label": c["label"], "year": year, "value": c["value"],
+               "reconstructed": rec[g]["value"] if g in rec else None}
+        for k in ("weight_total", "count_total", "base_total"):
+            if g in rec and k in rec[g]:
+                row[k] = rec[g][k]
+        rows.append(row)
+    check = None
+    if reconstruction is not None:
+        both = [x for x in rows if x["reconstructed"] is not None]
+        q = 10 ** decimals
+        check = {"compared": len(both),
+                 "max_abs_diff": max((abs(x["value"] - x["reconstructed"]) for x in both), default=None),
+                 "equal_when_rounded": sum(1 for x in both
+                                           if math.floor(x["reconstructed"] * q + 0.5) / q == x["value"])}
+    if areas:
+        want = {geo_id(a) for a in areas}
+        known = {x["geo_id"] for x in rows} | {e["geo_id"] for e in excluded}
+        rows = [x for x in rows if x["geo_id"] in want]
+        excluded = [e for e in excluded if e["geo_id"] in want]
+        excluded += [{"geo_id": g, "label": g, "reason": "not_in_data"} for g in sorted(want - known)]
+    rows.sort(key=lambda r: (-r["value"], r["label"]))
+    for i, r in enumerate(rows, 1):
+        r["rank"] = i
+    universe = len(rows) + sum(1 for e in excluded if e["reason"] != "not_in_data")
+    return {"year": year, "rows": rows, "excluded": excluded, "years_available": years,
+            "universe": universe, "aggregates": aggregates, "check": check,
+            "value_source": "ins_published"}
+
+
 def run(conn, recipe_id: str, *, year=None, areas=None, lang: str = "ro") -> dict:
     recipes = load_recipes()
     if recipe_id not in recipes:
         raise RecipeError("unknown_recipe", f"no recipe {recipe_id!r}")
     r = recipes[recipe_id]
+    if r.get("published"):
+        cells = _published_cells(conn, r["published"]["matrix"])
+        if cells:
+            return _run_published(conn, r, cells, year=year, areas=areas, lang=lang)
+    return _run_reconstruction(conn, r, year=year, areas=areas, lang=lang)
+
+
+def _pick(d, lang):
+    return d.get(lang) or d.get("ro") if isinstance(d, dict) else d
+
+
+def _recipe_info(r: dict, kind: str, lang: str) -> dict:
+    pick = lambda d: _pick(d, lang)
+    return {"id": r["id"], "version": r["version"], "kind": kind, "name": pick(r["name"]),
+            "unit": pick(r["unit"]), "definition": pick(r["definition"]),
+            "formula": r["formula"], "status": pick(r["status"]),
+            "missing_policy": r["missing_policy"],
+            "display_decimals": r["display_decimals"],
+            "unit_multipliers": r.get("unit_multipliers"),
+            "columns": [{**c, "label": pick(c["label"])} for c in r.get("columns", [])],
+            "question": r.get("question"),
+            "parameters": {k: r[k] for k in ("cell_columns", "keep", "by") if k in r},
+            "value_source": "reconstruction"}
+
+
+def _run_published(conn, r: dict, cells: dict, *, year, areas, lang) -> dict:
+    """INS's published values; the reconstruction, when its sources have the
+    year, rides along as a cross-check (never as the value)."""
+    from app.services import generation
+    from app.services.concept_search import dataset_facts
+    pub = r["published"]
+    counties = _county_ids(conn, source_specs(r)[0]["dataset"])
+    probe = compute_published(cells, counties, year=year, areas=areas)
+    try:
+        rec = _run_reconstruction(conn, r, year=probe["year"], lang=lang)
+    except RecipeError:
+        rec = None             # e.g. SOM103A before 2010: no SOM101E counts
+    out = compute_published(cells, counties, year=probe["year"], areas=areas, reconstruction=rec,
+                            decimals=r["display_decimals"])
+    yc = [c for (g, y), c in cells.items() if y == out["year"]]
+    facts = dataset_facts(conn, pub["matrix"], lang) or {}
+    gen = rec["generation"] if rec else (lambda g: {"id": g["id"], "status": g["status"],
+                                                    "built_at": g["built_at"]})(generation.current())
+    published = {
+        "role": "published", "dataset": pub["matrix"], "title": facts.get("title"),
+        "definition": facts.get("definition"), "unit": yc[0]["unit"] if yc else None,
+        "source_updated": yc[0]["ins_updated"] if yc else None, "coverage": facts.get("coverage"),
+        "concept": source_specs(r)[0].get("concept"), "reference": _pick(pub.get("reference"), lang),
+        "query": {"dataset": pub["matrix"], "cells": pub.get("cells"), "year": out["year"],
+                  "query_id": yc[0]["query_id"] if yc else None,
+                  "fetched_at": yc[0]["fetched_at"] if yc else None,
+                  "sha256": yc[0]["sha256"] if yc else None},
+        "aggregation": {"outcome": "valid_total", "method": "source_total"},
+        "quality": None, "generation": gen, "contract": rec["sources"][0].get("contract") if rec else None}
+    info = _recipe_info(r, r.get("kind", "ratio"), lang)
+    info.update(value_source="ins_published", status=_pick(pub.get("status") or r["status"], lang),
+                formula=pub.get("formula", r["formula"]), reconstruction_formula=r["formula"])
+    inputs = {"published": [["REF_AREA", "TIME_PERIOD", "OBS_VALUE"]]
+              + [[c["label"], c["year"], c["value"]] for c in sorted(yc, key=lambda c: c["label"])]}
+    if rec:
+        inputs.update(rec["inputs"])
+    return {"recipe": info, "request": {"year": year, "areas": areas or None, "lang": lang},
+            **out, "sources": [published] + (rec["sources"] if rec else []),
+            "inputs": inputs, "generation": gen}
+
+
+def _run_reconstruction(conn, r: dict, *, year=None, areas=None, lang: str = "ro") -> dict:
     kind = r.get("kind", "ratio")
-    pick = lambda d: d.get(lang) or d.get("ro") if isinstance(d, dict) else d
+    pick = lambda d: _pick(d, lang)
     if kind == "ratio":
         a_, b_ = _source(conn, r["numerator"], lang), _source(conn, r["denominator"], lang)
         out = compute(a_["rows"], b_["rows"], num_unit=a_["unit"], den_unit=b_["unit"],
@@ -357,15 +510,7 @@ def run(conn, recipe_id: str, *, year=None, areas=None, lang: str = "ro") -> dic
     for src in (a_, b_):
         sources.append({k: (pick(v) if k == "reference" else v) for k, v in src.items()
                         if k not in ("rows", "table", "columns")})
-    return {"recipe": {"id": r["id"], "version": r["version"], "kind": kind, "name": pick(r["name"]),
-                       "unit": pick(r["unit"]), "definition": pick(r["definition"]),
-                       "formula": r["formula"], "status": pick(r["status"]),
-                       "missing_policy": r["missing_policy"],
-                       "display_decimals": r["display_decimals"],
-                       "unit_multipliers": r.get("unit_multipliers"),
-                       "columns": [{**c, "label": pick(c["label"])} for c in r.get("columns", [])],
-                       "question": r.get("question"),
-                       "parameters": {k: r[k] for k in ("cell_columns", "keep", "by") if k in r}},
+    return {"recipe": _recipe_info(r, kind, lang),
             "request": {"year": year, "areas": areas or None, "lang": lang},
             **out, "sources": sources, "inputs": inputs,
             "generation": b_["generation"]}

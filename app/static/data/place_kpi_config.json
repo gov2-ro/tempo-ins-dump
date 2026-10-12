@@ -1,8 +1,8 @@
 {
   "_notes": {
     "schema": "Per KPI: key (stable id), label/label_en, aliases (old labels still accepted by the baselines route), parquet, unit/unit_en/unit_kind (count|percent_rate|per_mille_rate|currency), source_code/source_title(_en), definition(_en), measure additive|non_additive, partitions = columns collapsed (declared complete disjoint partitions, FIX-02 declared_partitions), weights = aligned weight parquet for non-additive measures, allow_approximation = permit a named unweighted mean when no weights exist, suppress = reason the KPI is not shown.",
-    "unemployment": "Our SOM103A export has only Masculin/Feminin rows (INS publishes Total; the fetch dropped it). The both-sexes rate is the registered_unemployment_county recipe (SOM101E year-end counts recover the active population by sex); Bucharest lacks SOM101E rows in the fetch and is omitted with its range.",
-    "wage": "Our FOM106E export has no all-activities total row (INS publishes it; the fetch dropped it); the net_earnings_county recipe weights CAEN sections × sex by FOM104F employees and reproduces the INS national total.",
+    "unemployment": "Our SOM103A export has only Masculin/Feminin rows (INS publishes Total; the fetch dropped it). The registered_unemployment_county recipe serves INS's published Total cells (published_totals) when the generation has them, else reconstructs the rate from SOM101E year-end counts (method_note).",
+    "wage": "Our FOM106E export has no all-activities total row (INS publishes it; the fetch dropped it). The net_earnings_county recipe serves INS's published Total cells when the generation has them, else weights CAEN sections × sex by FOM104F employees (method_note).",
     "rates": "Birth/death rates are published for Urban/Rural only; they are combined with POP105A resident-population weights per residence area and year (so periods before POP105A starts in 2012 are not shown)."
   },
   "county": [
@@ -42,10 +42,12 @@
       "source_code": "SOM103A",
       "source_title": "Rata șomajului pe sexe, macroregiuni, regiuni de dezvoltare și județe",
       "source_title_en": "Unemployment rate by gender, macroregions, development regions and counties",
-      "definition": "Rata șomajului înregistrat pentru ambele sexe (șomeri înregistrați față de populația activă civilă). INS o publică doar pe sexe în datele noastre; rata totală se reconstituie din numărul de șomeri la sfârșitul anului (SOM101E) și ratele pe sexe.",
-      "definition_en": "Registered unemployment rate for both sexes (registered unemployed relative to the civilian active population). Our data has it only by sex; the total rate is reconstructed from the year-end unemployed (SOM101E) and the rates by sex.",
+      "definition": "Rata șomajului înregistrat pentru ambele sexe (șomeri înregistrați față de populația activă civilă), așa cum o publică INS.",
+      "definition_en": "Registered unemployment rate for both sexes (registered unemployed relative to the civilian active population), as published by INS.",
       "measure": "non_additive",
       "recipe": "registered_unemployment_county",
+      "published_note": "Valoarea publicată de INS (ambele sexe), preluată separat de restul datelor.",
+      "published_note_en": "The value INS publishes (both sexes), fetched separately from the rest of the data.",
       "method_note": "Reconstituit: populația activă pe sexe = șomeri / rată; rata totală = total șomeri / total populație activă. Reproduce ratele regionale publicate.",
       "method_note_en": "Reconstructed: active population by sex = unemployed / rate; total rate = total unemployed / total active population. Reproduces the published regional rates."
     },
@@ -62,8 +64,10 @@
       "parquet": "FOM106E_judete.parquet",
       "source_title": "Câștigul salarial mediu net lunar pe activități CAEN, sexe și județe (ponderat cu salariații din FOM104F)",
       "source_title_en": "Average net monthly earnings by CAEN activity, sex and county (weighted by FOM104F employees)",
-      "definition": "Câștigul salarial mediu net lunar al tuturor salariaților din județ. INS publică acest total, dar el lipsește din datele noastre; îl reconstituim ca medie a câștigurilor pe secțiuni CAEN și sexe, ponderată cu numărul mediu de salariați (verificat: totalul național 2024 = 4.959 lei, ca la INS).",
-      "definition_en": "Average net monthly earnings of all employees in the county. INS publishes this total but it is missing from our data; we reconstruct it as the mean of earnings by CAEN section and sex weighted by the average number of employees (checked: the 2024 national total = 4,959 lei, as published by INS).",
+      "definition": "Câștigul salarial mediu net lunar al tuturor salariaților din județ (toate activitățile, ambele sexe), așa cum îl publică INS.",
+      "definition_en": "Average net monthly earnings of all employees in the county (all activities, both sexes), as published by INS.",
+      "published_note": "Valoarea publicată de INS (toate activitățile, ambele sexe), preluată separat de restul datelor.",
+      "published_note_en": "The value INS publishes (all activities, both sexes), fetched separately from the rest of the data.",
       "method_note": "Reconstituit: medie ponderată cu numărul mediu de salariați (FOM104F) pe secțiuni CAEN și sexe; reproduce totalul național publicat de INS.",
       "method_note_en": "Reconstructed: mean weighted by the average number of employees (FOM104F) over CAEN sections and sexes; reproduces the national total INS publishes.",
       "measure": "non_additive"

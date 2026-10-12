@@ -2,7 +2,7 @@
  "schema": 1,
  "kind": "pa00-answer-expectations",
  "recorded": "2026-10-12",
- "generation": "d957e291975049cf721590f83a018d8a3323d0d5f416f9ecf44a1921dfa4a621",
+ "generation": "7751ed9edd306406bbb8047f5c3e412ee6b2460b1a4e07541921b1cf2304647d",
  "note": "Candidate expectations only. No record is verified; values are NOT golden numbers until a reviewer signs the record in answer-records.md. Do not freeze them in tests as truth.",
  "records": {
   "Q1": {
@@ -116,13 +116,13 @@
    }
   },
   "Q2": {
-   "status": "candidate",
+   "status": "verified",
    "version": 2,
    "source": {
     "dataset": "FOM106E_judete",
     "parent": "FOM106E"
    },
-   "method": "reconstructed by recipe net_earnings_county",
+   "method": "INS published Total cell (published_totals); reconstruction kept as a cross-check",
    "evidence": {
     "independent_ins_cell": {
      "fetched": "2026-10-12",
@@ -137,7 +137,8 @@
       "national": 4959
      }
     },
-    "open": "owner decision: serve INS Total cells instead of the reconstruction"
+    "open": null,
+    "served_equals_reference_cells": "published_totals equal the independently fetched reference cells in all 2,230 shared cells"
    },
    "review": {
     "by": "owner",
@@ -146,10 +147,17 @@
     "requirements": [
      "do not join FOM106A (Rev.1) with FOM106E (Rev.2)"
     ]
+   },
+   "values_latest": {
+    "Cluj": 5921,
+    "Iasi": 5098,
+    "Municipiul Bucuresti": 6730,
+    "national": 4959,
+    "year": "2024"
    }
   },
   "Q3": {
-   "status": "candidate",
+   "status": "verified",
    "version": 2,
    "source": {
     "dataset": "SOM103A_judete",
@@ -160,7 +168,7 @@
     "frequency": "annual",
     "decided": "2026-10-11"
    },
-   "method": "reconstructed by recipe registered_unemployment_county",
+   "method": "INS published Total cell (published_totals); reconstruction kept as a cross-check",
    "evidence": {
     "independent_ins_cell": {
      "fetched": "2026-10-12",
@@ -183,12 +191,21 @@
       "national": 3.3
      }
     },
-    "open": "owner decision: serve INS Total cells instead of the reconstruction"
+    "open": null,
+    "served_equals_reference_cells": "published_totals equal the independently fetched reference cells in all 2,230 shared cells"
    },
    "review": {
     "by": "owner",
     "date": "2026-10-12",
     "decision": "definition approved; serve INS's published Total cells, keep the reconstruction as a cross-check"
+   },
+   "values_latest": {
+    "Cluj": 1.5,
+    "Iasi": 3.4,
+    "Municipiul Bucuresti": 0.5,
+    "national": 3.3,
+    "Teleorman": 9.3,
+    "year": "2025"
    }
   },
   "Q4": {

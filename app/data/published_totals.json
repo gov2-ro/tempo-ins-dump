@@ -1,0 +1,11 @@
+{
+ "about": "INS Total cells the app serves directly (instead of a reconstruction): every geographic level, all years from `from`. Fetch with scripts/fetch-ins-reference-cells.py --spec app/data/published_totals.json, load into the generation's DB with scripts/load-published-totals.py. Recipes name the matrix in `published`.",
+ "queries": [
+  {"id": "FOM106E-total", "matrix": "FOM106E",
+   "purpose": "Q2: average net monthly earnings, all activities (TOTAL), both sexes",
+   "select": [{"pick": "total"}, {"pick": "total"}, {"pick": "all"}, {"pick": "years", "from": 2008}, {"pick": "all"}]},
+  {"id": "SOM103A-total", "matrix": "SOM103A",
+   "purpose": "Q3: registered unemployment rate, both sexes",
+   "select": [{"pick": "total"}, {"pick": "all"}, {"pick": "years", "from": 1991}, {"pick": "all"}]}
+ ]
+}

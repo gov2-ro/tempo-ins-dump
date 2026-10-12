@@ -348,7 +348,7 @@ def test_bihor_unemployment_uses_latest_source_period():
     k = next(x for x in rep["kpis"] if x["key"] == "registered_unemployment_rate")
     assert k["period"] == k["source_latest_period"]       # not the old oldest-30 window (2020)
     assert int(k["period"]) >= 2024
-    assert k["method"]["code"] == "reconstruction" and k["method"]["approximation"] is False
+    assert k["method"]["code"] in ("reconstruction", "source_total") and k["method"]["approximation"] is False
     assert "BIM" not in k["label"] and "BIM" not in k["label_en"]
     assert [r["year"] for r in k["sparkline"]] == sorted(r["year"] for r in k["sparkline"])
     # rates change in points, counts in relative percent

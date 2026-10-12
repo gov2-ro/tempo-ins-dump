@@ -38,7 +38,7 @@ const PLACE_UI = {
           regionWord: '(regiune)', omitted: 'Indicatori indisponibili:',
           omittedReasons: { no_all_activities_total: 'nu există rând de total pe activități', no_data: 'fără date', missing_weights: 'fără ponderi',
               group_missing: 'lipsesc date pentru un sex' },
-          between: 'între', reconstructed: 'reconstituit', reconstructedTitle: 'Reconstituit din ponderile publicate de INS (vezi nota)', },
+          between: 'între', reconstructed: 'reconstituit', reconstructedTitle: 'Reconstituit din ponderile publicate de INS (vezi nota)', sourceTotalTitle: 'Totalul publicat de INS (vezi nota)', },
     en: { loading: 'Loading...', notFound: 'Place not found.', error: 'Loading error.',
           datasets: 'datasets available', themes: 'Datasets by theme',
           comparison: 'Comparison', national: 'National average', sameRegion: 'Same region:',
@@ -53,7 +53,7 @@ const PLACE_UI = {
           regionWord: '(region)', omitted: 'Unavailable indicators:',
           omittedReasons: { no_all_activities_total: 'no all-activities total row in the source', no_data: 'no data', missing_weights: 'no weights',
               group_missing: 'data missing for one sex' },
-          between: 'between', reconstructed: 'reconstructed', reconstructedTitle: 'Reconstructed from weights INS publishes (see the note)', },
+          between: 'between', reconstructed: 'reconstructed', reconstructedTitle: 'Reconstructed from weights INS publishes (see the note)', sourceTotalTitle: 'The total INS publishes (see the note)', },
 };
 
 class PlaceProfileApp {
@@ -259,6 +259,7 @@ class PlaceProfileApp {
         if (m.approximation) return `<span class="kpi-badge approx" title="${_esc(t.approxTitle)}">${_esc(t.approx)}</span>`;
         if (m.code === 'weighted_mean') return `<span class="kpi-badge weighted">${_esc(t.weighted)}</span>`;
         if (m.code === 'reconstruction') return `<span class="kpi-badge weighted" title="${_esc(t.reconstructedTitle)}">${_esc(t.reconstructed)}</span>`;
+        if (m.code === 'source_total') return `<span class="kpi-badge" title="${_esc(t.sourceTotalTitle)}">INS</span>`;
         return '';
     }
 

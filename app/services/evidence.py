@@ -220,7 +220,10 @@ def gid(label):
 
 def table(name, cols, keep=None):
     out = {}
-    with open(os.path.join(here, "inputs", name), encoding="utf-8") as f:
+    path = os.path.join(here, "inputs", name)
+    if not os.path.exists(path) and method.get("value_source") == "ins_published":
+        return out             # no reconstruction for this year: INS values only
+    with open(path, encoding="utf-8") as f:
         for r in csv.DictReader(f):
             if re.sub(r"^Anul\\s+", "", r["TIME_PERIOD"].strip()) != year:
                 continue
@@ -262,7 +265,22 @@ else:
 
 rows.sort(key=lambda r: (-r[1], r[0]))
 with open(os.path.join(here, "result.csv"), encoding="utf-8") as f:
-    published = {r["label"]: float(r["value"]) for r in csv.DictReader(f)}
+    result = list(csv.DictReader(f))
+if method.get("value_source") == "ins_published":
+    # value = INS's published cell (inputs/published.csv); the reconstruction is
+    # only a cross-check and must equal result.csv's `reconstructed` column
+    with open(os.path.join(here, "inputs", "published.csv"), encoding="utf-8") as f:
+        ins = {r["REF_AREA"].strip(): r["OBS_VALUE"] for r in csv.DictReader(f)}
+    wrong = [r["label"] for r in result if r["label"] not in ins or float(ins[r["label"]]) != float(r["value"])]
+    print(f"{len(result)} values; {len(wrong)} differ from inputs/published.csv", file=sys.stderr)
+    recon = {r["label"]: float(r["reconstructed"]) for r in result if r.get("reconstructed")}
+    got = {label: v for label, v in rows}
+    bad = [k for k, v in recon.items() if k not in got or abs(got[k] - v) > 1e-9 * max(1, abs(v))]
+    for r in rows:
+        print(f"{r[0]},{r[1]!r}")
+    print(f"recomputed {len(rows)} reconstructions; {len(bad)} differ from result.csv", file=sys.stderr)
+    sys.exit(1 if wrong or bad else 0)
+published = {r["label"]: float(r["value"]) for r in result}
 bad = [r for r in rows if r[0] not in published or abs(published[r[0]] - r[1]) > 1e-9 * max(1, abs(r[1]))]
 for r in rows:
     print(f"{r[0]},{r[1]!r}")
@@ -293,6 +311,9 @@ def recipe_bundle(result: dict, link: str) -> bytes:
             "source_aggregation": {k: v["aggregation"] for k, v in src.items()},
             "source_quality": {k: v["quality"] for k, v in src.items()},
             "status": r["status"],
+            "value_source": r.get("value_source", "reconstruction"),
+            **({"reconstruction_formula": r["reconstruction_formula"], "check": result.get("check"),
+                "aggregates": result.get("aggregates")} if r.get("value_source") == "ins_published" else {}),
         }),
         "attribution.json": _json(_attribution(result["sources"])),
         "recompute.py": RECOMPUTE_PY if ratio else RECOMPUTE_TABLES_PY,
@@ -313,7 +334,9 @@ def recipe_bundle(result: dict, link: str) -> bytes:
         files["result.csv"] = _csv(["rank", "geo_id", "label", "year", *keys],
                                    [[x["rank"], x["geo_id"], x["label"], x["year"],
                                      *[x.get(k) for k in keys]] for x in result["rows"]])
-        listing = "result.csv              ranking, unrounded (value = the recipe's result)\n"
+        listing = ("result.csv              ranking; value = INS's published cell, reconstructed = our cross-check\n"
+                   if r.get("value_source") == "ins_published" else
+                   "result.csv              ranking, unrounded (value = the recipe's result)\n")
         for role, (head, *rows) in result["inputs"].items():
             files[f"inputs/{role}.csv"] = _csv(head, rows)
             listing += f"inputs/{role}.csv".ljust(24) + f"{(src.get(role) or {}).get('dataset', role)}, " \

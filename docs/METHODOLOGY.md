@@ -45,12 +45,21 @@ the weights:
 - with `approximate=1` it returns an **unweighted mean**, labelled as an
   approximation and never called a total.
 
-**Reconstructions.** Where INS publishes the weights in another matrix, a reviewed
-recipe rebuilds the total (`/api/recipes/{id}`, labelled "reconstituit"):
-- `net_earnings_county`: CAEN-section × sex earnings (FOM106E), weighted by average
-  employees (FOM104F).
-- `registered_unemployment_county`: rates by sex (SOM103A) and year-end registered
-  unemployed (SOM101E). The active population by sex is recovered as unemployed / rate.
+**INS's own totals.** For the reviewed questions INS's Total cells are fetched
+separately (`app/data/published_totals.json` → `scripts/load-published-totals.py` →
+table `published_totals`, every geographic level) and served as the value, marked
+"INS":
+- `net_earnings_county`: FOM106E, all activities × both sexes;
+- `registered_unemployment_county`: SOM103A, both sexes.
+
+**Reconstructions.** The same recipes also rebuild each value from INS-published
+weights, shown next to it as a cross-check (`reconstructed`, and a `check` summary).
+In a generation without `published_totals` the reconstruction is the value,
+labelled "reconstituit":
+- earnings: CAEN-section × sex earnings (FOM106E), weighted by average employees
+  (FOM104F);
+- unemployment: rates by sex (SOM103A) and year-end registered unemployed (SOM101E);
+  the active population by sex is recovered as unemployed / rate.
 
 ## 4. Why a reconstructed total can differ from INS's
 
@@ -77,8 +86,8 @@ Counts have none of this: they are published exactly and add up exactly (section
 
 **What it means for use.** A reconstruction is good for levels and trends. It is
 fragile for rankings and thresholds: a 0.1 pp difference can reorder close
-counties. Where INS publishes the total, prefer INS's cell. Keeping INS's "Total"
-rows at fetch is an open decision (see BACKLOG, "Serve INS's own Total cells").
+counties. Where INS publishes the total, we serve INS's cell (section 3) and keep the
+reconstruction only as a check.
 
 ## 5. How values are checked
 
@@ -95,6 +104,7 @@ rows at fetch is an open decision (see BACKLOG, "Serve INS's own Total cells").
 
 | Label | Meaning |
 |---|---|
+| INS | INS's own published Total cell, fetched separately |
 | total | INS's own cell, or an exact sum of a verified disjoint breakdown |
 | reconstituit / reconstructed | weighted rebuild of a mean or rate from INS-published weights; may differ from INS's total by one unit in the last digit |
 | aproximativ / approximation | unweighted mean; not the statistic, shown only on request |
