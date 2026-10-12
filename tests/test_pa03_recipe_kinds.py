@@ -138,14 +138,18 @@ def test_q3_lies_between_the_sex_rates_and_bucharest_is_a_range(conn):
 
 
 @pytest.mark.corpus
-def test_place_pages_use_the_reconstructions():
+def test_place_pages_use_the_reconstructions(conn):
     from app.services import place_service as ps
     ps._kpi_config = None
     k = {x["key"]: x for x in ps.get_place_kpi_report("county", "cluj")["kpis"]}
     assert k["net_monthly_wage"]["value"] == 5921.0 and k["net_monthly_wage"]["period"] == "2024"
-    assert k["registered_unemployment_rate"]["value"] == 1.4
+    # the latest year follows the generation (2024 or 2025); the KPI is the recipe's value for it
+    u = k["registered_unemployment_rate"]
+    r = rc.run(conn, "registered_unemployment_county", year=u["period"])
+    assert u["value"] == round(next(x["value"] for x in r["rows"] if x["geo_id"] == "cluj"), 1)
     assert k["net_monthly_wage"]["method"]["code"] == "reconstruction"
     rep = ps.get_place_kpi_report("county", "municipiul-bucuresti")
-    assert [o for o in rep["omitted"] if o["key"] == "registered_unemployment_rate"][0]["bounds"] == [0.6, 0.7]
+    assert [o for o in rep["omitted"] if o["key"] == "registered_unemployment_rate"][0]["bounds"] == \
+        r["excluded"][0]["bounds"]
     b = ps.get_kpi_baselines("county", "cluj", "net_monthly_wage")
     assert round(b["national"][-1]["value"]) == 4959

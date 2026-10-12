@@ -1,6 +1,9 @@
 # PA-00 answer records, Q1–Q5
 
-Version 1, 2026-10-11 (INS reference cells added 2026-10-12), generation `a6737a263a34…` (see [baseline](baseline.md)).
+Version 2, 2026-10-12, generation `d957e2919750…` (copy `tempo-gen-20261012`,
+POP105A/SOM103A/TUR105D refreshed from INS; see [refresh](#refreshed-generation-2026-10-12)).
+Version 1 (2026-10-11) was recorded on generation `a6737a263a34…` (see [baseline](baseline.md));
+sections below that cite 2024 as the latest year describe v1.
 Machine-readable expectations: [answers.json](answers.json).
 
 **No record is `verified`.** Verification needs a reviewer and an independent INS
@@ -10,10 +13,10 @@ any record. Values below come from the corpus. They are not golden numbers.
 
 | Q | Status | Blocker / next step |
 |---|---|---|
-| Q1 population | `candidate`, evidence complete to 2023 | 2012–2023 equal INS in all 43 areas. **INS revised 2024–2025 on 10-09-2026** and added 1 Jan 2026; refresh POP105A, then review |
+| Q1 population | `candidate`, **evidence complete** | v2: equal to INS in all 645 area-years 2012–2026 (incl. the 2024–2025 revision). Needs a reviewer |
 | Q2 net earnings | `candidate` (reconstructed) | Within 1.2 lei of INS's county total everywhere, but equal after rounding in only 649/714 cells (Iași 2024: 5,097 vs INS 5,098). Decide: serve INS's own Total cells |
-| Q3 unemployment | `candidate` (reconstructed) | Within 0.09 pp, equal after rounding in 512/615 cells; the 2024 ranking order differs from INS. Bucharest 2024 = **0.7** (INS). Same decision as Q2. INS also has 2025 now |
-| Q4 tourism intensity | `candidate`, **feasible** | Numerator equals INS in all 559 county-year cells. 2024 ranking unchanged with INS's revised denominators; 6 areas move by 0.001. INS has 2025 stays now |
+| Q3 unemployment | `candidate` (reconstructed) | Within 0.09 pp, equal after rounding in 548/656 cells (2010–2025); the ranking order differs from INS. Bucharest = **0.7** (2024), **0.5** (2025) per INS. Same decision as Q2. Latest year now 2025 |
+| Q4 tourism intensity | `candidate`, **evidence complete** | v2: latest year **2025**. Numerator (602/602) and denominator (645/645) equal INS by county. Needs a reviewer |
 | Q5 share/reproduce | `candidate` | Checklist below; acceptance is PA-03 |
 
 **Decisions (owner, 2026-10-11):** the reference-cell fetch is approved; Q3 uses
@@ -106,12 +109,54 @@ metadata (2026-10-12) vs retained:
 **What this means for the records.** Q2 and Q3 reconstructions are close but are
 not INS's published statistic: the rounded value differs in 9 % (Q2) and 17 % (Q3)
 of cells, and a ranking question is sensitive to that. INS publishes the exact
-cell. Two owner decisions are open:
-1. **Refresh** POP105A, SOM103A and TUR105D in a new generation (re-fetch, stages
-   B–D on a copy), so the latest year is 2025/2026 and Q1's 2024–2025 match INS.
-2. **Serve INS's Total cells** for Q2/Q3 (keep "Total" options at fetch for these
+cell. Owner decisions:
+1. **Refresh** POP105A, SOM103A and TUR105D — **done 2026-10-12**, see below.
+2. **Open: serve INS's Total cells** for Q2/Q3 (keep "Total" options at fetch for these
    matrices, or register the reference cells as a reviewed source) and keep the
    reconstructions as cross-checks. Either way is a FIX-03-style corpus change.
+
+**Why a reconstructed total can differ from INS's although both start from "the
+same data".** They don't start from the same data. INS computes its Total from
+unrounded survey figures; we only have its *published* parts, each rounded (whole
+lei; 0.1 pp). A count total is unaffected: counts are published exactly and add up,
+so Q1/Q4 sums equal INS to the person. A mean or a rate is a weighted average of its
+parts. Each rounded part is off by ≤0.5 lei (≤0.05 pp), so our weighted average is
+off by ≤0.5 from INS's unrounded total, and INS then rounds that total by up to 0.5
+more: up to 1 lei (0.1 pp) apart, and a different last digit whenever the true value
+sits near a rounding boundary. Observed: Q3 always within that bound; Q2 within it
+except 2 of 714 cells (≤1.14 lei, Botoșani and Galați 2020), where FOM104F's employee
+counts are slightly different weights from INS's own.
+
+## Refreshed generation (2026-10-12)
+
+Copy `~/devbox/gov2/tempo-gen-20261012/data`, an APFS clone of `tempo-gen-20261005`
+with only POP105A, SOM103A and TUR105D refreshed (metadata + CSV from INS, stages B–D
+for the 3 parents and 12 children), generation `d957e2919750…`. Not published.
+
+- **Source diff:** POP105A 25,832 cells revised (2024–2025 only), 22,042 new (2026);
+  SOM103A +108 cells (2025); TUR105D +1,086 (2025). No other cell changed or vanished.
+- **Corpus diff:** exactly the 15 touched parquet files and their view profiles; same
+  children, columns and split rules; 0 unmatched labels; audit unchanged (160
+  conflicting-grain files, as before). DB rows changed only for those 15 codes (plus
+  the new `Anul 2026` time code).
+- **Global profilers:** `11-coverage-profiler.py`, `profile-values.py` and
+  `detect_trends.py` rewrite every dataset. Their rows for untouched datasets were
+  restored from the source generation, and `dataset_coverage` was kept whole (its
+  profiler cannot read SDMX geo values) with POP105A's row counts updated.
+  `generate_view_profiles.py --matrix` gives split children a different, wrong
+  profile, so the full generator ran to a side folder: identical for every untouched
+  dataset; the 15 touched profiles were copied in.
+- **KPI total gate:** re-checked against INS for the touched datasets: POP105A
+  `_grupe` 2026 = 19,041,322, exact match; `_varste` still `mismatch` (ages stop at 84).
+- **Against the reference cells** (re-fetched with the extended ranges into
+  `tempo-gen-20261012/reports/pa00-reference-cells/`): Q1 645/645 equal, Q4
+  numerator 602/602 equal, Q4 2024 ratio now identical to INS-cell ratios.
+- **Latest answers (candidate):** Q1 Cluj 1 Jan 2026 **701,564** (Iași 781,948,
+  Bucharest 1,713,832). Q4 2025: Constanța 8.475, Brașov 4.911, Vâlcea 4.252,
+  Covasna 3.036, Caraș-Severin 2.662 … Bucharest 2.441, Cluj 1.789, Iași 0.739.
+  Q3 2025 (INS): Cluj 1.5, Iași 3.4, Bucharest 0.5, national 3.3. Q2 unchanged (FOM106E
+  still ends in 2024).
+- Corpus tests (51) pass on this generation; the Q4 record test skips on the old one.
 
 ## Source files
 

@@ -189,8 +189,13 @@ def test_dataset_bundle_refuses_rather_than_cuts(client, monkeypatch):
 def test_real_tourism_intensity_matches_answer_record():
     from fastapi.testclient import TestClient
     from app.main import app
+    from app.services import generation
+    answers = json.loads((ROOT / "docs/plans/public-alpha/pa-00/answers.json").read_text())
+    if generation.current()["id"] != answers["generation"]:
+        pytest.skip("the answer record is for another corpus generation")
+    rec = answers["records"]["Q4"]
+    year = rec["numerator"]["period"]
     d = TestClient(app).get("/api/recipes/tourism_intensity").json()
-    rec = json.loads((ROOT / "docs/plans/public-alpha/pa-00/answers.json").read_text())["records"]["Q4"]
-    want = {x["geo"]: x["stays_per_resident"] for x in rec["values_2024"]}
-    assert d["year"] == "2024" and len(d["rows"]) == len(want) == 42
+    want = {x["geo"]: x["stays_per_resident"] for x in rec[f"values_{year}"]}
+    assert d["year"] == year and len(d["rows"]) == len(want) == 42
     assert all(round(x["intensity"], 3) == want[x["label"]] for x in d["rows"])

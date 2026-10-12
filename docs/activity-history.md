@@ -1,5 +1,26 @@
 # Activity History
 
+## 2026-10-12 — Refreshed POP105A, SOM103A, TUR105D in a new generation copy
+
+New copy `~/devbox/gov2/tempo-gen-20261012` (APFS clone of the 10-05 repair copy,
+so it costs only the changed files), generation `d957e2919750`, not published.
+Re-fetched metadata and CSVs for the three matrices INS had updated after our
+export, ran stages B–D for the 3 parents and 12 children, re-checked their summed
+KPIs against INS, rebuilt search and the generation manifest. The source diff was
+clean: POP105A revised 2024–2025 only and added 2026; SOM103A and TUR105D added
+2025. Against freshly fetched INS reference cells, Q1 (645 area-years) and Q4's
+numerator (602) are exact. The answer records are now v2 on this generation
+(Q4 latest year 2025, Q1 to 1 Jan 2026).
+
+Non-obvious: the three global profilers rewrite every dataset, and the coverage
+profiler zeroes geo statistics on SDMX files, so untouched rows were restored from
+the source generation (verified: no row outside the touched codes differs).
+`generate_view_profiles.py --matrix` builds split children wrongly, so the full
+build ran to a side folder (identical for all untouched datasets) and only the 15
+touched profiles were copied in. Backlog item added for both. Two corpus tests
+were pinned to the old latest year; they now follow the served generation. Also
+recorded why reconstructed means/rates differ from INS totals (rounding bound).
+
 ## 2026-10-12 — PA-00: INS reference cells fetched and compared
 
 INS came back online, so the approved fetch ran: 4 pivot requests (POP105A,

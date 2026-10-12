@@ -6,8 +6,8 @@
    "version": 1,
    "question": "Q4",
    "status": {
-    "ro": "în verificare: numitorul (populația la 1 ianuarie) e aprobat; înnoptările pe județe sunt egale cu totalurile INS (2012–2024); populația pe județe e egală cu totalurile INS până în 2023, iar 2024–2025 au fost revizuite de INS după descărcarea noastră",
-    "en": "under review: the denominator (population on 1 January) is approved; county stays equal the INS totals (2012–2024); county population equals the INS totals up to 2023, and INS revised 2024–2025 after our download"
+    "ro": "în verificare: numitorul (populația la 1 ianuarie) e aprobat; înnoptările (2012–2025) și populația (2012–2026) pe județe sunt egale cu totalurile publicate de INS (verificat 12.10.2026)",
+    "en": "under review: the denominator (population on 1 January) is approved; county stays (2012–2025) and county population (2012–2026) equal the totals INS publishes (checked 2026-10-12)"
    },
    "name": {
     "ro": "Intensitatea turistică: înnoptări pe locuitor",
@@ -175,8 +175,8 @@
    "question": "Q3",
    "kind": "rate_from_counts",
    "status": {
-    "ro": "reconstituit din ratele pe sexe și numărul de șomeri la sfârșitul anului; metoda reproduce ratele regionale publicate pe sexe (2022–2024, la rotunjire); Bucureștiul nu are numărul de șomeri în datele descărcate și apare doar ca interval; pe județe, 2010–2024, diferă de rata publicată de INS cu cel mult 0,09 puncte procentuale, deci rotunjit poate diferi cu 0,1",
-    "en": "reconstructed from the rates by sex and the year-end registered unemployed; the method reproduces the published regional rates by sex (2022–2024, to rounding); Bucharest lacks the unemployed count in the downloaded data and is shown only as a range; by county, 2010–2024, within 0.09 percentage points of the rate INS publishes, so it can differ by 0.1 once rounded"
+    "ro": "reconstituit din ratele pe sexe și numărul de șomeri la sfârșitul anului; metoda reproduce ratele regionale publicate pe sexe (2022–2024, la rotunjire); Bucureștiul nu are numărul de șomeri în datele descărcate și apare doar ca interval; pe județe, 2010–2025, diferă de rata publicată de INS cu cel mult 0,09 puncte procentuale, deci rotunjit poate diferi cu 0,1",
+    "en": "reconstructed from the rates by sex and the year-end registered unemployed; the method reproduces the published regional rates by sex (2022–2024, to rounding); Bucharest lacks the unemployed count in the downloaded data and is shown only as a range; by county, 2010–2025, within 0.09 percentage points of the rate INS publishes, so it can differ by 0.1 once rounded"
    },
    "name": {
     "ro": "Rata șomajului înregistrat (ambele sexe), pe județe",
