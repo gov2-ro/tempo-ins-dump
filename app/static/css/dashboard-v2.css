@@ -802,6 +802,10 @@ body.sidebar-open .dbv2-main {
 .dbv2-ssr-more { color: var(--accent); }
 .dbv2-ssr-def[open] summary .dbv2-ssr-more { display: none; }
 .dbv2-ssr-def p { margin: 6px 0 8px; max-width: 80ch; line-height: 1.5; }
+.dbv2-ssr-notes { margin: 6px 0 8px; max-width: 90ch; line-height: 1.5; }
+.dbv2-ssr-notes ul { margin: 2px 0 0; padding-left: 1.2em; }
+.dbv2-ssr-notes li[data-kind="series_break"], .dbv2-ssr-notes li[data-kind="excluded"],
+.dbv2-ssr-notes li[data-kind="source_issue"] { color: var(--text-0); }
 .dbv2-ssr-facts { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 4px 0; }
 .dbv2-ssr-facts dt { color: var(--text-2); }
 .dbv2-ssr-facts dt::after { content: ':'; }

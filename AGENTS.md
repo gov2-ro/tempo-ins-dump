@@ -112,6 +112,10 @@ off by default (set the second for local Ask work), and other `TEMPO_ASK_*`/`TEM
   - `js/site-chrome.js` — shared topbar for standalone pages. `chart-factory.js`
     dispatches to `chart-geo.js`, `chart-demographic.js`, `chart-new-types.js`
   - `static/geo/` — county/region/macroregion GeoJSON (ASCII county names)
+- **Dataset notes:** curated caveats, series breaks and decisions per dataset live in
+  `app/data/dataset_notes.json` (a parent code covers its split children); public ones
+  show on the dataset page and in `/api/datasets/{code}`. After editing, run
+  `scripts/build-notes-report.py` (a test checks `docs/reports/ins-notes.md` is in sync).
 - `_obsolete/` folders are archived. Don't edit or import from them.
 
 ## Dev MCP Server (`tools/tempo-dev-mcp/`)

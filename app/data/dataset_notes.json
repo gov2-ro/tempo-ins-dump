@@ -1,0 +1,207 @@
+{
+ "about": "Curated notes per dataset (app/services/dataset_notes.py). `codes` names datasets; a parent code covers its split children. Public notes show on the dataset page and in /api/datasets/{code}; all notes feed docs/reports/ins-notes.md (scripts/build-notes-report.py). `ins.raise` marks points to take up with INS.",
+ "notes": [
+  {
+   "id": "POP105A-census-break",
+   "codes": ["POP105A"],
+   "kind": "series_break",
+   "public": true,
+   "text": {
+    "ro": "Seria se rupe între 2021 și 2022: estimările până în 2021 pornesc de la recensământul din 2011, cele din 2022 de la recensământul din 2021. Scăderea dintre cei doi ani reflectă schimbarea bazei, nu doar evoluția populației.",
+    "en": "The series breaks between 2021 and 2022: estimates up to 2021 rest on the 2011 census, from 2022 on the 2021 census. The drop between the two years reflects the change of base, not only population change."
+   },
+   "data": {"between": ["2021", "2022"]},
+   "decided": {"by": "owner", "date": "2026-10-12", "context": "PA-00 Q1"},
+   "evidence": "Every county drops 2021→2022 (Cluj −27,636); POP105A methodology: estimates use the latest available census.",
+   "ins": {"raise": true, "question": "Is a back-calculation of 2012–2021 on the 2021 census basis planned, so the county series can be compared across the break?"}
+  },
+  {
+   "id": "POP105A-revisions",
+   "codes": ["POP105A"],
+   "kind": "provisional",
+   "public": true,
+   "text": {
+    "ro": "Datele până în 2023 sunt finale; 2024 este revizuit, iar 2025–2026 pot fi încă revizuite de INS.",
+    "en": "Data up to 2023 is final; 2024 is revised, and 2025–2026 may still be revised by INS."
+   },
+   "data": {"final_through": "2023", "revised": ["2024"], "provisional_from": "2025"},
+   "decided": {"by": "owner", "date": "2026-10-12", "context": "PA-00 Q1"},
+   "evidence": "INS observations on POP105A (updated 10-09-2026): data for 2024 revised; data before 2024 will not be revised. Our 02-09-2025 export had different 2024–2025 values."
+  },
+  {
+   "id": "POP105A-single-ages",
+   "codes": ["POP105A_judete_varste", "POP105A_regiuni_varste", "POP105A_macroregiuni_varste"],
+   "kind": "caveat",
+   "public": true,
+   "text": {
+    "ro": "Acest set are vârstele una câte una, de la 0 la 84 de ani, fără grupa de 85 de ani și peste. Suma lui nu este populația totală; pentru total folosiți setul pe grupe de vârstă.",
+    "en": "This set has single years of age from 0 to 84, without the 85-and-over group. Its sum is not the total population; use the age-group set for totals."
+   },
+   "evidence": "KPI total check: 2026 national 18,621,002 vs INS 19,041,322 (_grupe sums exactly)."
+  },
+  {
+   "id": "FOM106E-classification",
+   "codes": ["FOM106E", "FOM106A"],
+   "kind": "series_break",
+   "public": true,
+   "text": {
+    "ro": "FOM106E începe în 2008 și folosește clasificarea CAEN Rev.2; anii până în 2007 sunt în FOM106A, pe CAEN Rev.1. Cele două serii nu se unesc: activitățile nu corespund una la una.",
+    "en": "FOM106E starts in 2008 and uses the CAEN Rev.2 classification; years up to 2007 are in FOM106A, on CAEN Rev.1. The two series are not joined: the activities do not map one to one."
+   },
+   "data": {"between": ["2007", "2008"], "continued_by": "FOM106E", "continues": "FOM106A"},
+   "decided": {"by": "owner", "date": "2026-10-12", "context": "PA-00 Q2"}
+  },
+  {
+   "id": "FOM106E-annual-vs-monthly",
+   "codes": ["FOM106E"],
+   "kind": "definition",
+   "public": true,
+   "text": {
+    "ro": "Câștigul mediu lunar din cercetarea anuală include sumele plătite retroactiv, deci diferă de câștigul mediu din comunicatele lunare ale INS.",
+    "en": "The monthly average from the annual survey includes back pay, so it differs from the average earnings in INS's monthly releases."
+   },
+   "decided": {"by": "owner", "date": "2026-10-12", "context": "PA-00 Q2"},
+   "evidence": "FOM106E source notes."
+  },
+  {
+   "id": "FOM106E-tax-facilities",
+   "codes": ["FOM106E"],
+   "kind": "caveat",
+   "public": true,
+   "text": {
+    "ro": "Între 2019 și 2024, anumite categorii de salariați au beneficiat de facilități fiscale (impozit și contribuții). Pentru ei câștigul net este mai apropiat de cel brut, ceea ce influențează comparațiile între activități și județe.",
+    "en": "Between 2019 and 2024 some categories of employees had tax and contribution relief. Their net earnings are closer to gross, which affects comparisons between activities and counties."
+   },
+   "decided": {"by": "owner", "date": "2026-10-12", "context": "PA-00 Q2"},
+   "evidence": "FOM106E methodology: 'In perioada 1 ianuarie 2019-31 decembrie 2024 ... anumite categorii de salariati beneficiaza de facilitati fiscale'."
+  },
+  {
+   "id": "FOM106E-SOM103A-published-totals",
+   "codes": ["FOM106E", "SOM103A"],
+   "kind": "decision",
+   "public": false,
+   "text": {
+    "ro": "Descărcarea noastră nu are rândurile Total (toate activitățile × ambele sexe la FOM106E; ambele sexe la SOM103A). Se servesc totalurile publicate de INS, preluate separat; reconstituirea ponderată rămâne doar verificare (diferă cu cel mult o unitate, din rotunjire).",
+    "en": "Our download lacks the Total rows (all activities × both sexes in FOM106E; both sexes in SOM103A). INS's published totals, fetched separately, are served; the weighted reconstruction stays as a cross-check (it differs by at most one unit, from rounding)."
+   },
+   "decided": {"by": "owner", "date": "2026-10-12", "context": "PA-00 Q2/Q3"},
+   "evidence": "docs/METHODOLOGY.md §4; answer records, INS reference cells."
+  },
+  {
+   "id": "SOM103A-registered-not-ilo",
+   "codes": ["SOM103A", "SOM103B"],
+   "kind": "definition",
+   "public": true,
+   "text": {
+    "ro": "Rata șomajului înregistrat: șomerii înregistrați la agențiile de ocupare (ANOFM) față de populația activă civilă. Nu este rata șomajului BIM din ancheta forței de muncă.",
+    "en": "Registered unemployment rate: unemployed people registered with the employment agencies (ANOFM) relative to the civilian active population. It is not the ILO unemployment rate from the labour force survey."
+   },
+   "decided": {"by": "owner", "date": "2026-10-12", "context": "PA-00 Q3"}
+  },
+  {
+   "id": "SOM103A-bucharest-sai",
+   "codes": ["SOM103A"],
+   "kind": "series_break",
+   "public": true,
+   "text": {
+    "ro": "Pentru 1991–1996 INS dă București de două ori: „Municipiul București” și „Mun. București - incl. SAI” (cu Sectorul Agricol Ilfov). Județul Ilfov apare separat din 1997. Comparațiile peste această limită nu sunt pe același teritoriu.",
+    "en": "For 1991–1996 INS gives Bucharest twice: 'Municipiul Bucuresti' and 'Mun. Bucuresti - incl. SAI' (including the Ilfov Agricultural Sector). Ilfov county appears separately from 1997. Comparisons across that boundary are not on the same territory."
+   },
+   "data": {"between": ["1996", "1997"], "areas": ["Municipiul Bucuresti", "Mun. Bucuresti -incl. SAI", "Ilfov"]},
+   "evidence": "SOM103A_judete: 'Mun. Bucuresti -incl. SAI' 1991–1996, 'Ilfov' from 1997."
+  },
+  {
+   "id": "SOM101B-women-only",
+   "codes": ["SOM101B"],
+   "kind": "caveat",
+   "public": true,
+   "text": {
+    "ro": "Setul conține doar femeile (sursa are numai opțiunile Total și Feminin). Nu îl folosiți ca total al șomerilor.",
+    "en": "The set covers women only (the source has just the Total and Feminin options). Do not use it as the total number of unemployed."
+   },
+   "evidence": "A first Q3 draft used it by mistake (2026-10-11 correction in the answer records)."
+  },
+  {
+   "id": "TUR105D-coverage",
+   "codes": ["TUR105D", "TUR105E", "TUR105H"],
+   "kind": "coverage",
+   "public": true,
+   "text": {
+    "ro": "Cuprinde doar structurile de cazare cu cel puțin 5 locuri-pat; turiști români și străini.",
+    "en": "Covers only accommodation establishments with at least 5 bed-places; Romanian and foreign tourists."
+   },
+   "decided": {"by": "owner", "date": "2026-10-12", "context": "PA-00 Q4"},
+   "evidence": "TUR105D source notes."
+  },
+  {
+   "id": "TUR105D-rented-rooms",
+   "codes": ["TUR105D"],
+   "kind": "series_break",
+   "public": true,
+   "text": {
+    "ro": "Din 2021 datele includ și apartamentele și camerele de închiriat (2021–2022 au fost revizuite). Comparațiile cu anii de dinainte nu sunt pe aceeași acoperire.",
+    "en": "From 2021 the data also includes rented apartments and rooms (2021–2022 were revised). Comparisons with earlier years are not on the same coverage."
+   },
+   "data": {"between": ["2020", "2021"]},
+   "evidence": "TUR105D source notes."
+  },
+  {
+   "id": "TUR105EH-county-split",
+   "codes": ["TUR105E_judet", "TUR105H_judet"],
+   "kind": "excluded",
+   "public": true,
+   "text": {
+    "ro": "Acest set pe județe a pierdut coloana localităților la prelucrare, așa că un județ apare o dată pentru fiecare localitate. Valorile nu se pot aduna pe județ și setul nu este folosit în indicatorul înnoptări pe locuitor. Problema este a noastră, nu a INS, și urmează să fie reparată.",
+    "en": "This county set lost its locality column in processing, so a county appears once per locality. Its values cannot be added up per county, and the set is not used for the stays-per-resident indicator. The problem is ours, not INS's, and is queued for repair."
+   },
+   "decided": {"by": "owner", "date": "2026-10-12", "context": "PA-00 Q4"},
+   "evidence": "Generation manifest: conflicting/duplicate grain; e.g. TUR105E_judet 37,906 rows for 8,640 keys (FIX-03 county splits that dropped locality)."
+  },
+  {
+   "id": "locality-fetch-bucharest",
+   "codes": ["AGR101B", "AGR108B", "AGR109B", "AGR112B", "AGR115B", "AGR201B", "AGR202B", "ART101B", "ART104C", "ART106A", "ART107A", "ART108A", "ART113A", "ART121A", "ART123A", "FOM104D", "GOS106B", "GOS107A", "GOS108A", "GOS109A", "GOS110A", "GOS116A", "GOS118A", "JUS105C", "LOC101B", "LOC103B", "LOC104B", "LOC108B", "POP108C", "POP201D", "POP201K", "POP204C", "POP204F", "POP206D", "POP206J", "POP208C", "POP208G", "POP210D", "POP212B", "POP304B", "POP305B", "POP307A", "POP308A", "POP309E", "POP310E", "PPA101A", "SAN101B", "SAN102C", "SAN104B", "SCL101C", "SCL103D", "SCL104D", "SCL105B", "SCL106C", "SCL107C", "SCL108B", "SCL109D", "SCL110B", "SCL112B", "SOM101E", "SOM101F", "TUR101C", "TUR102C", "TUR103D", "TUR103F", "TUR104E", "TUR104H", "TUR105E", "TUR105H"],
+   "kind": "source_issue",
+   "public": true,
+   "text": {
+    "ro": "Datele pe localități pentru București lipsesc din descărcarea noastră (eroare de preluare, nu a INS). Sunt în curs de repreluare.",
+    "en": "Bucharest's locality rows are missing from our download (a fetch error, not INS's). They are being re-fetched."
+   },
+   "evidence": "Generation tempo-gen-20261012: these locality-level CSVs have no Bucharest row although the matrix lists 179132 MUNICIPIUL BUCURESTI; probe SOM101E Dec 2024 Bucharest = 8,702 at INS. Fixed in 6-fetch-csv.py (f81c586); refetch pending. Remove the note per dataset once refetched."
+  },
+  {
+   "id": "pivot-header-only-large-dims",
+   "codes": ["EXP101F", "EXP102F"],
+   "kind": "source_issue",
+   "public": false,
+   "text": {
+    "ro": "API-ul pivot TEMPO răspunde cu un CSV doar cu antet când o dimensiune are peste 1.000 de opțiuni selectate; datele au fost preluate pe bucăți.",
+    "en": "The TEMPO pivot API answers with a header-only CSV when a dimension has over 1,000 selected options; the data was fetched in chunks."
+   },
+   "evidence": "FIX-03 repair, 2026-10-05: EXP101F/EXP102F checked cell by cell against the website export.",
+   "ins": {"raise": true, "question": "Is there a documented option limit for /tempo-ins/pivot? An empty CSV is indistinguishable from an empty dataset."}
+  },
+  {
+   "id": "metadata-stale-periods",
+   "codes": ["EXP102F"],
+   "kind": "source_issue",
+   "public": false,
+   "text": {
+    "ro": "Metadatele matricei au rămas în urma datelor: lista de perioade se oprea în 2024 deși INS publica deja date mai noi.",
+    "en": "The matrix metadata lagged behind the data: its period list ended in 2024 while INS already published newer data."
+   },
+   "evidence": "FIX-03 repair, 2026-10-05.",
+   "ins": {"raise": true, "question": "Is the matrix metadata (period list, ultimaActualizare) guaranteed to be updated together with the data?"}
+  },
+  {
+   "id": "totals-not-in-download",
+   "codes": ["FOM106E", "SOM103A", "POP105A", "TUR105D"],
+   "kind": "decision",
+   "public": false,
+   "text": {
+    "ro": "Descărcarea noastră omite opțiunile „Total”; totalurile afișate sunt calculate (sume exacte pentru numărări) sau preluate separat de la INS (medii și rate). Vezi docs/METHODOLOGY.md.",
+    "en": "Our download omits the 'Total' options; the totals shown are computed (exact sums for counts) or fetched separately from INS (means and rates). See docs/METHODOLOGY.md."
+   },
+   "decided": {"by": "owner", "date": "2026-10-12"}
+  }
+ ]
+}

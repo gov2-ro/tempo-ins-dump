@@ -281,6 +281,7 @@ Clean checkout (no corpus, no secrets): `pip install -r requirements-dev.txt && 
 
 ### Core Architecture
 - **[METHODOLOGY.md](docs/METHODOLOGY.md)** — How computed totals, averages and rates relate to the values INS publishes.
+- **[reports/ins-notes.md](docs/reports/ins-notes.md)** — Per-dataset notes and decisions, and the points to raise with INS (generated from `app/data/dataset_notes.json`).
 - **[CURRENT_STATE.md](docs/CURRENT_STATE.md)** — Current paths, dependency order, serving behavior and unresolved operating limits.
 - **[DUCKDB_SPECS.md](docs/DUCKDB_SPECS.md)** — Historical schema design; actual DB introspection is authoritative.
 - **[DUCKDB_GUIDE.md](docs/DUCKDB_GUIDE.md)** — Historical query examples; use current paths and verify aggregation grain.

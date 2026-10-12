@@ -100,3 +100,6 @@ rows at fetch is an open decision (see BACKLOG, "Serve INS's own Total cells").
 | aproximativ / approximation | unweighted mean; not the statistic, shown only on request |
 | interval / range | the value is unknown, but must lie between the shown bounds (e.g. between the two sexes' rates) |
 | unavailable + reason | no honest single number exists for this selection |
+
+Per-dataset caveats, series breaks and the decisions behind them are kept in
+`app/data/dataset_notes.json` and listed in [reports/ins-notes.md](reports/ins-notes.md).

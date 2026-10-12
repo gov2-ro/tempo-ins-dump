@@ -18,6 +18,7 @@ from app.services.dashboard_composer import (
     compose_dashboard, retune_ranked_series, primary_time_dim,
     _build_slice, _non_total_options, _effective)
 from app.services import aggregation_policy as ap
+from app.services import dataset_notes
 from app.services import dimension_structure as dstruct
 from app.services.query_builder import build_data_query
 
@@ -484,6 +485,7 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
         'dimensions': dimensions,
         'measure': measure,
         'chart_config': chart_config,
+        'notes': dataset_notes.for_code(m[0], lang),
     }
 
 
