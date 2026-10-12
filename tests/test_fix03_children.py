@@ -253,3 +253,11 @@ def test_split_clean_run_exits_zero(tmp_path, monkeypatch):
     run_split_main(mod, tmp_path, monkeypatch,
                    lambda conn, rule, dry_run=False, stage_dir=None: [{"sub_code": "AAA1_x", "row_count": 5},
                                                       {"sub_code": "AAA1_y", "row_count": 3}])
+
+
+def test_siruta_coded_bucharest_is_a_locality_not_a_county():
+    mod = load("classify_t", "10-classify-dimensions.py")
+    assert mod.parse_geo("179132 MUNICIPIUL BUCURESTI")["geo_level"] == "locality"
+    assert mod.parse_geo("179132 MUNICIPIUL BUCURESTI")["siruta_code"] == 179132
+    assert mod.parse_geo("Municipiul Bucuresti")["geo_level"] == "county"
+    assert mod.parse_geo("88868 BUCURESCI")["geo_level"] == "locality"
