@@ -137,8 +137,18 @@ def _summary(code: str, facts: dict, lang: str, static: bool = False) -> str:
 
 def _notes_html(code: str, en: bool) -> str:
     """Curated notes (series breaks, coverage, caveats) under the definition."""
-    from app.services.dataset_notes import for_code
-    notes = for_code(code, "en" if en else "ro")
+    from app.services.dataset_meta import get_aggregation_context
+    from app.services.dataset_notes import for_code, source_totals_note
+    lang = "en" if en else "ro"
+    notes = for_code(code, lang)
+    conn = get_conn()
+    try:
+        ctx = get_aggregation_context(conn, code)
+        gen = source_totals_note(conn, code, (ctx or {}).get("measure"), lang)
+    finally:
+        conn.close()
+    if gen:
+        notes.append(gen)
     if not notes:
         return ""
     items = "".join(f'<li data-kind="{html.escape(n["kind"])}">{html.escape(n["text"])}</li>' for n in notes)

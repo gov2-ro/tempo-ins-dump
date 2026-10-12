@@ -239,6 +239,9 @@ def extract_siruta_from_label(label: str) -> Optional[str]:
         return parts[0]
     return None
 
+UNASSIGNED = "_fara_judet"   # group of localities the SIRUTA file cannot place
+
+
 def group_localities_by_judet(localitati_dim: Dict, judete_dim: Dict, siruta_map: Dict[str, str],
                               unmatched_out: Optional[List[str]] = None) -> Dict[str, List[Dict]]:
     """
@@ -270,7 +273,8 @@ def group_localities_by_judet(localitati_dim: Dict, judete_dim: Dict, siruta_map
 
     # Group localities by Judet
     judet_localities = {}
-    unmatched_localities = []
+    unmatched_localities = []      # labels, for the log
+    unmatched_options = []         # option dicts, fetched in a separate request
 
     for locality_opt in localitati_dim.get("options", []):
         label = locality_opt.get("label", "").strip()
@@ -279,40 +283,33 @@ def group_localities_by_judet(localitati_dim: Dict, judete_dim: Dict, siruta_map
         if label.upper() == "TOTAL":
             continue
 
-        # Extract SIRUTA code
         siruta_code = extract_siruta_from_label(label)
-        if not siruta_code:
-            unmatched_localities.append(label)
-            continue
-
-        # Find Judet for this SIRUTA code
-        judet_name_from_csv = siruta_map.get(siruta_code)
-        if not judet_name_from_csv:
-            unmatched_localities.append(f"{label} (SIRUTA: {siruta_code})")
-            continue
-
-        # Find Judet nomItemId (case-insensitive lookup)
-        judet_info = judet_name_to_id.get(judet_name_from_csv.lower())
+        judet_name_from_csv = siruta_map.get(siruta_code) if siruta_code else None
+        judet_info = judet_name_to_id.get(judet_name_from_csv.lower()) if judet_name_from_csv else None
         if not judet_info:
-            unmatched_localities.append(f"{label} -> {judet_name_from_csv} (no ID)")
+            reason = ("" if not siruta_code else f" (SIRUTA: {siruta_code})" if not judet_name_from_csv
+                      else f" -> {judet_name_from_csv} (no ID)")
+            unmatched_localities.append(label + reason)
+            unmatched_options.append(locality_opt)
             continue
 
         judet_id = judet_info['nomItemId']
-        judet_name = judet_info['original_name']
-
-        # Add to group
-        if judet_id not in judet_localities:
-            judet_localities[judet_id] = {
-                'judet_name': judet_name,
-                'judet_id': judet_id,
-                'localities': []
-            }
-        judet_localities[judet_id]['localities'].append(locality_opt)
+        judet_localities.setdefault(judet_id, {
+            'judet_name': judet_info['original_name'], 'judet_id': judet_id, 'localities': []
+        })['localities'].append(locality_opt)
 
     if unmatched_localities:
-        logger.error(f"Could not match {len(unmatched_localities)} localities to Judete")
+        logger.warning(f"{len(unmatched_localities)} localities match no county in the SIRUTA file; "
+                       "they are fetched together against every county")
         for unmatched in unmatched_localities[:10]:  # Log first 10
-            logger.error(f"  Unmatched: {unmatched}")
+            logger.warning(f"  Unmatched: {unmatched}")
+        # INS answers only the real county-locality pairs, so nothing is lost and
+        # nothing is duplicated (Bucharest was once dropped silently here).
+        judet_localities[UNASSIGNED] = {
+            'judet_name': UNASSIGNED, 'judet_id': None, 'localities': unmatched_options,
+            'judet_ids': [o["nomItemId"] for o in judete_dim.get("options", [])
+                          if o.get("label", "").strip().lower() != "total"],
+        }
     if unmatched_out is not None:
         unmatched_out.extend(unmatched_localities)
 
@@ -364,15 +361,7 @@ def fetch_by_judet_split(matrix_code: str, matrix_def: Dict, output_dir: str,
 
     # Group localities by Judet
     tqdm.write(f"Grouping localities by Judet for {matrix_code}...")
-    unmatched: List[str] = []
-    judet_groups = group_localities_by_judet(localitati_dim, judete_dim, siruta_map, unmatched)
-
-    if unmatched:
-        # A locality without a county would be left out of every request: refuse
-        # rather than write an incomplete file (Bucharest was lost this way).
-        tqdm.write(f"ERROR: {len(unmatched)} localities of {matrix_code} match no county "
-                   f"(e.g. {unmatched[0]}); update data/meta/uat-siruta.csv")
-        return False
+    judet_groups = group_localities_by_judet(localitati_dim, judete_dim, siruta_map)
 
     if not judet_groups:
         tqdm.write(f"ERROR: No localities grouped for {matrix_code}")
@@ -414,8 +403,9 @@ def fetch_by_judet_split(matrix_code: str, matrix_def: Dict, output_dir: str,
             dim_label = dim.get("label", "").strip().lower()
 
             if dim_label == "judete":
-                # Keep only this specific Judet
-                dim["options"] = [opt for opt in dim["options"] if opt["nomItemId"] == judet_id]
+                # Keep only this specific Judet (every county for the unassigned group)
+                keep = set(group_info.get('judet_ids') or [judet_id])
+                dim["options"] = [opt for opt in dim["options"] if opt["nomItemId"] in keep]
 
             elif dim_label in ["localitati", "localitati "]:
                 # Keep only localities for this Judet
@@ -433,9 +423,10 @@ def fetch_by_judet_split(matrix_code: str, matrix_def: Dict, output_dir: str,
             response_text = response.content.decode('utf-8', errors='ignore')
             if ('celule' in response_text.lower() and '30000' in response_text) or \
                ('pragul' in response_text.lower() and 'celule' in response_text.lower()):
-                tqdm.write(f"    WARNING: {judet_name} exceeds cell limit, skipping")
-                logger.warning(f"{matrix_code} - Judet {judet_name} exceeds cell limit")
-                continue
+                # Skipping a county would write a file that silently lacks it.
+                tqdm.write(f"    ERROR: {judet_name} exceeds the cell limit; {matrix_code} not written")
+                logger.error(f"{matrix_code} - Judet {judet_name} exceeds cell limit")
+                return False
 
             # Save partial file
             partial_file = os.path.join(partial_dir, f"{matrix_code}_{judet_name}.csv")
@@ -455,9 +446,9 @@ def fetch_by_judet_split(matrix_code: str, matrix_def: Dict, output_dir: str,
                     tqdm.write(f"    Got {len(data_rows)} rows from {judet_name}")
 
         except Exception as e:
-            tqdm.write(f"    ERROR fetching {judet_name}: {e}")
+            tqdm.write(f"    ERROR fetching {judet_name}: {e}; {matrix_code} not written")
             logger.error(f"{matrix_code} - Error fetching Judet {judet_name}: {e}")
-            continue
+            return False
 
     # Combine all partial files
     if not all_data_rows:

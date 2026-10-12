@@ -72,3 +72,43 @@ def test_note_codes_name_real_datasets():
         con.close()
     missing = {c for n in dn.load() for c in n["codes"] if c not in known}
     assert not missing, sorted(missing)
+
+
+def _tiny_db():
+    import duckdb
+    con = duckdb.connect()
+    con.execute("CREATE TABLE matrices (matrix_code VARCHAR, parent_matrix_code VARCHAR)")
+    con.execute("CREATE TABLE dimensions (dimension_id INT, matrix_code VARCHAR, dim_code INT, "
+                "dim_column_name VARCHAR, dim_label VARCHAR, option_count INT)")
+    con.execute("CREATE TABLE dimension_options (dimension_id INT, option_label VARCHAR)")
+    con.executemany("INSERT INTO matrices VALUES (?, ?)", [("M1", None), ("M1_judete", "M1")])
+    con.executemany("INSERT INTO dimensions VALUES (?,?,?,?,?,?)", [
+        (1, "M1", 1, "SEX", "Sexe", 3), (2, "M1", 2, "REF_AREA", "Judete", 43),
+        (3, "M1", 3, "TIME_PERIOD", "Ani", 5), (4, "M1", 4, "AGE", "Varste", 4),
+        (5, "M1_judete", 1, "SEX", "Sexe", 2), (6, "M1_judete", 2, "REF_AREA", "judete", 42)])
+    con.executemany("INSERT INTO dimension_options VALUES (?, ?)", [
+        (1, "Total"), (1, "Masculin"), (2, " TOTAL "), (2, "Cluj"), (3, "Anul 2024"),
+        (4, "0-4 ani"), (4, "5-9 ani")])
+    return con
+
+
+def test_generated_note_names_the_dropped_totals_of_a_non_additive_dataset():
+    con = _tiny_db()
+    n = dn.source_totals_note(con, "M1_judete", "non_additive", "ro")
+    assert n["id"] == "source-totals-not-downloaded"
+    assert n["data"] == {"matrix": "M1", "dimensions": ["Sexe", "Judete"]}   # AGE has no Total
+    assert "„Sexe”" in n["text"] and "nu îl calculează" in n["text"]
+    assert dn.source_totals_note(con, "M1_judete", "additive") is None       # counts are summed
+    assert dn.source_totals_note(con, "NOPE", "non_additive") is None
+
+
+@pytest.mark.corpus
+def test_generated_note_on_a_real_mean_dataset():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    c = TestClient(app)
+    ids = [n["id"] for n in c.get("/api/datasets/FOM106E_judete").json()["notes"]]
+    assert "source-totals-not-downloaded" in ids
+    ids = [n["id"] for n in c.get("/api/datasets/POP105A_judete_grupe").json()["notes"]]
+    assert "source-totals-not-downloaded" not in ids                      # a count: summed exactly
+    assert "descărcarea noastră nu o conține" in c.get("/dataset/FOM106E_judete").text

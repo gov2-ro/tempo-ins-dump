@@ -485,7 +485,8 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
         'dimensions': dimensions,
         'measure': measure,
         'chart_config': chart_config,
-        'notes': dataset_notes.for_code(m[0], lang),
+        'notes': dataset_notes.for_code(m[0], lang) + [n for n in (
+            dataset_notes.source_totals_note(conn, m[0], measure, lang),) if n],
     }
 
 

@@ -101,14 +101,39 @@ def test_bucharest_localities_are_grouped_under_their_county(fetch_csv):
         {"Cluj": [10], "Municipiul Bucuresti": [11]}
 
 
-def test_an_unmatched_locality_fails_the_split_fetch(fetch_csv, tmp_path):
-    judete = {"options": [{"label": "Cluj", "nomItemId": 2}]}
-    locs = {"options": [{"label": "54975 MUNICIPIUL CLUJ-NAPOCA", "nomItemId": 10},
-                        {"label": "999999 NOUA", "nomItemId": 12}]}
+def test_unmatched_localities_are_fetched_against_every_county(fetch_csv, tmp_path, monkeypatch):
+    judete = {"label": "Judete", "options": [{"label": "Total", "nomItemId": 1},
+                                              {"label": "Cluj", "nomItemId": 2}, {"label": "Alba", "nomItemId": 3}]}
+    locs = {"label": "Localitati", "options": [{"label": "54975 MUNICIPIUL CLUJ-NAPOCA", "nomItemId": 10},
+                                               {"label": "999999 NOUA", "nomItemId": 12}]}
     out = []
     groups = fetch_csv.group_localities_by_judet(locs, judete, {"54975": "Cluj"}, out)
-    assert out == ["999999 NOUA (SIRUTA: 999999)"] and len(groups) == 1
-    assert fetch_csv.fetch_by_judet_split("AAA1", {}, str(tmp_path), judete, locs, {"54975": "Cluj"}) is False
+    assert out == ["999999 NOUA (SIRUTA: 999999)"]
+    extra = groups[fetch_csv.UNASSIGNED]
+    assert [o["nomItemId"] for o in extra["localities"]] == [12] and extra["judet_ids"] == [2, 3]
+    sent = []
+
+    def post(url, json=None, **kw):
+        sent.append(json)
+        return SimpleNamespace(content=b"a,b\n1,2\n", status_code=200, raise_for_status=lambda: None)
+    monkeypatch.setattr(fetch_csv.requests, "post", post)
+    monkeypatch.setattr(fetch_csv, "convert_to_pivot_payload",
+                        lambda d, c, include_totals=False: {d2["label"]: [o["nomItemId"] for o in d2["options"]]
+                                                            for d2 in d["dimensionsMap"]})
+    mdef = {"dimensionsMap": [judete, locs]}
+    assert fetch_csv.fetch_by_judet_split("AAA1", mdef, str(tmp_path), judete, locs, {"54975": "Cluj"}) is True
+    assert {"Judete": [2], "Localitati": [10]} in sent
+    assert {"Judete": [2, 3], "Localitati": [12]} in sent          # the unplaced locality, every county
+
+
+def test_a_county_over_the_cell_limit_fails_instead_of_being_skipped(fetch_csv, tmp_path, monkeypatch):
+    judete = {"label": "Judete", "options": [{"label": "Cluj", "nomItemId": 2}]}
+    locs = {"label": "Localitati", "options": [{"label": "54975 MUNICIPIUL CLUJ-NAPOCA", "nomItemId": 10}]}
+    monkeypatch.setattr(fetch_csv.requests, "post", lambda url, **kw: SimpleNamespace(
+        content="Ati depasit pragul de 30000 celule".encode(), status_code=200, raise_for_status=lambda: None))
+    monkeypatch.setattr(fetch_csv, "convert_to_pivot_payload", lambda d, c, include_totals=False: {})
+    assert fetch_csv.fetch_by_judet_split("AAA1", {"dimensionsMap": [judete, locs]}, str(tmp_path),
+                                          judete, locs, {"54975": "Cluj"}) is False
 
 
 def test_fetch_csv_success_exit_zero(fetch_csv, monkeypatch):
