@@ -1,8 +1,15 @@
 """
 Coverage & Sparsity Profiler for INS TEMPO datasets.
 Measures data completeness across dimensions and writes results to DuckDB.
+
+  python 11-coverage-profiler.py                    rebuild dataset_coverage for every dataset
+  python 11-coverage-profiler.py --matrix A,B       replace only these datasets' rows
+
+Parquet values are matched to dimension options by nom_item_id (legacy files) or
+by their SDMX value / option label (SDMX files).
 """
 
+import argparse
 import duckdb
 import json
 import os
@@ -16,7 +23,7 @@ CURRENT_YEAR = 2026
 PROGRESS_INTERVAL = 200
 
 DDL = """
-CREATE TABLE dataset_coverage (
+CREATE TABLE IF NOT EXISTS dataset_coverage (
     matrix_code VARCHAR PRIMARY KEY,
     time_dim_column VARCHAR,
     time_min_year INTEGER,
@@ -98,18 +105,24 @@ def load_metadata(rconn):
     ).fetchall():
         geo_levels[nid] = gl
 
-    # nom_item_ids per dimension (for fallback when no parquet)
-    dim_nids = {}
-    for dim_id, nid in rconn.execute(
-        "SELECT dimension_id, nom_item_id FROM dimension_options"
+    # nom_item_ids per dimension (for fallback when no parquet), and how an SDMX
+    # parquet spells each option: its sdmx_value or its trimmed label
+    dim_nids, dim_values = {}, {}
+    for dim_id, nid, label, sdmx in rconn.execute(
+        "SELECT dopt.dimension_id, dopt.nom_item_id, dopt.option_label, sc.sdmx_value "
+        "FROM dimension_options dopt LEFT JOIN sdmx_codes sc ON sc.nom_item_id = dopt.nom_item_id"
     ).fetchall():
         dim_nids.setdefault(dim_id, []).append(nid)
+        vals = dim_values.setdefault(dim_id, {})
+        for v in (sdmx, (label or "").strip()):
+            if v:
+                vals.setdefault(str(v), nid)
 
     matrices = [(mc, rc, str(corpus_parquet(mc))) for mc, rc in rconn.execute(
         "SELECT matrix_code, row_count FROM matrices ORDER BY matrix_code"
     ).fetchall()]
 
-    return dims_by_matrix, time_years, geo_levels, dim_nids, matrices
+    return dims_by_matrix, time_years, geo_levels, dim_nids, dim_values, matrices
 
 
 def _pq_query(pconn, sql, ppath):
@@ -118,7 +131,16 @@ def _pq_query(pconn, sql, ppath):
     return pconn.execute(full_sql)
 
 
-def profile_dataset(mc, row_count, ppath, dims, time_years, geo_levels, dim_nids, pconn):
+def _nid(value, dim, dim_values):
+    """nom_item_id of a parquet value: legacy files store the id (an integer
+    column), SDMX files the option's SDMX value or label."""
+    if isinstance(value, int):
+        return value
+    return (dim_values.get(dim["dimension_id"]) or {}).get(str(value).strip())
+
+
+def profile_dataset(mc, row_count, ppath, dims, time_years, geo_levels, dim_nids, pconn, dim_values=None):
+    dim_values = dim_values or {}
     time_dim = next((d for d in dims if d["dim_type"] == "time"), None)
     geo_dim = next((d for d in dims if d["dim_type"] == "geo"), None)
     has_parquet = ppath and os.path.exists(ppath)
@@ -137,7 +159,7 @@ def profile_dataset(mc, row_count, ppath, dims, time_years, geo_levels, dim_nids
                 f'SELECT DISTINCT "{col}" FROM read_parquet(\'__PPATH__\')', ppath).fetchall()]
             years = set()
             grans = Counter()
-            for tid in ids:
+            for tid in (_nid(v, time_dim, dim_values) for v in ids):
                 if tid in time_years:
                     y, tg = time_years[tid]
                     years.add(y)
@@ -161,7 +183,7 @@ def profile_dataset(mc, row_count, ppath, dims, time_years, geo_levels, dim_nids
             ids = [r[0] for r in _pq_query(pconn,
                 f'SELECT DISTINCT "{col}" FROM read_parquet(\'__PPATH__\')', ppath).fetchall()]
             lc = Counter()
-            for gid in ids:
+            for gid in (_nid(v, geo_dim, dim_values) for v in ids):
                 gl = geo_levels.get(gid)
                 if gl:
                     lc[gl] += 1
@@ -283,12 +305,23 @@ def print_summary(conn):
         print(f"  {r[0]}: last_year={r[1]}, stale={r[2]}y")
 
 
-def main():
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="Coverage & sparsity profiler (dataset_coverage)")
+    ap.add_argument("--matrix", metavar="CODE[,CODE,...]",
+                    help="replace only these datasets' rows (default: rebuild the table)")
+    args = ap.parse_args(argv)
+    codes = [c.strip() for c in (args.matrix or "").split(",") if c.strip()]
     start = time.time()
     # Try write to main DB first; if locked, use fallback
     wconn, write_path, is_main = open_write_conn()
-    wconn.execute("DROP TABLE IF EXISTS dataset_coverage")
-    wconn.execute(DDL)
+    if codes and not is_main:
+        raise SystemExit("main DB is locked; a --matrix run must write to it (stop the server)")
+    if codes:
+        wconn.execute(DDL)
+        wconn.execute(f"DELETE FROM dataset_coverage WHERE matrix_code IN ({','.join('?' * len(codes))})", codes)
+    else:
+        wconn.execute("DROP TABLE IF EXISTS dataset_coverage")
+        wconn.execute(DDL)
     # Read from same conn if main, else open read-only
     if is_main:
         rconn = wconn
@@ -296,7 +329,9 @@ def main():
         rconn = duckdb.connect(DB_PATH, read_only=True)
     pconn = duckdb.connect()
 
-    dims_by_matrix, time_years, geo_levels, dim_nids, matrices = load_metadata(rconn)
+    dims_by_matrix, time_years, geo_levels, dim_nids, dim_values, matrices = load_metadata(rconn)
+    if codes:
+        matrices = [m for m in matrices if m[0] in set(codes)]
     total = len(matrices)
     print(f"Processing {total} datasets...")
 
@@ -310,7 +345,8 @@ def main():
             print(f"  [{i+1}/{total}] {time.time() - start:.1f}s elapsed")
         dims = dims_by_matrix.get(mc, [])
         try:
-            rec = profile_dataset(mc, row_count, ppath, dims, time_years, geo_levels, dim_nids, pconn)
+            rec = profile_dataset(mc, row_count, ppath, dims, time_years, geo_levels, dim_nids, pconn,
+                                  dim_values)
         except Exception as e:
             errors += 1
             rec = dict(EMPTY_REC)

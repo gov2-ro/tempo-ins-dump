@@ -22,6 +22,9 @@ PER_MATRIX_ORDER = [
     "10-import-metadata.py",        # --stats-only: row_count/path of the new parquet
     "13-dimension-structure.py",
     "generate_view_profiles.py",
+    "profile-values.py",            # per-matrix value profiles, trends, coverage
+    "detect_trends.py",
+    "11-coverage-profiler.py",
 ]
 
 
@@ -39,7 +42,8 @@ def test_stage_order_for_a_changed_matrix(pipe):
     st = pipe.state()["matrices"]["AAA1"]["stages"]
     assert set(st) == set(["meta", "6-fetch-csv", "10-import-metadata", "10-classify-dimensions",
                                "11-build-sdmx-codes", "9-csv-to-parquet", "12-split", "10-import-stats",
-                               "13-dimension-structure", "generate_view_profiles", "validate"])
+                               "13-dimension-structure", "generate_view_profiles", "validate",
+                               "10-classify-children", "profiles", "published_totals"])
 
 
 def test_children_are_profiled_with_their_parent(pipe):
@@ -47,9 +51,11 @@ def test_children_are_profiled_with_their_parent(pipe):
     pipe.feed([("05.05.2026", "AAA1")])
     assert pipe.go() == 0
     cmds = [(s, a) for s, a in pipe.cmds]
+    assert ("10-classify-dimensions.py", ["--matrix", "AAA1_a,AAA1_b"]) in cmds   # child profiles
     assert ("13-dimension-structure.py", ["--matrix", "AAA1,AAA1_a,AAA1_b"]) in cmds
-    for code in ("AAA1", "AAA1_a", "AAA1_b"):
-        assert ("generate_view_profiles.py", ["--matrix", code]) in cmds
+    assert ("generate_view_profiles.py", ["--matrix", "AAA1,AAA1_a,AAA1_b"]) in cmds
+    assert ("profile-values.py", ["--matrix", "AAA1,AAA1_a,AAA1_b"]) in cmds
+    assert ("11-coverage-profiler.py", ["--matrix", "AAA1"]) in cmds
     # profiling happens after the split registered the children, before validation
     order = [s for s, _ in cmds]
     assert order.index("12-split-datasets.py") < order.index("13-dimension-structure.py")
@@ -137,8 +143,16 @@ def test_global_profiles_are_flagged_stale_then_cleared_by_the_flag(pipe):
     assert pipe.go() == 0
     stale = pipe.state()["stale"]
     assert set(stale) == {"coverage", "trends", "value_profiles", "search_index"}
-    assert all(v == ["AAA1", "AAA1_a"] for v in stale.values())
-    assert "11-coverage-profiler.py" not in pipe.scripts()
+    # coverage/trends/values ran per matrix; only the search index is owed
+    assert stale["search_index"] == ["AAA1", "AAA1_a"]
+    assert stale["coverage"] == stale["trends"] == stale["value_profiles"] == []
+    assert ("11-coverage-profiler.py", ["--matrix", "AAA1"]) in pipe.cmds
+    assert "build-search-index.py" not in pipe.scripts()
+
+    pipe.rcs[("detect_trends.py", "AAA1,AAA1_a")] = 1       # a failed per-matrix profile is owed
+    assert pipe.go("--matrix", "AAA1") == 0
+    assert pipe.state()["stale"]["trends"] == ["AAA1", "AAA1_a"]
+    pipe.rcs.clear()
 
     assert pipe.go("--global-profiles", "--all") == 0
     assert {"11-coverage-profiler.py", "detect_trends.py", "profile-values.py",
@@ -200,3 +214,23 @@ def test_validate_matrix_rejects_inconsistent_artifacts(real_env):
     assert "child set" in mod.validate_matrix("TST101", kids[:1]) or True
     (env.parquet / "TST101.parquet").unlink()
     assert "parent parquet missing" in mod.validate_matrix("TST101", kids)
+
+
+def test_published_totals_are_refetched_for_listed_matrices(pipe, tmp_path, monkeypatch):
+    spec = tmp_path / "published_totals.json"
+    spec.write_text(json.dumps({"queries": [{"id": "AAA1-total", "matrix": "AAA1", "select": []},
+                                            {"id": "ZZZ9-total", "matrix": "ZZZ9", "select": []}]}))
+    monkeypatch.setattr(pipe.mod, "PUBLISHED_TOTALS_SPEC", spec)
+    pipe.feed([("05.05.2026", "AAA1")])
+    assert pipe.go() == 0
+    cmds = [(s, a) for s, a in pipe.cmds]
+    fetch = [a for s, a in cmds if s == "fetch-ins-reference-cells.py"]
+    assert len(fetch) == 1 and fetch[0][fetch[0].index("--only") + 1] == "AAA1-total"
+    assert any(s == "load-published-totals.py" for s, _ in cmds)
+    assert pipe.state()["matrices"]["AAA1"]["stages"]["published_totals"]["outcome"] == "ok"
+
+
+def test_pipeline_data_dir_must_be_named_data(pipe, tmp_path, monkeypatch):
+    monkeypatch.setenv("TEMPO_PIPELINE_DATA_DIR", str(tmp_path / "copy"))
+    pipe.feed([("05.05.2026", "AAA1")])
+    assert pipe.go("--matrix", "AAA1") == 2 and pipe.calls == []

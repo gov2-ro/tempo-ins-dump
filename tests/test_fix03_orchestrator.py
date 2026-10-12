@@ -105,7 +105,11 @@ def test_success_advances_watermark_to_feed_date_not_today(pipe):
     assert st["retry"] == {}
     assert st["matrices"]["AAA1"]["source_update"] == "05.03.2026"  # latest of its updates
     assert st["matrices"]["AAA1"]["outcome"] == "ok"
-    assert all(v["outcome"] == "ok" for v in st["matrices"]["AAA1"]["stages"].values())
+    stages = st["matrices"]["AAA1"]["stages"]
+    assert all(v["outcome"] == "ok" for k, v in stages.items()
+               if k not in ("10-classify-children", "published_totals"))
+    # no children and not a published-totals matrix: those optional stages are skipped
+    assert stages["10-classify-children"]["outcome"] == stages["published_totals"]["outcome"] == "skipped"
     assert pipe.sync_calls == [["AAA1", "BBB2"]]
     assert [c for c in pipe.calls if c[1] == "AAA1"][0][0] == "6-fetch-csv.py"
 

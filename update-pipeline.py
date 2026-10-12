@@ -77,10 +77,20 @@ import requests
 # Config
 # ---------------------------------------------------------------------------
 BASE_DIR = Path(__file__).parent
-NEWS_CSV = BASE_DIR / "data" / "insse_news.csv"
+
+
+def data_dir() -> Path:
+    """The data tree every path below lives in: TEMPO_PIPELINE_DATA_DIR (a copied
+    generation's `.../data`) or the repo's data/. Child scripts run with its parent
+    as cwd, because some resolve `data/...` from the cwd (6-fetch-csv, 4-build-meta-index)."""
+    env = os.environ.get("TEMPO_PIPELINE_DATA_DIR")
+    return Path(env).resolve() if env else BASE_DIR / "data"
+
+
+NEWS_CSV = data_dir() / "insse_news.csv"
 NEWS_URL = "http://statistici.insse.ro:8077/tempo-ins/news/"
 META_BASE_URL = "http://statistici.insse.ro:8077/tempo-ins/matrix/"
-LOG_DIR = BASE_DIR / "data" / "logs"
+LOG_DIR = data_dir() / "logs"
 LAST_RUN_FILE = LOG_DIR / "last-pipeline-run.txt"   # legacy mirror of the watermark
 STATE_FILE = LOG_DIR / "update-pipeline-state.json"  # outcomes, retry set, watermark
 
@@ -123,8 +133,8 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 def sync_ultima_actualizare(codes: list[str], lang: str, dry_run: bool = False) -> int:
     """Update matrices.ultima_actualizare in DuckDB from freshly fetched metadata JSONs."""
-    meta_dir = BASE_DIR / "data" / "2-metas" / lang
-    db_path = BASE_DIR / "data" / "corpus" / "metadata.duckdb"
+    meta_dir = data_dir() / "2-metas" / lang
+    db_path = corpus_db_path()
 
     if dry_run:
         log.info(f"[DRY-RUN] sync_ultima_actualizare for {len(codes)} matrices")
@@ -236,17 +246,25 @@ STAGE_CODES = "11-build-sdmx-codes"
 STAGE_CONVERT = "9-csv-to-parquet"
 STAGE_SPLIT = "12-split"
 STAGE_STATS = "10-import-stats"
+STAGE_CLASSIFY_CHILDREN = "10-classify-children"
 STAGE_DIMS = "13-dimension-structure"
 STAGE_VIEWS = "generate_view_profiles"
+STAGE_PROFILES = "profiles"
+STAGE_PUBLISHED = "published_totals"
 STAGE_VALIDATE = "validate"
-OPTIONAL_STAGES = {STAGE_DIMS, STAGE_VIEWS}
+OPTIONAL_STAGES = {STAGE_CLASSIFY_CHILDREN, STAGE_DIMS, STAGE_VIEWS, STAGE_PROFILES, STAGE_PUBLISHED}
+# INS Total cells served directly (app/data/published_totals.json): re-fetched and
+# reloaded when one of their matrices is refreshed.
+PUBLISHED_TOTALS_SPEC = BASE_DIR / "app" / "data" / "published_totals.json"
 # DB-refresh stages that --skip-duckdb leaves out (partial run).
 DB_STAGES = (STAGE_IMPORT, STAGE_CLASSIFY, STAGE_CODES)
 # Run-level (batch) stages, all required.
 BATCH_INDEX = "4-build-meta-index"
 BATCH_SYNC = "sync-ultima-actualizare"
-# Run-level optional stages (--global-profiles): scripts that rebuild whole tables and
-# have no per-matrix mode. Without the flag the touched matrices are recorded as stale.
+# Run-level optional stages (--global-profiles): whole-table rebuilds. Coverage, trends
+# and value profiles also run per matrix (stage "profiles"), so only a matrix whose
+# per-matrix profiles failed is recorded as stale for them; the search index has no
+# per-matrix mode and every touched matrix is stale for it until --global-profiles.
 GLOBAL_PROFILE_STAGES = (
     ("coverage", "11-coverage-profiler.py", []),
     ("trends", "detect_trends.py", []),
@@ -372,7 +390,7 @@ def run_cmd(cmd: list[str], dry_run: bool = False, label: str = "") -> int:
         log.info(f"[DRY-RUN] {label or display}")
         return 0
     log.info(f"Running: {display}")
-    result = subprocess.run(cmd, cwd=BASE_DIR, env=child_env())
+    result = subprocess.run(cmd, cwd=data_dir().parent, env=child_env())
     if result.returncode != 0:
         log.error(f"FAILED (exit {result.returncode}): {display}")
     return result.returncode
@@ -384,7 +402,7 @@ def run(cmd: list[str], dry_run: bool = False, label: str = "") -> bool:
 
 
 def python_rc(script: str, args: list[str], dry_run: bool = False) -> int:
-    return run_cmd([sys.executable, script] + args, dry_run=dry_run,
+    return run_cmd([sys.executable, str(BASE_DIR / script)] + args, dry_run=dry_run,
                    label=f"{script} {' '.join(args)}")
 
 
@@ -468,7 +486,7 @@ def parse_news(since: str | None) -> dict[str, str | None]:
 
 def fetch_meta(code: str, lang: str, force: bool) -> bool:
     """Fetch metadata for a single matrix directly from the API."""
-    output_dir = BASE_DIR / "data" / "2-metas" / lang
+    output_dir = data_dir() / "2-metas" / lang
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{code}.json"
 
@@ -496,8 +514,17 @@ def _stage(stages: dict, name: str, outcome: str, reason: str | None = None) -> 
     stages[name] = {"outcome": outcome, "reason": reason, "at": now_iso()}
 
 
+def published_queries(code: str) -> list[str]:
+    """Ids of the published-total queries for one matrix (app/data/published_totals.json)."""
+    try:
+        spec = json.loads(PUBLISHED_TOTALS_SPEC.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return [q["id"] for q in spec.get("queries", []) if q.get("matrix") == code]
+
+
 def corpus_db_path() -> Path:
-    return BASE_DIR / "data" / "corpus" / "metadata.duckdb"
+    return data_dir() / "corpus" / "metadata.duckdb"
 
 
 CHILDREN_SEEN: dict[str, list[str]] = {}   # parent -> children profiled this run
@@ -526,7 +553,7 @@ def validate_matrix(code: str, children: list[str], check_split: bool = True) ->
     dimensions registered. Children (when splitting ran): registered in dataset_splits
     and matrices, file present with the registered row count."""
     db = corpus_db_path()
-    pq_dir = BASE_DIR / "data" / "corpus" / "parquet"
+    pq_dir = data_dir() / "corpus" / "parquet"
     conn = duckdb.connect(str(db), read_only=True)
     try:
         def rows_of(path: Path):
@@ -656,20 +683,41 @@ def process_matrix(code: str, args, lang: str) -> tuple[str, dict, tuple[str, st
         if f:
             return fail(f)
 
-    # 9. optional profiling of the parent and its children: visible, never blocking
+    # 9. optional profiling of the parent and its children: visible, never blocking.
+    # Children are re-classified first (their matrix_profiles carry the time range);
+    # coverage is per parent (children have no coverage rows corpus-wide).
     children = [] if (dry or args.no_split) else fetch_children(code)
     CHILDREN_SEEN[code] = children
     targets = [code] + children
+    joined = ",".join(targets)
+    published = published_queries(code)
     degraded = False
-    for key, disabled, flag in ((STAGE_DIMS, args.no_dim_structure, "--no-dim-structure"),
-                                (STAGE_VIEWS, args.no_view_profiles, "--no-view-profiles")):
+    for key, disabled, flag in (
+            (STAGE_CLASSIFY_CHILDREN, args.skip_duckdb or not children, "--skip-duckdb/no children"),
+            (STAGE_DIMS, args.no_dim_structure, "--no-dim-structure"),
+            (STAGE_VIEWS, args.no_view_profiles, "--no-view-profiles"),
+            (STAGE_PROFILES, args.skip_duckdb, "--skip-duckdb"),
+            (STAGE_PUBLISHED, args.skip_duckdb or not published, "--skip-duckdb/not listed")):
         if disabled:
             _stage(stages, key, "skipped", flag)
             continue
-        if key == STAGE_DIMS:
-            runs = [("13-dimension-structure.py", ["--matrix", ",".join(targets)])]
+        if key == STAGE_CLASSIFY_CHILDREN:
+            runs = [("10-classify-dimensions.py", ["--matrix", ",".join(children)])]
+        elif key == STAGE_DIMS:
+            runs = [("13-dimension-structure.py", ["--matrix", joined])]
+        elif key == STAGE_VIEWS:
+            runs = [("generate_view_profiles.py", ["--matrix", joined])]
+        elif key == STAGE_PROFILES:
+            runs = [("scripts/profile-values.py", ["--matrix", joined]),
+                    ("detect_trends.py", ["--matrix", joined]),
+                    ("11-coverage-profiler.py", ["--matrix", code])]
         else:
-            runs = [("generate_view_profiles.py", ["--matrix", t]) for t in targets]
+            cells = data_dir() / "published-totals"
+            runs = [("scripts/fetch-ins-reference-cells.py",
+                     ["--spec", str(PUBLISHED_TOTALS_SPEC), "--meta-dir", str(data_dir() / "2-metas" / "ro"),
+                      "--out", str(cells), "--only", q, "--delay", "2"]) for q in published]
+            runs.append(("scripts/load-published-totals.py",
+                         ["--cells", str(cells), "--db", str(corpus_db_path())]))
         bad = []
         for script, script_args in runs:
             rc = python_rc(script, script_args, dry_run=dry)
@@ -763,6 +811,10 @@ def run_pipeline(argv: list[str] | None = None) -> int:
     if args.since and args.all:
         log.error("--since and --all are mutually exclusive")
         return EXIT_USAGE
+    if data_dir().name != "data":
+        log.error(f"TEMPO_PIPELINE_DATA_DIR must be a directory named 'data' (child scripts "
+                  f"resolve data/... from its parent): {data_dir()}")
+        return EXIT_USAGE
 
     dry = args.dry_run
     started = now_iso()
@@ -794,7 +846,7 @@ def _run_pipeline(args, lang: str, started: str, dry: bool) -> int:
 
     # ---- 0. Standalone propagate-splits shortcut ----
     if args.propagate_splits:
-        propagate_split_metadata(BASE_DIR / "data" / "corpus" / "metadata.duckdb", dry_run=dry)
+        propagate_split_metadata(corpus_db_path(), dry_run=dry)
         return EXIT_OK
 
     # ---- 1. Optionally re-fetch news ----
@@ -899,8 +951,13 @@ def _run_pipeline(args, lang: str, started: str, dry: bool) -> int:
         touched = sorted({c for c in handled if results.get(c) in ("ok", "ok_degraded")}
                          | {k for c in handled for k in CHILDREN_SEEN.get(c, [])})
         stale = state.data.setdefault("stale", {})
+        unprofiled = {c for c in handled
+                      if (state.data["matrices"].get(c, {}).get("stages", {})
+                          .get(STAGE_PROFILES, {}).get("outcome")) not in ("ok",)}
+        unprofiled |= {k for c in unprofiled for k in CHILDREN_SEEN.get(c, [])}
         for key, _, _ in GLOBAL_PROFILE_STAGES:
-            stale[key] = sorted(set(stale.get(key, [])) | set(touched))
+            add = touched if key == "search_index" else sorted(set(touched) & unprofiled)
+            stale[key] = sorted(set(stale.get(key, [])) | set(add))
         if args.global_profiles:
             log.info("=== Whole-corpus profiles (optional) ===")
             for key, script, script_args in GLOBAL_PROFILE_STAGES:

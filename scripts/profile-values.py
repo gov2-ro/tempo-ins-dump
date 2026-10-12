@@ -2,7 +2,11 @@
 """
 Rebuild dataset_value_profiles for all datasets with parquet files.
 Adapted from the phase1-value-profiler agent spec for v3 (OBS_VALUE column).
+
+  python scripts/profile-values.py                 rebuild the table (canonical datasets)
+  python scripts/profile-values.py --matrix A,B    replace only these datasets' rows
 """
+import argparse
 import sys
 import time
 from pathlib import Path
@@ -12,11 +16,17 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import duckdb
 from duckdb_config import DB_FILE, corpus_parquet
 
+ap = argparse.ArgumentParser(description="Value profiles (dataset_value_profiles)")
+ap.add_argument("--matrix", metavar="CODE[,CODE,...]",
+                help="replace only these datasets' rows (default: rebuild the table)")
+codes = [c.strip() for c in (ap.parse_args().matrix or "").split(",") if c.strip()]
+
 conn = duckdb.connect(str(DB_FILE))
 
-conn.execute("DROP TABLE IF EXISTS dataset_value_profiles")
+if not codes:
+    conn.execute("DROP TABLE IF EXISTS dataset_value_profiles")
 conn.execute("""
-    CREATE TABLE dataset_value_profiles (
+    CREATE TABLE IF NOT EXISTS dataset_value_profiles (
         matrix_code      VARCHAR PRIMARY KEY,
         row_count        BIGINT,
         val_min          DOUBLE,
@@ -37,7 +47,10 @@ conn.execute("""
 
 matrices = [(mc, str(corpus_parquet(mc))) for (mc,) in conn.execute("""
     SELECT matrix_code FROM matrices WHERE is_canonical = TRUE ORDER BY matrix_code
-""").fetchall()]
+""").fetchall() if not codes or mc in codes]
+if codes:
+    conn.execute(f"DELETE FROM dataset_value_profiles WHERE matrix_code IN ({','.join('?' * len(codes))})",
+                 codes)
 
 print(f"Profiling {len(matrices)} datasets...")
 t0 = time.time()

@@ -101,6 +101,16 @@ def test_bucharest_localities_are_grouped_under_their_county(fetch_csv):
         {"Cluj": [10], "Municipiul Bucuresti": [11]}
 
 
+def test_an_unmatched_locality_fails_the_split_fetch(fetch_csv, tmp_path):
+    judete = {"options": [{"label": "Cluj", "nomItemId": 2}]}
+    locs = {"options": [{"label": "54975 MUNICIPIUL CLUJ-NAPOCA", "nomItemId": 10},
+                        {"label": "999999 NOUA", "nomItemId": 12}]}
+    out = []
+    groups = fetch_csv.group_localities_by_judet(locs, judete, {"54975": "Cluj"}, out)
+    assert out == ["999999 NOUA (SIRUTA: 999999)"] and len(groups) == 1
+    assert fetch_csv.fetch_by_judet_split("AAA1", {}, str(tmp_path), judete, locs, {"54975": "Cluj"}) is False
+
+
 def test_fetch_csv_success_exit_zero(fetch_csv, monkeypatch):
     monkeypatch.setattr(fetch_csv.requests, "post", fake_post(b"a,b\n1,2\n3,4\n"))
     assert fetch_csv.main(["--matrix", "AAA1", "--force"]) == 0

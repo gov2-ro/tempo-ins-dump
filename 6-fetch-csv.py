@@ -239,7 +239,8 @@ def extract_siruta_from_label(label: str) -> Optional[str]:
         return parts[0]
     return None
 
-def group_localities_by_judet(localitati_dim: Dict, judete_dim: Dict, siruta_map: Dict[str, str]) -> Dict[str, List[Dict]]:
+def group_localities_by_judet(localitati_dim: Dict, judete_dim: Dict, siruta_map: Dict[str, str],
+                              unmatched_out: Optional[List[str]] = None) -> Dict[str, List[Dict]]:
     """
     Group localities by their Judet using SIRUTA codes.
 
@@ -309,9 +310,11 @@ def group_localities_by_judet(localitati_dim: Dict, judete_dim: Dict, siruta_map
         judet_localities[judet_id]['localities'].append(locality_opt)
 
     if unmatched_localities:
-        logger.warning(f"Could not match {len(unmatched_localities)} localities to Judete")
+        logger.error(f"Could not match {len(unmatched_localities)} localities to Judete")
         for unmatched in unmatched_localities[:10]:  # Log first 10
-            logger.debug(f"  Unmatched: {unmatched}")
+            logger.error(f"  Unmatched: {unmatched}")
+    if unmatched_out is not None:
+        unmatched_out.extend(unmatched_localities)
 
     return judet_localities
 
@@ -361,7 +364,15 @@ def fetch_by_judet_split(matrix_code: str, matrix_def: Dict, output_dir: str,
 
     # Group localities by Judet
     tqdm.write(f"Grouping localities by Judet for {matrix_code}...")
-    judet_groups = group_localities_by_judet(localitati_dim, judete_dim, siruta_map)
+    unmatched: List[str] = []
+    judet_groups = group_localities_by_judet(localitati_dim, judete_dim, siruta_map, unmatched)
+
+    if unmatched:
+        # A locality without a county would be left out of every request: refuse
+        # rather than write an incomplete file (Bucharest was lost this way).
+        tqdm.write(f"ERROR: {len(unmatched)} localities of {matrix_code} match no county "
+                   f"(e.g. {unmatched[0]}); update data/meta/uat-siruta.csv")
+        return False
 
     if not judet_groups:
         tqdm.write(f"ERROR: No localities grouped for {matrix_code}")

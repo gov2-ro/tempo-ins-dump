@@ -251,12 +251,18 @@ def _insert_batch(conn, batch):
              r["breakpoint_years"], r["geo_variance"], r["geo_outlier_counties"]])
 
 
-def main():
+def main(argv=None):
+    import argparse
+    ap = argparse.ArgumentParser(description="Trend detection (dataset_trends)")
+    ap.add_argument("--matrix", metavar="CODE[,CODE,...]",
+                    help="replace only these datasets' rows (default: rebuild the table)")
+    codes = [c.strip() for c in (ap.parse_args(argv).matrix or "").split(",") if c.strip()]
     t0 = time.time()
     conn = duckdb.connect(DB_PATH, read_only=False)
 
-    conn.execute("DROP TABLE IF EXISTS dataset_trends")
-    conn.execute("""CREATE TABLE dataset_trends (
+    if not codes:
+        conn.execute("DROP TABLE IF EXISTS dataset_trends")
+    conn.execute("""CREATE TABLE IF NOT EXISTS dataset_trends (
         matrix_code VARCHAR PRIMARY KEY, trend_direction VARCHAR, trend_slope DOUBLE,
         yoy_growth_latest DOUBLE, max_value_year INTEGER, min_value_year INTEGER,
         has_seasonality BOOLEAN, breakpoint_years VARCHAR, geo_variance DOUBLE,
@@ -264,7 +270,9 @@ def main():
 
     matrices = [(mc, str(corpus_parquet(mc))) for (mc,) in conn.execute(
         "SELECT matrix_code FROM matrices ORDER BY matrix_code").fetchall()
-        if corpus_parquet(mc).exists()]
+        if corpus_parquet(mc).exists() and (not codes or mc in codes)]
+    if codes:
+        conn.execute(f"DELETE FROM dataset_trends WHERE matrix_code IN ({','.join('?' * len(codes))})", codes)
     total = len(matrices)
     print(f"Processing {total} datasets...")
 

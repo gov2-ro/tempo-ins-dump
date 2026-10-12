@@ -1161,7 +1161,21 @@ class ProfileGenerator:
 # Output & stats
 # ---------------------------------------------------------------------------
 
-def write_profiles(profiles: dict, output_dir: Path):
+def _index_entry(code: str, p: dict) -> dict:
+    return {
+        "code": code,
+        "name": p.get('matrix_name', ''),
+        "archetype": p.get('archetype', ''),
+        "dim_count": p.get('dim_count', 0),
+        "snapshot_charts": [c['chart_type'] for c in p['views']['snapshot'].get('charts', [])],
+        "timeline": p['views']['timeline'].get('available', False),
+        "warnings": len(p.get('warnings', [])),
+    }
+
+
+def write_profiles(profiles: dict, output_dir: Path, *, partial: bool = False):
+    """Write one JSON per profile plus `_index.json`. `partial` (a --matrix run)
+    updates only these codes' index entries and keeps the rest."""
     output_dir.mkdir(parents=True, exist_ok=True)
     for code, profile in profiles.items():
         path = output_dir / f"{code}.json"
@@ -1170,20 +1184,12 @@ def write_profiles(profiles: dict, output_dir: Path):
     log.info("Wrote %d profiles to %s/", len(profiles), output_dir)
 
     # Write index file for the preview UI
-    index = []
-    for code, p in sorted(profiles.items()):
-        sn_charts = [c['chart_type'] for c in p['views']['snapshot'].get('charts', [])]
-        tl_avail = p['views']['timeline'].get('available', False)
-        index.append({
-            "code": code,
-            "name": p.get('matrix_name', ''),
-            "archetype": p.get('archetype', ''),
-            "dim_count": p.get('dim_count', 0),
-            "snapshot_charts": sn_charts,
-            "timeline": tl_avail,
-            "warnings": len(p.get('warnings', [])),
-        })
     index_path = output_dir / "_index.json"
+    entries = {}
+    if partial and index_path.exists():
+        entries = {e["code"]: e for e in json.loads(index_path.read_text(encoding="utf-8"))}
+    entries.update({code: _index_entry(code, p) for code, p in profiles.items()})
+    index = [entries[c] for c in sorted(entries)]
     with open(index_path, 'w', encoding='utf-8') as f:
         json.dump(index, f, ensure_ascii=False)
     log.info("Wrote index (%d entries) to %s", len(index), index_path)
@@ -1249,7 +1255,7 @@ def print_stats(profiles: dict):
 
 def main():
     parser = argparse.ArgumentParser(description="Generate view profiles for INS TEMPO datasets")
-    parser.add_argument("--matrix", type=str, help="Generate for a single dataset")
+    parser.add_argument("--matrix", type=str, help="Generate for these datasets only (CODE[,CODE,...])")
     parser.add_argument("--output", type=str, default=str(OUTPUT_DIR), help="Output directory")
     parser.add_argument("--debug", action="store_true", help="Verbose logging")
     args = parser.parse_args()
@@ -1265,20 +1271,23 @@ def main():
 
     try:
         if args.matrix:
-            profile = gen.generate_profile(args.matrix)
-            if not profile and args.matrix in gen.split_matrices:
-                profile = gen.generate_sub_profile(args.matrix)
-            if profile:
-                out_dir = Path(args.output)
-                out_dir.mkdir(parents=True, exist_ok=True)
-                path = out_dir / f"{args.matrix}.json"
-                with open(path, 'w', encoding='utf-8') as f:
-                    json.dump(profile, f, indent=2, ensure_ascii=False)
-                if args.debug:
-                    print(json.dumps(profile, indent=2, ensure_ascii=False))
-                log.info("Wrote %s", path)
-            else:
-                log.error("No profile generated for %s", args.matrix)
+            # A split child is built exactly as the full run builds it (its
+            # sub-profile); generate_profile would treat it as a standalone
+            # dataset (no parent, different charts).
+            profiles, missing = {}, []
+            for code in [c.strip() for c in args.matrix.split(',') if c.strip()]:
+                profile = gen.generate_sub_profile(code) if code in gen.split_matrices \
+                    else gen.generate_profile(code)
+                if profile:
+                    profiles[code] = profile
+                    if args.debug:
+                        print(json.dumps(profile, indent=2, ensure_ascii=False))
+                else:
+                    missing.append(code)
+            if profiles:
+                write_profiles(profiles, Path(args.output), partial=True)
+            if missing:
+                log.error("No profile generated for %s", ", ".join(missing))
                 sys.exit(1)
         else:
             profiles = gen.generate_all()
