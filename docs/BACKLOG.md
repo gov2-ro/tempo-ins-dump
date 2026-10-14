@@ -4,6 +4,15 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Data refresh findings — 2026-10-15
+
+- [ ] **Single-age population children lack 85+, so their headline total is short**:
+  `POP107D_varste_*` / `POP108D_varste_*` hold ages 0–84 only; "85 ani si peste"
+  lives in the `_grupe_*` children. The summed latest KPI shows 21,179,764 against
+  INS's 21,646,220 (2026), exactly the 466,456 aged 85+. The KPI check calls these
+  children `unresolved` (`pin_not_single:REF_AREA_2`), so no gate withholds the
+  value. Label the total "0–84 ani" or withhold it; check other `_varste` splits.
+
 ## Public-alpha milestone plan — 2026-10-11
 
 - [ ] **Five dependable questions: prepare and deliver the bounded web alpha**.

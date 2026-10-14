@@ -2,6 +2,10 @@
 
 Version 2, 2026-10-12, generation `c307f28a8c7b…` (copy `tempo-gen-20261012`,
 POP105A/SOM103A/TUR105D refreshed from INS; see [refresh](#refreshed-generation-2026-10-12)).
+Re-pinned 2026-10-15 to generation `9b3e065d2fe9…` (same copy, POP107D/POP108D re-fetched
+with Bucharest, per-dimension INS checks loaded). Q1–Q4 keep their values: no source
+of theirs was re-fetched (POP105A, `published_totals`, TUR105D), and the Q4 answer test
+passes on the new generation.
 Version 1 (2026-10-11) was recorded on generation `a6737a263a34…` (see [baseline](baseline.md));
 sections below that cite 2024 as the latest year describe v1.
 Machine-readable expectations: [answers.json](answers.json).

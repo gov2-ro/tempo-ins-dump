@@ -1,5 +1,44 @@
 # Activity History
 
+## 2026-10-15 — POP107D/POP108D with Bucharest; INS dimension checks; generation 9b3e065d
+
+On the copy `tempo-gen-20261012`, after INS outages on 12–14 Oct:
+- **Dimension checks** (`check-kpi-totals.py dims`): 684 summed dimensions of the
+  KPIs that disagreed with INS, tested on INS data alone. 377 match, 272 mismatch,
+  35 unresolved, all stored in `kpi_dimension_checks`. Most mismatches sum ≥10% above
+  INS's total because the options overlap (education levels 83, economic activity
+  44), and the 9ef7b4b policy already refuses to collapse them.
+- **POP107D/POP108D re-fetched** with Bucharest (21.6M rows each, parent and four
+  children). Their REF_AREA check went from 41 to 42 counties and now matches INS.
+  Both parents' summed KPIs equal INS exactly (21,646,220 for 2026 and 21,671,469
+  for 2025).
+- Search index and generation manifest rebuilt. `answers.json` is pinned to
+  `9b3e065d2fe9…`; Q1–Q4 sources are unchanged since 12 Oct.
+
+Checks: chart-selector primary unchanged for all 4,110 datasets; search eval
+identical on all 17 questions; full suite 673 passed with the copy's data (618
+passed, 55 skipped without it).
+
+Fixes found on the way:
+- `6-fetch-csv` county requests had no timeout, so a dead connection hung the run
+  for 6.5 h. All INS requests now time out (30 s connect, 10 min read).
+- A county is retried after 30 s, 1, 2 and 5 min. This covers a timeout, a dropped
+  connection (a laptop wake loses DNS) and an empty 200 body. INS sends that body
+  when degraded, and it used to be saved as a county with no rows, silently. The
+  refetch logs show no download hit it.
+- `check-kpi-totals dims --write-db` failed after a full run: its read-only
+  connection to the same file was still open.
+- `make_client` (tests) cleared shared caches instead of swapping them, so later
+  tests on the real corpus read fixture entries. The Q4 answer test failed once the
+  answer record matched the generation.
+- The static evidence bundle of a selection over the browser's 12 MB budget was an
+  empty 200 bundle, where the server answers 413 (POP107D by year, now that its grain
+  is certified). It now refuses like every other over-budget selection: API parity
+  1017/1017 with 5 documented budget refusals.
+
+Found: the single-age `_varste` children stop at 84, so their headline total is
+466,456 short (backlog).
+
 ## 2026-10-12 — Re-fetched 69 locality-level matrices; pipeline fixes for copies
 
 Ran `update-pipeline.py --matrix` on the copy (`TEMPO_PIPELINE_DATA_DIR`) for the 69
