@@ -4,6 +4,42 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Ask findings from debug logs — 2026-10-15
+
+Four DeepSeek Flash runs with `TEMPO_ASK_DEBUG` (server log
+`tempo-gen-20261012/reports/uvicorn-8080.log`): none failed at the provider; each hit
+one of these.
+
+- [ ] **Compatible providers stop with an empty answer at 2,048 tokens**: DeepSeek
+  Flash ended its last call with `finish_reason: length` and 0 text chars, because
+  its reasoning used up `max_tokens`. The page showed "(no answer)". Apply
+  `RESPONSES_MIN_OUTPUT_TOKENS` (8,000) to `_openai` in `llm_client.py` too. Treat an
+  empty `length` stop as a recoverable error, not an answer.
+- [ ] **"Total" filter values are refused with an unhelpful hint**: the model asked
+  `POP108D_grupe_judet` for `AGE: ["Total"]` → `slice_value_missing`. INS total rows
+  aren't stored. When a refused value looks like a total, `_REASON_HINTS` in
+  `agent.py` should say "no total rows are stored; omit the filter to sum the
+  categories".
+- [ ] **Raw rows flood the model context**: the data tool lets up to 5,000 rows
+  through (`limit=5000` in `_handle_query_dataset_data`). One refused aggregation
+  fell back to 2,732 raw rows (187k chars), and `list_categories` returns 49k
+  chars. Every later model call resends them, which slows it (14 s) and costs
+  tokens. Cap rows sent to the model at a few hundred, with `row_count` and a
+  "narrow it" note. The page keeps the full data.
+- [ ] **Conflicting-grain refusals give no way forward**: `POP10xD_*_judet` and
+  `TUR105H_judet` are among the 160 conflicting-grain files (see "County hierarchy
+  grain repair" below), so totals and group-bys are refused. The model then
+  searched again and ran out of calls (8-model-call and 12-tool limits). The hint
+  should name a working alternative: the `_localitate` child, or `POP105A` for
+  county population. Search should rank such datasets above refused ones.
+- [ ] **Multi-step comparisons exceed the Ask budget**: "municipalities with the
+  biggest population drop, 1992–2002 and 2010–2020" needs every municipality at
+  four points in time, differences and a ranking; it ended partial. Consider a
+  change/ranking tool (period A vs period B per area), or a recipe, instead of
+  raising the 8-call limit.
+- [ ] **Ask eval on the new providers**: no listed model has run `tempo_eval_agent`
+  yet (needs a key per provider). Mistral `-latest` ids are unconfirmed in its docs.
+
 ## Data refresh findings — 2026-10-15
 
 - [ ] **Single-age population children lack 85+, so their headline total is short**:
