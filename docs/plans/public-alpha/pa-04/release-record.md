@@ -79,7 +79,7 @@ Fixed during the workload:
 
 1. ~~**INS reference cells**~~ — **closed 2026-10-12:** Q1–Q4 verified against INS
    cells and owner-reviewed. The candidate moves to the refreshed copy
-   `tempo-gen-20261012` (see the release update below).
+   `tempo-gen-20261012` (see [the 2026-10-15 update](#release-update-2026-10-15-static-candidate-on-generation-9b3e065d)).
 2. **Image and resource gate:** `release-check.py --docker` plus the workload
    under 512 MiB / 1 worker on Linux. The local RSS peak (1.2 GiB) makes this a
    likely blocker until measured.
@@ -97,6 +97,26 @@ parity). Browser smoke: 20 pages × RO/EN × 3 widths, no errors and no `/api`
 requests. Not uploaded. See [DEPLOY-STATIC.md](../../../DEPLOY-STATIC.md).
 Q2/Q3 are now reconstructed answers (`pa-00/answer-records.md`); only
 Bucharest's Q3 value still waits for INS.
+
+## Release update (2026-10-15): static candidate on generation 9b3e065d
+
+The candidate data moves to the refreshed copy `tempo-gen-20261012`, generation
+`9b3e065d2fe9bb1df9bae2131b7bdeae9be3426f3c82b9a9954f7e6dc8f45550`. Since the 2026-10-12
+generation:
+- POP107D/POP108D were re-fetched with Bucharest;
+- per-dimension INS checks are loaded (`kpi_dimension_checks`, 684 dimensions);
+- the POP parents' summed KPIs equal INS.
+
+Static build `tempo-gen-20261012/static` from commit `47ac900`: 46,074 files, 3,376
+datasets. `release-check.py --static … --api-cases` (1,017 server answers) **passed**:
+- manifest, generation and completeness ok;
+- API parity 1,017/1,017, with 5 documented browser-budget refusals;
+- the suite passed 618, with 55 skipped because the gate runs without a corpus.
+  With the copy's data the full suite passed 673.
+
+The gate first found a static evidence bundle that was not refused over the browser
+budget (fixed in `9f08610`). Not uploaded. Gate 2 still applies only to the Fly path,
+and gate 3 (sessions) is still open.
 
 ## Commands (for later, after the gates)
 
