@@ -13,6 +13,15 @@ const history = [];   // [{role:'user'|'assistant', content: str}]
 let isLoading = false;
 let MAX_HISTORY_TURNS = 20;  // overwritten from /api/ask/config
 let ASK_UNAVAILABLE = false; // /api/ask/config: neither hosted nor own-key Ask
+let MAX_SECONDS = 90;        // /api/ask/config limits.max_seconds
+let DEBUG_AVAILABLE = false; // server runs with TEMPO_ASK_DEBUG
+
+/** Debug mode: offered only when the server allows it; on via ?debug=1 or the settings box. */
+function debugOn() {
+    if (!DEBUG_AVAILABLE) return false;
+    if (new URLSearchParams(location.search).get('debug') === '1') return true;
+    try { return localStorage.getItem('ask_debug') === '1'; } catch { return false; }
+}
 
 let askConfigPromise = null;
 /** /api/ask/config, fetched once (null when unreachable). */
@@ -27,6 +36,17 @@ async function initServerNotices() {
         const cfg = await askConfig();
         if (!cfg) return;
         if (cfg.limits && cfg.limits.max_history_turns) MAX_HISTORY_TURNS = cfg.limits.max_history_turns;
+        if (cfg.limits && cfg.limits.max_seconds) MAX_SECONDS = cfg.limits.max_seconds;
+        DEBUG_AVAILABLE = !!cfg.debug;
+        const row = document.getElementById('s-debug-row');
+        if (row) row.classList.toggle('hidden', !DEBUG_AVAILABLE);
+        const box = document.getElementById('s-debug');
+        if (box) {
+            box.checked = debugOn();
+            box.addEventListener('change', () => {
+                try { localStorage.setItem('ask_debug', box.checked ? '1' : '0'); } catch { /* blocked */ }
+            });
+        }
         const b = document.getElementById('ask-logging-banner');
         if (b) b.classList.toggle('hidden', !cfg.chat_logging);
         if (cfg.available === false) showAskUnavailable();
@@ -572,6 +592,11 @@ function appendAssistantResponse(result) {
         div.appendChild(details);
     }
 
+    if (result.debug) {
+        const { debug, ...raw } = result;
+        appendDebugPanel(div, debug.events || [], raw);
+    }
+
     list.appendChild(div);
     scrollToBottom();
 }
@@ -581,10 +606,100 @@ function appendLoadingIndicator() {
     const div = document.createElement('div');
     div.className = 'chat-msg chat-msg--assistant chat-msg--loading';
     div.id = 'chat-loading';
-    div.innerHTML = '<div class="chat-bubble"><span class="chat-dots"><span></span><span></span><span></span></span></div>';
+    div.innerHTML = '<div class="chat-bubble"><span class="chat-dots"><span></span><span></span><span></span></span>'
+        + '<span class="chat-wait"></span><div class="chat-debug-log hidden"></div></div>';
     list.appendChild(div);
+    // Elapsed time against the server's budget, so a slow answer is not a silent one.
+    const wait = div.querySelector('.chat-wait');
+    const t0 = Date.now();
+    const timer = setInterval(() => {
+        const s = Math.round((Date.now() - t0) / 1000);
+        wait.textContent = `${s}s / ${MAX_SECONDS}s`;
+    }, 1000);
+    const remove = div.remove.bind(div);
+    div.remove = () => { clearInterval(timer); remove(); };
     scrollToBottom();
     return div;
+}
+
+/** One agent step (debug mode) as a short line. */
+function fmtEvent(ev) {
+    const t = `${(ev.ms / 1000).toFixed(1)}s`.padStart(6);
+    const secs = ms => `${(ms / 1000).toFixed(1)}s`;
+    switch (ev.event) {
+        case 'start': return `${t}  start · ${ev.provider} / ${ev.model} · ${ev.history_turns} earlier turns`;
+        case 'model_call': return `${t}  → model call #${ev.iteration} (${ev.messages} messages)`;
+        case 'model_done': return `${t}  ← model #${ev.iteration} in ${secs(ev.took_ms)}: ${ev.stop_reason}`
+            + (ev.tool_calls.length ? ` · tools: ${ev.tool_calls.join(', ')}` : '') + ` · text ${ev.text_chars} chars`;
+        case 'model_error': return `${t}  ✗ model #${ev.iteration} after ${secs(ev.took_ms)}: ${ev.code} · ${ev.detail}`;
+        case 'tool': return `${t}  ⚙ ${ev.name} ${JSON.stringify(ev.input).slice(0, 160)}`;
+        case 'tool_done': return `${t}  ✓ ${ev.name} in ${secs(ev.took_ms)}`
+            + (ev.status ? ` · ${ev.status}` : '') + (ev.rows != null ? ` · ${ev.rows} rows` : '')
+            + (ev.error ? ` · error: ${ev.error}` : '') + ` · ${ev.result_chars} chars`;
+        case 'guardrail': return `${t}  ! guardrail: ${ev.note}`;
+        case 'answer': return `${t}  ✔ answer (${ev.text_chars} chars)`;
+        case 'stopped': return `${t}  ■ stopped: ${ev.reason}`;
+        case 'server_error': return `      ✗ server error: ${ev.detail}`;
+        default: return `${t}  ${JSON.stringify(ev)}`;
+    }
+}
+
+function appendDebugLine(loadingEl, ev) {
+    const log = loadingEl.querySelector('.chat-debug-log');
+    log.classList.remove('hidden');
+    const line = document.createElement('div');
+    if (/error/.test(ev.event)) line.className = 'err';
+    line.textContent = fmtEvent(ev);
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+    scrollToBottom();
+}
+
+/** Debug panel under an answer or an error: the steps and the raw JSON. */
+function appendDebugPanel(parent, events, raw) {
+    const details = document.createElement('details');
+    details.className = 'chat-debug';
+    const summary = document.createElement('summary');
+    summary.textContent = `Debug · ${events.length} steps`;
+    details.appendChild(summary);
+    const steps = document.createElement('pre');
+    steps.textContent = events.map(fmtEvent).join('\n');
+    details.appendChild(steps);
+    if (raw !== undefined) {
+        const json = document.createElement('pre');
+        json.textContent = JSON.stringify(raw, null, 2);
+        details.appendChild(json);
+    }
+    parent.appendChild(details);
+}
+
+/** Debug mode: POST /api/ask/stream, show each step live, resolve with the result. */
+async function askStreaming(body, loadingEl) {
+    const resp = await fetch('/api/ask/stream', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!resp.ok || !resp.body) return { error: { status: resp.status, detail: resp.statusText }, events: [] };
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    const events = [];
+    let buf = '', last = null;
+    for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let nl;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, nl).trim();
+            buf = buf.slice(nl + 1);
+            if (!line) continue;
+            const ev = JSON.parse(line);
+            if (ev.event === 'result' || ev.event === 'error') { last = ev; continue; }
+            events.push(ev);
+            appendDebugLine(loadingEl, ev);
+        }
+    }
+    if (!last) return { error: { status: 0, detail: 'The stream ended without a result' }, events };
+    return last.event === 'result' ? { result: last.result, events } : { error: last, events };
 }
 
 function scrollToBottom() {
@@ -610,25 +725,43 @@ async function sendMessage() {
     appendMessage('user', question);
     const loadingEl = appendLoadingIndicator();
 
+    // server caps history; send only the most recent turns (see /api/ask/config limits)
+    const body = { question, history: history.slice(-MAX_HISTORY_TURNS), ...byokPayload() };
+    // Never wait forever: the server stops at MAX_SECONDS; allow a margin for the last call.
+    const ctl = new AbortController();
+    const abortTimer = setTimeout(() => ctl.abort(), (MAX_SECONDS + 30) * 1000);
     try {
-        // server caps history; send only the most recent turns (see /api/ask/config limits)
-        const resp = await fetch('/api/ask', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question, history: history.slice(-MAX_HISTORY_TURNS), ...byokPayload() }),
-        });
+        let result;
+        if (debugOn()) {
+            const out = await askStreaming(body, loadingEl);
+            loadingEl.remove();
+            if (out.error) {
+                const d = out.error.detail;
+                appendMessage('assistant', `Error ${out.error.status}: ${typeof d === 'string' ? d : JSON.stringify(d)}`);
+                appendDebugPanel(document.getElementById('chat-messages').lastElementChild, out.events, out.error);
+                return;
+            }
+            result = { ...out.result, debug: { events: out.events } };
+        } else {
+            const resp = await fetch('/api/ask', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+                signal: ctl.signal,
+            });
 
-        loadingEl.remove();
+            loadingEl.remove();
 
-        if (!resp.ok) {
-            const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-            const detail = typeof err.detail === 'string' ? err.detail : 'Request rejected';
-            const retry = resp.headers.get('Retry-After');
-            appendMessage('assistant', `Error: ${detail}` + (retry ? ` (retry in ~${retry}s)` : ''));
-            return;
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                const detail = typeof err.detail === 'string' ? err.detail
+                    : (err.detail && typeof err.detail.message === 'string') ? err.detail.message : 'Request rejected';
+                const retry = resp.headers.get('Retry-After');
+                appendMessage('assistant', `Error ${resp.status}: ${detail}` + (retry ? ` (retry in ~${retry}s)` : ''));
+                return;
+            }
+            result = await resp.json();
         }
-
-        const result = await resp.json();
         appendAssistantResponse(result);
 
         // Update history for next turn
@@ -637,8 +770,11 @@ async function sendMessage() {
 
     } catch (e) {
         loadingEl.remove();
-        appendMessage('assistant', `Network error: ${e.message}`);
+        appendMessage('assistant', e.name === 'AbortError'
+            ? `No answer after ${MAX_SECONDS + 30}s. The server may still be working; its log has the details.`
+            : `Network error: ${e.message}`);
     } finally {
+        clearTimeout(abortTimer);
         isLoading = false;
         setInputDisabled(false);
         input.focus();

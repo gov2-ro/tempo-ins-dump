@@ -40,6 +40,7 @@ class LLMError(Exception):
     def __init__(self, code: str, message: str, status: int = 502, retry_after: int | None = None):
         super().__init__(message)
         self.code, self.message, self.status, self.retry_after = code, message, status, retry_after
+        self.debug_detail: str | None = None   # the provider's own error, for TEMPO_ASK_DEBUG only
 
 
 class UnsupportedProvider(LLMError):
@@ -125,7 +126,10 @@ def complete_with_tools(
         if prov == "ollama" and provider_available(prov):
             return _openai(messages, tools, api_key="ollama", base_url=config.OLLAMA_BASE_URL, **kw)
     except Exception as e:  # noqa: BLE001 — classified, original text dropped
-        raise classify_provider_error(e) from None
+        err = classify_provider_error(e)
+        if err is not e:
+            err.debug_detail = f"{type(e).__name__}: {str(e)[:500]}"
+        raise err from None
     raise UnsupportedProvider()
 
 

@@ -91,6 +91,7 @@ All settings are env vars. None are required except enabling the endpoint and pr
 | `TEMPO_ASK_SERVER_MODELS` | `TEMPO_LLM_PROVIDER:TEMPO_LLM_MODEL` | `provider:model` pairs a server-funded (no user key) call may use |
 | `TEMPO_ASK_LOG_CHATS` | `false` | Content logging, see below. Keep off unless you accept the retention terms |
 | `TEMPO_DEBUG` | `false` | Set `true` for verbose agent iteration logs |
+| `TEMPO_ASK_DEBUG` | `false` | **Local only.** Prints `ASK_DEBUG`/`ASK_METRICS` lines to stdout. A request with `debug: true` returns every agent step (model calls with timings and stop reasons, tools with inputs and row counts, the provider's own error text with the key redacted). `POST /api/ask/stream` streams those steps as NDJSON. The Ask page offers a Debug checkbox in its settings, or `?debug=1`, and shows the steps live |
 
 ### Launch examples
 

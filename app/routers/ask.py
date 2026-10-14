@@ -16,13 +16,21 @@ Logging contract
   are redacted recursively. GET /api/ask/config tells the UI so it can disclose this
   before a question is submitted. Retention is that of the log sink (fly logs / local
   file); nothing here rotates or deletes it.
+* Only when TEMPO_ASK_DEBUG=true (local development, never a public server): a request
+  with ``debug: true`` gets every agent step back (``debug.events``, provider error text
+  redacted) and POST /api/ask/stream streams those steps as NDJSON while it runs.
+  ``ASK_DEBUG`` and ``ASK_METRICS`` lines then reach stdout.
 """
 import json
 import logging
 import time
 from datetime import datetime, timezone
 
+import queue
+import threading
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app import config
@@ -32,6 +40,16 @@ from app.services.llm_client import LLMError
 
 log = logging.getLogger(__name__)
 log.addFilter(ask_guard.RedactingFilter())
+
+if config.ASK_DEBUG:
+    # uvicorn configures only its own loggers: without a handler INFO lines vanish.
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(message)s"))
+    _h.addFilter(ask_guard.RedactingFilter())
+    for _name in (__name__, "app.services.agent"):
+        _lg = logging.getLogger(_name)
+        _lg.setLevel(logging.INFO)
+        _lg.addHandler(_h)
 
 
 def _write_chat_log(entry: dict, secrets: tuple = ()) -> None:
@@ -61,6 +79,7 @@ class AskRequest(BaseModel):
     provider: str | None = Field(default=None, max_length=40)   # one of llm_client.PROVIDERS
     model: str | None = Field(default=None, max_length=100)
     api_key: str | None = Field(default=None, max_length=400)
+    debug: bool = False   # honoured only when the server runs with TEMPO_ASK_DEBUG
 
 
 @router.get("/ask/config")
@@ -78,6 +97,7 @@ def ask_config() -> dict:
             "max_seconds": config.ASK_MAX_SECONDS,
         },
         "byok_models": ask_guard.byok_allowlist(),
+        "debug": config.ASK_DEBUG,
     }
 
 
@@ -88,6 +108,56 @@ def _http_from_llm(e: LLMError) -> HTTPException:
 
 @router.post("/ask")
 def ask(req: AskRequest) -> dict:
+    debug = req.debug and config.ASK_DEBUG
+    events: list[dict] = []
+    t0 = time.monotonic()
+    try:
+        out = _answer(req, events.append if debug else None)
+    except HTTPException as e:
+        if debug:
+            raise HTTPException(e.status_code, detail={"message": e.detail, "debug": _debug(req, events, t0)},
+                                headers=e.headers) from None
+        raise
+    if debug:
+        out["debug"] = _debug(req, events, t0)
+    return out
+
+
+@router.post("/ask/stream")
+def ask_stream(req: AskRequest):
+    """Debug only: the agent's steps as NDJSON lines while it runs, then the result
+    (``{"event": "result", "result": …}``) or the error (``{"event": "error", …}``)."""
+    if not config.ASK_DEBUG:
+        raise HTTPException(status_code=404, detail="Not found")
+    q: queue.Queue = queue.Queue()
+    secrets = (req.api_key,) if req.api_key else ()
+
+    def work():
+        try:
+            q.put({"event": "result", "result": _answer(req, q.put)})
+        except HTTPException as e:
+            q.put({"event": "error", "status": e.status_code, "detail": e.detail})
+        except Exception as e:  # noqa: BLE001
+            q.put({"event": "error", "status": 500, "detail": type(e).__name__})
+        finally:
+            q.put(None)
+
+    threading.Thread(target=work, daemon=True).start()
+
+    def lines():
+        while (ev := q.get()) is not None:
+            yield json.dumps(ask_guard.redact(ev, secrets), ensure_ascii=False, default=str) + "\n"
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson")
+
+
+def _debug(req: AskRequest, events: list[dict], t0: float) -> dict:
+    secrets = (req.api_key,) if req.api_key else ()
+    return {"events": ask_guard.redact(events, secrets), "elapsed_ms": int((time.monotonic() - t0) * 1000)}
+
+
+def _answer(req: AskRequest, on_event=None) -> dict:
+    """The /ask pipeline. ``on_event`` (debug only) receives every agent step."""
     # Hosted calls need TEMPO_ASK_ENABLED, own-key calls TEMPO_ASK_BYOK_ENABLED.
     # A key does not reopen an Ask the server has switched off.
     byok = bool(req.api_key) or ask_guard.is_keyless(req.provider)
@@ -115,7 +185,7 @@ def ask(req: AskRequest) -> dict:
         raise
     try:
         result = run_agent(req.question, history,
-                           provider=provider, model=model, api_key=req.api_key)
+                           provider=provider, model=model, api_key=req.api_key, on_event=on_event)
     except LLMError as e:
         _log_metrics(**base, status=e.status, reason=e.code,
                      elapsed_ms=int((time.monotonic() - t0) * 1000))
@@ -125,6 +195,8 @@ def ask(req: AskRequest) -> dict:
     except Exception as e:
         # Never echo str(e): it may carry provider text, paths or credentials.
         log.error("Agent failed: %s", type(e).__name__)
+        if on_event:
+            on_event({"event": "server_error", "detail": f"{type(e).__name__}: {str(e)[:500]}"})
         _log_metrics(**base, status=500, reason=type(e).__name__,
                      elapsed_ms=int((time.monotonic() - t0) * 1000))
         raise HTTPException(status_code=500, detail="Ask failed") from None

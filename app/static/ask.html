@@ -250,6 +250,34 @@
         }
 
         /* ---------------------------------------------------------------
+           Debug mode (TEMPO_ASK_DEBUG): live steps and the raw response
+        --------------------------------------------------------------- */
+        .chat-wait { font-size: 0.78rem; color: var(--text-2); margin-left: 8px; }
+        .chat-debug-log {
+            margin-top: 8px;
+            font: 0.74rem/1.45 'Fira Mono', monospace;
+            color: var(--text-2);
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+        .chat-debug-log .err { color: #c0392b; }
+        .chat-debug { font-size: 0.78rem; color: var(--text-2); max-width: 100%; }
+        .chat-debug summary { cursor: pointer; user-select: none; padding: 3px 0; }
+        .chat-debug pre {
+            margin: 6px 0 0;
+            padding: 6px 8px;
+            background: var(--bg-2);
+            border-radius: var(--radius-sm);
+            font: 0.72rem/1.4 'Fira Mono', monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 320px;
+            overflow: auto;
+        }
+
+        /* ---------------------------------------------------------------
            Tool trace
         --------------------------------------------------------------- */
         .chat-trace {
@@ -514,6 +542,10 @@
                             Remember this key on this device</label>
                         <div class="settings-note" id="s-remember-note">Off by default: the key is kept only for this browser tab (sessionStorage) and disappears when the tab closes. If you tick this, the key is saved <strong>unencrypted</strong> in this browser's localStorage, readable by any script running on this page, until you press Clear.</div>
                     </div>
+                    <div class="settings-row settings-check hidden" id="s-debug-row">
+                        <label for="s-debug"><input id="s-debug" type="checkbox">
+                            Debug mode: show each step live and the raw response</label>
+                    </div>
                     <div class="settings-actions">
                         <button id="s-clear" class="s-btn">Clear</button>
                         <button id="s-save" class="s-btn s-btn-primary">Save</button>
@@ -580,7 +612,7 @@
     </script>
     <script src="/js/config.js?v=1"></script>
     <script src="/js/api.js?v=30"></script>
-    <script src="/js/ask.js?v=3"></script>
+    <script src="/js/ask.js?v=4"></script>
     <script>
         // Patch appendMessage to hide empty state on first message
         const _orig = window.appendMessage;

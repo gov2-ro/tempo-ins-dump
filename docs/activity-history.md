@@ -1,5 +1,25 @@
 # Activity History
 
+## 2026-10-15 — Ask debug mode
+
+A question that "stays on loading" now explains itself.
+- **Always:** the loading bubble counts seconds against the server's budget
+  (`12s / 90s`). The page gives up after the budget plus 30 s and says so, instead
+  of waiting forever.
+- **`TEMPO_ASK_DEBUG=true` (local only):** the agent reports each step: model call,
+  its timing, stop reason and requested tools; each tool with its input, status, row
+  count and time; guardrails, stops and errors. Provider failures carry the
+  provider's own message (e.g. `AuthenticationError … invalid x-api-key`), with the
+  visitor's key redacted. Public responses still get only the stable message.
+- **Delivery:** `POST /api/ask/stream` sends the steps as NDJSON while the agent
+  runs. The Ask page shows them live under the loading bubble and keeps them, with
+  the raw JSON, in a "Debug" panel under the answer. Enable it with the settings
+  checkbox (shown only when the server allows debug) or `?debug=1`. `ASK_DEBUG`
+  and `ASK_METRICS` lines now reach the uvicorn console; before, INFO lines from
+  app loggers were dropped.
+- `ask.js` cache-buster bumped to v4. The earlier provider change kept v3, so a
+  browser could pair the new page with a cached script.
+
 ## 2026-10-15 — Ask: more providers, current models, OpenAI on the Responses API
 
 Visitors can bring a key from more providers. Mistral, DeepSeek, xAI and OpenRouter

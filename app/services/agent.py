@@ -379,6 +379,7 @@ def run_agent(
     provider: str | None = None,
     model: str | None = None,
     api_key: str | None = None,
+    on_event=None,
 ) -> AgentResult:
     """Run the NL→Data agent loop.
 
@@ -389,6 +390,8 @@ def run_agent(
         model:    Model ID override. None → env default.
         api_key:  BYOK API key. None → reads from env (default behaviour).
                   Passed directly to the LLM as message history.
+        on_event: Debug hook (TEMPO_ASK_DEBUG): called with one dict per step
+                  (model call, tool, stop), each stamped with ms since start.
 
     Returns:
         AgentResult with answer, citations, tool_trace, data, chart_spec, warnings.
@@ -409,6 +412,18 @@ def run_agent(
     iterations = 0
     tools_used = 0
     prov_name = provider or config.LLM_PROVIDER
+
+    def emit(kind: str, **fields) -> None:
+        if on_event is None:
+            return
+        ev = {"event": kind, "ms": int((time.monotonic() - started) * 1000), **fields}
+        log.info("ASK_DEBUG %s", json.dumps(ev, ensure_ascii=False, default=str)[:600])
+        try:
+            on_event(ev)
+        except Exception:  # noqa: BLE001 — a debug sink must never break the answer
+            pass
+
+    emit("start", provider=prov_name, model=model or config.LLM_MODEL, history_turns=len(history or []))
 
     def _budget() -> dict:
         return {
@@ -435,6 +450,7 @@ def run_agent(
             "provider": "The model provider became unavailable",
         }
         agent_warnings.append(f"{msgs[reason]} before a final answer; the result is partial.")
+        emit("stopped", reason=reason)
         answer = text or (
             "I could not finish within the request limits. "
             + ("Partial data is attached. " if last_query_result else "")
@@ -461,6 +477,8 @@ def run_agent(
             log.debug("Agent iteration %d, %d messages", iterations, len(messages))
 
         iterations += 1
+        emit("model_call", iteration=iterations, messages=len(messages))
+        t_call = time.monotonic()
         try:
             resp = complete_with_tools(
                 messages, TOOLS, system=SYSTEM_PROMPT,
@@ -468,10 +486,16 @@ def run_agent(
                 timeout=max(1.0, min(config.ASK_PROVIDER_TIMEOUT, deadline - time.monotonic())))
         except Exception as e:  # noqa: BLE001
             err = classify_provider_error(e)
+            emit("model_error", iteration=iterations, took_ms=int((time.monotonic() - t_call) * 1000),
+                 code=err.code, detail=getattr(err, "debug_detail", None) or type(e).__name__)
             if tool_trace and err.code in ("provider_timeout", "provider_unavailable", "provider_rate_limited"):
                 log.warning("Provider error after %d tools: %s", len(tool_trace), err.code)
                 return _stopped("provider")
             raise err from None
+
+        emit("model_done", iteration=iterations, took_ms=int((time.monotonic() - t_call) * 1000),
+             stop_reason=resp.stop_reason, tool_calls=[tc["name"] for tc in resp.tool_calls],
+             text_chars=len(resp.text or ""))
 
         if not resp.tool_calls:
             # Guardrail: model gave up without querying data, but search returned results.
@@ -496,10 +520,12 @@ def run_agent(
                     ),
                 })
                 agent_warnings.append("Guardrail: model skipped data query — injected follow-up turn.")
+                emit("guardrail", note="search found datasets but no data was queried; nudging the model")
                 log.debug("Guardrail fired at iteration %d", iterations)
                 continue
 
             # Done — extract final answer
+            emit("answer", text_chars=len(resp.text or ""))
             answer, verification = _finalize(resp.text or "(no answer)")
             citations = _extract_citations(answer, tool_trace)
             chart_spec = _get_chart_spec(last_queried_matrix, conn) if last_queried_matrix else None
@@ -532,6 +558,8 @@ def run_agent(
                 over_budget = "deadline"
                 break
             tools_used += 1
+            emit("tool", name=tc["name"], input=tc["input"])
+            t_tool = time.monotonic()
             handler = TOOL_HANDLERS.get(tc["name"])
             if handler:
                 try:
@@ -543,6 +571,10 @@ def run_agent(
                 result = {"error": "Unknown tool"}
 
             result_str = json.dumps(result, ensure_ascii=False, default=str)
+            emit("tool_done", name=tc["name"], took_ms=int((time.monotonic() - t_tool) * 1000),
+                 status=result.get("status"), error=result.get("error"),
+                 rows=len(result.get("rows") or []) if isinstance(result.get("rows"), list) else None,
+                 result_chars=len(result_str))
 
             tool_trace.append({
                 "tool": tc["name"],

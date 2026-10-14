@@ -40,6 +40,8 @@ LLM_MODEL          = os.environ.get("TEMPO_LLM_MODEL", "claude-sonnet-5-5")
 # Local Ollama (OpenAI-compatible), e.g. http://localhost:11434/v1. Unset: no Ollama provider.
 OLLAMA_BASE_URL    = os.environ.get("TEMPO_OLLAMA_BASE_URL", "")
 ASK_LOG_CHATS      = os.environ.get("TEMPO_ASK_LOG_CHATS", "false").lower() in ("1", "true", "yes")
+# Local debugging only: per-step agent events in responses and POST /api/ask/stream.
+ASK_DEBUG          = os.environ.get("TEMPO_ASK_DEBUG", "false").lower() in ("1", "true", "yes")
 ASK_LOG_DIR        = Path(os.environ.get("TEMPO_ASK_LOG_DIR", str(PROJECT_ROOT / "logs")))
 
 # --- Ask request bounds, allowlist and budgets (FIX-08) --------------------
