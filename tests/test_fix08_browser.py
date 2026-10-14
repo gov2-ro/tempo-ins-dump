@@ -133,7 +133,7 @@ def test_opt_in_persists_across_reload_and_clear_removes(page):
 
 def test_legacy_localstorage_key_is_visible_and_clearable(page):
     page.evaluate(f"localStorage.setItem('ask_api_key', '{KEY}');"
-                  "localStorage.setItem('ask_provider','openai');localStorage.setItem('ask_model','gpt-4o')")
+                  "localStorage.setItem('ask_provider','openai');localStorage.setItem('ask_model','gpt-6.1-sol')")
     page.reload(wait_until="domcontentloaded")
     page.wait_for_selector("#settings-toggle")
     open_settings(page)

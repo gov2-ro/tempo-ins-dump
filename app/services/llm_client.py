@@ -1,16 +1,37 @@
 """Provider-agnostic LLM client for tool-calling.
 
-Supports Anthropic (default) and OpenAI. Both return the same LLMResponse shape
-so the agent loop is provider-agnostic.
+Anthropic (default) uses its own SDK, OpenAI the Responses API (its current
+models call tools only there), and every other provider an OpenAI-compatible
+chat-completions endpoint (OPENAI_COMPATIBLE). All return the same LLMResponse
+shape so the agent loop is provider-agnostic.
 
 Usage:
     from app.services.llm_client import complete_with_tools, LLMResponse
     resp = complete_with_tools(messages, tools, system=SYSTEM_PROMPT)
 """
+import json
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
 from app import config
+
+# provider -> (base URL, env var holding a server-funded key)
+OPENAI_COMPATIBLE = {
+    "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai/", "GEMINI_API_KEY"),
+    "mistral": ("https://api.mistral.ai/v1", "MISTRAL_API_KEY"),
+    "deepseek": ("https://api.deepseek.com", "DEEPSEEK_API_KEY"),
+    "xai": ("https://api.x.ai/v1", "XAI_API_KEY"),
+    "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
+}
+# Ollama runs on the operator's machine and needs no key. It exists only when
+# TEMPO_OLLAMA_BASE_URL is set, so a public server never calls a local port by default.
+KEYLESS = ("ollama",)
+PROVIDERS = ("anthropic", "openai", *OPENAI_COMPATIBLE, *KEYLESS)
+
+
+def provider_available(provider: str) -> bool:
+    return provider in PROVIDERS and (provider != "ollama" or bool(config.OLLAMA_BASE_URL))
 
 
 class LLMError(Exception):
@@ -45,6 +66,15 @@ def classify_provider_error(e: BaseException) -> LLMError:
     return LLMError("provider_error", "The provider request failed", 502)
 
 
+def _key(api_key: str | None, env: str) -> str:
+    """The user's key, else the server's own for this provider. Never another provider's:
+    the OpenAI SDK would otherwise fall back to OPENAI_API_KEY and send it elsewhere."""
+    key = api_key or os.environ.get(env, "")
+    if not key:
+        raise LLMError("provider_auth", "No API key for this provider", 401)
+    return key
+
+
 @dataclass
 class LLMResponse:
     stop_reason: str           # "end_turn" | "tool_use" | "max_tokens"
@@ -69,7 +99,7 @@ def complete_with_tools(
         messages:   Conversation history in the provider-agnostic format:
                     [{"role": "user"|"assistant"|"tool", "content": ...}]
         tools:      JSON-Schema tool definitions (provider-agnostic format).
-        provider:   "anthropic" or "openai". Defaults to config.LLM_PROVIDER.
+        provider:   one of PROVIDERS. Defaults to config.LLM_PROVIDER.
         model:      Model ID. Defaults to config.LLM_MODEL.
         system:     System prompt text.
         max_tokens: Maximum output tokens.
@@ -88,12 +118,12 @@ def complete_with_tools(
         if prov == "anthropic":
             return _anthropic(messages, tools, api_key=api_key, **kw)
         if prov == "openai":
-            return _openai(messages, tools, api_key=api_key, **kw)
-        if prov == "gemini":
-            # Gemini via OpenAI-compatible endpoint — no extra dependency needed
-            return _openai(
-                messages, tools, api_key=api_key or config.GEMINI_API_KEY or None,
-                base_url="https://generativelanguage.googleapis.com/v1beta/openai/", **kw)
+            return _openai_responses(messages, tools, api_key=_key(api_key, "OPENAI_API_KEY"), **kw)
+        if prov in OPENAI_COMPATIBLE:
+            base_url, env = OPENAI_COMPATIBLE[prov]
+            return _openai(messages, tools, api_key=_key(api_key, env), base_url=base_url, **kw)
+        if prov == "ollama" and provider_available(prov):
+            return _openai(messages, tools, api_key="ollama", base_url=config.OLLAMA_BASE_URL, **kw)
     except Exception as e:  # noqa: BLE001 — classified, original text dropped
         raise classify_provider_error(e) from None
     raise UnsupportedProvider()
@@ -168,6 +198,59 @@ def _to_anthropic_message(msg: dict) -> dict:
 # ---------------------------------------------------------------------------
 # OpenAI backend
 # ---------------------------------------------------------------------------
+
+# Reasoning tokens count against max_output_tokens: a budget sized for the answer
+# alone can end a turn before any text or tool call.
+RESPONSES_MIN_OUTPUT_TOKENS = 8000
+
+
+def _openai_responses(messages, tools, *, model, system, max_tokens, api_key, timeout=30.0) -> LLMResponse:
+    """OpenAI's own models via the Responses API (stateless: store=False, full input each turn)."""
+    import openai
+
+    client = openai.OpenAI(api_key=api_key, timeout=timeout, max_retries=config.ASK_PROVIDER_MAX_RETRIES)
+    resp = client.responses.create(
+        model=model,
+        instructions=system or None,
+        input=[item for m in messages for item in _to_responses_items(m)],
+        tools=[{"type": "function", "name": t["name"], "description": t.get("description", ""),
+                "parameters": t.get("input_schema", {"type": "object", "properties": {}})}
+               for t in tools],
+        tool_choice="auto",
+        max_output_tokens=max(max_tokens, RESPONSES_MIN_OUTPUT_TOKENS),
+        store=False,
+    )
+    texts, tool_calls = [], []
+    for item in resp.output or []:
+        if item.type == "message":
+            texts += [c.text for c in item.content or [] if getattr(c, "type", "") == "output_text"]
+        elif item.type == "function_call":
+            tool_calls.append({"id": item.call_id, "name": item.name,
+                               "input": json.loads(item.arguments or "{}")})
+    if tool_calls:
+        stop = "tool_use"
+    elif resp.status == "incomplete":
+        stop = "max_tokens"
+    else:
+        stop = "end_turn"
+    return LLMResponse(stop_reason=stop, text="\n".join(texts) or None, tool_calls=tool_calls)
+
+
+def _to_responses_items(msg: dict) -> list[dict]:
+    """A generic (OpenAI chat-format) message as Responses API input items."""
+    role, content = msg["role"], msg.get("content")
+    if role == "tool":
+        return [{"type": "function_call_output", "call_id": msg["tool_use_id"],
+                 "output": content if isinstance(content, str) else str(content)}]
+    if role == "assistant":
+        chat = _to_openai_message(msg)          # Anthropic blocks -> chat tool_calls
+        items = [{"role": "assistant", "content": chat["content"]}] if chat.get("content") else []
+        for tc in chat.get("tool_calls") or []:
+            items.append({"type": "function_call", "call_id": tc["id"],
+                          "name": tc["function"]["name"], "arguments": tc["function"]["arguments"]})
+        return items
+    return [{"role": role, "content": content}]
+
 
 def _openai(messages, tools, *, model, system, max_tokens, api_key=None, base_url=None,
             timeout=30.0) -> LLMResponse:

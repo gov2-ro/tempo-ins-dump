@@ -1,5 +1,34 @@
 # Activity History
 
+## 2026-10-15 — Ask: more providers, current models, OpenAI on the Responses API
+
+Visitors can bring a key from more providers. Mistral, DeepSeek, xAI and OpenRouter
+join Anthropic, OpenAI and Gemini, all but Anthropic and OpenAI through
+OpenAI-compatible endpoints (`OPENAI_COMPATIBLE` in `llm_client.py`). Local Ollama
+is a keyless provider that exists only when `TEMPO_OLLAMA_BASE_URL` is set. The
+picker on the Ask page now lists what the server's allowlist offers, with a key
+hint per provider.
+
+Why these changes:
+- **OpenAI on the Responses API:** OpenAI's current models (gpt-6.x) call tools
+  only through the Responses API, not Chat Completions. Calls are stateless
+  (`store=False`, full input each turn). `max_output_tokens` is at least 8,000,
+  because reasoning tokens count against it.
+- **Keys per provider:** a server-funded call reads only its own provider's key
+  variable. With no key the OpenAI SDK would have fallen back to
+  `OPENAI_API_KEY` and sent it to Gemini or any other compatible endpoint;
+  that's now a 401.
+- **Current models:** model lists updated (Claude 5.5, GPT-6.x, Gemini 4/3.8,
+  DeepSeek V4, Grok 4.7) and the default server model is `claude-sonnet-5-5`.
+  The ids come from each provider's docs and OpenRouter's model list on
+  2026-10-15. Mistral uses its `-latest` aliases, not confirmed in its current
+  docs.
+
+Not verified: no model ran through the Ask eval (no provider keys on this machine).
+Tests cover routing, keys, the Responses conversion and Ollama gating with fake SDKs;
+the browser check shows the picker with seven providers and no console errors. The
+static candidate built from `47ac900` predates this change; rebuild it before upload.
+
 ## 2026-10-15 — POP107D/POP108D with Bucharest; INS dimension checks; generation 9b3e065d
 
 On the copy `tempo-gen-20261012`, after INS outages on 12–14 Oct:

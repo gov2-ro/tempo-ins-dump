@@ -39,15 +39,33 @@ The SDK picks up the key from the environment — no code change needed.
 
 The agent makes 4-8 sequential tool-call requests per question. Each request resends the accumulated message history, so the **cumulative tokens-per-minute** (TPM) is roughly `request_count × avg_request_size ≈ 18-25k TPM` per question in the current configuration.
 
-| Provider / Model | Recommended? | Notes |
-|---|---|---|
-| **Anthropic Claude Sonnet 4.6** | ✅ Recommended | Best tool-use discipline. Follows "MUST" directives reliably. High TPM on all tiers. Default. |
-| **Anthropic Claude Opus 4.6** | ✅ Overkill but works | Same discipline as Sonnet; slower, pricier. |
-| **OpenAI gpt-4o** | ✅ Acceptable | Adequate tool-use. Tier-1 TPM (30k) is tight but workable with the trimmed prompts. |
-| **OpenAI gpt-4-turbo** | ❌ Avoid on tier-1 | 30k TPM limit is hit on ~6-iteration runs. Weaker tool-use discipline than Claude (tends to skip mandatory steps and ask permission instead of fetching). Upgrade the OpenAI account tier or switch provider. |
-| **OpenAI gpt-4o-mini** | ❌ Avoid | Higher TPM, but tool-use discipline is poor. Expect "would you like me to..." responses instead of fetching data. |
+### Providers (2026-10-15)
 
-**Rule of thumb**: if you can't use Anthropic, use `gpt-4o`, not `gpt-4-turbo` or `gpt-4o-mini`.
+Anthropic uses its own SDK; OpenAI uses the Responses API (its current models call
+tools only there); the rest are OpenAI-compatible chat-completions endpoints
+(`OPENAI_COMPATIBLE` in `app/services/llm_client.py`). The models offered per provider
+are in `app/static/ask-models.json`.
+
+| Provider id | Endpoint | Server-funded key env var |
+|---|---|---|
+| `anthropic` | Anthropic SDK | `ANTHROPIC_API_KEY` |
+| `openai` | Responses API | `OPENAI_API_KEY` |
+| `gemini` | `generativelanguage.googleapis.com/v1beta/openai/` | `GEMINI_API_KEY` |
+| `mistral` | `api.mistral.ai/v1` | `MISTRAL_API_KEY` |
+| `deepseek` | `api.deepseek.com` | `DEEPSEEK_API_KEY` |
+| `xai` | `api.x.ai/v1` | `XAI_API_KEY` |
+| `openrouter` | `openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
+| `ollama` | `TEMPO_OLLAMA_BASE_URL` (e.g. `http://localhost:11434/v1`) | none: keyless, own-key rules |
+
+A server-funded call reads only its own provider's variable. A missing key is a
+`401`, never another provider's key. Ollama exists only when `TEMPO_OLLAMA_BASE_URL`
+is set, so a public server never calls a local port by default.
+
+Tool-use discipline differs between models. None of the listed models has been run
+through the Ask eval yet (`tempo_eval_agent` needs a key per provider), and the model
+ids come from each provider's docs as of 2026-10-15. Earlier notes (2026-07, older models): Claude followed "MUST" directives
+reliably, while gpt-4o-mini and gpt-4-turbo often asked permission instead of fetching
+data.
 
 ## 2. Configuration
 
@@ -56,8 +74,10 @@ All settings are env vars. None are required except enabling the endpoint and pr
 | Env var | Default | Description |
 |---|---|---|
 | `TEMPO_ASK_ENABLED` | `false` | **Must be `true`** to activate `POST /api/ask`. Returns 404 otherwise. |
-| `TEMPO_LLM_PROVIDER` | `anthropic` | `anthropic` or `openai` |
-| `TEMPO_LLM_MODEL` | `claude-sonnet-4-6` | Any model ID accepted by the provider |
+| `TEMPO_LLM_PROVIDER` | `anthropic` | A provider id from the table above |
+| `TEMPO_LLM_MODEL` | `claude-sonnet-5-5` | Any model ID accepted by the provider |
+| `TEMPO_ASK_BYOK_ENABLED` | `false` | Own-key (and keyless Ollama) calls; separate from `TEMPO_ASK_ENABLED` |
+| `TEMPO_OLLAMA_BASE_URL` | unset | Local Ollama's OpenAI-compatible URL; unset means no Ollama provider |
 | `TEMPO_ASK_MAX_ITERATIONS` | `8` | Max model calls per request |
 | `TEMPO_ASK_MAX_TOOL_CALLS` | `12` | Max tools dispatched per request, counting every tool in a multi-tool response. (Before FIX-08 this env var meant loop iterations.) |
 | `TEMPO_ASK_MAX_SECONDS` | `90` | Wall-clock budget per request; checked before every model call and tool |
@@ -83,12 +103,12 @@ TEMPO_ASK_ENABLED=1 ANTHROPIC_API_KEY=sk-ant-... uvicorn app.main:app --reload -
 **OpenAI**
 ```bash
 source ~/devbox/envs/240826/bin/activate
-TEMPO_ASK_ENABLED=1 TEMPO_LLM_PROVIDER=openai TEMPO_LLM_MODEL=gpt-4o OPENAI_API_KEY=sk-proj-... uvicorn app.main:app --reload --port 8080
+TEMPO_ASK_ENABLED=1 TEMPO_LLM_PROVIDER=openai TEMPO_LLM_MODEL=gpt-6.1-sol OPENAI_API_KEY=sk-proj-... uvicorn app.main:app --reload --port 8080
 ```
 
 > **Common mistakes:**
 > - Setting `OPENAI_API_KEY` without `TEMPO_LLM_PROVIDER=openai` → the app still uses Anthropic and fails with "authentication" error.
-> - Setting `TEMPO_LLM_PROVIDER=openai` without `TEMPO_LLM_MODEL` → sends `claude-sonnet-4-6` (the default) to OpenAI, which returns 404 "model not found".
+> - Setting `TEMPO_LLM_PROVIDER=openai` without `TEMPO_LLM_MODEL` → sends `claude-sonnet-5-5` (the default) to OpenAI, which returns 404 "model not found".
 > - All three vars (`TEMPO_LLM_PROVIDER`, `TEMPO_LLM_MODEL`, `OPENAI_API_KEY`) are required together when using OpenAI.
 
 ---

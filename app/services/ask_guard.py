@@ -83,7 +83,7 @@ def validate_history(history, question: str) -> list[dict]:
 # Provider / model allowlist
 # ---------------------------------------------------------------------------
 
-KNOWN_PROVIDERS = ("anthropic", "openai", "gemini")
+from app.services.llm_client import KEYLESS, PROVIDERS as KNOWN_PROVIDERS, provider_available  # noqa: E402
 
 
 def _json_models() -> dict[str, list[str]]:
@@ -109,7 +109,12 @@ def byok_allowlist() -> dict[str, list[str]]:
     allow = _pairs(config.ASK_ALLOWED_MODELS) if config.ASK_ALLOWED_MODELS else _json_models()
     if config.ASK_ALLOWED_PROVIDERS:
         allow = {p: m for p, m in allow.items() if p in config.ASK_ALLOWED_PROVIDERS}
-    return {p: m for p, m in allow.items() if p in KNOWN_PROVIDERS and m}
+    return {p: m for p, m in allow.items() if provider_available(p) and m}
+
+
+def is_keyless(provider: str | None) -> bool:
+    """A provider that takes no key (local Ollama): its calls follow the own-key rules."""
+    return (provider or "").strip().lower() in KEYLESS
 
 
 def server_allowlist() -> dict[str, list[str]]:
@@ -152,6 +157,7 @@ _SECRET_KEY_RE = re.compile(
 _PLAIN_VALUE_RES = [
     re.compile(r"sk-[A-Za-z0-9_\-]{8,}"),                 # OpenAI / Anthropic style
     re.compile(r"AIza[0-9A-Za-z_\-]{20,}"),               # Google API keys
+    re.compile(r"xai-[A-Za-z0-9_\-]{8,}"),                # xAI
     re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]{8,}"),
 ]
 _KV_RE = re.compile(r"(?i)(api[-_]?key|x-api-key|authorization)(\"?\s*[:=]\s*\"?)[^\s\"',}]+")

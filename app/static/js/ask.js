@@ -14,10 +14,18 @@ let isLoading = false;
 let MAX_HISTORY_TURNS = 20;  // overwritten from /api/ask/config
 let ASK_UNAVAILABLE = false; // /api/ask/config: neither hosted nor own-key Ask
 
+let askConfigPromise = null;
+/** /api/ask/config, fetched once (null when unreachable). */
+function askConfig() {
+    askConfigPromise = askConfigPromise || API.fetch('/ask/config').catch(() => null);
+    return askConfigPromise;
+}
+
 /** Show the chat-logging disclosure before any question is submitted. */
 async function initServerNotices() {
     try {
-        const cfg = await API.fetch('/ask/config');
+        const cfg = await askConfig();
+        if (!cfg) return;
         if (cfg.limits && cfg.limits.max_history_turns) MAX_HISTORY_TURNS = cfg.limits.max_history_turns;
         const b = document.getElementById('ask-logging-banner');
         if (b) b.classList.toggle('hidden', !cfg.chat_logging);
@@ -49,8 +57,16 @@ function showAskUnavailable() {
 // BYOK — Bring Your Own Key settings (persisted in localStorage)
 // ---------------------------------------------------------------------------
 
-const PROVIDER_DEFAULTS = { anthropic: 'claude-sonnet-4-6', openai: 'gpt-4o', gemini: 'gemini-2.5-flash' };
-let PROVIDER_MODELS = {};  // loaded from /ask-models.json
+const PROVIDER_LABELS = {
+    anthropic: 'Anthropic', openai: 'OpenAI', gemini: 'Google Gemini', mistral: 'Mistral',
+    deepseek: 'DeepSeek', xai: 'xAI (Grok)', openrouter: 'OpenRouter', ollama: 'Ollama (local, no key)',
+};
+const KEY_HINTS = {
+    anthropic: 'sk-ant-…', openai: 'sk-proj-…', gemini: 'AIza…', mistral: 'Mistral API key',
+    deepseek: 'sk-…', xai: 'xai-…', openrouter: 'sk-or-…', ollama: 'No key needed',
+};
+const KEYLESS = new Set(['ollama']);   // local models: the server switches them on
+let PROVIDER_MODELS = {};  // labels from /ask-models.json, limited to what the server allows
 
 // Key storage policy (FIX-08):
 //  - default: in memory + sessionStorage (this tab only, gone when the tab closes)
@@ -103,10 +119,11 @@ function clearBYOK() {
 
 function updateKeyBadge() {
     const scope = keyScope();
-    const hasKey = scope !== 'none';
+    const keyless = KEYLESS.has(getBYOK().provider) && !!PROVIDER_MODELS[getBYOK().provider];
+    const hasKey = scope !== 'none' || keyless;
     const status = document.getElementById('s-key-status');
-    if (status) status.textContent = scope === 'device'
-        ? 'A key is saved on this device (localStorage). Press Clear to remove it.'
+    if (status) status.textContent = keyless ? 'No key needed for a local model.'
+        : scope === 'device' ? 'A key is saved on this device (localStorage). Press Clear to remove it.'
         : scope === 'tab' ? 'A key is set for this tab only.' : 'No key set.';
     const remember = document.getElementById('s-remember');
     if (remember) remember.checked = scope === 'device';
@@ -119,8 +136,19 @@ function updateKeyBadge() {
 /** Returns extra payload fields when a user key is stored, empty object otherwise. */
 function byokPayload() {
     const { apiKey, provider, model } = getBYOK();
-    if (!apiKey) return {};
-    return { provider, model: model || PROVIDER_DEFAULTS[provider] || undefined, api_key: apiKey };
+    const keyless = KEYLESS.has(provider);
+    if (!apiKey && !keyless) return {};
+    const first = (PROVIDER_MODELS[provider] || [])[0];
+    const out = { provider, model: model || (first && first.id) || undefined };
+    if (!keyless) out.api_key = apiKey;
+    return out;
+}
+
+function updateKeyHint(provider) {
+    const input = document.getElementById('s-key');
+    if (!input) return;
+    input.placeholder = KEY_HINTS[provider] || 'API key';
+    input.disabled = KEYLESS.has(provider);
 }
 
 function populateModelSelect(provider, selectedModel) {
@@ -144,20 +172,32 @@ async function initSettings() {
     const panel  = document.getElementById('ask-settings');
     if (!toggle || !panel) return;
 
-    // Load model list from JSON
-    try {
-        const resp = await fetch('/ask-models.json');
-        PROVIDER_MODELS = await resp.json();
-    } catch {
-        // Fallback: one entry per provider using defaults
-        for (const [p, id] of Object.entries(PROVIDER_DEFAULTS))
-            PROVIDER_MODELS[p] = [{ id, label: id }];
+    // Labels from the JSON; the server's allowlist decides what is offered
+    // (Ollama only appears when the server has a local model configured).
+    let labels = {};
+    try { labels = await (await fetch('/ask-models.json')).json(); } catch { /* ids as labels */ }
+    const cfg = await askConfig();
+    const allowed = (cfg && cfg.byok_models) || {};
+    PROVIDER_MODELS = {};
+    for (const [p, ids] of Object.entries(allowed)) {
+        const named = Object.fromEntries((labels[p] || []).map(m => [m.id, m.label]));
+        PROVIDER_MODELS[p] = ids.map(id => ({ id, label: named[id] || id }));
+    }
+    const provSel = document.getElementById('s-provider');
+    provSel.innerHTML = '';
+    for (const p of Object.keys(PROVIDER_MODELS)) {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.textContent = PROVIDER_LABELS[p] || p;
+        provSel.appendChild(opt);
     }
 
-    // Populate fields from localStorage
-    const { provider, model } = getBYOK();
-    document.getElementById('s-provider').value = provider;
+    // Populate fields from storage (a provider the server no longer allows falls back to the first)
+    let { provider, model } = getBYOK();
+    if (!PROVIDER_MODELS[provider]) provider = Object.keys(PROVIDER_MODELS)[0] || '';
+    provSel.value = provider;
     populateModelSelect(provider, model);
+    updateKeyHint(provider);
     // the stored key is deliberately NOT copied into the input (keeps it out of the DOM)
     document.getElementById('s-key').value = '';
     updateKeyBadge();
@@ -165,6 +205,7 @@ async function initSettings() {
     // Rebuild model dropdown when provider changes
     document.getElementById('s-provider').addEventListener('change', e => {
         populateModelSelect(e.target.value, '');
+        updateKeyHint(e.target.value);
     });
 
     // "Open settings" link in the no-key notice

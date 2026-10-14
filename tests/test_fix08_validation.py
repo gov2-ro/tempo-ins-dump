@@ -52,11 +52,11 @@ def test_total_request_size_rejected(client, calls, monkeypatch):
 
 
 @pytest.mark.parametrize("kw", [
-    {"provider": "mistral"},
+    {"provider": "nonesuch"},
     {"provider": "ANTHROPIC; DROP"},
     {"provider": "openai", "model": "gpt-9-secret"},
     {"provider": "anthropic", "model": "not-a-model", "api_key": FAKE_KEY},
-    {"provider": "mistral", "api_key": FAKE_KEY},
+    {"provider": "nonesuch", "api_key": FAKE_KEY},
 ])
 def test_unsupported_provider_or_model_rejected(client, calls, kw):
     r = post(client, **kw)
@@ -82,19 +82,19 @@ def test_valid_multi_turn_ro_en(client, calls):
 
 def test_server_funded_limited_to_server_pair(client, calls):
     # no key -> only the configured server provider/model
-    assert post(client, provider="openai", model="gpt-4o").status_code == 403
+    assert post(client, provider="openai", model="gpt-6.1-sol").status_code == 403
     assert calls == []
     assert post(client).status_code == 200
     assert calls[0]["provider"] == config.LLM_PROVIDER and calls[0]["model"] == config.LLM_MODEL
 
 
 def test_byok_works_and_is_distinct(client, calls):
-    r = post(client, provider="openai", model="gpt-4o", api_key=FAKE_KEY)
+    r = post(client, provider="openai", model="gpt-6.1-sol", api_key=FAKE_KEY)
     assert r.status_code == 200
-    assert (calls[0]["provider"], calls[0]["model"], calls[0]["api_key"]) == ("openai", "gpt-4o", FAKE_KEY)
+    assert (calls[0]["provider"], calls[0]["model"], calls[0]["api_key"]) == ("openai", "gpt-6.1-sol", FAKE_KEY)
     # BYOK without model picks the first allowlisted model for that provider
     r = post(client, provider="gemini", api_key=FAKE_KEY)
-    assert r.status_code == 200 and calls[1]["model"] == "gemini-2.5-pro"
+    assert r.status_code == 200 and calls[1]["model"] == "gemini-4-argon"
 
 
 def test_byok_allowed_when_ask_disabled_but_server_call_404(monkeypatch):
@@ -104,7 +104,7 @@ def test_byok_allowed_when_ask_disabled_but_server_call_404(monkeypatch):
     c = make_client()
     assert c.post("/api/ask", json={"question": "x"}).status_code == 404
     assert c.post("/api/ask", json={"question": "x", "api_key": FAKE_KEY,
-                                    "provider": "anthropic", "model": "claude-sonnet-4-6"}).status_code == 200
+                                    "provider": "anthropic", "model": "claude-sonnet-5-5"}).status_code == 200
 
 
 @pytest.mark.parametrize("hosted", [False, True])
@@ -116,23 +116,23 @@ def test_byok_switched_off_rejects_own_key_calls(monkeypatch, hosted):
     install(monkeypatch, lambda n, m, kw: called.append(1) or text_resp())
     c = make_client()
     r = c.post("/api/ask", json={"question": "x", "api_key": FAKE_KEY,
-                                 "provider": "anthropic", "model": "claude-sonnet-4-6"})
+                                 "provider": "anthropic", "model": "claude-sonnet-5-5"})
     assert r.status_code == 404 and not called
     cfg = c.get("/api/ask/config").json()
     assert cfg["byok_enabled"] is False and cfg["available"] is hosted
 
 
 def test_allowlist_config_overrides(client, calls, monkeypatch):
-    monkeypatch.setattr(config, "ASK_ALLOWED_MODELS", ["openai:gpt-4o"])
+    monkeypatch.setattr(config, "ASK_ALLOWED_MODELS", ["openai:gpt-6.1-sol"])
     assert post(client, provider="anthropic", api_key=FAKE_KEY).status_code == 400
-    assert post(client, provider="openai", model="gpt-4o-mini", api_key=FAKE_KEY).status_code == 400
-    assert post(client, provider="openai", model="gpt-4o", api_key=FAKE_KEY).status_code == 200
+    assert post(client, provider="openai", model="gpt-6-luna", api_key=FAKE_KEY).status_code == 400
+    assert post(client, provider="openai", model="gpt-6.1-sol", api_key=FAKE_KEY).status_code == 200
     monkeypatch.setattr(config, "ASK_ALLOWED_MODELS", [])
     monkeypatch.setattr(config, "ASK_ALLOWED_PROVIDERS", ["anthropic"])
     assert post(client, provider="openai", api_key=FAKE_KEY).status_code == 400
     monkeypatch.setattr(config, "ASK_ALLOWED_PROVIDERS", [])
-    monkeypatch.setattr(config, "ASK_SERVER_MODELS", ["openai:gpt-4o"])
-    assert post(client, provider="openai", model="gpt-4o").status_code == 200
+    monkeypatch.setattr(config, "ASK_SERVER_MODELS", ["openai:gpt-6.1-sol"])
+    assert post(client, provider="openai", model="gpt-6.1-sol").status_code == 200
 
 
 def test_llm_client_unknown_provider_never_falls_through(monkeypatch):
@@ -140,7 +140,7 @@ def test_llm_client_unknown_provider_never_falls_through(monkeypatch):
     monkeypatch.setattr(lc, "_anthropic", lambda *a, **k: pytest.fail("fell through"))
     monkeypatch.setattr(lc, "_openai", lambda *a, **k: pytest.fail("fell through"))
     with pytest.raises(UnsupportedProvider):
-        complete_with_tools([], [], provider="mistral")
+        complete_with_tools([], [], provider="nonesuch")
 
 
 class _Boom(Exception):

@@ -1,17 +1,43 @@
 {
   "anthropic": [
-    { "id": "claude-sonnet-4-6",        "label": "Claude Sonnet 4.6 (recommended)" },
-    { "id": "claude-haiku-4-5-20251001", "label": "Claude Haiku 4.5" }
+    { "id": "claude-sonnet-5-5", "label": "Claude Sonnet 5.5 (recommended)" },
+    { "id": "claude-opus-5-5",   "label": "Claude Opus 5.5" },
+    { "id": "claude-haiku-5-5",  "label": "Claude Haiku 5.5" }
   ],
   "openai": [
-    { "id": "gpt-4o",       "label": "GPT-4o (recommended)" },
-    { "id": "gpt-4o-mini",  "label": "GPT-4o Mini" },
-    { "id": "gpt-4-turbo",  "label": "GPT-4 Turbo" }
+    { "id": "gpt-6.1-sol",  "label": "GPT-6.1 Sol (recommended)" },
+    { "id": "gpt-6-astra",  "label": "GPT-6 Astra" },
+    { "id": "gpt-6-luna",   "label": "GPT-6 Luna" }
   ],
   "gemini": [
-    {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
-    {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
-    {"id": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash Lite"}
+    { "id": "gemini-4-argon",        "label": "Gemini 4 Argon" },
+    { "id": "gemini-3.8-flash",      "label": "Gemini 3.8 Flash" },
+    { "id": "gemini-3.5-flash-lite", "label": "Gemini 3.5 Flash-Lite" }
+  ],
+  "mistral": [
+    { "id": "mistral-large-latest",  "label": "Mistral Large" },
+    { "id": "mistral-medium-latest", "label": "Mistral Medium" },
+    { "id": "mistral-small-latest",  "label": "Mistral Small" }
+  ],
+  "deepseek": [
+    { "id": "deepseek-v4-pro", "label": "DeepSeek V4 Pro" },
+    { "id": "deepseek-flash",  "label": "DeepSeek Flash" }
+  ],
+  "xai": [
+    { "id": "grok-4.7", "label": "Grok 4.7" },
+    { "id": "grok-4.3", "label": "Grok 4.3" }
+  ],
+  "openrouter": [
+    { "id": "anthropic/claude-sonnet-5.5",   "label": "Claude Sonnet 5.5" },
+    { "id": "openai/gpt-6.1-sol",            "label": "GPT-6.1 Sol" },
+    { "id": "google/gemini-4-argon",         "label": "Gemini 4 Argon" },
+    { "id": "deepseek/deepseek-v4-pro",      "label": "DeepSeek V4 Pro" },
+    { "id": "mistralai/mistral-large-4-0",   "label": "Mistral Large 4" },
+    { "id": "qwen/qwen3-235b-a22b-2507",     "label": "Qwen3 235B" },
+    { "id": "meta-llama/llama-4-maverick",   "label": "Llama 4 Maverick" }
+  ],
+  "ollama": [
+    { "id": "qwen3:8b",    "label": "Qwen3 8B (local)" },
+    { "id": "llama3.1:8b", "label": "Llama 3.1 8B (local)" }
   ]
 }
-

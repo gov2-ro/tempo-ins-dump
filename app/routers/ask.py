@@ -1,6 +1,6 @@
 """POST /api/ask — user-facing NL→Data agent endpoint.
 
-Gated by TEMPO_ASK_ENABLED (BYOK requests are allowed even when it is off).
+Hosted calls need TEMPO_ASK_ENABLED; own-key and keyless local (Ollama) calls need TEMPO_ASK_BYOK_ENABLED.
 
 Request pipeline (FIX-08): validate history -> resolve provider/model against the
 allowlist -> take a concurrency slot -> run the budgeted agent. Nothing reaches a
@@ -58,7 +58,7 @@ class AskRequest(BaseModel):
     # Raw list: elements are validated (role/content/size) in ask_guard.validate_history
     history: list = Field(default_factory=list)
     # BYOK fields — optional; sent to the provider through this server, never stored
-    provider: str | None = Field(default=None, max_length=40)   # "anthropic" | "openai" | "gemini"
+    provider: str | None = Field(default=None, max_length=40)   # one of llm_client.PROVIDERS
     model: str | None = Field(default=None, max_length=100)
     api_key: str | None = Field(default=None, max_length=400)
 
@@ -90,7 +90,7 @@ def _http_from_llm(e: LLMError) -> HTTPException:
 def ask(req: AskRequest) -> dict:
     # Hosted calls need TEMPO_ASK_ENABLED, own-key calls TEMPO_ASK_BYOK_ENABLED.
     # A key does not reopen an Ask the server has switched off.
-    byok = bool(req.api_key)
+    byok = bool(req.api_key) or ask_guard.is_keyless(req.provider)
     if byok and not config.ASK_BYOK_ENABLED:
         raise HTTPException(status_code=404, detail="Ask with your own key is not available on this server")
     if not byok and not config.ASK_ENABLED:

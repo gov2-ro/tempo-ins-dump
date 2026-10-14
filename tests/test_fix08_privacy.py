@@ -56,7 +56,7 @@ def test_opt_in_content_log_is_separate_and_redacted(monkeypatch, caplog, tmp_pa
             handler=handler)
     caplog.set_level(logging.DEBUG)
     r = make_client().post("/api/ask", json={"question": f"q with {FAKE_KEY}", "api_key": FAKE_KEY,
-                                             "provider": "anthropic", "model": "claude-sonnet-4-6"})
+                                             "provider": "anthropic", "model": "claude-sonnet-5-5"})
     assert r.status_code == 200
     file_text = (tmp_path / "ask-chats.jsonl").read_text()
     for blob in (caplog.text, file_text):
@@ -88,7 +88,7 @@ def test_sentinel_in_tool_exception_and_provider_error_never_logged(monkeypatch,
     install(monkeypatch, boom)
     caplog.clear()
     r = make_client().post("/api/ask", json={"question": "x", "api_key": FAKE_KEY,
-                                             "provider": "anthropic", "model": "claude-sonnet-4-6"})
+                                             "provider": "anthropic", "model": "claude-sonnet-5-5"})
     assert r.status_code == 502
     assert SENTINEL not in caplog.text and SENTINEL not in r.text
 

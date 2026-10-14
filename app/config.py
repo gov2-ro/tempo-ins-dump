@@ -33,9 +33,12 @@ ASK_ENABLED        = os.environ.get("TEMPO_ASK_ENABLED", "false").lower() in ("1
 # Bring-your-own-key Ask is a separate switch, also off by default: Ask stays out
 # of the public alpha until its exposure gate passes (PA-01/PA-04).
 ASK_BYOK_ENABLED   = os.environ.get("TEMPO_ASK_BYOK_ENABLED", "false").lower() in ("1", "true", "yes")
-LLM_PROVIDER       = os.environ.get("TEMPO_LLM_PROVIDER", "anthropic")   # anthropic | openai | gemini
-LLM_MODEL          = os.environ.get("TEMPO_LLM_MODEL", "claude-sonnet-4-6")
-GEMINI_API_KEY     = os.environ.get("GEMINI_API_KEY", "")  # server-side Gemini key (optional)
+LLM_PROVIDER       = os.environ.get("TEMPO_LLM_PROVIDER", "anthropic")   # see llm_client.PROVIDERS
+LLM_MODEL          = os.environ.get("TEMPO_LLM_MODEL", "claude-sonnet-5-5")
+# Server-funded keys are read per provider (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY,
+# MISTRAL_API_KEY, DEEPSEEK_API_KEY, XAI_API_KEY, OPENROUTER_API_KEY).
+# Local Ollama (OpenAI-compatible), e.g. http://localhost:11434/v1. Unset: no Ollama provider.
+OLLAMA_BASE_URL    = os.environ.get("TEMPO_OLLAMA_BASE_URL", "")
 ASK_LOG_CHATS      = os.environ.get("TEMPO_ASK_LOG_CHATS", "false").lower() in ("1", "true", "yes")
 ASK_LOG_DIR        = Path(os.environ.get("TEMPO_ASK_LOG_DIR", str(PROJECT_ROOT / "logs")))
 

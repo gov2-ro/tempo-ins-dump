@@ -223,7 +223,10 @@ the query rules is proven equal to the server by parity suites. The gate is
 `release-check.py --static`, and the upload is `scripts/deploy-static.sh`, a dry
 run by default. See [DEPLOY-STATIC.md](DEPLOY-STATIC.md).
 
-Ask is disabled by default (`TEMPO_ASK_ENABLED`) and accepts BYOK. FIX-08: history
+Ask is disabled by default (`TEMPO_ASK_ENABLED`); own-key calls have their own switch
+(`TEMPO_ASK_BYOK_ENABLED`). Providers: Anthropic, OpenAI (Responses API), Gemini,
+Mistral, DeepSeek, xAI, OpenRouter, and local Ollama only when `TEMPO_OLLAMA_BASE_URL`
+is set (see [agent-setup.md](agent-setup.md)). FIX-08: history
 is validated before any provider call (user/assistant text only, 20 turns, 8k
 chars per turn, 40k total). Providers/models come from an allowlist
 (`ask-models.json` for BYOK; only `TEMPO_LLM_PROVIDER:TEMPO_LLM_MODEL` for

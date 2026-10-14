@@ -121,7 +121,7 @@ def test_provider_retry_limit_is_passed_to_sdk(monkeypatch):
     monkeypatch.setitem(sys.modules, "anthropic", types.SimpleNamespace(Anthropic=FakeAnthropic))
     monkeypatch.setattr(config, "ASK_PROVIDER_MAX_RETRIES", 1)
     lc.complete_with_tools([{"role": "user", "content": "x"}], [], provider="anthropic",
-                           model="claude-sonnet-4-6", api_key="k", timeout=12)
+                           model="claude-sonnet-5-5", api_key="k", timeout=12)
     assert seen["timeout"] == 12 and seen["max_retries"] == 1
 
 
