@@ -405,6 +405,16 @@ def check_dims(data_dir: Path, kpis: dict, codes, cache: Path, tol: float, delay
     """Per summed dimension of each listed KPI: does INS's own partition add up?"""
     cache.mkdir(parents=True, exist_ok=True)
     res = Resolver(data_dir)
+    try:
+        return _check_dims(res, kpis, codes, cache, tol, delay, offline)
+    finally:
+        # --write-db opens the same file read-write in this process; DuckDB refuses
+        # that while this read-only connection is still open.
+        res.con.close()
+        res.pcon.close()
+
+
+def _check_dims(res, kpis: dict, codes, cache: Path, tol: float, delay: float, offline: bool):
     nested = dict(res.con.execute(
         "SELECT matrix_code || '|' || dim_column, nests_in FROM dimension_structure "
         "WHERE nests_in IS NOT NULL").fetchall()) if res.con.execute(

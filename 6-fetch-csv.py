@@ -52,6 +52,12 @@ import copy
 # Suppress only the single InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
+# (connect, read) seconds. A county request takes about a minute; without a read
+# timeout a dead connection blocks the run forever (POP108D, 2026-10-14).
+REQUEST_TIMEOUT = (30, 600)
+# Waits between retries of one county (about 8.5 min in all: a short INS outage or a laptop wake).
+COUNTY_RETRY_WAITS = (30, 60, 120, 300)
+
 # Set up logging
 logging.basicConfig(level=logging.INFO,
                    format='%(asctime)s - %(levelname)s - %(message)s')
@@ -416,8 +422,21 @@ def fetch_by_judet_split(matrix_code: str, matrix_def: Dict, output_dir: str,
 
         # Make request
         try:
-            response = requests.post(url, json=payload, headers=headers, verify=False)
-            response.raise_for_status()
+            # When degraded, INS answers 200 with an empty body; taking that as "no
+            # rows" would silently drop the county. Retry it like a network error.
+            for attempt, wait in enumerate(COUNTY_RETRY_WAITS + (None,)):
+                try:
+                    response = requests.post(url, json=payload, headers=headers, verify=False,
+                                             timeout=REQUEST_TIMEOUT)
+                    response.raise_for_status()
+                    if not response.content.strip():
+                        raise RuntimeError("empty answer from INS")
+                    break
+                except (requests.Timeout, requests.ConnectionError, RuntimeError) as e:
+                    if wait is None:
+                        raise
+                    tqdm.write(f"    {judet_name}: {e.__class__.__name__}, retrying in {wait} s")
+                    time.sleep(wait)
 
             # Check for errors
             response_text = response.content.decode('utf-8', errors='ignore')
@@ -747,7 +766,7 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
     try:
         # Make request
         tqdm.write(f"Making pivot request for {matrix_code}")
-        response = requests.post(url, json=payload, headers=headers, verify=False)
+        response = requests.post(url, json=payload, headers=headers, verify=False, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
 
         # Check for cell limit error from INS API
@@ -846,7 +865,7 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
                 payload_with_totals = convert_to_pivot_payload(matrix_def, matrix_code, include_totals=True)
 
                 # Make retry request
-                retry_response = requests.post(url, json=payload_with_totals, headers=headers, verify=False)
+                retry_response = requests.post(url, json=payload_with_totals, headers=headers, verify=False, timeout=REQUEST_TIMEOUT)
                 retry_response.raise_for_status()
 
                 # Check for cell limit error on retry
@@ -943,7 +962,7 @@ def fetch_insse_excel_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
     try:
         # Make request
         tqdm.write(f"Making excel request for {matrix_code}")
-        response = requests.post(url, json=payload, headers=headers, verify=False)
+        response = requests.post(url, json=payload, headers=headers, verify=False, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         
         # Save Excel response
