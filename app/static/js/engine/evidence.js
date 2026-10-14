@@ -105,6 +105,11 @@ export async function datasetEvidence(api, ApiError, code, { filters, groupBy, a
     if (groupBy) params.group_by = JSON.stringify(groupBy);
     if (approximate) params.approximate = 1;
     const res = await api.handle(`/datasets/${code}/data`, params);
+    if (res.aggregation && res.aggregation.reason === 'browser_budget') {
+        // The browser could not load the rows: refuse, never bundle an empty answer.
+        throw new ApiError(413, `This selection needs ${(res.budget.bytes / 1e6).toFixed(1)} MB of data, more than the `
+            + `static site loads at once (${(res.budget.max_bytes / 1e6).toFixed(0)} MB). Filter by county or period.`);
+    }
     if (res.truncated || res.time_windowed || res.partial_period_dropped) {
         throw new ApiError(413, 'The selection is larger than an evidence bundle can hold '
             + 'completely. Narrow it (period or area) and try again.');

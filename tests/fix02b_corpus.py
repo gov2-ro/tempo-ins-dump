@@ -186,10 +186,12 @@ def make_client(tmp_path, monkeypatch, structure: bool = False):
     monkeypatch.setattr(appdb, "_conn", None)
     for mod in (dd, dq, gg, cs, pages, qb, dm):
         monkeypatch.setattr(mod, "PARQUET_DIR", corpus / "parquet")
-    dm.clear_context_cache()
-    cs._cache.clear()
-    dstruct._cache.clear()
-    dstruct._TABLE_OK = None
-    ins._cache.clear()
+    # Fresh caches, restored at teardown: clearing the shared ones left fixture
+    # entries behind for later tests on the real corpus.
+    monkeypatch.setattr(dm, "_CTX_CACHE", type(dm._CTX_CACHE)())
+    monkeypatch.setattr(cs, "_cache", {})
+    monkeypatch.setattr(dstruct, "_cache", {})
+    monkeypatch.setattr(dstruct, "_TABLE_OK", None)
+    monkeypatch.setattr(ins, "_cache", {})
     from app.main import app
     return TestClient(app, raise_server_exceptions=False)
