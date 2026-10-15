@@ -183,3 +183,114 @@ def test_large_datasets_default_tiles_are_answered_without_loading(tmp_path):
                 "--cases", str(out / "tiles.jsonl")])
     s = json.loads(res.strip().splitlines()[-1])
     assert s["cases"] > 0 and s["ok"] == s["cases"] and not s.get("browser_budget_refusals"), res
+
+
+def test_bar_views_preserve_queries_and_stacking_permissions():
+    """Presentation must not infer additivity or discard a dense series silently."""
+    _run([NODE, '-e', r'''
+const fs = require('fs'), vm = require('vm'), assert = require('assert');
+vm.runInThisContext(fs.readFileSync('app/static/js/utils.js', 'utf8'));
+const dimensions = [{dim_column_name:'TIME_PERIOD',dim_type:'time'}];
+const data = {group_by:['TIME_PERIOD','RATE'],filters:{SEX:['Total']}};
+const dense = {id:'dense',chart_type:'heatmap',roles:{x_axis:'TIME_PERIOD',series:'RATE'},data};
+const grouped = {...dense,id:'rates',views:['lines','heatmap'],default_view:'lines'};
+const additive = {...dense,id:'counts',views:['lines','stacked','heatmap'],default_view:'stacked'};
+const reverse = {...dense,id:'reverse',roles:{x_axis:'RATE',series:'TIME_PERIOD'}};
+const category = {...dense,id:'category',roles:{x_axis:'COUNTY',series:'RATE'},views:['bars','heatmap']};
+const source = {charts:[dense,grouped,additive,reverse,category]};
+const result = preferBarViews(source,dimensions);
+assert.equal(result.charts[0].default_view,'bars');
+assert.equal(result.charts[0].views.join(','),'bars,heatmap');
+assert.equal(result.charts[1].default_view,'grouped');
+assert(!result.charts[1].views.includes('stacked'));
+assert.equal(result.charts[2].default_view,'stacked');
+assert.equal(result.charts[3].roles.x_axis,'TIME_PERIOD');
+assert.strictEqual(result.charts[4],category);
+for (const c of result.charts) assert.strictEqual(c.data,data);
+assert.equal(source.charts[0].views,undefined);
+assert.equal(source.charts[1].default_view,'lines');
+'''])
+
+
+def test_grouped_time_bars_keep_missing_periods_and_do_not_sum_rates():
+    _run([NODE, '-e', r'''
+const fs = require('fs'), vm = require('vm'), assert = require('assert');
+vm.runInThisContext(fs.readFileSync('app/static/js/utils.js', 'utf8'));
+vm.runInThisContext(fs.readFileSync('app/static/js/chart-factory.js', 'utf8'));
+let option;
+global.echarts = {init: () => ({setOption: o => {option=o;}})};
+const data = {columns:['TIME_PERIOD','RATE','OBS_VALUE'],column_labels:{},
+ rows:[['2020','A',7],['2022','A',9],['2020','B',2],['2021','B',3]]};
+const cfg = {primary_chart:'bar_vertical',time_dim:'TIME_PERIOD',series_dim:'RATE'};
+createTimeSeriesChart({},cfg,data,{},'bar');
+assert.deepEqual(option.xAxis.data,['2020','2021','2022']);
+assert.deepEqual(option.series.map(s => s.data),[[7,null,9],[2,3,null]]);
+assert(option.series.every(s => s.type === 'bar' && !s.stack));
+const params = [{value:7,seriesName:'A',marker:'',axisValue:'2020'},
+                {value:2,seriesName:'B',marker:'',axisValue:'2020'}];
+assert(!option.tooltip.formatter(params).includes('∑'));
+assert(option.xAxis.axisLabel.showMinLabel && option.xAxis.axisLabel.showMaxLabel);
+'''])
+
+
+def test_theme_teasers_pin_observed_cells_and_validate_dated_insights():
+    _run([NODE, '-e', r'''
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+vm.runInThisContext(fs.readFileSync('app/static/js/theme-overviews.js','utf8'));
+const meta={chart_config:{time_dim:'TIME_PERIOD'},dimensions:[
+ {dim_column_name:'CATEGORY',dim_label:'Category',dim_type:'indicator',options:[{sdmx_value:'never occurred',label:'Never occurred'},{sdmx_value:'GDP',label:'GDP'}]},
+ {dim_column_name:'UNIT_MEASURE',dim_type:'unit',options:[{sdmx_value:'Number',label:'Number'},{sdmx_value:'Thousands',label:'Thousands'}]},
+ {dim_column_name:'REF_AREA',dim_label:'County',dim_type:'geo',options:[{sdmx_value:'Cluj',label:'Cluj'}]},
+ {dim_column_name:'TIME_PERIOD',dim_type:'time',options:[]}]};
+const sample={columns:['UNIT_MEASURE','TIME_PERIOD','CATEGORY','REF_AREA','OBS_VALUE'],
+ rows:[['Thousands','2024','GDP','Cluj',7.5]],column_labels:{}};
+const pins=ThemeOverviews.seriesPins(meta,sample);
+assert.deepEqual(pins.filters,{UNIT_MEASURE:['Thousands'],CATEGORY:['GDP'],REF_AREA:['Cluj']});
+assert.equal(pins.unit,'Thousands');
+assert(!('TIME_PERIOD' in pins.filters));
+assert(ThemeOverviews.seriesPins(meta,{...sample,columns:['UNIT_MEASURE','TIME_PERIOD','CATEGORY','OBS_VALUE'],rows:[['Thousands','2024','GDP',7.5]]})===null);
+const insight={kpis:[{key:'latest',value:0,unit:'%',sparkline:[2,1,0],sparkline_periods:['2020','2022','2025'],
+ provenance:{filters:{CATEGORY:['Gross value added'],SEX:['Total']}}}]};
+assert.equal(ThemeOverviews.fromInsight('X',insight,'Title').value,0);
+assert.deepEqual(ThemeOverviews.fromInsight('X',insight,'Title').context,['Gross value added']);
+insight.kpis[0].sparkline_periods=['2020','2021'];
+assert.equal(ThemeOverviews.fromInsight('X',insight,'Title'),null);
+insight.kpis[0].sparkline_periods=['Under 10 hours','10–20 hours','20+ hours'];
+assert.equal(ThemeOverviews.fromInsight('X',insight,'Title'),null);
+assert.equal(ThemeOverviews.fromInsight('X',{kpis:[{key:'latest',value:2}]},'Title'),null);
+for(const theme of ['general','labour','economy','demography','tourism','health','education','agriculture','industry'])
+ for(const lang of ['ro','en']) {
+  assert.equal((ThemeOverviews.questions(theme,lang).match(/href=/g)||[]).length,6);
+  assert.equal((ThemeOverviews.questions(theme,lang,'Subtheme').match(/href=/g)||[]).length,6);
+ }
+'''])
+
+
+def test_gdp_teasers_query_gdp_and_refuse_duplicate_periods():
+    _run([NODE, '-e', r'''
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+vm.runInThisContext(fs.readFileSync('app/static/js/theme-overviews.js','utf8'));
+let calls=0;
+global.API={fetch:async()=>{throw Error('Do not reuse the generic GVA headline');},
+ getDataset:async code=>({dimensions:[
+  {dim_column_name:'CATEGORY',dim_type:'indicator',options:[{sdmx_value:'GVA',label:'Gross value added'},{sdmx_value:'PRODUS INTERN BRUT',label:'GDP'}]},
+  {dim_column_name:'UNIT_MEASURE',dim_type:'unit',options:[{sdmx_value:'Millions',label:'Millions'}]},
+  {dim_column_name:'TIME_PERIOD',dim_type:'time',options:[]}],chart_config:{time_dim:'TIME_PERIOD'}}),
+ getDatasetData:async(code,filters,limit,config)=>{
+  calls++;
+  assert.deepEqual(filters.CATEGORY,['PRODUS INTERN BRUT']);
+  assert.deepEqual(filters.UNIT_MEASURE,['Millions']);
+  assert.deepEqual(config.groupBy,['TIME_PERIOD']);
+  return {columns:['TIME_PERIOD','OBS_VALUE'],column_labels:code==='CON104P'
+   ? {TIME_PERIOD:{'9000':'Anul 2023','8000':'Anul 2024','10000':'Anul 2025'}} : {}, rows:code==='CON104R'
+   ? [['2023',1],['2024',2],['2024',999]] : code==='CON104P'
+   ? [['9000',1],['8000',2],['10000',3]] : [['2023',1],['2024',2],['2025',3]]};
+ }};
+ThemeOverviews.theme({theme:'economy',indicators:[{code:'BASE'}]},'en').then(cards=>{
+ assert.equal(calls,3);
+ assert.deepEqual(cards.map(c=>c.code),['BASE','CON104P','CON104Q']);
+ assert.equal(cards[1].value,3);
+ assert.deepEqual(cards[1].sparkline_periods,['2023','2024','2025']);
+ assert.deepEqual(cards[1].filters.CATEGORY,['PRODUS INTERN BRUT']);
+}).catch(e=>{console.error(e);process.exitCode=1;});
+'''])

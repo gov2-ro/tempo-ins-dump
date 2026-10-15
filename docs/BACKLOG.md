@@ -4,6 +4,36 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Theme preview findings — 2026-10-16
+
+- [ ] **Repair category ancestry on canonical splits**: split datasets can have
+  the correct `context_code` but empty `ancestor_codes` (for example school
+  datasets in context `2505`). Exact-context catalog queries find them while
+  ancestor-filtered browsing/category summaries omit them, so tree/header totals
+  and result totals disagree. Rebuild ancestry from the context tree on a copy,
+  validate direct/ancestor membership, then regenerate affected search/static
+  records. Theme teasers use exact context membership as a presentation fallback;
+  this UI change does not repair the corpus or the existing catalogue summaries.
+- [ ] **Show the selected aggregate's scope in generic insights**: `CON104P` and
+  `CON104Q` can select `Total valoare adaugata bruta` with an empty context label,
+  although the dataset title describes GDP. Preserve that aggregate label in the
+  dashboard/Ask/evidence context rather than implying GDP. The new theme previews
+  explicitly select `PRODUS INTERN BRUT`; cover GDP/GVA with different numerical
+  values when fixing the generic insight presentation. Also label `CON104S`
+  as the GDP price index/deflator, rather than an ambiguous GDP growth headline;
+  its theme preview now makes that distinction explicit.
+
+## UI follow-up — 2026-10-15
+
+- [ ] **Disclose bounded chart subsets**: `createSmallMultiplesChart` keeps at
+  most 16 facets and `_orderedHorizontalBars` keeps at most 150 categories.
+  Show the displayed/available count or add paging; a visible date range does
+  not disclose omitted categories. Keep the full query result available.
+- [ ] **County KPI source detail**: add a shareable detail view for the exact
+  curated recipe/published total, including its definition and method. The UI
+  now opens the curated comparison from a KPI and labels raw source links
+  separately; raw dataset defaults need not reproduce a published or weighted KPI.
+
 ## Ask findings from debug logs — 2026-10-15
 
 Four DeepSeek Flash runs with `TEMPO_ASK_DEBUG` (server log
@@ -572,8 +602,11 @@ See also: `docs/chart-taxonomy.md` for full gap analysis per cluster (33 exempla
 - [x] **Boost area_stacked for percentage data** (HIGH, 295 datasets / 15%) — Done.
   Frontend now uses chart_selector's recommendation for default chart type.
   Selector already scored area_stacked correctly; frontend was ignoring it.
-- [ ] **Small multiples / heatmap for high-cardinality time** (MED, 520 datasets / 27%) —
-  Categorical Time cluster (6-50 options) renders cluttered lines. Default to heatmap/small_multiples for >8 series.
+- [x] **High-cardinality time presentation** (2026-10-15): the v2 UI opens dense
+  time×category tiles as bars of an explicitly selected series; small sets offer
+  grouped bars, and only existing verified partitions offer stacking. Heatmap
+  remains an explicit alternative. This supersedes the earlier heatmap default;
+  the metadata scorer is unchanged.
 - [x] **Fix population_pyramid selection** (MED, 69 datasets / 4%) — Done.
   Relaxed gender_count threshold from ≤3 to ≤6 (INS mixes gender+residence in one dim).
   Added population_pyramid to frontend snapshot chart types when age+gender dims present.

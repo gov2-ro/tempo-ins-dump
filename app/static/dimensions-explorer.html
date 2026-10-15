@@ -186,8 +186,10 @@
             .dims-sub-mobile { display: inline; }
         }
     </style>
+    <link rel="stylesheet" href="/css/ui-rhythm.css?v=3">
+    <script src="/js/ui-preferences.js?v=2" defer></script>
 </head>
-<body>
+<body class="dims-page">
     <!-- Top bar -->
     <nav class="topbar" id="topbar">
         <div class="topbar-left">
@@ -200,7 +202,6 @@
                 <svg id="theme-icon-moon" class="hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
             </button>
             <button class="toggle-btn lang-toggle" id="lang-toggle" title="Switch language">
-                <img id="lang-flag" class="lang-flag" src="" alt="">
                 <span id="lang-label">EN</span>
             </button>
         </div>
@@ -212,6 +213,7 @@
         <!-- Left: dimension sidebar -->
         <nav class="dims-sidebar" id="dims-sidebar">
             <div class="dims-sidebar-title">Dimensions</div>
+            <input id="dims-search" class="dims-search" type="search" placeholder="Caută o dimensiune…" aria-label="Caută o dimensiune">
             <div id="dims-dim-list"><div class="dims-loading" style="padding:8px 14px;">Loading…</div></div>
         </nav>
 
@@ -228,7 +230,7 @@
             <div id="dims-filter-bar"></div>
 
             <!-- Dataset list -->
-            <div id="dims-dataset-header"></div>
+            <div id="dims-dataset-header" role="status" aria-live="polite"></div>
             <div id="dims-dataset-list"><div class="dims-loading">Loading datasets…</div></div>
         </main>
     </div>
@@ -248,9 +250,9 @@
     </footer>
 
     <script src="/js/config.js?v=1"></script>
-    <script src="/js/utils.js?v=31"></script>
-    <script src="/js/api.js?v=30"></script>
-    <script src="/js/dims-explorer.js?v=6"></script>
+    <script src="/js/utils.js?v=32"></script>
+    <script src="/js/api.js?v=31"></script>
+    <script src="/js/dims-explorer.js?v=7"></script>
 <style>
     #zelogo:after { opacity: .5;
 content: "α WIP"; font-weight: normal; font-size: 11px; color: #FFF; background-color: #C99; line-height: 1; padding: 1px 3px;

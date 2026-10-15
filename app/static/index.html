@@ -31,6 +31,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/explore.css?v=44">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="/css/ui-rhythm.css?v=3">
+    <script src="/js/ui-preferences.js?v=2" defer></script>
 </head>
 <body>
     <!-- Notice bar (above everything) -->
@@ -108,12 +110,7 @@
 
         <!-- Browse view -->
         <section id="browse-view" class="browse-view">
-            <div class="browse-header">
-                <h1 class="browse-title" id="browse-title"></h1>
-                <p class="browse-tagline" id="browse-tagline"></p>
-                <p class="browse-subtitle" id="browse-subtitle"></p>
-            </div>
-            <!-- Three ways in (PA-02b): a question, a place, an indicator -->
+            <nav class="theme-nav" id="theme-nav" aria-label="Teme"></nav>
             <div class="entry-points" id="entry-points"></div>
             <!-- Headline indicators grid (themed KPI cards) -->
             <div class="headlines-section" id="headlines-section"></div>
@@ -208,14 +205,15 @@
 
     <!-- Scripts: reuse existing API + chart modules -->
     <script src="/js/config.js?v=1"></script>
-    <script src="/js/utils.js?v=31"></script>
-    <script src="/js/api.js?v=30"></script>
-    <script src="/js/echarts-theme.js?v=2"></script>
-    <script src="/js/chart-factory.js?v=35"></script>
-    <script src="/js/chart-new-types.js?v=35"></script>
+    <script src="/js/utils.js?v=32"></script>
+    <script src="/js/api.js?v=31"></script>
+    <script src="/js/theme-overviews.js?v=2"></script>
+    <script src="/js/echarts-theme.js?v=3"></script>
+    <script src="/js/chart-factory.js?v=36"></script>
+    <script src="/js/chart-new-types.js?v=36"></script>
     <script src="/js/chart-geo.js?v=23"></script>
     <script src="/js/chart-demographic.js?v=26"></script>
-    <script src="/js/explore-app.js?v=101"></script>
+    <script src="/js/explore-app.js?v=104"></script>
 <style>
     #page-loader {
         display: flex;

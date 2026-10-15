@@ -216,10 +216,3 @@ const API = {
         return `${this.base}/recipes/${encodeURIComponent(id)}/evidence?${q}`;
     },
 };
-
-// The static site has no Ask (no server for the model): hide its entry points.
-if (API.isStatic) {
-    document.addEventListener('DOMContentLoaded', () => {
-        document.querySelectorAll('a[href="/ask.html"]').forEach(a => { a.style.display = 'none'; });
-    });
-}

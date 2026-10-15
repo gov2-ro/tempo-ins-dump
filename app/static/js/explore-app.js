@@ -395,6 +395,10 @@ class LensApp {
         document.getElementById('lang-toggle').addEventListener('click', () => {
             this.lang = this.lang === 'ro' ? 'en' : 'ro';
             localStorage.setItem('lens_lang', this.lang);
+            const url = new URL(location.href);
+            if (this.lang === 'en') url.searchParams.set('lang', 'en');
+            else url.searchParams.delete('lang');
+            history.replaceState(null, '', url);
             this.applyLang();
             // Clear caches (names depend on lang)
             this.categories = null;
@@ -418,6 +422,7 @@ class LensApp {
 
     applyTheme() {
         document.body.dataset.theme = this.theme;
+        document.documentElement.dataset.theme = this.theme;
         const sunIcon = document.getElementById('theme-icon-sun');
         const moonIcon = document.getElementById('theme-icon-moon');
         if (this.theme === 'light') {
@@ -430,6 +435,7 @@ class LensApp {
     }
 
     applyLang() {
+        document.documentElement.lang = this.lang;
         const nextLang = this.lang === 'ro' ? 'en' : 'ro';
         document.getElementById('lang-label').textContent = nextLang.toUpperCase();
         localizeChrome(this.lang);
@@ -480,6 +486,7 @@ class LensApp {
 
     // --- About view ---------------------------------------------------------
     showAbout() {
+        document.body.classList.remove('landing-page', 'catalog-page');
         document.getElementById('page-loader')?.classList.add('hidden');
         this.navigate(null, 'about');
         this.disposeCharts();
@@ -501,7 +508,10 @@ class LensApp {
 
     // --- Browse view --------------------------------------------------------
     async showBrowse() {
+        const version = this._overviewVersion = (this._overviewVersion || 0) + 1;
         this.navigate(null);
+        document.body.classList.add('landing-page');
+        this.closeSidebar();
         this.disposeCharts();
         this.hideTableToggleRow();
         this._updatePageMeta(null);
@@ -516,6 +526,7 @@ class LensApp {
             this.categoryTrends ? Promise.resolve(null) : API.getCategoryTrends(),
             API.getCorpusSummary({ lang: this.lang }),
         ]);
+        if (this._overviewVersion !== version) return;
         if (catResp) this.categories = catResp.tree;
         if (trendsResp) this.categoryTrends = trendsResp.trends;
 
@@ -539,6 +550,10 @@ class LensApp {
     }
 
     showCategoryGrid() {
+        this._overviewVersion = (this._overviewVersion || 0) + 1;
+        this.renderQuestions();
+        document.body.classList.add('landing-page');
+        document.body.classList.remove('catalog-page');
         document.getElementById('category-grid').classList.remove('hidden');
         document.getElementById('dataset-panel').classList.add('hidden');
         document.getElementById('facet-bar')?.classList.add('hidden');
@@ -613,143 +628,124 @@ class LensApp {
         };
     }
 
-    /** Three ways in (PA-02b): ask a question (guided examples open the
-     *  concept search with the question prefilled, as a shareable /?q= link),
-     *  pick a county, or browse indicators by theme. No key or account. */
+    /** General questions at home; a theme's questions live on its profile. */
     async renderEntryPoints() {
-        const host = document.getElementById('entry-points');
-        if (!host || host.dataset.ready) return;
-        host.dataset.ready = '1';
         const ro = this.lang !== 'en';
-        const t = ro ? {
-            ask: 'Pune o întrebare', askHint: 'Scrieți cu cuvintele dvs.: indicator, loc, an',
-            place: 'Alege un județ', placeHint: 'Profilul județului, cu definiții și surse',
-            pick: 'Județ…', indicator: 'Răsfoiește indicatorii', indicatorHint: 'Pe teme, ca în TEMPO',
-            browse: 'Vezi temele ↓',
-            questions: [
-                'Cum a evoluat populația rezidentă a județului Cluj?',
-                'Cum se compară salariul mediu net în Cluj, Iași și București?',
-                'În ce județe este cea mai mare rată a șomajului înregistrat?',
-                'Ce județe au cele mai multe înnoptări turistice pe locuitor?',
-            ],
-        } : {
-            ask: 'Ask a question', askHint: 'Your own words: indicator, place, year',
-            place: 'Pick a county', placeHint: 'County profile with definitions and sources',
-            pick: 'County…', indicator: 'Browse indicators', indicatorHint: 'By theme, as in TEMPO',
-            browse: 'See themes ↓',
-            questions: [
-                "How has Cluj county's resident population changed?",
-                'Compare average net earnings in Cluj, Iași and Bucharest',
-                'Which counties have the highest registered unemployment rate?',
-                'Which counties have the most tourist overnight stays per resident?',
-            ],
-        };
-        const langQ = ro ? '' : '&lang=en';
-        host.innerHTML = `
-            <div class="entry-card entry-ask">
-                <div class="entry-title">${t.ask}</div>
-                <button class="entry-search" type="button" id="entry-search-btn">${t.askHint}</button>
-                <ul class="entry-questions">${t.questions.map(q =>
-                    `<li><a href="/?q=${encodeURIComponent(q)}${langQ}">${_escHtml(q)}</a></li>`).join('')}</ul>
-            </div>
-            <div class="entry-card entry-place">
-                <div class="entry-title">${t.place}</div>
-                <label class="entry-hint" for="entry-county">${t.placeHint}</label>
-                <select id="entry-county" class="entry-select"><option value="">${t.pick}</option></select>
-            </div>
-            <div class="entry-card entry-indicator">
-                <div class="entry-title">${t.indicator}</div>
-                <div class="entry-hint">${t.indicatorHint}</div>
-                <a class="entry-link" href="#categories-label">${t.browse}</a>
-            </div>`;
-        document.getElementById('entry-search-btn').addEventListener('click', () => this.openSearch());
+        this.renderQuestions();
+        let toolbar = document.getElementById('landing-tools');
+        if (!toolbar) {
+            toolbar = document.createElement('div');
+            toolbar.id = 'landing-tools';
+            toolbar.className = 'landing-tools';
+            document.getElementById('search-trigger').after(toolbar);
+        }
+        toolbar.innerHTML = `<span class="corpus-compact" id="corpus-compact"></span>
+            <select id="entry-county" aria-label="${ro ? 'Alege un județ' : 'Choose a county'}"><option value="">${ro ? 'Județ…' : 'County…'}</option></select>
+            <a href="/dimensions-explorer.html${ro ? '' : '?lang=en'}">${ro ? 'Dimensiuni' : 'Dimensions'} ↗</a>`;
+        this.renderBrowseHeader(this.corpus);
         const sel = document.getElementById('entry-county');
         sel.addEventListener('change', () => {
-            if (sel.value) window.location.href = `/place/county/${sel.value}${ro ? '' : '?lang=en'}`;
+            if (sel.value) location.href = `/place/county/${sel.value}${ro ? '' : '?lang=en'}`;
         });
         try {
             const resp = await API.fetch('/places');
-            const counties = (resp.places || []).filter(p => p.type === 'county')
-                .sort((a, b) => a.name.localeCompare(b.name, 'ro'));
-            sel.insertAdjacentHTML('beforeend', counties.map(p =>
-                `<option value="${_escHtml(p.slug)}">${_escHtml(p.name)}</option>`).join(''));
+            sel.insertAdjacentHTML('beforeend', (resp.places || []).filter(p => p.type === 'county')
+                .sort((a, b) => a.name.localeCompare(b.name, 'ro')).map(p =>
+                    `<option value="${_escHtml(p.slug)}">${_escHtml(p.name)}</option>`).join(''));
         } catch (e) { console.warn('Places unavailable:', e); }
     }
 
     renderBrowseHeader(corpus) {
-        const title = document.getElementById('browse-title');
-        const sub = document.getElementById('browse-subtitle');
-        const tagline = document.getElementById('browse-tagline');
-        if (title) title.textContent = this.ui.browseTitle;
-        if (sub && corpus) {
-            sub.innerHTML = this.ui.browseSub(
-                formatNumber(corpus.datasets, 0),
-                formatNumber(corpus.observations, 0)
-            ) + ` · <a href="/dimensions-explorer.html" class="browse-dims-link">${this.lang === 'ro' ? 'Explorează după dimensiuni' : 'Explore by dimension'} →</a>`;
+        this.corpus = corpus;
+        const compact = document.getElementById('corpus-compact');
+        if (compact && corpus) compact.textContent = `${formatNumber(corpus.datasets, 0)} ${this.lang === 'ro' ? 'seturi' : 'datasets'} · ${formatNumber(corpus.observations, 0)} ${this.lang === 'ro' ? 'obs.' : 'rows'}`;
+    }
+
+    renderQuestions(cat = null) {
+        this.activeCategory = cat;
+        const host = document.getElementById('entry-points');
+        const theme = (this.headlines || []).find(t => t.context_code === cat?.code);
+        host.innerHTML = ThemeOverviews.questions(theme?.theme || 'general', this.lang,
+            cat && !theme ? ThemeOverviews.clean(cat.name).toLocaleLowerCase() : '');
+        this.renderThemeNav();
+    }
+
+    renderThemeNav() {
+        const nav = document.getElementById('theme-nav');
+        if (!nav) return;
+        const en = this.lang === 'en';
+        const active = this.activeCategory;
+        nav.innerHTML = `<a href="/${en ? '?lang=en' : ''}"${!active ? ' aria-current="page"' : ''}>General</a>`;
+        for (const theme of this.headlines || []) {
+            const a = document.createElement('a');
+            a.href = `/?cat=${theme.context_code}${en ? '&lang=en' : ''}`;
+            a.textContent = theme.theme_label;
+            if (active && (active.code === theme.context_code || this.drillStack.some(c => c.cat.code === theme.context_code))) a.setAttribute('aria-current','page');
+            nav.appendChild(a);
         }
-        if (tagline) tagline.textContent = this.ui.browseTagline;
+        const all = document.createElement('a');
+        all.href = `/${en ? '?lang=en' : ''}#categories-label`;
+        all.textContent = en ? 'All themes ↓' : 'Toate temele ↓';
+        nav.appendChild(all);
+        const dims = document.createElement('a');
+        dims.href = `/dimensions-explorer.html${en ? '?lang=en' : ''}`;
+        dims.textContent = en ? 'Dimensions ↗' : 'Dimensiuni ↗';
+        nav.appendChild(dims);
+    }
+
+    teaserCard(ind) {
+        const card = document.createElement('a');
+        card.className = 'headline-card';
+        const params = new URLSearchParams();
+        if (this.lang === 'en') params.set('lang','en');
+        const filters = ind.filters || ind.provenance?.filters;
+        if (filters && Object.keys(filters).length) params.set('f',JSON.stringify(filters));
+        card.href = `/dataset/${encodeURIComponent(ind.code)}${params.size ? '?' + params : ''}`;
+        const context = (ind.context || []).join(' · ');
+        const label = ind.code === 'CON104S' && ind.format === 'percent'
+            ? (this.lang === 'en' ? 'GDP deflator · quarterly change' : 'Deflator PIB · variație trimestrială') : ind.label;
+        const unit = ind.format === 'percent' ? (ind.unit || '').replace(/^%\s*/, '') : ind.unit || '';
+        card.innerHTML = `<div class="headline-card-info">
+            <div class="headline-label" title="${_escHtml(label)}">${_escHtml(label)}</div>
+            ${context ? `<div class="teaser-context">${_escHtml(context)}</div>` : ''}
+            <div class="headline-value-row"><span class="headline-value">${this._formatHeadlineValue(ind.value, ind.format)}</span>
+                <span class="headline-unit">${_escHtml(unit)}</span></div></div>
+            ${this._renderSparkline(ind.sparkline, ind.change_pct, ind.sparkline_periods)}
+            <div class="headline-footer"><span class="headline-period">${_escHtml(ind.period)} · ${_escHtml(ind.code)}</span>
+                ${ind.change_pct != null ? `<span class="headline-change ${ind.change_pct >= 0 ? 'up' : 'down'}">${ind.change_pct >= 0 ? '↑' : '↓'} ${Math.abs(ind.change_pct).toFixed(1)}%</span>` : ''}</div>`;
+        return card;
+    }
+
+    themeCards(theme) {
+        this._themeCards ||= new Map();
+        const key = `${this.lang}:${theme.context_code}`;
+        if (!this._themeCards.has(key)) this._themeCards.set(key, ThemeOverviews.theme(theme,this.lang));
+        return this._themeCards.get(key);
     }
 
     renderHeadlines(headlines) {
         const container = document.getElementById('headlines-section');
-        if (!container || !headlines || !headlines.length) return;
-        container.innerHTML = '';
-
-        const grid = document.createElement('div');
-        grid.className = 'headlines-grid';
-
+        if (!container || !headlines?.length) return;
+        container.innerHTML = '<div class="headlines-grid"></div>';
+        const grid = container.firstElementChild;
+        const lang = this.lang;
         for (const theme of headlines) {
-            const section = document.createElement('div');
+            const section = document.createElement('section');
             section.className = 'headline-theme';
-            section.dataset.cols = String(theme.indicators.length);
-
-            // Theme header with icon + label + arrow → drills into category
-            const header = document.createElement('div');
-            header.className = 'headline-theme-header';
-            header.innerHTML = `
+            section.dataset.context = theme.context_code;
+            section.innerHTML = `<a class="headline-theme-header" href="/?cat=${theme.context_code}${lang === 'en' ? '&lang=en' : ''}">
                 <span class="headline-theme-icon">${THEME_ICONS[theme.icon] || '📊'}</span>
-                <span class="headline-theme-label">${theme.theme_label}</span>
-                <span class="headline-theme-arrow">›</span>
-            `;
-            if (theme.context_code) {
-                header.addEventListener('click', () => this._drillToContext(theme.context_code));
-            }
-            section.appendChild(header);
-
-            const cards = document.createElement('div');
-            cards.className = 'headline-cards';
-
-            for (const ind of theme.indicators) {
-                const card = document.createElement('div');
-                card.className = 'headline-card';
-                card.addEventListener('click', () => this.showDashboard(ind.code));
-
-                const changeHtml = ind.change_pct != null
-                    ? `<span class="headline-change ${ind.change_pct >= 0 ? 'up' : 'down'}">${ind.change_pct >= 0 ? '↑' : '↓'} ${Math.abs(ind.change_pct).toFixed(1)}%</span>`
-                    : '';
-
-                const sparkHtml = this._renderSparkline(ind.sparkline, ind.change_pct);
-
-                card.innerHTML = `
-                    ${sparkHtml}
-                    <div class="headline-card-info">
-                        <div class="headline-label">${ind.label}</div>
-                        <div class="headline-value-row">
-                            <span class="headline-value">${this._formatHeadlineValue(ind.value, ind.format)}</span>
-                            <span class="headline-unit">${ind.unit}</span>
-                        </div>
-                    </div>
-                    <div class="headline-footer">
-                        <span class="headline-period">${ind.period}</span>
-                        ${changeHtml}
-                    </div>
-                `;
-                cards.appendChild(card);
-            }
-            section.appendChild(cards);
+                <span class="headline-theme-label">${_escHtml(theme.theme_label)}</span><span class="headline-theme-arrow">›</span></a>
+                <div class="headline-cards"></div>`;
+            const cards = section.lastElementChild;
+            theme.indicators.slice(0, 3).forEach(ind => cards.appendChild(this.teaserCard(ind)));
             grid.appendChild(section);
+            this.themeCards(theme).then(indicators => {
+                if (!cards.isConnected || this.lang !== lang) return;
+                cards.replaceChildren(...indicators.slice(0, 3).map(ind => this.teaserCard(ind)));
+            });
         }
-        container.appendChild(grid);
+        this.renderThemeNav();
     }
 
     _drillToContext(contextCode) {
@@ -769,8 +765,9 @@ class LensApp {
         if (result) this.drillCategory(result.cat, result.idx);
     }
 
-    _renderSparkline(data, changePct) {
-        if (!data || data.length < 3) return '';
+    _renderSparkline(data, changePct, periods) {
+        // Older snapshots have no period metadata: omit the undated chart.
+        if (!periods || periods.length !== data?.length || data.length < 3) return '';
         const fill = changePct != null ? (changePct >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-3)';
         const min = Math.min(...data);
         const max = Math.max(...data);
@@ -783,10 +780,10 @@ class LensApp {
         });
         const polyline = points.join(' ');
         const fillPoly = `${points[0].split(',')[0]},${h} ${polyline} ${points[points.length-1].split(',')[0]},${h}`;
-        return `<svg class="headline-sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+        return `<div class="headline-trend"><svg aria-hidden="true" class="headline-sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
             <polygon points="${fillPoly}" fill="${fill}" />
             <polyline points="${polyline}" />
-        </svg>`;
+        </svg><div class="chart-range"><span>${_escHtml(periods[0])}</span><span>${_escHtml(periods[periods.length - 1])}</span></div></div>`;
     }
 
     _formatHeadlineValue(value, format) {
@@ -885,44 +882,22 @@ class LensApp {
         }
     }
 
-    renderThemeHeadlines(contextCode) {
+    async renderThemeHeadlines(cat, version) {
         const container = document.getElementById('theme-headlines');
-        if (!container) return;
-        // Find matching theme by context_code
-        const theme = (this.headlines || []).find(t => t.context_code === contextCode);
-        if (!theme || !theme.indicators || !theme.indicators.length) {
-            container.classList.add('hidden');
-            return;
-        }
-        const cards = document.createElement('div');
-        cards.className = 'headline-cards';
-        for (const ind of theme.indicators) {
-            const card = document.createElement('div');
-            card.className = 'headline-card';
-            card.addEventListener('click', (e) => { e.stopPropagation(); this.showDashboard(ind.code); });
-            const changeHtml = ind.change_pct != null
-                ? `<span class="headline-change ${ind.change_pct >= 0 ? 'up' : 'down'}">${ind.change_pct >= 0 ? '↑' : '↓'} ${Math.abs(ind.change_pct).toFixed(1)}%</span>`
-                : '';
-            const sparkHtml = this._renderSparkline(ind.sparkline, ind.change_pct);
-            card.innerHTML = `
-                ${sparkHtml}
-                <div class="headline-card-info">
-                    <div class="headline-label">${ind.label}</div>
-                    <div class="headline-value-row">
-                        <span class="headline-value">${this._formatHeadlineValue(ind.value, ind.format)}</span>
-                        <span class="headline-unit">${ind.unit}</span>
-                    </div>
-                </div>
-                <div class="headline-footer">
-                    <span class="headline-period">${ind.period}</span>
-                    ${changeHtml}
-                </div>
-            `;
-            cards.appendChild(card);
-        }
-        container.innerHTML = '';
-        container.appendChild(cards);
+        const theme = (this.headlines || []).find(t => t.context_code === cat.code);
+        container.innerHTML = '<div class="headline-cards"><span class="teaser-loading">…</span></div>';
         container.classList.remove('hidden');
+        try {
+            let cards = theme ? await this.themeCards(theme) : await ThemeOverviews.category(cat,this.lang,4);
+            if (this._overviewVersion !== version) return;
+            if (cards.length < 4 && theme) {
+                const extra = await ThemeOverviews.category(cat,this.lang,4);
+                if (this._overviewVersion !== version) return;
+                cards = [...cards, ...extra.filter(c => !cards.some(k => k.code === c.code))].slice(0,4);
+            }
+            container.firstElementChild.replaceChildren(...cards.map(card => this.teaserCard(card)));
+            container.classList.toggle('hidden', !cards.length);
+        } catch { if (this._overviewVersion === version) container.classList.add('hidden'); }
     }
 
     _renderTrendIndicator(contextCode) {
@@ -968,11 +943,18 @@ class LensApp {
             if (cat) this.drillStack.push({ cat, colorIdx: 0 });
         }
         const lastCat = this._findCategoryByCode(codes[codes.length - 1]);
-        if (lastCat) await this.drillCategory(lastCat, 0, false);
+        if (lastCat) {
+            this.drillStack.push({cat:lastCat,colorIdx:0});
+            await this.drillCategory(lastCat, 0, false);
+        }
     }
 
     async drillCategory(cat, colorIdx, pushToStack = true) {
+        document.body.classList.remove('landing-page');
+        document.body.classList.add('catalog-page');
+        const version = this._overviewVersion = (this._overviewVersion || 0) + 1;
         if (pushToStack) this.drillStack.push({ cat, colorIdx });
+        this.renderQuestions(cat);
 
         // Sync drill path to URL (replaceState — no history spam)
         const catPath = this.drillStack.map(e => e.cat.code).join(':');
@@ -1001,7 +983,7 @@ class LensApp {
         this.renderBreadcrumbs();
         this.renderFacetBar();
         this.renderThemeStats(cat.code);
-        this.renderThemeHeadlines(cat.code);
+        this.renderThemeHeadlines(cat, version);
 
         const list = document.getElementById('dataset-list');
         list.innerHTML = '<div class="skeleton" style="height:200px;margin:8px 0"></div>';
@@ -1012,6 +994,7 @@ class LensApp {
             sort: this.drillSort, lang: this.lang,
             ...this.drillFilters,
         });
+        if (this._overviewVersion !== version) return;
         list.innerHTML = '';
 
         // Show subcategory cards first (if any)
@@ -1019,25 +1002,26 @@ class LensApp {
             const subcatGrid = document.createElement('div');
             subcatGrid.className = 'subcat-grid';
             for (const child of cat.children) {
-                const trend = this.categoryTrends?.[child.code];
-                let trendHtml = '';
-                if (trend && trend.total) {
-                    const yoy = trend.avg_yoy;
-                    if (yoy != null) {
-                        const cls = yoy >= 0 ? 'up' : 'down';
-                        trendHtml = `<span class="subcat-trend ${cls}">${yoy >= 0 ? '↑' : '↓'} ${Math.abs(yoy).toFixed(1)}%</span>`;
-                    }
-                }
-                const card = document.createElement('div');
+                const card = document.createElement('section');
                 card.className = 'subcat-card';
-                card.addEventListener('click', () => this.drillCategory(child, colorIdx));
-                card.innerHTML = `
-                    <span class="subcat-name">${child.name}</span>
-                    <span class="subcat-meta">
-                        <span class="subcat-count">${child.total_datasets || 0} ${this.ui.datasets}</span>
-                        ${trendHtml}
-                    </span>
-                `;
+                const link = document.createElement('a');
+                link.className = 'subcat-name';
+                link.href = `/?cat=${this.drillStack.map(e => e.cat.code).concat(child.code).join(':')}${this.lang === 'en' ? '&lang=en' : ''}`;
+                link.textContent = ThemeOverviews.clean(child.name);
+                card.appendChild(link);
+                const preview = document.createElement('div');
+                preview.className = 'subcat-teasers';
+                preview.innerHTML = '<span class="teaser-loading">…</span>';
+                card.appendChild(preview);
+                const count = document.createElement('span');
+                count.className = 'subcat-count';
+                count.textContent = `${child.total_datasets || 0} ${this.ui.datasets}`;
+                card.appendChild(count);
+                ThemeOverviews.category(child,this.lang).then(cards => {
+                    if (!preview.isConnected || this._overviewVersion !== version) return;
+                    preview.replaceChildren(...cards.map(ind => this.teaserCard(ind)));
+                    if (!cards.length) preview.textContent = this.lang === 'en' ? 'Open indicators →' : 'Vezi indicatorii →';
+                }).catch(() => { if (preview.isConnected) preview.replaceChildren(); });
                 subcatGrid.appendChild(card);
             }
             list.appendChild(subcatGrid);
@@ -1269,6 +1253,7 @@ class LensApp {
     }
 
     async showDashboardV1(code) {
+        document.body.classList.remove('landing-page', 'catalog-page');
         document.getElementById('page-loader')?.classList.add('hidden');
         this.navigate(code);
         this.disposeCharts();

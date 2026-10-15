@@ -228,6 +228,7 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
             'unit': unit_label, 'format': 'number',
             'context': pinned_context,
             'sparkline': [v for _, v in period_totals[-12:]],
+            'sparkline_periods': [str(p) for p, _ in period_totals[-12:]],
             'provenance': _prov(),
         })
 

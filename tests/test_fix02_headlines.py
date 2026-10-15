@@ -43,6 +43,8 @@ def test_ind118a_style_total_row_not_double_counted(pq):
                      slice={'CATEGORY': ['Total, din care:']})
     assert status == 'ok' and c['value'] == 120.0 and c['prev_value'] == 100.0
     assert c['change']['value'] == 20.0 and c['change']['basis'] == 'yoy'
+    assert c['sparkline_periods'] == ['2022', '2023']
+    assert c['sparkline'] == [100.0, 120.0]
     p = c['provenance']
     assert p['source_code'] == 'TOT' and p['period'] == '2023'
     assert p['method'] == 'aggregate_row' and p['outcome'] == 'valid_total'

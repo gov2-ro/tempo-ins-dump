@@ -255,7 +255,7 @@ class DashboardV2 {
             this.showError(`${this.ui.notFound(this.code)} (${e.message})`);
             return;
         }
-        this.composition = this.metadata.chart_config?.composition;
+        this.composition = preferBarViews(this.metadata.chart_config?.composition, this.metadata.dimensions);
         this.applyPlaceParam();
         this.renderHeader();
         // Correspondences load in the background — never block the dashboard
@@ -621,16 +621,16 @@ class DashboardV2 {
 
     // -------------------------------------------------------------- insights
 
-    sparklineSVG(values, w = 84, h = 26) {
-        if (!values || values.length < 2) return '';
+    sparklineSVG(values, periods, w = 84, h = 26) {
+        if (!values || values.length < 2 || periods?.length !== values.length) return '';
         const min = Math.min(...values), max = Math.max(...values);
         const span = max - min || 1;
         const pts = values.map((v, i) =>
             `${(i / (values.length - 1) * w).toFixed(1)},${(h - 2 - (v - min) / span * (h - 4)).toFixed(1)}`
         ).join(' ');
-        return `<svg class="dbv2-spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+        return `<span class="dbv2-spark-wrap"><svg aria-hidden="true" class="dbv2-spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
             <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.5"/>
-        </svg>`;
+        </svg><span class="chart-range"><span>${_escHtml(periods[0])}</span><span>${_escHtml(periods[periods.length-1])}</span></span></span>`;
     }
 
     /** Headline for the user's selection (PA-02b): the same shared /data
@@ -716,7 +716,7 @@ class DashboardV2 {
         const cards = (ins.kpis || []).map(k => {
             let value = '', sub = '';
             if (k.key === 'latest') {
-                value = `${formatNumber(k.value)}${this.sparklineSVG(k.sparkline)}`;
+                value = `${formatNumber(k.value)}${this.sparklineSVG(k.sparkline, k.sparkline_periods)}`;
                 // context = non-total pins ("Masculin") — without them the
                 // number reads as the dataset-wide value, which it isn't
                 sub = [k.unit, k.period, ...(k.context || [])].filter(Boolean).join(' · ');
@@ -924,14 +924,14 @@ class DashboardV2 {
 
     /** A time × category tile with views (lines / stacked / heatmap). */
     isTemporalViewTile(chart) {
-        return !!chart.views?.includes('lines');
+        return !!(chart._temporalViews || chart.views?.includes('lines'));
     }
 
     /** The chart type a tile is drawn as, after its view. */
     tileShownType(chart) {
         const v = this.tileView(chart);
         if (v && this.isTemporalViewTile(chart)) {
-            return { lines: 'line', heatmap: 'heatmap',
+            return { bars: 'bar_vertical', grouped: 'bar_vertical', lines: 'line', heatmap: 'heatmap',
                      stacked: chart.chart_type === 'area_stacked' ? 'area_stacked' : 'stacked_bar' }[v]
                 || chart.chart_type;
         }
@@ -983,6 +983,7 @@ class DashboardV2 {
         const sel = document.createElement('select');
         sel.className = 'dbv2-chip-select dbv2-pick';
         sel.title = this.ui.pickTooltip;
+        sel.setAttribute('aria-label', this.ui.pickTooltip);
         for (const v of values) {
             const o = document.createElement('option');
             o.value = v;
@@ -1289,19 +1290,29 @@ class DashboardV2 {
             // stacked or the heatmap — all drawn from the same slice.
             const view = this.tileView(chart);
             let renderType = chart.chart_type;
-            const viewFlags = {};
+            const viewFlags = { _sumSeries: chart.views?.includes('stacked') || false };
             container.style.minHeight = '';
             let rowHeight = 0;
             if (view && roles?.x_axis && roles.x_axis === timeDim) {
                 // Time × category views: lines, stacked bars (only where the
                 // parts add up, per the composer) or the heatmap — same slice.
-                renderType = { lines: 'line', heatmap: 'heatmap',
+                renderType = { bars: 'bar_vertical', grouped: 'bar_vertical', lines: 'line', heatmap: 'heatmap',
                                stacked: chart.chart_type === 'area_stacked' ? 'area_stacked' : 'stacked_bar' }[view]
                     || renderType;
+                if (view === 'bars') {
+                    const si = tileData.columns.indexOf(roles.series);
+                    const values = orderedDimValues(tileData.rows, si, roles.series, this.metadata);
+                    const parts = values.filter(v => !isTotalLabel(v));
+                    const choices = parts.length ? parts : values;
+                    const pick = choices.includes(this.tilePicks[chart.id]) ? this.tilePicks[chart.id] : choices[0];
+                    this.tilePickSelect(chart, roles.series, choices, pick, bar0);
+                    tileData = { ...tileData, rows: tileData.rows.filter(r => r[si] === pick) };
+                    tileRoles = { ...roles, series: null };
+                }
                 const typeEl = bar0?.querySelector('.dbv2-tile-type');
                 if (typeEl) {
-                    typeEl.textContent = chartTypeLabel(renderType, this.lang);
-                    typeEl.dataset.chartType = renderType;
+                    typeEl.textContent = chartTypeLabel(view === 'grouped' ? 'grouped_bar' : renderType, this.lang);
+                    typeEl.dataset.chartType = view === 'grouped' ? 'grouped_bar' : renderType;
                 }
             } else if (view && roles?.x_axis && roles?.series) {
                 const sIdx = tileData.columns.indexOf(roles.series);
@@ -1341,6 +1352,21 @@ class DashboardV2 {
                 const xi = tileData.columns.indexOf(tileRoles?.x_axis);
                 const nCats = xi === -1 ? 0 : new Set(tileData.rows.map(r => r[xi])).size;
                 container.style.minHeight = `${Math.min(2600, nCats * (rowHeight || 22) + 90)}px`;
+            }
+            container.parentNode.querySelector('.dbv2-chart-range')?.remove();
+            const ti = tileData.columns.indexOf(timeDim);
+            if (ti !== -1 && tileData.rows.length) {
+                const periods = uniqueValues(tileData.rows, ti);
+                const labels = tileData.column_labels?.[timeDim] || {};
+                const range = document.createElement('div');
+                range.className = 'chart-range dbv2-chart-range';
+                range.title = this.lang === 'en' ? 'Full period of the displayed data selection' : 'Perioada completă a datelor din selecție';
+                for (const period of [periods[0], periods[periods.length - 1]]) {
+                    const end = document.createElement('span');
+                    end.textContent = labels[String(period)] || String(period);
+                    range.appendChild(end);
+                }
+                container.after(range);
             }
             const tileConfig = {
                 ...this.metadata.chart_config,

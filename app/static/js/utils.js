@@ -487,3 +487,24 @@ async function openFeedback({ title, dataset = null, selection = null, generatio
     const url = `${FEEDBACK_REPO}?title=${encodeURIComponent(title || 'Feedback')}&labels=alpha-feedback&body=${encodeURIComponent(body)}`;
     window.open(url, '_blank', 'noopener');
 }
+
+/** Presentation only: preserve slices and the server's stacking permissions.
+ * Dense temporal heatmaps become bars of one explicitly selected series.
+ * Small sets may use grouped bars; stacking is never inferred here. */
+function preferBarViews(composition, dimensions) {
+    if (!composition?.charts) return composition;
+    const timeCols = new Set((dimensions || []).filter(d => d.dim_type === 'time').map(d => d.dim_column_name));
+    return { ...composition, charts: composition.charts.map(chart => {
+        const roles = chart.roles || {};
+        const temporal = timeCols.has(roles.x_axis) || timeCols.has(roles.series);
+        if (!temporal || !roles.series || !(chart.chart_type === 'heatmap' || chart.views?.includes('heatmap'))) return chart;
+        const views = ['bars'];
+        if (chart.views?.includes('lines')) views.push('grouped', 'lines');
+        if (chart.views?.includes('stacked')) views.push('stacked');
+        views.push('heatmap');
+        const defaultView = chart.default_view === 'stacked' && views.includes('stacked')
+            ? 'stacked' : views.includes('grouped') ? 'grouped' : 'bars';
+        return { ...chart, roles: timeCols.has(roles.x_axis) ? roles : { ...roles, x_axis: roles.series, series: roles.x_axis },
+            views, default_view: defaultView, _temporalViews: true };
+    }) };
+}

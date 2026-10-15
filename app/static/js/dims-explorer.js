@@ -9,7 +9,9 @@ const TOP_UM = 10;
 // ── State ──────────────────────────────────────────────────────────────────
 
 let activeDim = null;
-let lang = localStorage.getItem('lens_lang') || 'ro';
+let lang = new URLSearchParams(location.search).get('lang') || localStorage.getItem('lens_lang') || 'ro';
+let dimensionSearch = '';
+let datasetRequest = 0;
 let allDims = [];
 let showAll = false;
 let showAllUm = false;
@@ -46,6 +48,34 @@ const SORTS = [
     { value: 'options', label: 'Most options' },
 ];
 
+const DIMS_TEXT = {
+    ro: { title: 'Explorează după dimensiuni', intro: 'Găsește indicatori care au ceva în comun: județe, vârste, activități economice sau unități de măsură.',
+        dimensions: 'Dimensiuni', all: 'Toate seturile', units: 'Unități de măsură', search: 'Caută o dimensiune…', more: 'mai multe',
+        loading: 'Se încarcă seturile…', empty: 'Niciun set nu corespunde filtrelor.', error: 'Eroare', reset: 'Resetează filtrele',
+        datasets: 'seturi', of: 'din', rows: 'observații', has: 'Cu:', geo: 'Teritoriu', gender: 'Sex', age: 'Vârstă',
+        'All archetypes': 'Toate structurile', 'Time series': 'Serii de timp', 'Geo + Time': 'Teritoriu și timp',
+        'Demographic': 'Demografie', 'Residence': 'Rezidență', 'All periods': 'Toate perioadele',
+        'Annual': 'Anual', 'Monthly': 'Lunar', 'Quarterly': 'Trimestrial', 'Recently updated': 'Actualizate recent',
+        'Name A–Z': 'Nume A–Z', 'Most records': 'Cele mai multe observații', 'Most dimensions': 'Cele mai multe dimensiuni', 'Most options': 'Cele mai multe opțiuni' },
+    en: { title: 'Explore by dimension', intro: 'Find indicators with something in common: counties, ages, economic activities or units of measure.',
+        dimensions: 'Dimensions', all: 'All datasets', units: 'Units of measure', search: 'Find a dimension…', more: 'more',
+        loading: 'Loading datasets…', empty: 'No datasets match these filters.', error: 'Error', reset: 'Clear filters',
+        datasets: 'datasets', of: 'of', rows: 'observations', has: 'With:', geo: 'Geography', gender: 'Sex', age: 'Age' }
+};
+const dt = key => (DIMS_TEXT[lang] || DIMS_TEXT.ro)[key] || key;
+function applyLabels() {
+    document.documentElement.lang = lang;
+    document.title = `${dt('title')} — INS+`;
+    document.querySelector('.dims-main-title').textContent = dt('title');
+    document.querySelector('.dims-main-sub').textContent = dt('intro');
+    document.querySelector('.dims-sidebar-title').textContent = dt('dimensions');
+    document.querySelector('.dims-mobile-pick label').textContent = dt('dimensions');
+    const search = document.getElementById('dims-search');
+    search.placeholder = dt('search');
+    search.setAttribute('aria-label', dt('search'));
+}
+const normalizeDim = text => text.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+
 function isUnitDim(label) {
     const lc = label.toLowerCase().trim();
     return lc.startsWith('um:') || lc === 'unitati de masura' || lc === 'unitate de masura';
@@ -78,14 +108,17 @@ function syncUrl() {
         if (filters[k]) url.searchParams.set(k, 'true');
         else url.searchParams.delete(k);
     });
+    if (lang === 'en') url.searchParams.set('lang', 'en');
+    else url.searchParams.delete('lang');
     history.replaceState(null, '', url);
 }
 
 // ── Theme & Lang ───────────────────────────────────────────────────────────
 
 function applyTheme(theme) {
-    theme = theme || localStorage.getItem('lens_theme') || 'dark';
+    theme = theme || localStorage.getItem('lens_theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
     document.body.dataset.theme = theme;
+    document.documentElement.dataset.theme = theme;
     document.getElementById('theme-icon-sun').classList.toggle('hidden', theme !== 'dark');
     document.getElementById('theme-icon-moon').classList.toggle('hidden', theme === 'dark');
 }
@@ -99,11 +132,6 @@ function bindTheme() {
     });
 }
 
-const FLAG_DATA = {
-    ro: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAKCAIAAAAHLozhAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAALBJREFUeNpiYBgFgx0wMjIyEtIAAFBAAf8GCgQYGBiIVMDIyMjGxoaqgImJiRANTExMhGhgYmIiRAMTExMhGpiYmAjRwMTERIgGJiYmQjQwMTERooGJiYkQDUxMTIRoYGJiIkQDExMTIRqYmJgI0cDExESIBiYmJkI0MDExEaKBiYmJEA1MTEyEaGBiYiJEAxMTEyEamJiYCNHAxMREiAYmJiZCNDAAIMAA0e1ANMAAAAASUVORK5CYII=',
-    en: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAKCAIAAAAHLozhAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAZhJREFUeNpiYBgFgxgwMjIyEtIAACBAAf8GCgQYGBiIVMDIyMjGxoaqgImJiRANTExMhGhgYmIiRAMTExMhGpiYmAjRwMTERIgGJiYmQjQwMTERooGJiYkQDUxMTIRoYGJiIkQDExMTIRqYmJgI0cDExESIBiYmJkI0MDExEaKBiYmJEA1MTEyEaGBiYiJEAxMTEyEamJiYCNHAxMREiAYmJiZCNDAAIMAA0RNANMAAAAAElFTkSuQmCC',
-};
-
 function bindLang() {
     const btn = document.getElementById('lang-toggle');
     updateLangBtn();
@@ -111,6 +139,10 @@ function bindLang() {
         lang = lang === 'ro' ? 'en' : 'ro';
         localStorage.setItem('lens_lang', lang);
         updateLangBtn();
+        applyLabels();
+        renderFilterBar();
+        renderDimList();
+        syncUrl();
         loadDatasets();
     });
 }
@@ -118,8 +150,7 @@ function bindLang() {
 function updateLangBtn() {
     const nextLang = lang === 'ro' ? 'en' : 'ro';
     document.getElementById('lang-label').textContent = nextLang.toUpperCase();
-    const flagEl = document.getElementById('lang-flag');
-    if (flagEl) flagEl.src = FLAG_DATA[nextLang] || '';
+
 }
 
 // ── Filter bar ─────────────────────────────────────────────────────────────
@@ -142,20 +173,22 @@ function renderFilterBar() {
 
     const hasLabel = document.createElement('span');
     hasLabel.className = 'facet-label';
-    hasLabel.textContent = 'Has:';
+    hasLabel.textContent = dt('has');
     bar.appendChild(hasLabel);
 
     [
-        { key: 'has_geo', label: 'Geo' },
-        { key: 'has_gender', label: 'Gender' },
-        { key: 'has_age', label: 'Age' },
+        { key: 'has_geo', label: dt('geo') },
+        { key: 'has_gender', label: dt('gender') },
+        { key: 'has_age', label: dt('age') },
     ].forEach(({ key, label }) => {
         const chip = document.createElement('button');
         chip.className = 'facet-chip' + (filters[key] ? ' active' : '');
         chip.textContent = label;
+        chip.setAttribute('aria-pressed', String(filters[key]));
         chip.addEventListener('click', () => {
             filters[key] = !filters[key];
             chip.classList.toggle('active', filters[key]);
+            chip.setAttribute('aria-pressed', String(filters[key]));
             syncUrl(); loadDatasets();
         });
         bar.appendChild(chip);
@@ -176,10 +209,11 @@ function makeSelect(id, options, currentVal, onChange) {
     const sel = document.createElement('select');
     sel.id = id;
     sel.className = 'facet-select';
+    sel.setAttribute('aria-label', dt(options[0].label));
     options.forEach(opt => {
         const o = document.createElement('option');
         o.value = opt.value;
-        o.textContent = opt.label;
+        o.textContent = dt(opt.label);
         if (opt.value === currentVal) o.selected = true;
         sel.appendChild(o);
     });
@@ -196,7 +230,7 @@ async function loadDimensions() {
         renderDimList();
     } catch (e) {
         document.getElementById('dims-dim-list').innerHTML =
-            `<div class="dims-loading" style="padding:8px 14px;">Error: ${escHtml(e.message)}</div>`;
+            `<div class="dims-loading" style="padding:8px 14px;">${dt('error')}: ${escHtml(e.message)}</div>`;
     }
 }
 
@@ -204,10 +238,18 @@ function renderDimList() {
     const container = document.getElementById('dims-dim-list');
     container.innerHTML = '';
 
-    const mainDims = allDims.filter(d => !isUnitDim(d.label));
-    const unitDims = allDims.filter(d => isUnitDim(d.label));
+    const matches = d => normalizeDim(d.label).includes(normalizeDim(dimensionSearch));
+    const mainDims = allDims.filter(d => !isUnitDim(d.label) && matches(d));
+    const unitDims = allDims.filter(d => isUnitDim(d.label) && matches(d));
+    const all = document.createElement('button');
+    all.type = 'button';
+    all.className = 'dim-pill' + (!activeDim ? ' active' : '');
+    all.textContent = dt('all');
+    all.setAttribute('aria-pressed', String(!activeDim));
+    all.addEventListener('click', () => { setActiveDim(null); renderDimList(); });
+    container.appendChild(all);
 
-    const visible = showAll ? mainDims : mainDims.slice(0, TOP_N);
+    const visible = showAll || dimensionSearch ? mainDims : mainDims.slice(0, TOP_N);
     const remaining = mainDims.length - TOP_N;
 
     const cloud = document.createElement('div');
@@ -215,10 +257,10 @@ function renderDimList() {
     visible.forEach(d => cloud.appendChild(makeDimPill(d)));
     container.appendChild(cloud);
 
-    if (!showAll && remaining > 0) {
+    if (!showAll && !dimensionSearch && remaining > 0) {
         const btn = document.createElement('button');
         btn.className = 'dim-show-more';
-        btn.textContent = `+ ${remaining} more`;
+        btn.textContent = `+ ${remaining} ${dt('more')}`;
         btn.addEventListener('click', () => { showAll = true; renderDimList(); });
         container.appendChild(btn);
     }
@@ -230,10 +272,10 @@ function renderDimList() {
 
         const groupLabel = document.createElement('div');
         groupLabel.className = 'dims-sidebar-group-label';
-        groupLabel.textContent = `Units of Measure (${unitDims.length})`;
+        groupLabel.textContent = `${dt('units')} (${unitDims.length})`;
         container.appendChild(groupLabel);
 
-        const visibleUm = showAllUm ? unitDims : unitDims.slice(0, TOP_UM);
+        const visibleUm = showAllUm || dimensionSearch ? unitDims : unitDims.slice(0, TOP_UM);
         const remainingUm = unitDims.length - TOP_UM;
 
         const unitCloud = document.createElement('div');
@@ -241,17 +283,17 @@ function renderDimList() {
         visibleUm.forEach(d => unitCloud.appendChild(makeDimPill(d, 'UM: ')));
         container.appendChild(unitCloud);
 
-        if (!showAllUm && remainingUm > 0) {
+        if (!showAllUm && !dimensionSearch && remainingUm > 0) {
             const btn = document.createElement('button');
             btn.className = 'dim-show-more';
-            btn.textContent = `+ ${remainingUm} more`;
+            btn.textContent = `+ ${remainingUm} ${dt('more')}`;
             btn.addEventListener('click', () => { showAllUm = true; renderDimList(); });
             container.appendChild(btn);
         }
     }
 
     if (activeDim) highlightDimPill(activeDim);
-    renderMobileSelect(mainDims, unitDims);
+    renderMobileSelect(allDims.filter(d => !isUnitDim(d.label)), allDims.filter(d => isUnitDim(d.label)));
 }
 
 /** Mobile (≤640px) replacement for the sidebar: one labelled native select
@@ -260,9 +302,9 @@ function renderMobileSelect(mainDims, unitDims) {
     const sel = document.getElementById('dims-mobile-select');
     if (!sel) return;
     const opt = (d, prefix = '') => `<option value="${escHtml(d.label)}">${escHtml(prefix && d.label.startsWith(prefix) ? d.label.slice(prefix.length) : d.label)} (${d.dataset_count})</option>`;
-    sel.innerHTML = `<option value="">All datasets</option>
-        <optgroup label="Dimensions">${mainDims.map(d => opt(d)).join('')}</optgroup>
-        ${unitDims.length ? `<optgroup label="Units of measure">${unitDims.map(d => opt(d, 'UM: ')).join('')}</optgroup>` : ''}`;
+    sel.innerHTML = `<option value="">${dt('all')}</option>
+        <optgroup label="${dt('dimensions')}">${mainDims.map(d => opt(d)).join('')}</optgroup>
+        ${unitDims.length ? `<optgroup label="${dt('units')}">${unitDims.map(d => opt(d, 'UM: ')).join('')}</optgroup>` : ''}`;
     sel.value = activeDim || '';
     if (!sel.dataset.bound) {
         sel.dataset.bound = '1';
@@ -278,6 +320,7 @@ function makeDimPill(d, stripPrefix = '') {
     btn.className = 'dim-pill' + (activeDim === d.label ? ' active' : '');
     btn.dataset.label = d.label;
     btn.title = d.label;
+    btn.setAttribute('aria-pressed', String(activeDim === d.label));
     btn.innerHTML = `${escHtml(display)}<span class="dim-pill-count">${d.dataset_count}</span>`;
     btn.addEventListener('click', () => setActiveDim(activeDim === d.label ? null : d.label));
     return btn;
@@ -285,7 +328,9 @@ function makeDimPill(d, stripPrefix = '') {
 
 function highlightDimPill(label) {
     document.querySelectorAll('.dim-pill').forEach(el => {
-        el.classList.toggle('active', el.dataset.label === label);
+        const selected = (el.dataset.label || null) === label;
+        el.classList.toggle('active', selected);
+        el.setAttribute('aria-pressed', String(selected));
     });
     const sel = document.getElementById('dims-mobile-select');
     if (sel && sel.value !== (label || '')) sel.value = label || '';
@@ -303,7 +348,9 @@ function setActiveDim(label) {
 async function loadDatasets() {
     const list = document.getElementById('dims-dataset-list');
     const header = document.getElementById('dims-dataset-header');
-    list.innerHTML = '<div class="dims-loading">Loading datasets…</div>';
+    const request = ++datasetRequest;
+    header.textContent = dt('loading');
+    list.innerHTML = `<div class="dims-loading">${dt('loading')}</div>`;
 
     const params = { limit: 30, lang, sort: filters.sort };
     if (activeDim) params.dim = activeDim;
@@ -315,35 +362,49 @@ async function loadDatasets() {
 
     try {
         const data = await API.getDatasets(params);
+        if (request !== datasetRequest) return;
         const total = data.total;
-        const label = activeDim
-            ? `Datasets with "${activeDim}" (${total})`
-            : `Recent Datasets (${total > 30 ? '30 of ' + total : total})`;
-        header.textContent = label;
+        header.replaceChildren();
+        const label = document.createElement('span');
+        label.textContent = `${data.datasets.length} ${dt('of')} ${total.toLocaleString(lang === 'ro' ? 'ro-RO' : 'en-GB')} ${dt('datasets')}${activeDim ? ` · ${activeDim}` : ''}`;
+        header.appendChild(label);
+        if (activeDim || Object.entries(filters).some(([k,v]) => k === 'sort' ? v !== 'updated' : !!v)) {
+            const reset = document.createElement('button');
+            reset.type = 'button';
+            reset.className = 'dims-reset';
+            reset.textContent = dt('reset');
+            reset.addEventListener('click', () => {
+                activeDim = null;
+                filters = { sort: 'updated', archetype: '', granularity: '', has_geo: false, has_gender: false, has_age: false };
+                syncUrl(); renderFilterBar(); renderDimList(); loadDatasets();
+            });
+            header.appendChild(reset);
+        }
         renderDatasetList(list, data.datasets);
     } catch (e) {
-        list.innerHTML = `<div class="dims-loading">Error: ${escHtml(e.message)}</div>`;
+        if (request !== datasetRequest) return;
+        header.textContent = dt('error');
+        list.innerHTML = `<div class="dims-loading">${dt('error')}: ${escHtml(e.message)}</div>`;
     }
 }
 
 function renderDatasetList(list, datasets) {
     list.innerHTML = '';
     if (!datasets.length) {
-        list.innerHTML = '<div class="dims-loading">No datasets match the current filters.</div>';
+        list.innerHTML = `<div class="dims-loading">${dt('empty')}</div>`;
         return;
     }
     datasets.forEach(ds => {
-        const row = document.createElement('div');
+        const row = document.createElement('a');
         row.className = 'ds-row';
-        row.style.cursor = 'pointer';
-        row.addEventListener('click', () => { window.location.href = `/?code=${ds.matrix_code}`; });
+        row.href = `/dataset/${encodeURIComponent(ds.matrix_code)}${lang === 'en' ? '?lang=en' : ''}`;
         row.innerHTML = `
             <span class="ds-code">${escHtml(ds.matrix_code)}</span>
             <span class="ds-name">${escHtml(ds.matrix_name)}</span>
             <span class="ds-badges">
                 ${ds.time_range ? `<span class="ds-badge">${ds.time_range}</span>` : ''}
-                ${ds.archetype ? `<span class="ds-badge">${ds.archetype}</span>` : ''}
-                ${ds.row_count ? `<span class="ds-badge">${ds.row_count.toLocaleString()} rows</span>` : ''}
+                ${ds.archetype ? `<span class="ds-badge">${dt(ARCHETYPES.find(a => a.value === ds.archetype)?.label || ds.archetype)}</span>` : ''}
+                ${ds.row_count ? `<span class="ds-badge">${ds.row_count.toLocaleString(lang === 'ro' ? 'ro-RO' : 'en-GB')} ${dt('rows')}</span>` : ''}
             </span>
         `;
         list.appendChild(row);
@@ -365,6 +426,8 @@ document.addEventListener('DOMContentLoaded', () => {
     bindTheme();
     bindLang();
     restoreFromUrl();
+    applyLabels();
+    document.getElementById('dims-search').addEventListener('input', e => { dimensionSearch = e.target.value; renderDimList(); });
     renderFilterBar();
     loadDimensions();
     loadDatasets();
