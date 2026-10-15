@@ -514,7 +514,11 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
                               f"The source query returned an unexpected period (reference "
                               f"{ctx.request_id}); nothing was computed.")
         rows.append((tuple(str(v) for v in key), year, r[-1]))
-    table = build_endpoint_table(rows)
+    try:
+        table = build_endpoint_table(rows)
+    except ToolFailure as f:
+        f.provenance = prov
+        raise
 
     if added:
         parents: dict = {}

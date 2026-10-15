@@ -18,11 +18,10 @@ import json
 import subprocess
 import sys
 import zipfile
-from pathlib import Path
 
 import pytest
 
-from at01_fixtures import GENERATION, add_dataset, call, make_env, write_manifest
+from at01_fixtures import GENERATION, add_dataset, call, make_env
 
 YEARS = ("1992", "2002", "2010", "2020")
 TABLE = {"A": (100, 80, 90, 60), "B": (200, 150, 120, 100), "C": (100, 100, 0, 5),
@@ -321,6 +320,36 @@ def test_disjoint_parts_without_a_total_are_summed_once(tmp_path, monkeypatch):
              intervals=[iv("2000", "2010")])
     assert [(r["from_value"], r["to_value"]) for r in rows_of(e)] == [(100.0, 200.0)] * 2
     assert e["provenance"]["aggregation"]["method"] == "sum_partition"
+
+
+def test_profiled_flat_categories_sum_once_and_unprofiled_ones_are_refused(tmp_path, monkeypatch):
+    import duckdb
+
+    def build(corpus, profiled):
+        rows = [(e, c, y, UNIT, v * k) for e in ("A", "B") for y, k in (("2000", 1.0), ("2010", 2.0))
+                for c, v in (("Parte 1", 60.0), ("Parte 2", 40.0))]
+        add_dataset(corpus, "CATSUM", [area_dim(["A", "B"]),
+                                       ("CATEGORY", "Categorie", None, [("Parte 1", {}), ("Parte 2", {})]),
+                                       time_dim(("2000", "2010")), unit_dim(UNIT)], rows)
+        if profiled:
+            db = duckdb.connect(str(corpus / "metadata.duckdb"))
+            db.execute("""CREATE TABLE dimension_structure (matrix_code VARCHAR, dim_column VARCHAR,
+                          levels VARCHAR, default_level VARCHAR, n_levels INTEGER,
+                          aggregate_value VARCHAR, aggregate_verified BOOLEAN, additive BOOLEAN,
+                          nests_in VARCHAR, discrimination DOUBLE, dominance DOUBLE,
+                          confidence VARCHAR, source VARCHAR)""")
+            db.execute("INSERT INTO dimension_structure VALUES ('CATSUM', 'CATEGORY', '[]', 'all', 0, "
+                       "NULL, FALSE, NULL, NULL, NULL, NULL, 'flat', 'test')")
+            db.close()
+    make_env(tmp_path / "flat", monkeypatch, build=lambda c: build(c, True))
+    e = call("compare_periods", dataset="CATSUM", entity_columns=["REF_AREA"],
+             intervals=[iv("2000", "2010")])
+    assert [(r["from_value"], r["to_value"]) for r in rows_of(e)] == [(100.0, 200.0)] * 2   # 60 + 40
+    make_env(tmp_path / "unprofiled", monkeypatch, build=lambda c: build(c, False))
+    e = call("compare_periods", dataset="CATSUM", entity_columns=["REF_AREA"],
+             intervals=[iv("2000", "2010")])
+    assert (e["status"], e["reason"]) == ("unavailable", "unverified_structure")   # never guessed
+    assert e["data"] == {} and e["recovery"][0]["arguments"]["column"] == "CATEGORY"
 
 
 def test_a_missing_pin_value_is_the_policys_refusal(tmp_path, monkeypatch):
@@ -694,6 +723,23 @@ def test_a_large_result_is_shortened_to_the_budget_without_losing_counts_or_warn
     assert e["provenance"]["sources"][0]["unit"] == UNIT
 
 
+def test_the_table_never_exceeds_the_model_visible_row_cap(tmp_path, monkeypatch):
+    from app.services.tools import contract
+    names = [f"E{i:03d}" for i in range(150)]
+
+    def build(corpus):
+        add_dataset(corpus, "WIDEX", [area_dim(names), time_dim(("2000", "2005", "2010", "2020")),
+                                      unit_dim(UNIT)],
+                    [(n, y, UNIT, float(i * (k + 1))) for i, n in enumerate(names)
+                     for k, y in enumerate(("2000", "2005", "2010", "2020"))])
+    make_env(tmp_path, monkeypatch, build=build)
+    e = call("compare_periods", dataset="WIDEX", entity_columns=["REF_AREA"], top_k=100,
+             intervals=[iv("2000", "2005"), iv("2000", "2010"), iv("2000", "2020"), iv("2005", "2020")])
+    assert [len(i["rows"]) for i in e["data"]["intervals"]] == [50] * 4
+    assert e["limits"]["returned_rows"] == 200 <= contract.MAX_TABLE_ROWS
+    assert e["limits"]["total_rows"] == 600 and e["limits"]["preview_truncated"] is True
+
+
 def test_shrink_cuts_exclusion_samples_first_then_rows_then_reports_nothing_left():
     from app.services.tools import changes, contract
     rows = [{"entity": {"A": str(i)}, "from_value": 1.0, "to_value": 2.0, "absolute": 1.0,
@@ -1013,6 +1059,7 @@ def test_a_restricted_source_scope_makes_the_result_partial(env, monkeypatch):
     sc = e["provenance"]["scope"]
     assert sc["domain_complete"] is False and "0–84" in sc["description"]
     assert sc["limitations"][0]["code"] == "age_range_restricted"
+    assert "Restricted domain: Ages 0–84" in e["message"]
     assert len(rows_of(e)) == 4                                   # still ranked, with the limit stated
 
 

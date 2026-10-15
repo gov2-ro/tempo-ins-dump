@@ -26,8 +26,10 @@ def _evidence_recovery(selection: dict | None, generation_id: str | None) -> dic
 def compare_periods(args, ctx):
     r = period_changes.run(ctx.conn, args, ctx.lang, ctx=ctx)
     intervals, returned, eligible, cut = [], 0, 0, False
+    # top_k is per interval; the whole table stays within the model-visible row cap
+    per_interval = min(args.top_k, contract.MAX_TABLE_ROWS // max(1, len(r["intervals"])))
     for iv in r["intervals"]:
-        rows = iv["rows"][:args.top_k]
+        rows = iv["rows"][:per_interval]
         sample = iv["excluded"][:period_changes.EXCLUDED_SAMPLE]
         truncated = len(sample) < len(iv["excluded"])
         cut = cut or len(rows) < len(iv["rows"]) or truncated
@@ -60,6 +62,9 @@ def compare_periods(args, ctx):
                    f"{returned} row(s) are shown.")
         if excluded:
             message += f" {excluded} entity-interval pair(s) were excluded and are listed."
+        scope = r["provenance"].get("scope") or {}
+        if scope.get("domain_complete") is False:
+            message += f" Restricted domain: {scope.get('description')}."
         message += " " + MESSAGE_TAIL
     return contract.envelope(
         "compare_periods", ctx, status=r["status"], reason=r["reason"], message=message,
