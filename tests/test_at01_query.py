@@ -25,7 +25,7 @@ Synthetic families (on top of fix02b's POPX/ADDX/RATEX/INCX):
 """
 import copy
 import json
-import os
+import shutil
 from pathlib import Path
 
 import duckdb
@@ -35,9 +35,6 @@ from at01_fixtures import GENERATION, add_dataset, add_split, call, make_env
 from fix02b_corpus import _write
 
 ROOT = Path(__file__).resolve().parent.parent
-
-NO_STRUCT = "no verified structure"
-
 
 # ------------------------------------------------------------------ corpus
 
@@ -97,6 +94,14 @@ def build_base(corpus):
         ("CATEGORY", "Categorie", None, [("A", {}), ("B", {}), ("C", {})]),
         ("TIME_PERIOD", "Ani", "time", YEARS[1:])), [("A", "2024", 0.0), ("B", "2024", None)])
 
+    add_dataset(corpus, "UNITX", _dims(
+        ("UNIT_MEASURE", "Unitate", "unit", [("Lei", {}), ("Euro", {})]),
+        ("TIME_PERIOD", "Ani", "time", YEARS[1:])), [("Lei", "2024", 10.0), ("Euro", "2024", 2.0)])
+    add_dataset(corpus, "SCHEMX", _dims(
+        ("CATEGORY", "Categorie", None, [("A", {})]), ("GHOST", "Dimensiune lipsa", None, [("g", {})]),
+        ("TIME_PERIOD", "Ani", "time", YEARS[1:])), [], file=False)
+    _write(corpus / "parquet" / "SCHEMX.parquet",
+           "CATEGORY VARCHAR, TIME_PERIOD VARCHAR, OBS_VALUE DOUBLE", [("A", "2024", 5.0)])
     add_dataset(corpus, "COMBX", _dims(
         ("CATEGORY", "Categorie", None, [("A", {}), ("B", {})]),
         ("TIME_PERIOD", "Ani", "time", YEARS)), [("A", "2023", 1.0), ("B", "2024", 2.0)])
@@ -156,10 +161,9 @@ def build_base(corpus):
                 [(c, str(y), float(y - 2000)) for y in range(2017, 2025) for c in "ABC"])
 
 
-def build_struct(corpus):
-    """build_base + dimension_structure: POPX has two verified AGE levels, LEVX a
-    verified level of 200 long members."""
-    build_base(corpus)
+def add_struct(corpus):
+    """dimension_structure: POPX has two verified AGE levels, LEVX a verified level
+    of 200 long members."""
     members = [f"{LONG}{i:03d}" for i in range(200)]
     add_dataset(corpus, "LEVX", _dims(
         ("GRP", "Grupa", None, [(m, {}) for m in members]),
@@ -185,16 +189,54 @@ def build_struct(corpus):
     db.close()
 
 
-@pytest.fixture
-def env(tmp_path, monkeypatch):
-    return make_env(tmp_path, monkeypatch, build_base, conflicting=["CHILDX", "CHILD2", "ORPHX"],
-                    duplicate=["DUPCH"])
+def add_gate(corpus):
+    """INS source-total checks (kpi_total_checks) for four copies of a SEX partition
+    without a Total row: INS disagrees / has no Total / was never checked / agrees."""
+    for code in ("SRCMIS", "SRCNO", "SRCUNC", "SRCOK"):
+        add_dataset(corpus, code, _sex_dims(False), [("Masculin", "2024", 60.0), ("Feminin", "2024", 40.0)])
+    db = duckdb.connect(str(corpus / "metadata.duckdb"))
+    db.execute("CREATE TABLE kpi_total_checks (matrix_code VARCHAR, status VARCHAR, period VARCHAR, "
+               "ins DOUBLE, rel DOUBLE, reason VARCHAR)")
+    db.execute("INSERT INTO kpi_total_checks VALUES ('SRCMIS', 'mismatch', '2024', 130.0, 0.3, NULL), "
+               "('SRCNO', 'unresolved', NULL, NULL, NULL, 'no_total_option:SEX'), "
+               "('SRCOK', 'match', '2024', 100.0, 0.0, NULL)")
+    db.close()
+
+
+@pytest.fixture(scope="module")
+def base_corpus(tmp_path_factory):
+    """The synthetic corpus is built once per module and copied into each test's
+    own directory (DuckDB files are rewritten by every add_dataset, which is slow)."""
+    from fix02b_corpus import build_corpus
+    corpus = build_corpus(tmp_path_factory.mktemp("at01d_base"))
+    build_base(corpus)
+    return corpus
+
+
+def _env(base_corpus, tmp_path, monkeypatch, extra=None, **manifest):
+    def build(corpus):
+        shutil.rmtree(corpus)
+        shutil.copytree(base_corpus, corpus)
+        if extra:
+            extra(corpus)
+    manifest.setdefault("conflicting", ["CHILDX", "CHILD2", "ORPHX"])
+    manifest.setdefault("duplicate", ["DUPCH"])
+    return make_env(tmp_path, monkeypatch, build, **manifest)
 
 
 @pytest.fixture
-def senv(tmp_path, monkeypatch):
-    return make_env(tmp_path, monkeypatch, build_struct,
-                    conflicting=["CHILDX", "CHILD2", "ORPHX"], duplicate=["DUPCH"])
+def env(base_corpus, tmp_path, monkeypatch):
+    return _env(base_corpus, tmp_path, monkeypatch)
+
+
+@pytest.fixture
+def senv(base_corpus, tmp_path, monkeypatch):
+    return _env(base_corpus, tmp_path, monkeypatch, add_struct)
+
+
+@pytest.fixture
+def genv(base_corpus, tmp_path, monkeypatch):
+    return _env(base_corpus, tmp_path, monkeypatch, add_gate)
 
 
 def q(**kw):
@@ -487,11 +529,11 @@ def test_raw_rows_of_a_flagged_file_are_marked_do_not_total(env):
 
 # ================================================================== missing Total
 
-def _concepts(tmp_path, monkeypatch, recipe="net_earnings_county"):
+def _concepts(tmp_path, monkeypatch, recipe="net_earnings_county", family="NOTOT"):
     from app.services import concept_search
-    path = tmp_path / f"concepts-{recipe}.json"
+    path = tmp_path / f"concepts-{family}-{recipe}.json"
     path.write_text(json.dumps({"concepts": [
-        {"id": "notot_concept", "family": "NOTOT", "variants": {"county": "NOTOT"},
+        {"id": "fixture_concept", "family": family, "variants": {"county": family},
          "total_recipe": recipe}]}))
     monkeypatch.setattr(concept_search, "CONCEPTS_PATH", path)
 
@@ -547,6 +589,84 @@ def test_a_missing_non_total_value_is_looked_up_not_summed(env):
     assert e["reason"] == "slice_value_missing" and "Total" not in e["message"]
     assert recs(e, "find_dimension_values")[0]["arguments"]["query"] == "C"
     assert not recs(e, "query_data") and not recs(e, "run_recipe")
+
+
+# ================================================================== other policy refusals
+
+def test_mixed_units_ask_for_exactly_one_unit(env):
+    e = q(dataset="UNITX", group_by=["TIME_PERIOD"])
+    assert e["status"] == "unavailable" and e["reason"] == "mixed_units" and rows(e) == []
+    assert e["provenance"]["aggregation"]["blocking_dimension"] == "UNIT_MEASURE"
+    assert e["recovery"][0]["tool"] == "find_dimension_values"
+    assert e["recovery"][0]["arguments"]["column"] == "UNIT_MEASURE"
+    assert e["recovery"][1]["kind"] == "narrow" and "exactly one unit" in e["recovery"][1]["message"]
+    assert "12.0" not in json.dumps(e)                          # 10 lei + 2 euro is never a number
+    one = q(dataset="UNITX", group_by=["TIME_PERIOD"], filters={"UNIT_MEASURE": ["Lei"]})
+    assert one["status"] == "ok" and rows(one) == [["2024", 10.0]]
+
+
+def test_dimension_missing_from_the_file_is_explained(env):
+    e = q(dataset="SCHEMX", group_by=["TIME_PERIOD"])
+    assert e["status"] == "unavailable" and e["reason"] == "schema_mismatch"
+    assert e["provenance"]["aggregation"]["blocking_dimension"] == "GHOST" and rows(e) == []
+    assert "not a column of its data file" in e["message"]
+    assert [r["tool"] for r in e["recovery"]] == ["describe_dataset"]
+
+
+def test_missing_aggregation_context_is_explained_not_summed(env, monkeypatch):
+    from app.services import dataset_meta
+    monkeypatch.setattr(dataset_meta, "get_aggregation_context", lambda conn, code: None)
+    e = q(dataset="ADDX", group_by=["TIME_PERIOD"])
+    assert e["status"] == "unavailable" and e["reason"] == "no_aggregation_context" and rows(e) == []
+    assert "not usable for a safe aggregation" in e["message"]
+    assert [r["tool"] for r in e["recovery"]] == ["describe_dataset"]
+    assert "120.0" not in json.dumps(e["data"]) and not recs(e, "query_data")
+
+
+def test_total_together_with_its_parts_is_split_into_two_safe_requests(env):
+    e = q(dataset="ADDX", group_by=["TIME_PERIOD"], filters={"CATEGORY": ["Total", "A"]})
+    assert e["status"] == "unavailable" and e["reason"] == "contains_aggregate" and rows(e) == []
+    total_only, parts = [r["arguments"]["filters"]["CATEGORY"] for r in recs(e, "query_data")][:2]
+    assert total_only == ["Total"] and parts == ["A"]
+    out = q(**recs(e, "query_data")[0]["arguments"])
+    assert out["status"] == "ok" and rows(out) == [["2022", 100.0], ["2023", 120.0]]
+
+
+def test_unverified_structure_can_stay_on_the_axis_instead(env):
+    e = q(dataset="NOTOT2", group_by=["TIME_PERIOD"])
+    assert e["status"] == "unavailable" and e["reason"] == "unverified_structure"
+    keep = recs(e, "query_data")[0]
+    assert keep["arguments"]["group_by"] == ["TIME_PERIOD", "CATEGORY"]
+    out = q(**keep["arguments"])
+    assert out["status"] == "ok" and sorted(rows(out)) == [["2024", "A", 60.0], ["2024", "B", 40.0]]
+
+
+# ================================================================== INS source totals
+
+def test_source_total_disagreement_withholds_the_sum(genv, tmp_path, monkeypatch):
+    e = q(dataset="SRCMIS", group_by=["TIME_PERIOD"])
+    assert e["status"] == "unavailable" and e["reason"] == "source_total_mismatch" and rows(e) == []
+    assert "disagree" in e["message"] and "100.0" not in json.dumps(e["data"])
+    assert not recs(e, "run_recipe")
+    _concepts(tmp_path, monkeypatch, family="SRCMIS")
+    again = q(dataset="SRCMIS", group_by=["TIME_PERIOD"])
+    assert again["recovery"][0]["tool"] == "run_recipe"
+    assert again["recovery"][0]["arguments"]["recipe"] == "net_earnings_county"
+
+
+@pytest.mark.parametrize("code,reason,text", [
+    ("SRCNO", "no_source_total", "no Total row"),
+    ("SRCUNC", "source_total_unchecked", "not been checked")])
+def test_unchecked_or_unanchored_sums_are_withheld(genv, code, reason, text):
+    e = q(dataset=code, group_by=["TIME_PERIOD"])
+    assert e["status"] == "unavailable" and e["reason"] == reason and rows(e) == []
+    assert text in e["message"]
+    assert any(r["kind"] == "narrow" for r in e["recovery"]) and recs(e, "describe_dataset")
+
+
+def test_a_sum_that_ins_confirms_is_served(genv):
+    e = q(dataset="SRCOK", group_by=["TIME_PERIOD"])
+    assert e["status"] == "ok" and rows(e) == [["2024", 100.0]]
 
 
 # ================================================================== empty and missing
@@ -712,7 +832,7 @@ def test_time_window_maps_to_limits_and_warns(env, monkeypatch):
     monkeypatch.setattr(dq, "MAX_DATA_ROWS", 20)
     e = q(dataset="WINX", limit=20)
     assert e["status"] == "ok" and e["limits"]["time_windowed"] is True
-    assert e["limits"]["source_complete"] is False
+    assert e["limits"]["source_complete"] is False and e["limits"]["total_rows"] is None
     periods = sorted({r[1] for r in rows(e)})
     assert periods[-1] == "2024" and periods[0] > "2017"       # newest periods only
     assert "earlier periods" in [w for w in e["warnings"] if w["code"] == "time_windowed"][0]["message"]
@@ -720,8 +840,8 @@ def test_time_window_maps_to_limits_and_warns(env, monkeypatch):
     assert older["limits"]["time_windowed"] is False and {r[1] for r in rows(older)} == {"2017"}
 
 
-def test_missing_manifest_blocks_totals_but_not_raw_rows(tmp_path, monkeypatch):
-    make_env(tmp_path, monkeypatch, build_base, generation_id=None)
+def test_missing_manifest_blocks_totals_but_not_raw_rows(base_corpus, tmp_path, monkeypatch):
+    _env(base_corpus, tmp_path, monkeypatch, generation_id=None)
     g = q(dataset="ADDX", group_by=["TIME_PERIOD"])
     assert g["status"] == "unavailable" and g["reason"] == "generation_unverified" and g["data"] == {}
     assert g["provenance"]["generation"] == {"id": None, "status": "missing", "built_at": None}

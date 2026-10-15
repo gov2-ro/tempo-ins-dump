@@ -27,6 +27,7 @@ from app.services import data_query as dq
 from app.services import dimension_structure as dstruct
 from app.services import grain_guard
 from app.services import scope as scope_mod
+from app.services.aggregation_policy import _is_total_option
 from app.services.chart_selector import TOTAL_RE
 from app.services.dataset_meta import decide_grouped, get_aggregation_context, source_total_gate
 from app.services.query_builder import resolve_parquet_schema, to_sdmx_name
@@ -108,6 +109,8 @@ def _answer(aid: "_Aid", warnings: list) -> dict:
     grouped = bool(request["group_by"])
     prov = C.query_provenance(ctx, aid.code, request, res)
     limits = C.query_limits(res, len(rows))
+    if limits["time_windowed"] or limits["partial_period_dropped"] is not None:
+        limits["total_rows"] = None      # the selection has rows beyond the window: size unknown
     warnings = warnings + _result_warnings(aid, rows, columns, grouped)
     recs = []
     status, reason = "ok", None
@@ -136,7 +139,11 @@ def _answer(aid: "_Aid", warnings: list) -> dict:
             "incomplete_domain",
             f"This total covers only part of the domain ({desc}); it is not an all-ages / "
             "all-population total. Do not present it as one.", subject=",".join(cols) or None))
-        alts = aid.complete_alternatives(cols, limit=1) if cols else []
+        try:
+            alts = aid.complete_alternatives(cols, limit=1) if cols else []
+        except Exception:
+            log.exception("complete-domain alternative lookup failed code=%s", aid.code)
+            alts = []
         message = (f"Valid only for the covered part of the domain: {desc}. "
                    f"{message} It is not a complete-domain total.")
         if alts:
@@ -244,7 +251,25 @@ def _empty_selection(aid: "_Aid", warnings: list) -> dict:
     """No row matches: report which requested values are absent. Never a nearest
     period, another area or a broader selection."""
     res = aid.res
-    missing = (res.get("selection") or {}).get("missing_values") or {}
+    sel = res.get("selection") or {}
+    missing = sel.get("missing_values") or {}
+    try:
+        reason, message, recs, bounds = _plan_empty(aid, missing)
+    except Exception:
+        log.exception("recovery planning failed code=%s", aid.code)
+        reason = "period_unavailable" if "TIME_PERIOD" in missing else "slice_value_missing"
+        message = ("No rows match the requested values; nothing was substituted: no other "
+                   "period, area or category stands in for the requested one.")
+        recs, bounds = [aid.describe_rec()], None
+    data = {"columns": res["columns"], "rows": [], "column_labels": {}, "selection": sel}
+    if bounds is not None:
+        data["period_bounds"] = bounds
+    return C.envelope("query_data", aid.ctx, status="unavailable", reason=reason, message=message,
+                      data=data, provenance=_refusal_provenance(aid),
+                      limits=C.query_limits(res, 0), warnings=warnings, recovery=recs)
+
+
+def _plan_empty(aid: "_Aid", missing: dict):
     tcol = aid.time_column()
     periods = missing.get(tcol) if tcol else None
     others = {c: v for c, v in missing.items() if c != tcol}
@@ -258,9 +283,9 @@ def _empty_selection(aid: "_Aid", warnings: list) -> dict:
         parts.append(text)
         recs.append(aid.find_values_rec(tcol, "", "List the periods the data actually has."))
     for col, vals in others.items():
-        totals = [v for v in vals if _total_like(v)]
+        totals = [v for v in vals if aid.is_total_value(col, v)]
         if totals:
-            msg, more = _missing_total(aid, col, totals, vals)
+            msg, more = _missing_total(aid, col, totals)
             parts.append(msg)
             recs.extend(more)
         else:
@@ -270,19 +295,12 @@ def _empty_selection(aid: "_Aid", warnings: list) -> dict:
     if not missing:
         parts.append("each requested value exists, but no observation matches all of them "
                      "together")
-        recs += [C.recovery("narrow", "Relax or check one filter at a time (find_dimension_values "
-                                      "lists the values); nothing was widened for you."),
+        recs += [C.recovery("narrow", "Check one filter at a time (find_dimension_values lists "
+                                      "the values); nothing was widened for you."),
                  aid.describe_rec()]
-    reason = "period_unavailable" if periods else "slice_value_missing"
     message = ("No rows match: " + "; ".join(parts) + ". Nothing was substituted: no other "
                "period, area or category stands in for the requested one.")
-    data = {"columns": res["columns"], "rows": [], "column_labels": {},
-            "selection": res.get("selection")}
-    if bounds is not None:
-        data["period_bounds"] = bounds
-    return C.envelope("query_data", aid.ctx, status="unavailable", reason=reason, message=message,
-                      data=data, provenance=_refusal_provenance(aid),
-                      limits=C.query_limits(res, 0), warnings=warnings, recovery=recs)
+    return ("period_unavailable" if periods else "slice_value_missing"), message, recs, bounds
 
 
 def _refusal_provenance(aid: "_Aid") -> dict:
@@ -321,7 +339,7 @@ def _plan_generic(aid, reason, col, simple: bool = False):
     return msg, recs, []
 
 
-def _missing_total(aid: "_Aid", col: str, totals: list, all_missing: list):
+def _missing_total(aid: "_Aid", col: str, totals: list):
     """Message part and recoveries for a requested Total the data does not have."""
     meta = aid.metadata_lists_total(col)
     shown = _short(totals)
@@ -347,9 +365,9 @@ def _missing_total(aid: "_Aid", col: str, totals: list, all_missing: list):
 
 def _plan_slice_value_missing(aid, reason, col):
     wanted = aid.canon_filters().get(col) or []
-    totals = [v for v in wanted if _total_like(v)]
-    if totals or (col and aid.metadata_lists_total(col) and any(_total_like(v) for v in wanted)):
-        msg, recs = _missing_total(aid, col, totals or wanted, wanted)
+    totals = [v for v in wanted if aid.is_total_value(col, v, meta=True)]
+    if totals:
+        msg, recs = _missing_total(aid, col, totals)
         return (msg + ". Nothing was computed, and no other value was substituted.", recs, [])
     msg = (f"None of the requested {col} values ({_short(wanted)}) exists in the data of "
            f"{aid.code}; nothing was computed and no other value was substituted.")
@@ -591,6 +609,29 @@ class _Aid:
                 self._actx = None
         return self._actx
 
+    def is_total_value(self, col: str, v, meta: bool = False) -> bool:
+        """Does a requested value look like a Total? By its spelling; with `meta`,
+        also when it is a verified roll-up or a metadata option the policy treats
+        as a total (national geography, ...). Reads cached metadata only."""
+        if _total_like(v):
+            return True
+        actx = self.agg_ctx() if meta else None
+        if not actx:
+            return False
+        want = str(v).strip()
+        struct = actx.get("struct") or {}
+        agg = dstruct.aggregate_value(struct, col)
+        if agg is not None and str(agg).strip() == want:
+            return True
+        for d in actx.get("dimensions") or []:
+            if d.get("dim_column_name") != col:
+                continue
+            for o in d.get("options") or []:
+                keys = {str(x).strip() for x in (o.get("label"), o.get("sdmx_value")) if x}
+                if want in keys and _is_total_option(d, o, None, struct):
+                    return True
+        return False
+
     def metadata_lists_total(self, col: str) -> bool:
         actx = self.agg_ctx()
         if not actx:
@@ -617,7 +658,9 @@ class _Aid:
                                        "notes.", "describe_dataset",
                           {"dataset": self.code, "lang": self.lang})
 
-    def find_values_rec(self, col: str, query: str, message: str) -> dict:
+    def find_values_rec(self, col: str | None, query: str, message: str) -> dict:
+        if not col:
+            return C.recovery("narrow", message)
         return C.recovery("tool_call", message, "find_dimension_values",
                           {"dataset": self.code, "column": col, "query": query[:200]})
 
