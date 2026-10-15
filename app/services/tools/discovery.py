@@ -12,6 +12,9 @@ statistic themselves:
     evidence is not conflicting, whose domain is not known to be incomplete
     and whose proposed grouping the shared aggregation policy allows;
     otherwise the candidate says why and points at `describe_dataset`.
+    The scope of a candidate comes from `scope.dataset_restrictions`: only a PROVEN
+    gap (`domain.complete` false, e.g. single-age children stop at 84) blocks a
+    candidate; `null` means "not verified" and is never presented as complete.
   * describe_dataset reads `dataset_meta` (metadata, structure, measure) and the
     ACTUAL values/period bounds of the data file. Metadata option lists and
     metadata year ranges are reported next to the actual ones, never instead.
@@ -30,7 +33,7 @@ from collections import Counter
 from pydantic import ValidationError
 
 from app.services import concept_search as cs
-from app.services import data_query, dataset_meta, dataset_search, grain_guard, recipes
+from app.services import data_query, dataset_meta, dataset_search, grain_guard, recipes, scope
 from app.services.chart_selector import TOTAL_RE
 from app.services.tools import contract as C
 from app.services.tools.contract import ToolFailure
@@ -111,47 +114,57 @@ def _period_present(conn, code: str, value: str) -> bool | None:
 
 # ------------------------------------------------------------------ domain scope
 
-def _restrictions(actx) -> list | None:
-    """Known domain restrictions from the shared scope service; None when that
-    service is unavailable or cannot tell (the domain is then unknown)."""
-    if actx is None:
-        return None
-    try:
-        from app.services import scope
-    except ImportError:
-        return None
-    try:
-        rs = scope.dataset_restrictions(actx)
-    except Exception:
-        log.exception("scope restrictions failed")
-        return None
-    return None if rs is None else [dict(r) for r in rs]
+_DOMAIN_TEXT = {
+    "ro": {"verified": "Vârstele sunt acoperite complet (verificat); celelalte dimensiuni nu sunt "
+                       "examinate pentru completitudine.",
+           "unknown": "Completitudinea domeniului nu este verificată (nu s-a dovedit nicio lipsă; "
+                      "nu toate dimensiunile sunt examinate)."},
+    "en": {"verified": "Ages are fully covered (verified); other dimensions are not examined "
+                       "for completeness.",
+           "unknown": "Domain completeness is not verified (no gap was proven; not every "
+                      "dimension is examined)."},
+}
 
 
 def _domain(actx, lang: str) -> dict:
-    """{complete: bool|None, restrictions, description, missing}. A restriction
-    with a gap makes the domain incomplete; no restriction reported by the scope
-    service is `complete: true` only for the kinds it can check (age ranges);
-    without the service the domain is unknown (null), never assumed complete."""
-    rs = _restrictions(actx)
-    if rs is None:
-        return {"complete": None, "restrictions": [], "description": "", "missing": []}
-    block = C.scope_block({"domain_complete": None, "restrictions": rs}, lang)
-    missing = [{"column": lim.get("column"), "missing": lim["missing"]}
-               for lim in block["limitations"] if lim.get("missing")]
-    if missing:
-        complete = False
-    elif all(r.get("kind") == "age_range" for r in rs):
-        complete = True
-    else:
-        complete = None
-    desc = block["description"] if rs else ""
-    return {"complete": complete, "restrictions": rs, "description": desc, "missing": missing}
+    """Scope of one dataset from the shared scope service (age ranges only).
+
+    complete  False   a proven gap: an age dimension whose data lacks part of its
+                      domain (single-age children stop at 84);
+              True    every age dimension is verified fully covered; other
+                      dimensions are not examined (`checked` says which were);
+              None    anything else. Unknown is never reported as complete.
+    """
+    tx = _DOMAIN_TEXT.get(lang, _DOMAIN_TEXT["ro"])
+    out = {"complete": None, "restrictions": [], "description": tx["unknown"], "missing": [],
+           "checked": []}
+    if actx is None:
+        return out
+    try:
+        rs = [dict(r) for r in scope.dataset_restrictions(actx)]
+        age_cols = list(dict.fromkeys(
+            d["dim_column_name"] for d in actx.get("dimensions") or ()
+            if d.get("dim_type") == "age"))
+        covs = [scope.dimension_coverage(actx, c) for c in age_cols]
+    except Exception:
+        log.exception("scope service failed")
+        return out
+    out["checked"] = age_cols
+    if rs:
+        block = C.scope_block({"domain_complete": False, "restrictions": rs}, lang)
+        out.update(complete=False, restrictions=rs, description=block["description"],
+                   missing=[{"column": lim.get("column"), "missing": lim["missing"]}
+                            for lim in block["limitations"] if lim.get("missing")])
+    elif age_cols and all(c is not None and c["complete"] for c in covs):
+        out.update(complete=True, description=tx["verified"])
+    return out
 
 
 def _scope_provenance(domain: dict, lang: str) -> dict:
-    return C.scope_block({"domain_complete": domain["complete"],
-                          "restrictions": domain["restrictions"]}, lang)
+    block = C.scope_block({"domain_complete": domain["complete"],
+                           "restrictions": domain["restrictions"]}, lang)
+    return {"description": domain["description"], "domain_complete": domain["complete"],
+            "limitations": block["limitations"]}
 
 
 # ------------------------------------------------------------------ discover: queries
@@ -465,7 +478,9 @@ def _recipe_candidate(ctx, rid: str, parsed: dict, coverage: dict | None, relati
     next_call = period_call or _call("run_recipe", **args)
     return {"dataset": rid, "kind": "recipe", "relation": relation, "level": r.get("geo_level", "county"),
             "quality": quality, "sources": sources,
-            "domain": {"complete": None, "restrictions": [], "description": "", "missing": []},
+            "domain": {"complete": None, "restrictions": [], "missing": [], "checked": [],
+                       "description": "A recipe's eligibility and exclusions are in its run_recipe "
+                                      "result."},
             "title": title, "coverage": dict(cov) if cov else None, "url": None,
             "queryable": not unsafe and next_call is not None, "preferred": False, "notes": notes,
             "next_call": next_call}
@@ -731,8 +746,9 @@ def discover_indicators(args, ctx):
                        "județe') or a county and year. Nothing was substituted.")]
     else:
         message = (f"{len(cards)} reviewed concept(s) with candidate datasets and "
-                   f"{len(families)} family search hit(s). Concept candidates are suggestions "
-                   "checked for grain and scope; families are unverified search hits.")
+                   f"{len(families)} family search hit(s). Candidates carry their grain status and any "
+                   "proven scope restriction (domain.complete null = not verified); families "
+                   "are unverified search hits.")
         recovery = []
 
     def build():
@@ -946,8 +962,7 @@ def describe_dataset(args, ctx):
                          "one of them." if n_splits else ".")})
 
     grain = grain_guard.file_status(code)
-    domain = _domain(actx, lang) if has_file else {"complete": None, "restrictions": [],
-                                                   "description": "", "missing": []}
+    domain = _domain(actx, lang)
     if domain["complete"] is False:
         domain["complete_alternatives"] = [
             {"dataset": s, "next_call": _call("describe_dataset", dataset=s, lang=lang)}
