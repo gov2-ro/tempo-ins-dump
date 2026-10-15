@@ -60,10 +60,18 @@ def get_recipe_result(recipe_id: str,
 def get_recipe_evidence(request: Request, recipe_id: str,
                         year: str = Query(None, pattern=r"^\d{4}$"),
                         areas: str = Query(None, max_length=2000),
-                        lang: str = Query("ro", pattern="^(ro|en)$")):
+                        lang: str = Query("ro", pattern="^(ro|en)$"),
+                        expected_generation: str = Query(
+                            None, max_length=128, pattern=r"^[A-Za-z0-9._-]+$",
+                            description="Refuse (409 generation_changed) unless the served data "
+                                        "generation is this one, before the bundle is built and "
+                                        "again before it is sent.")):
     """ZIP evidence bundle for the recipe result (see app/services/evidence.py)."""
-    from app.services import export as ex
+    from app.services import export as ex, generation
     from app.services.evidence import recipe_bundle
+    stale = generation.precondition(expected_generation)
+    if stale:
+        raise HTTPException(409, stale)
     slot = ex.try_acquire("csv")
     if slot is None:
         raise ex.busy_error()
@@ -73,6 +81,9 @@ def get_recipe_evidence(request: Request, recipe_id: str,
                                     "areas": areas, "lang": lang}.items() if v}
         link = f"{str(request.base_url).rstrip('/')}/compare.html?{urlencode(params)}"
         data = recipe_bundle(result, link)
+        stale = generation.precondition(expected_generation)    # swapped while building
+        if stale:
+            raise HTTPException(409, stale)
     finally:
         slot()
     name = f"{recipe_id}_{result['year']}_evidence.zip"

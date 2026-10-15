@@ -157,12 +157,16 @@ def get_dataset_evidence(
     group_by: str = Query("", description="JSON array, as for /data"),
     approximate: int = Query(0, ge=0, le=1),
     lang: str = Query("ro", pattern="^(ro|en)$"),
+    expected_generation: str = Query(
+        None, max_length=128, pattern=r"^[A-Za-z0-9._-]+$",
+        description="Refuse (409 generation_changed) unless the served data generation is "
+                    "this one, before the bundle is built and again before it is sent."),
 ):
     """ZIP evidence bundle for one /data selection (PA-03a): unrounded result,
     the raw observations behind an aggregation, the decision, definition,
     source and a manifest with hashes. Complete or 413, never cut."""
     from urllib.parse import urlencode
-    from app.services import export as ex
+    from app.services import export as ex, generation
     from app.services.evidence import EvidenceError, dataset_bundle
     from app.services.request_validation import InvalidRequest, parse_json_param
     try:
@@ -170,6 +174,9 @@ def get_dataset_evidence(
         g = parse_json_param(group_by, "group_by")
     except InvalidRequest as e:
         raise HTTPException(400, str(e))
+    stale = generation.precondition(expected_generation)
+    if stale:
+        raise HTTPException(409, stale)
     slot = ex.try_acquire("csv")
     if slot is None:
         raise ex.busy_error()
@@ -182,6 +189,9 @@ def get_dataset_evidence(
             q["lang"] = lang
         link = f"{str(request.base_url).rstrip('/')}/dataset-v2.html?{urlencode(q)}"
         data = dataset_bundle(conn, matrix_code, f, g, bool(approximate), lang, link)
+        stale = generation.precondition(expected_generation)    # swapped while building
+        if stale:
+            raise HTTPException(409, stale)
     except EvidenceError as e:
         raise HTTPException(e.status, e.message)
     finally:
