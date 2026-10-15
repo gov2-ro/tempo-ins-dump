@@ -72,3 +72,19 @@ def summary() -> dict:
     """JSON-safe identity for responses and /api/health."""
     g = current()
     return {"id": g["id"], "status": g["status"], "built_at": g["built_at"]}
+
+
+def precondition(expected: str | None) -> dict | None:
+    """None when there is no precondition or the served generation is `expected`;
+    otherwise the 409 detail of a stale evidence request (`generation_changed`).
+    Evidence routes check it before building a bundle and again before sending."""
+    if expected is None or expected == "":
+        return None
+    g = current()
+    if g["status"] == "present" and g["id"] == expected:
+        return None
+    return {"reason": "generation_changed",
+            "message": "The data generation changed since this answer was computed; "
+                       "re-run the selection to cite the current data.",
+            "expected_generation": expected, "served_generation": g["id"],
+            "served_status": g["status"]}

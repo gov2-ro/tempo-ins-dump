@@ -343,6 +343,33 @@ function aggBadgeHTML(src, lang = 'ro') {
     return b ? `<span class="agg-badge agg-badge-${b.cls}" title="${_escHtml(b.title)}">${_escHtml(b.label)}</span>` : '';
 }
 
+/** Note for a total that covers only part of a dimension's domain, e.g.
+ *  "Vârste 0–84 ani (fără 85+)". `scope` is the server's `scope`
+ *  (/data, insights provenance); a restriction the caller asked for is theirs
+ *  and not warned about. Bounds: hi == null is open-ended ("85+"). */
+function scopeNote(scope, lang = 'ro') {
+    const r = (scope?.restrictions || []).find(x => !x.requested && x.kind === 'age_range');
+    if (!r) return '';
+    const span = ([lo, hi]) => hi == null ? `${lo}+` : lo === hi ? `${lo}` : `${lo}–${hi}`;
+    const gaps = [];
+    let from = r.domain[0];                      // first age not yet accounted for
+    for (const [lo, hi] of r.covered) {
+        if (lo > from) gaps.push([from, lo - 1]);
+        if (hi == null) { from = null; break; }
+        from = Math.max(from, hi + 1);
+    }
+    if (from != null && (r.domain[1] == null || from <= r.domain[1])) gaps.push([from, r.domain[1]]);
+    const covered = r.covered.map(span).join(', '), missing = gaps.map(span).join(', ');
+    return lang === 'en'
+        ? `Ages ${covered}${missing ? ` (${missing} not included)` : ''}`
+        : `Vârste ${covered} ani${missing ? ` (fără ${missing})` : ''}`;
+}
+
+function scopeNoteHTML(scope, lang = 'ro') {
+    const t = scopeNote(scope, lang);
+    return t ? `<span class="agg-badge agg-badge-scope" title="${_escHtml(t)}">${_escHtml(t)}</span>` : '';
+}
+
 /** Method + verification as a tooltip, for plain totals too. */
 function aggMethodTitle(src, lang = 'ro') {
     if (!src) return '';

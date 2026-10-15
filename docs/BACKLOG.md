@@ -49,35 +49,66 @@ one of these.
   `POP108D_grupe_judet` for `AGE: ["Total"]` → `slice_value_missing`. INS total rows
   aren't stored. When a refused value looks like a total, `_REASON_HINTS` in
   `agent.py` should say "no total rows are stored; omit the filter to sum the
-  categories".
+  categories". *AT-01 (2026-10-15): the `query_data` tool explains the missing Total
+  and offers the reviewed recipe, a policy-checked query without the pin and a value
+  lookup; Ask still uses its old handler until AT-02.*
 - [ ] **Raw rows flood the model context**: the data tool lets up to 5,000 rows
   through (`limit=5000` in `_handle_query_dataset_data`). One refused aggregation
   fell back to 2,732 raw rows (187k chars), and `list_categories` returns 49k
   chars. Every later model call resends them, which slows it (14 s) and costs
   tokens. Cap rows sent to the model at a few hundred, with `row_count` and a
-  "narrow it" note. The page keeps the full data.
+  "narrow it" note. The page keeps the full data. *AT-01: tool results are capped at
+  200 rows and 32 KiB with explicit preview flags; Ask adopts them in AT-02.*
 - [ ] **Conflicting-grain refusals give no way forward**: `POP10xD_*_judet` and
   `TUR105H_judet` are among the 160 conflicting-grain files (see "County hierarchy
   grain repair" below), so totals and group-bys are refused. The model then
   searched again and ran out of calls (8-model-call and 12-tool limits). The hint
   should name a working alternative: the `_localitate` child, or `POP105A` for
-  county population. Search should rank such datasets above refused ones.
+  county population. Search should rank such datasets above refused ones. *AT-01:
+  `query_data` names a certified-unique parent/sibling as a candidate and discovery
+  does not prefer conflicting files; Ask adopts them in AT-02.*
 - [ ] **Multi-step comparisons exceed the Ask budget**: "municipalities with the
   biggest population drop, 1992–2002 and 2010–2020" needs every municipality at
   four points in time, differences and a ranking; it ended partial. Consider a
   change/ranking tool (period A vs period B per area), or a recipe, instead of
-  raising the 8-call limit.
+  raising the 8-call limit. *AT-01: `compare_periods` (+ `/api/period-changes`)
+  ranks every eligible entity per interval; Ask adopts it in AT-02.*
 - [ ] **Ask eval on the new providers**: no listed model has run `tempo_eval_agent`
   yet (needs a key per provider). Mistral `-latest` ids are unconfirmed in its docs.
 
 ## Data refresh findings — 2026-10-15
 
-- [ ] **Single-age population children lack 85+, so their headline total is short**:
+- [x] **Single-age population children lack 85+, so their headline total is short**:
   `POP107D_varste_*` / `POP108D_varste_*` hold ages 0–84 only; "85 ani si peste"
   lives in the `_grupe_*` children. The summed latest KPI shows 21,179,764 against
   INS's 21,646,220 (2026), exactly the 466,456 aged 85+. The KPI check calls these
   children `unresolved` (`pin_not_single:REF_AREA_2`), so no gate withholds the
   value. Label the total "0–84 ani" or withhold it; check other `_varste` splits.
+  *Done in AT-01 (2026-10-15): grouped `/data`, the static engine and the insights KPI
+  carry `scope` (covered [[0,84]] of [0,null]); v1/v2 show "Vârste 0–84 ani (fără 85+)";
+  16 `_varste*` children and POP201G/POP203A/POP203B ([15,49]) are flagged. The value
+  is labelled, not withheld; no split or corpus change.*
+
+## AT-01 follow-ups — 2026-10-15
+
+From the analytical-tools package ([record](plans/ask-and-public-mcp/at-01-record.md)).
+
+- [ ] **Scope note is missing from Ask, compare and place pages**: only v1/v2 dataset
+  pages show the restriction badge. Add it where those pages show a summed total.
+- [ ] **Coverage is checked for age dimensions only**: a split child that keeps one
+  value of a non-age dimension (e.g. one sex) is not flagged; `domain_complete` then
+  stays null. Also, the note says "Vârste/Ages" for every age-typed dimension,
+  including non-person ones (enterprise age).
+- [ ] **Tool messages are mostly English**: scope text, recipe and link messages are
+  bilingual; discovery, query and period-change messages are not. Decide before the
+  public MCP (AT-03) whether to localise them.
+- [ ] **Allowed-columns lookup is repeated**: `run_query`, `_download` and the links
+  tool each read `dimensions` + schema maps; a `data_query` helper would remove that.
+- [ ] **Recipe cross-check failures are silent**: for a published recipe,
+  `recipes.run` swallows the reconstruction error, so `check_unavailable` cannot say
+  why the check is missing.
+- [ ] **Period changes do not refuse known boundary breaks**: series breaks are
+  warnings; administrative-boundary continuity is never verified.
 
 ## Public-alpha milestone plan — 2026-10-11
 

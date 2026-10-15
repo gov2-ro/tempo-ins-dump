@@ -720,7 +720,7 @@ class DashboardV2 {
                 // context = non-total pins ("Masculin") — without them the
                 // number reads as the dataset-wide value, which it isn't
                 sub = [k.unit, k.period, ...(k.context || [])].filter(Boolean).join(' · ');
-                sub += aggBadgeHTML(k.provenance, this.lang);
+                sub += aggBadgeHTML(k.provenance, this.lang) + scopeNoteHTML(k.provenance?.scope, this.lang);
                 // The insight KPIs describe the whole dataset; with a selection
                 // they must not read as the selected place's value (PA-02b).
                 if (Object.keys(this.expandedUserFilters()).length) sub += ` · <em>${this.ui.wholeDataset}</em>`;
@@ -1176,11 +1176,11 @@ class DashboardV2 {
     /** Badge for a live slice (reflects the user's filters, unlike the
      *  composition-time decision). */
     sliceBadge(data) {
-        const html = aggBadgeHTML(data?.aggregation, this.lang);
+        const html = aggBadgeHTML(data?.aggregation, this.lang) + scopeNoteHTML(data?.scope, this.lang);
         if (!html) return null;
-        const tmp = document.createElement('span');
+        const tmp = document.createElement('template');
         tmp.innerHTML = html;
-        return tmp.firstElementChild;
+        return tmp.content;
     }
 
     /** (Re)build the tile grid for the given charts. Called on every

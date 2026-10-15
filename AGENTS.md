@@ -95,10 +95,13 @@ reads env: `TEMPO_DATA_DIR`, `TEMPO_MAX_ROWS` (50,000), `TEMPO_DEBUG`,
 `TEMPO_DB_MEMORY` / `TEMPO_SEARCH_MEMORY` / `TEMPO_SCRATCH_MEMORY` (DuckDB budgets),
 `TEMPO_ASK_ENABLED` (hosted Ask) and `TEMPO_ASK_BYOK_ENABLED` (own-key Ask), both
 off by default (set the second for local Ask work), and other `TEMPO_ASK_*`/`TEMPO_LLM_*`.
+`TEMPO_PUBLIC_BASE_URL` is the trusted origin of the tools' citation/evidence links
+(unset: root-relative links; never derived from a request's Host header).
 
 - **Routers:** `datasets` (catalog/search/detail), `dataset_data` (data, insights,
   CSV/XLSX download), `categories`, `sdmx` (SDMX 2.1 data/datastructure/dataflow),
-  `places`, `ask` (LLM Q&A).
+  `places`, `ask` (LLM Q&A), `recipes`, `changes` (`/api/period-changes` and its
+  `/evidence` bundle).
 - **Services:** `dataset_search` + `dataset_meta` (shared by routes, dev MCP and
   Ask agent), `data_query` (the one validated `/data` query that REST, Ask and the
   dev MCP all call; don't add a parallel path), `grain_guard` + `generation`
@@ -106,7 +109,14 @@ off by default (set the second for local Ask work), and other `TEMPO_ASK_*`/`TEM
   `query_builder`, `chart_selector` (+ `chart_selector_eval`),
   `dashboard_composer` (tile composition), `insights` (KPIs, sentences),
   `headlines` (+ `headline_config.json`), `dimension_structure`,
-  `place_service`, `agent` + `llm_client`, `agent_eval`.
+  `place_service`, `agent` + `llm_client`, `agent_eval`, `scope` (which part of an
+  age domain a grouped total covers; mirrored in `static/js/engine/scope.js`),
+  `period_changes` + `change_evidence`.
+- **Analytical tools** (`services/tools/`, contract `tempo-tools/1`, spec in
+  `docs/plans/ask-and-public-mcp/`): seven tools for Ask and the public MCP behind one
+  entry point, `registry.call_tool(name, arguments)`. It validates arguments before any
+  DB work, owns the cursor, re-checks the generation and keeps results under 32 KiB.
+  Handlers call the shared services above; adapters must not re-implement their rules.
 - **Pages** (`static/`):
   - `dataset-v2.html` + `js/dashboard-v2.js` — main dataset page
   - `index.html` + `js/explore-app.js` — v1 explorer: home, catalog, legacy

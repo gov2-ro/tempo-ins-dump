@@ -2431,7 +2431,7 @@ class LensApp {
                 .filter(r => r[ti] != null && r[vi] != null)
                 .map(r => ({ period: r[ti], total: r[vi] }))
                 .sort((x, y) => String(x.period).localeCompare(String(y.period)));
-            return { kind: 'ok', totals, aggregation: res.aggregation };
+            return { kind: 'ok', totals, aggregation: res.aggregation, scope: res.scope };
         } catch (e) {
             console.warn('Headline series unavailable:', e);
             return { kind: 'error' };
@@ -2466,7 +2466,7 @@ class LensApp {
             const periodLabel = String(latest.period).replace(/^Anul\s+/, '');
             this.addInsight(row, this.ui.latestValue, this.formatBigNumber(latest.total),
                 (trendHtml ? trendHtml + ' ' : '') + (periodLabel ? `<span class="insight-period">${periodLabel}</span>` : '')
-                + aggBadgeHTML(series.aggregation, this.lang));
+                + aggBadgeHTML(series.aggregation, this.lang) + scopeNoteHTML(series.scope, this.lang));
         } else {
             this.addInsight(row, this.ui.dataPoints, formatNumber(rows.length, 0));
         }

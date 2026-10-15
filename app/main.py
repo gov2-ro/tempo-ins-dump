@@ -9,6 +9,7 @@ from pathlib import Path
 
 from app.config import CORPUS_DIR
 from app.routers import categories, datasets, dataset_data, sdmx, ask, places, pages, recipes
+from app.routers import changes
 
 app = FastAPI(title="INS TEMPO Explorer", version="0.1.0")
 
@@ -40,6 +41,7 @@ app.include_router(ask.router, prefix="/api", tags=["ask"])
 app.include_router(places.router, tags=["places"])
 app.include_router(pages.router, tags=["pages"])
 app.include_router(recipes.router, prefix="/api", tags=["recipes"])
+app.include_router(changes.router, prefix="/api", tags=["changes"])
 
 _LLMS_TXT = Path(__file__).parent.parent / "llms.txt"
 
