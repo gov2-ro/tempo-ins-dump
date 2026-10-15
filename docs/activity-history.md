@@ -9,9 +9,16 @@ card grid and the "Thematic categories" listing. They are now one listing.
   any recent updates that belong to it. The category's other subsections and
   other recent updates follow.
 - Categories without a theme keep the three-column listing.
-- Recent updates use the same criterion as before: the 12 most recently updated
-  datasets overall. The 2026-10-16 copy places 6 in Tourism and 6 in A.1
-  population, under Social statistics' other subsections. Most themes show none.
+- Recent updates follow a new rule, chosen by the owner: datasets updated in the
+  last 30 days, at most 3 per section, newest first. Before, it was the 12 most
+  recently updated datasets overall.
+  - The API applies the window and keeps at most 3 per second-level category
+    (A.1, B.18, …). Every landing section is made of whole second-level
+    categories, so each section's 3 latest are always included.
+  - The page caps each section at 3.
+  - On the 2026-10-16 copy this lists 3 population updates (under Social
+    statistics' other subsections), 3 tourism and 2 justice. Most themes show
+    none, which the owner accepted.
 - Each update is one line: change first, then title, code and date. The
   definition excerpt was dropped. Lines link to `/dataset/{code}`; the old cards
   opened the v1 view in place.
