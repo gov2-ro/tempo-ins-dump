@@ -6,6 +6,9 @@ from app.services.headlines import compute_headlines
 
 router = APIRouter()
 
+RECENT_DAYS = 30            # landing "recently updated": update window
+RECENT_PER_SECTION = 3      # and how many each landing section lists
+
 
 @router.get("/categories")
 def get_categories(lang: str = Query("ro", regex="^(ro|en)$")):
@@ -125,7 +128,9 @@ def get_corpus_summary(lang: str = Query("ro", regex="^(ro|en)$")):
     # Headline indicators from parquet files
     headlines = compute_headlines(conn, PARQUET_DIR, lang)
 
-    # Recently updated datasets
+    # Recently updated datasets: updated in the last RECENT_DAYS, at most
+    # RECENT_PER_SECTION per second-level category (A.1, B.18, ...). Every landing
+    # section is a union of such categories, so its own top 3 is always here.
     name_col = "COALESCE(m.matrix_name_en, m.matrix_name)" if lang == "en" else "m.matrix_name"
     def_col = "COALESCE(m.definitie_en, m.definitie)" if lang == "en" else "m.definitie"
     recent_rows = conn.execute(f"""
@@ -137,9 +142,13 @@ def get_corpus_summary(lang: str = Query("ro", regex="^(ro|en)$")):
         FROM matrices m
         LEFT JOIN dataset_trends t ON m.matrix_code = t.matrix_code
         LEFT JOIN matrix_profiles p ON m.matrix_code = p.matrix_code
-        WHERE m.is_canonical = TRUE AND m.ultima_actualizare IS NOT NULL
-        ORDER BY m.ultima_actualizare DESC
-        LIMIT 12
+        LEFT JOIN contexts c ON c.context_code = m.context_code
+        WHERE m.is_canonical = TRUE
+          AND TRY_CAST(m.ultima_actualizare AS DATE) >= current_date - INTERVAL {RECENT_DAYS} DAY
+        QUALIFY row_number() OVER (
+            PARTITION BY CASE WHEN c.level >= 2 THEN c.parent_code ELSE m.context_code END
+            ORDER BY TRY_CAST(m.ultima_actualizare AS DATE) DESC, m.matrix_code) <= {RECENT_PER_SECTION}
+        ORDER BY TRY_CAST(m.ultima_actualizare AS DATE) DESC, m.matrix_code
     """).fetchall()
 
     recently_updated = []

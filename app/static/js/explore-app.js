@@ -565,8 +565,10 @@ class LensApp {
         });
         walk(this.categories, []);
         const recent = (this.recentlyUpdated || []).map(ds => ({ ds, codes: (paths.get(ds.context_code) || []).map(n => n.code) }));
-        // Each update is listed once, at the first theme or category that claims it.
-        const take = claims => recent.filter(r => !r.placed && claims(r.codes)).map(r => { r.placed = true; return r.ds; });
+        // Each update is listed once, at the first theme or category that claims
+        // it; a section shows its 3 latest (the API already keeps 30 days).
+        const take = claims => recent.filter(r => !r.placed && claims(r.codes))
+            .map(r => { r.placed = true; return r.ds; }).slice(0, 3);
 
         const themed = document.createElement('div');
         themed.className = 'landing-themed';
