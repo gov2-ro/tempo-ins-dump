@@ -918,6 +918,66 @@ def test_two_identical_calls_give_identical_envelopes(env):
     assert a == b
 
 
+# ================================================================== native flags and hygiene
+
+def test_collapsed_time_and_dropped_partial_period_are_flagged(env):
+    e = q(dataset="ADDX", group_by=["CATEGORY"])
+    tc = [w for w in e["warnings"] if w["code"] == "time_collapsed"]
+    assert tc and tc[0]["subject"] == "TIME_PERIOD" and "single-period" in tc[0]["message"]
+    assert sorted(rows(e)) == [["A", 90.0], ["B", 130.0], ["Total", 220.0]]     # summed over 2022+2023
+    # a capped raw result is cut mid-period: the oldest period is dropped, and said so
+    cut = q(dataset="WINX", limit=10)
+    assert cut["limits"]["partial_period_dropped"] == "2021" and cut["limits"]["total_rows"] is None
+    assert "2021" not in {r[1] for r in rows(cut)} and rows(cut)
+    assert {"preview", "partial_period_dropped"} <= set(codes(cut))
+    assert cut["limits"]["source_complete"] is False
+
+
+def test_each_call_runs_one_query_and_never_aggregates_for_a_recovery(senv, monkeypatch):
+    import app.services.data_query as dq
+    from app.services import grain_guard
+    seen = {"run": 0, "slice": 0}
+    real_run, real_slice = dq.run_query, grain_guard.check_slice
+
+    def run(*a, **k):
+        seen["run"] += 1
+        return real_run(*a, **k)
+
+    def check(*a, **k):
+        seen["slice"] += 1
+        return real_slice(*a, **k)
+    monkeypatch.setattr(dq, "run_query", run)
+    monkeypatch.setattr(grain_guard, "check_slice", check)
+    for kw in (dict(dataset="CHILDX", group_by=["TIME_PERIOD"]),
+               dict(dataset="AGEC", group_by=["TIME_PERIOD"]),
+               dict(dataset="POPX", group_by=["TIME_PERIOD"], filters={"AGE": ["0 ani", "0-4 ani"]}),
+               dict(dataset="NOTOT", filters={"CATEGORY": ["Total"]}, group_by=["TIME_PERIOD"]),
+               dict(dataset="RATEX", group_by=["TIME_PERIOD"])):
+        seen.update(run=0, slice=0)
+        e = q(**kw)
+        assert e["recovery"] and seen["run"] == 1 and seen["slice"] <= 1, kw
+
+
+def test_no_message_leaks_sql_paths_or_internals(senv):
+    battery = [dict(dataset="POPX", group_by=["TIME_PERIOD"]),
+               dict(dataset="CHILDX", group_by=["TIME_PERIOD"]),
+               dict(dataset="AGEC", group_by=["TIME_PERIOD"]),
+               dict(dataset="ADDX", filters={"TIME_PERIOD": ["1999"]}),
+               dict(dataset="NOTOT", filters={"CATEGORY": ["Total"]}),
+               dict(dataset="SCHEMX", group_by=["TIME_PERIOD"]),
+               dict(dataset="POPAGE", group_by=["TIME_PERIOD"]),
+               dict(dataset="ADDX", filters={"BOGUS": ["x"]}),
+               dict(dataset="ZERX", filters={"CATEGORY": ["A", "B", "C"]}),
+               dict(dataset="BIGX", limit=200)]
+    for kw in battery:
+        e = q(**kw)
+        text = json.dumps(e, ensure_ascii=False)
+        for bad in ("SELECT", "read_parquet", ".parquet", "/private", "/var/", "Traceback",
+                    "Binder", "duckdb", "OBS_VALUE IN"):
+            assert bad not in text, (kw, bad)
+        assert len(e["recovery"]) <= 3
+
+
 # ================================================================== real corpus (read-only)
 
 PINNED = "9b3e065d"
