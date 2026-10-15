@@ -12,7 +12,7 @@ import logging
 from app.config import PARQUET_DIR
 from app.db import get_conn
 from app.services.chart_selector import TOTAL_RE as _TOTAL_RE
-from app.services.dataset_meta import get_dataset_meta, _parquet_dim_values
+from app.services.dataset_meta import get_aggregation_context, get_dataset_meta, _parquet_dim_values
 from app.services.dataset_meta import source_total_gate as _source_total_gate
 from app.services.dashboard_composer import (
     _build_slice, _effective, _total_entry, primary_time_dim, spec_decision)
@@ -215,11 +215,16 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
         first = period_totals[0]
         period = _period_label(latest_p)
 
+        # Which part of the domain the headline covers (AT-01b): the same
+        # disclosure /data reports, e.g. single-age children hold ages 0-84 only.
+        scope_block = _kpi_scope(conn, matrix_code, decision, time_dim)
+
         def _prov(comparison=None):
             p = ap.provenance(decision, source_code=matrix_code, period=period,
                               unit=unit_label, comparison=comparison)
             if source_check:
                 p['source_check'] = source_check
+            p['scope'] = scope_block
             return p
 
         kpis.append({
@@ -363,6 +368,20 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
         _cache.clear()
     _cache[key] = {'data': data, 'ts': now}
     return data
+
+
+def _kpi_scope(conn, matrix_code, decision, time_dim) -> dict:
+    """scope.result_scope for the headline series (no caller filters, grouped by
+    time). A failure reports an unknown scope, never a missing one."""
+    from app.services import scope
+    try:
+        ctx = get_aggregation_context(conn, matrix_code)
+        found = scope.result_scope(ctx, decision.to_dict(), {},
+                                   [time_dim['dim_column_name']]) if ctx else None
+    except Exception:
+        log.exception("insights scope failed for %s", matrix_code)
+        found = None
+    return found or {'domain_complete': None, 'restrictions': []}
 
 
 def _fetch_row(conn, table, matrix_code):
