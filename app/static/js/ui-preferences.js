@@ -2,7 +2,8 @@
 (() => {
     const sizes = [16, 17, 18, 20];
     const saved = Number(localStorage.getItem('ins-text-size'));
-    document.documentElement.style.fontSize = `${sizes.includes(saved) ? saved : 17}px`;
+    const initial = sizes.includes(saved) ? saved : 18;   // L unless the reader chose another size
+    document.documentElement.style.fontSize = `${initial}px`;
     const ro = () => (new URLSearchParams(location.search).get('lang') || localStorage.getItem('lens_lang') || 'ro') !== 'en';
     document.addEventListener('DOMContentLoaded', () => {
         const bar = document.querySelector('.topbar');
@@ -15,7 +16,7 @@
         host.className = 'reading-control';
         host.innerHTML = `<button type="button" class="toggle-btn reading-toggle" aria-expanded="false" aria-controls="reading-options" aria-label="${ro() ? 'Mărimea textului' : 'Text size'}">Aa</button>
             <div id="reading-options" class="reading-options hidden" role="group" aria-label="${ro() ? 'Mărimea textului' : 'Text size'}">
-            ${sizes.map((n, i) => `<button type="button" data-size="${n}" aria-pressed="${n === (sizes.includes(saved) ? saved : 17)}">${['S', 'M', 'L', 'XL'][i]}</button>`).join('')}</div>`;
+            ${sizes.map((n, i) => `<button type="button" data-size="${n}" aria-pressed="${n === initial}">${['S', 'M', 'L', 'XL'][i]}</button>`).join('')}</div>`;
         let ask = nav.querySelector('a[href="/ask.html"]');
         if (!ask && !location.pathname.endsWith('/ask.html')) {
             ask = document.createElement('a');

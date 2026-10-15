@@ -14,7 +14,7 @@ const UI = {
         browseTagline: 'Tempo INS, da nițel mai drăgu\'',
         noticeText: 'Versiune alfa / preview. Acesta nu este un proiect oficial al Guvernului României. Date preluate de pe <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Actualizate recent',
-        categoriesLabel: 'Categorii tematice',
+        otherSubcategories: 'Alte subcategorii:',
         searchPlaceholder: 'Caută seturi de date, indicatori, coduri...',
         searchTrigger: 'Caută seturi de date...',
         searchEmpty: 'Tastează pentru a căuta în toate seturile de date',
@@ -84,7 +84,7 @@ const UI = {
         browseTagline: 'Tempo INS, but nicer',
         noticeText: 'Alpha/preview. This is not an official Romanian Government project. Data sourced from <a href="https://insse.ro" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Recently updated',
-        categoriesLabel: 'Thematic categories',
+        otherSubcategories: 'Other subcategories:',
         searchPlaceholder: 'Search datasets, indicators, codes...',
         searchTrigger: 'Search datasets...',
         searchEmpty: 'Type to search across all datasets',
@@ -532,13 +532,10 @@ class LensApp {
 
 
         this.headlines = summary.headlines || [];
+        this.recentlyUpdated = summary.recently_updated || [];
         this.renderNoticeBar();
         this.renderBrowseHeader(summary.corpus);
         this.renderEntryPoints();
-        this.renderHeadlines(this.headlines);
-        this.renderRecentlyUpdated(summary.recently_updated);
-        const catLabel = document.getElementById('categories-label');
-        if (catLabel) catLabel.textContent = this.ui.categoriesLabel;
 
         document.getElementById('page-loader')?.classList.add('hidden');
         this.showCategoryGrid();
@@ -557,62 +554,133 @@ class LensApp {
         document.getElementById('category-grid').classList.remove('hidden');
         document.getElementById('dataset-panel').classList.add('hidden');
         document.getElementById('facet-bar')?.classList.add('hidden');
-        // Show landing sections (recent-section only if it has content)
-        document.getElementById('headlines-section')?.classList.remove('hidden');
-        const recentGrid = document.getElementById('recent-grid');
-        if (recentGrid && recentGrid.children.length) {
-            document.getElementById('recent-section')?.classList.remove('hidden');
-        }
-        document.getElementById('categories-label')?.classList.remove('hidden');
         this.drillStack = [];
 
-        const grid = document.getElementById('category-grid');
-        grid.innerHTML = '';
-
-        this.categories.forEach((cat, i) => {
-            const section = document.createElement('div');
-            section.className = 'cat-section';
-
-            const imgFile = CATEGORY_IMGS[cat.code];
-            const imgTag = imgFile ? `<img class="cat-section-img" src="/img/themes/${encodeURIComponent(imgFile)}" alt="" aria-hidden="true">` : '';
-            const header = document.createElement('div');
-            header.className = 'cat-section-header';
-            header.innerHTML = `
-                <div class="cat-section-title">
-                    <span class="cat-section-name">${this.shortName(cat.name)}</span>
-                    <span class="cat-section-meta"><strong>${cat.total_datasets || 0}</strong> ${this.ui.datasets} · <strong>${cat.children.length}</strong> ${this.ui.subcategories}</span>
-                </div>
-                ${imgTag}
-            `;
-            header.addEventListener('click', () => this.drillCategory(cat, i));
-            section.appendChild(header);
-
-            if (cat.children.length > 1) {
-                const subcats = document.createElement('div');
-                subcats.className = 'cat-subcats';
-
-                cat.children.forEach((child, ci) => {
-                    const sub = document.createElement('span');
-                    sub.className = 'cat-subcat';
-                    sub.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        this.drillCategory(cat, i);
-                        this.drillCategory(child, 0);
-                    });
-                    sub.innerHTML = `<span class="cat-subcat-name">${this.shortName(child.name)}</span> <span class="cat-subcat-count">(${child.total_datasets})</span>`;
-                    subcats.appendChild(sub);
-                    if (ci < cat.children.length - 1) {
-                        const sep = document.createElement('span');
-                        sep.className = 'cat-subcat-sep';
-                        sep.textContent = '·';
-                        subcats.appendChild(sep);
-                    }
-                });
-                section.appendChild(subcats);
-            }
-
-            grid.appendChild(section);
+        // One overview: a category holds its themes (two chart previews, their
+        // subsections and recent updates), then its remaining subsections.
+        const paths = new Map();
+        const walk = (nodes, trail) => nodes.forEach(node => {
+            paths.set(node.code, [...trail, node]);
+            walk(node.children || [], [...trail, node]);
         });
+        walk(this.categories, []);
+        const recent = (this.recentlyUpdated || []).map(ds => ({ ds, codes: (paths.get(ds.context_code) || []).map(n => n.code) }));
+        // Each update is listed once, at the first theme or category that claims it.
+        const take = claims => recent.filter(r => !r.placed && claims(r.codes)).map(r => { r.placed = true; return r.ds; });
+
+        const themed = document.createElement('div');
+        themed.className = 'landing-themed';
+        const rest = document.createElement('div');
+        rest.className = 'landing-rest';
+        this.categories.forEach((cat, i) => {
+            const themes = (this.headlines || []).filter(t => paths.get(t.context_code)?.[0] === cat);
+            (themes.length ? themed : rest).appendChild(this.categorySection(cat, i, themes, paths, take));
+        });
+        const grid = document.getElementById('category-grid');
+        grid.replaceChildren(themed, rest);
+        const unplaced = take(() => true);
+        if (unplaced.length) grid.appendChild(this.recentLines(unplaced));
+    }
+
+    categorySection(cat, i, themes, paths, take) {
+        const section = document.createElement('div');
+        section.className = 'cat-section';
+        const imgFile = CATEGORY_IMGS[cat.code];
+        const imgTag = imgFile ? `<img class="cat-section-img" src="/img/themes/${encodeURIComponent(imgFile)}" alt="" aria-hidden="true">` : '';
+        const header = document.createElement('div');
+        header.className = 'cat-section-header';
+        header.innerHTML = `
+            <div class="cat-section-title">
+                <span class="cat-section-name">${this.shortName(cat.name)}</span>
+                <span class="cat-section-meta"><strong>${cat.total_datasets || 0}</strong> ${this.ui.datasets} · <strong>${cat.children.length}</strong> ${this.ui.subcategories}</span>
+            </div>
+            ${imgTag}
+        `;
+        header.addEventListener('click', () => this.drillCategory(cat, i));
+        section.appendChild(header);
+
+        if (themes.length) {
+            const grid = document.createElement('div');
+            grid.className = 'headlines-grid';
+            for (const theme of themes) {
+                const trail = paths.get(theme.context_code);
+                grid.appendChild(this.themeBlock(theme, trail, i, take(codes => codes.includes(theme.context_code))));
+            }
+            section.appendChild(grid);
+        }
+        const themeCodes = new Set(themes.map(t => t.context_code));
+        const others = cat.children.filter(child => !themeCodes.has(child.code));
+        if (others.length && (themes.length || cat.children.length > 1)) {
+            const links = this.subcatLinks(others, [cat], i);
+            if (themes.length) links.insertAdjacentHTML('afterbegin', `<span class="cat-other-label">${this.ui.otherSubcategories}</span>`);
+            section.appendChild(links);
+        }
+        const updates = take(codes => codes[0] === cat.code);
+        if (updates.length) section.appendChild(this.recentLines(updates));
+        return section;
+    }
+
+    /** A theme's two chart previews, its subsections and its recent updates. */
+    themeBlock(theme, trail, catIdx, updates) {
+        const lang = this.lang;
+        const section = document.createElement('section');
+        section.className = 'headline-theme';
+        section.dataset.context = theme.context_code;
+        section.innerHTML = `<a class="headline-theme-header" href="/?cat=${theme.context_code}${lang === 'en' ? '&lang=en' : ''}">
+            <span class="headline-theme-icon">${THEME_ICONS[theme.icon] || '📊'}</span>
+            <span class="headline-theme-label">${_escHtml(theme.theme_label)}</span><span class="headline-theme-arrow">›</span></a>
+            <div class="headline-cards"></div>`;
+        const cards = section.lastElementChild;
+        theme.indicators.slice(0, 2).forEach(ind => cards.appendChild(this.teaserCard(ind)));
+        this.themeCards(theme).then(indicators => {
+            if (!cards.isConnected || this.lang !== lang) return;
+            cards.replaceChildren(...indicators.slice(0, 2).map(ind => this.teaserCard(ind)));
+        });
+        const node = trail.at(-1);
+        if (node.children?.length > 1) section.appendChild(this.subcatLinks(node.children, trail, catIdx));
+        if (updates.length) section.appendChild(this.recentLines(updates));
+        return section;
+    }
+
+    /** Inline subsection links. A plain click drills down in place; the href
+     *  keeps open-in-new-tab and copy-link working. */
+    subcatLinks(children, trail, catIdx) {
+        const wrap = document.createElement('div');
+        wrap.className = 'cat-subcats';
+        children.forEach((child, ci) => {
+            const path = [...trail, child];
+            const link = document.createElement('a');
+            link.className = 'cat-subcat';
+            link.href = `/?cat=${path.map(c => c.code).join(':')}${this.lang === 'en' ? '&lang=en' : ''}`;
+            link.innerHTML = `<span class="cat-subcat-name">${this.shortName(child.name)}</span> <span class="cat-subcat-count">(${child.total_datasets})</span>`;
+            link.addEventListener('click', e => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                e.preventDefault();
+                this.drillStack = path.slice(0, -1).map((cat, depth) => ({ cat, colorIdx: depth ? 0 : catIdx }));
+                this.drillCategory(child, 0);
+            });
+            wrap.appendChild(link);
+            if (ci < children.length - 1) wrap.insertAdjacentHTML('beforeend', '<span class="cat-subcat-sep">·</span>');
+        });
+        return wrap;
+    }
+
+    /** Recently updated datasets, one per line: change, title, code · date. */
+    recentLines(datasets) {
+        const box = document.createElement('div');
+        box.className = 'recent-lines';
+        const en = this.lang === 'en';
+        box.innerHTML = `<div class="recent-lines-label">${this.ui.recentlyUpdated}</div>` + datasets.map(ds => {
+            const g = ds.yoy_growth_latest;
+            const dir = g != null ? (g > 0 ? 'up' : g < 0 ? 'down' : 'flat')
+                : ds.trend_direction === 'increasing' ? 'up' : ds.trend_direction === 'decreasing' ? 'down' : 'flat';
+            const change = { up: '↑', down: '↓', flat: '→' }[dir] + (g ? ` ${Math.abs(g).toFixed(1)}%` : '');
+            return `<a class="recent-line" href="/dataset/${encodeURIComponent(ds.matrix_code)}${en ? '?lang=en' : ''}" title="${_escHtml(ds.matrix_name)}">
+                <span class="recent-trend ${dir}">${change}</span>
+                <span class="recent-name">${_escHtml(ds.matrix_name)}</span>
+                <span class="recent-meta"><span class="recent-code">${_escHtml(ds.matrix_code)} · </span>${_escHtml(ds.ultima_actualizare || '')}</span></a>`;
+        }).join('');
+        return box;
     }
 
     // --- Landing page sections ------------------------------------------------
@@ -684,7 +752,7 @@ class LensApp {
             nav.appendChild(a);
         }
         const all = document.createElement('a');
-        all.href = `/${en ? '?lang=en' : ''}#categories-label`;
+        all.href = `/${en ? '?lang=en' : ''}#category-grid`;
         all.textContent = en ? 'All themes ↓' : 'Toate temele ↓';
         nav.appendChild(all);
         const dims = document.createElement('a');
@@ -721,31 +789,6 @@ class LensApp {
         const key = `${this.lang}:${theme.context_code}`;
         if (!this._themeCards.has(key)) this._themeCards.set(key, ThemeOverviews.theme(theme,this.lang));
         return this._themeCards.get(key);
-    }
-
-    renderHeadlines(headlines) {
-        const container = document.getElementById('headlines-section');
-        if (!container || !headlines?.length) return;
-        container.innerHTML = '<div class="headlines-grid"></div>';
-        const grid = container.firstElementChild;
-        const lang = this.lang;
-        for (const theme of headlines) {
-            const section = document.createElement('section');
-            section.className = 'headline-theme';
-            section.dataset.context = theme.context_code;
-            section.innerHTML = `<a class="headline-theme-header" href="/?cat=${theme.context_code}${lang === 'en' ? '&lang=en' : ''}">
-                <span class="headline-theme-icon">${THEME_ICONS[theme.icon] || '📊'}</span>
-                <span class="headline-theme-label">${_escHtml(theme.theme_label)}</span><span class="headline-theme-arrow">›</span></a>
-                <div class="headline-cards"></div>`;
-            const cards = section.lastElementChild;
-            theme.indicators.slice(0, 3).forEach(ind => cards.appendChild(this.teaserCard(ind)));
-            grid.appendChild(section);
-            this.themeCards(theme).then(indicators => {
-                if (!cards.isConnected || this.lang !== lang) return;
-                cards.replaceChildren(...indicators.slice(0, 3).map(ind => this.teaserCard(ind)));
-            });
-        }
-        this.renderThemeNav();
     }
 
     _drillToContext(contextCode) {
@@ -801,48 +844,6 @@ class LensApp {
                 if (Math.abs(value) >= 10_000) return formatNumber(Math.round(value), 0);
                 return formatNumber(value, value % 1 === 0 ? 0 : 1);
         }
-    }
-
-    renderRecentlyUpdated(datasets) {
-        const section = document.getElementById('recent-section');
-        const label = document.getElementById('recent-label');
-        const grid = document.getElementById('recent-grid');
-        if (!section || !grid || !datasets || !datasets.length) return;
-
-        label.textContent = this.ui.recentlyUpdated;
-        grid.innerHTML = '';
-
-        for (const ds of datasets) {
-            const card = document.createElement('div');
-            card.className = 'recent-card';
-            card.addEventListener('click', () => this.showDashboard(ds.matrix_code));
-
-            let trendHtml = '';
-            if (ds.trend_direction === 'increasing' || (ds.yoy_growth_latest != null && ds.yoy_growth_latest > 0)) {
-                trendHtml = `<span class="recent-trend up">↑${ds.yoy_growth_latest != null ? ' ' + Math.abs(ds.yoy_growth_latest).toFixed(1) + '%' : ''}</span>`;
-            } else if (ds.trend_direction === 'decreasing' || (ds.yoy_growth_latest != null && ds.yoy_growth_latest < 0)) {
-                trendHtml = `<span class="recent-trend down">↓${ds.yoy_growth_latest != null ? ' ' + Math.abs(ds.yoy_growth_latest).toFixed(1) + '%' : ''}</span>`;
-            } else {
-                trendHtml = `<span class="recent-trend flat">→</span>`;
-            }
-
-            const excerptHtml = ds.excerpt
-                ? `<div class="recent-excerpt">${ds.excerpt}</div>`
-                : '';
-
-            card.innerHTML = `
-                <div class="recent-card-top">
-                    <div class="recent-info">
-                        <div class="recent-name">${ds.matrix_name}</div>
-                        <div class="recent-meta">${ds.matrix_code} · ${ds.ultima_actualizare || ''}</div>
-                    </div>
-                    ${trendHtml}
-                </div>
-                ${excerptHtml}
-            `;
-            grid.appendChild(card);
-        }
-        section.classList.remove('hidden');
     }
 
     async renderThemeStats(code) {
@@ -966,11 +967,6 @@ class LensApp {
 
         // Update page title + meta tags for category
         this._updatePageMeta({ type: 'category', cat, catPath });
-
-        // Hide landing-page-only sections
-        document.getElementById('headlines-section')?.classList.add('hidden');
-        document.getElementById('recent-section')?.classList.add('hidden');
-        document.getElementById('categories-label')?.classList.add('hidden');
 
         document.getElementById('category-grid').classList.add('hidden');
         const panel = document.getElementById('dataset-panel');

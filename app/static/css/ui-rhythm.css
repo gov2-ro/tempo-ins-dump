@@ -2,7 +2,7 @@
 :root { --page-gutter: clamp(1rem, 3.5vw, 4rem); --content-width: 1600px; }
 [data-theme="light"] { --text-2: #626877; --text-3: #737988; --text-muted: #626877; }
 [data-theme="dark"] { --text-2: #9393a2; --text-3: #858594; --text-muted: #9393a2; }
-body { line-height: 1.55; }
+body { line-height: 1.45; }
 button, select, input { font-family: inherit; }
 .topbar { min-height: 3.5rem; height: auto; gap: .75rem; padding: .5rem var(--page-gutter); }
 .topbar .toggle-btn { min-width: 2.25rem; min-height: 2.25rem; width: auto; font-size: .8rem; }
@@ -297,4 +297,28 @@ button, select, input { font-family: inherit; }
 @media (max-width: 900px) { .topbar { flex-wrap: wrap; } }
 @media (max-width: 640px) {
     .place-page .topbar-right a[href="/places"], .place-page .topbar-right a[href="/"] { display: none; }
+}
+/* Landing: a category holds its themes (two previews, subsections, recent updates). */
+.category-grid { columns: auto; margin-top: 0; padding-bottom: 3rem; }
+.landing-themed > .cat-section { border-bottom: 1px solid var(--border-hover); padding: 1.25rem 0 1.5rem; margin-bottom: 0; }
+.landing-themed .cat-section-img { height: 3.5rem; }
+.landing-themed .headlines-grid { padding-top: .25rem; }
+.landing-themed .headline-cards { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.landing-themed > .cat-section > .cat-subcats { margin-top: 1.25rem; }
+.landing-rest { columns: 3; column-gap: 2rem; padding-top: 1.5rem; }
+.headline-theme > .cat-subcats { margin-top: .35rem; }
+.cat-subcat-name { font-size: .75rem; }
+.cat-subcat-count { font-size: .7rem; }
+.cat-other-label { font-size: .75rem; color: var(--text-2); margin-right: .4rem; }
+.recent-lines { margin-top: .6rem; min-width: 0; }
+.recent-lines-label { font-size: .65rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-2); }
+.recent-line { display: flex; align-items: baseline; gap: .5rem; min-width: 0; padding: .1rem 0; color: var(--text-1); white-space: nowrap; }
+.recent-line:hover .recent-name { color: var(--accent); }
+.recent-line .recent-trend { flex: 0 0 3.5rem; font-size: .7rem; font-variant-numeric: tabular-nums; }
+.recent-line .recent-name { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: .75rem; line-height: inherit; }
+.recent-line .recent-meta { flex: 0 0 auto; margin: 0; font-size: .65rem; color: var(--text-2); }
+@media (max-width: 1120px) { .landing-rest { columns: 2; } }
+@media (max-width: 640px) {
+    .landing-rest { columns: 1; }
+    .recent-line .recent-code { display: none; }
 }
