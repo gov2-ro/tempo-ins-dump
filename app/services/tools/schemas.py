@@ -309,7 +309,9 @@ class NextCall(_Closed):
 
 
 class Candidate(_Open):
-    dataset: str
+    """A dataset (`dataset` set) or a reviewed recipe (`recipe` set, `dataset` null)."""
+    dataset: str | None
+    recipe: str | None = None
     level: str | None
     quality: str | None
     domain: dict[str, Any] | None

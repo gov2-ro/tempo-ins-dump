@@ -476,7 +476,7 @@ def _recipe_candidate(ctx, rid: str, parsed: dict, coverage: dict | None, relati
                                                "the generation audit; run_recipe may refuse or "
                                                "exclude entities."))
     next_call = period_call or _call("run_recipe", **args)
-    return {"dataset": rid, "kind": "recipe", "relation": relation, "level": r.get("geo_level", "county"),
+    return {"dataset": None, "recipe": rid, "kind": "recipe", "relation": relation, "level": r.get("geo_level", "county"),
             "quality": quality, "sources": sources,
             "domain": {"complete": None, "restrictions": [], "missing": [], "checked": [],
                        "description": "A recipe's eligibility and exclusions are in its run_recipe "
@@ -556,7 +556,7 @@ def _concept_card(ctx, raw: dict, by_id: dict, parsed: dict, query: str) -> dict
     card["candidates"] = cands
     pref = next((c for c in cands if c["preferred"]), None)
     if pref:
-        card["preferred"] = pref["dataset"]
+        card["preferred"] = pref["dataset"] or pref.get("recipe")
         card["next_call"] = pref["next_call"]
     else:
         card["notes"].append(_note(

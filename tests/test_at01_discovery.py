@@ -359,6 +359,7 @@ def test_recipe_concept_gets_a_run_recipe_call_with_year_and_areas(env):
     assert c["coverage"] == {"first": "2022", "last": "2024", "frequency": "annual"}
     cd = c["candidates"][0]
     assert cd["kind"] == "recipe" and cd["sources"] == ["STAYK_judete", "POPK_judete"] and cd["preferred"]
+    assert cd["dataset"] is None and cd["recipe"] == "tk_intensity"
     assert c["next_call"] == {"tool": "run_recipe", "arguments": {
         "recipe": "tk_intensity", "lang": "ro", "year": "2023", "areas": ["Cluj"]}}
     assert_calls_valid(out)
