@@ -418,6 +418,48 @@ def test_static_site_answers_data_requests_with_the_same_scope(tmp_path):
     assert s["ok"] == s["cases"] - s.get("browser_budget_refusals", 0)
 
 
+# ------------------------------------------- the note the dashboards render
+
+_NOTE_JS = """
+const vm = require('vm'), fs = require('fs');
+const ctx = vm.createContext({console, location: {search: ''}, localStorage: {getItem() { return null; }},
+                              window: {}, document: {}});
+vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), ctx);
+const cases = JSON.parse(process.argv[2]);
+console.log(JSON.stringify(cases.map(([scope, lang, html]) =>
+    vm.runInContext((html ? 'scopeNoteHTML' : 'scopeNote') + '(' + JSON.stringify(scope) + ', ' + JSON.stringify(lang) + ')', ctx))));
+"""
+
+
+def _restriction(covered, domain, requested=False):
+    return {"restrictions": [{"column": "AGE", "kind": "age_range", "covered": covered,
+                              "domain": domain, "requested": requested}]}
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_dashboards_render_the_restriction_note():
+    import subprocess
+    cases = [
+        [_restriction([[0, 84]], [0, None]), "ro", False],
+        [_restriction([[0, 84]], [0, None]), "en", False],
+        [_restriction([[3, 9], [20, 30]], [0, 40]), "en", False],
+        [_restriction([[0, 84]], [0, None], requested=True), "ro", False],    # the asked scope: no warning
+        [{"domain_complete": None, "restrictions": []}, "ro", False],
+        [None, "ro", False],
+        [_restriction([[0, 84]], [0, None]), "en", True],
+        [_restriction([["<img src=x>", 5]], [0, None]), "en", True],          # escaped, never markup
+    ]
+    out = subprocess.run([NODE, "-e", _NOTE_JS, str(ROOT / "app/static/js/utils.js"), json.dumps(cases)],
+                         capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    notes = json.loads(out.stdout)
+    assert notes[:6] == ["V\u00e2rste 0\u201384 ani (f\u0103r\u0103 85+)", "Ages 0\u201384 (85+ not included)",
+                         "Ages 3\u20139, 20\u201330 (0\u20132, 10\u201319, 31\u201340 not included)", "", "", ""]
+    assert notes[6] == ('<span class="agg-badge agg-badge-scope" title="Ages 0\u201384 (85+ not included)">'
+                        'Ages 0\u201384 (85+ not included)</span>')
+    assert "<img" not in notes[7] and "&lt;img" in notes[7]
+
+
 # --------------------------------------------- read-only probe of the real copy
 
 def _generation_id():
@@ -427,18 +469,31 @@ def _generation_id():
 
 @pytest.mark.corpus
 def test_real_single_age_child_is_disclosed_as_zero_to_84():
+    """Generation 9b3e065d: the locality child sums to 21,179,764 for 2026, INS
+    publishes 21,646,220; the 466,456 difference are the people aged 85+, who
+    exist only in the grouped-age sibling."""
     if not _generation_id().startswith("9b3e065d"):
         pytest.skip("pinned to generation 9b3e065d (copied 2026-10-12 corpus)")
     from app.db import get_conn
     from app.services.data_query import run_query
     conn = get_conn()
-    body = run_query(conn, "POP107D_varste_judet", group_by=["TIME_PERIOD"])
-    assert not body.get("unavailable")
-    assert body["aggregation"]["outcome"] == "valid_total"
-    assert body["scope"]["domain_complete"] is False
-    assert body["scope"]["restrictions"] == [
+    year = {"TIME_PERIOD": ["2026"]}
+    child = run_query(conn, "POP107D_varste_localitate", year, ["TIME_PERIOD"])
+    assert not child.get("unavailable") and child["aggregation"]["outcome"] == "valid_total"
+    assert child["rows"] == [["2026", 21179764.0]]                    # the value is unchanged
+    assert child["scope"]["domain_complete"] is False
+    assert child["scope"]["restrictions"] == [
         {"column": "AGE", "kind": "age_range", "covered": [[0, 84]], "domain": [0, None],
          "requested": False}]
-    # the grouped-age sibling adds the open-ended band: no age restriction
-    sib = run_query(conn, "POP107D_grupe_judet", group_by=["TIME_PERIOD"])
-    assert not sib.get("unavailable") and sib["scope"]["restrictions"] == []
+    # the grouped-age sibling holds everyone: no age restriction (null: other
+    # partitions are only metadata-verified), and the 85+ band closes the gap
+    sib = run_query(conn, "POP107D_grupe_localitate", year, ["TIME_PERIOD"])
+    assert sib["rows"] == [["2026", 21646220.0]] and sib["scope"]["restrictions"] == []
+    assert sib["scope"]["domain_complete"] is not False
+    band = run_query(conn, "POP107D_grupe_localitate", {**year, "AGE": ["85 ani si peste"]}, ["TIME_PERIOD"])
+    assert band["rows"] == [["2026", 466456.0]]
+    assert band["scope"]["restrictions"][0]["requested"] is True
+    assert child["rows"][0][1] + band["rows"][0][1] == sib["rows"][0][1]
+    # the county child is not served as a total at all in this generation
+    county = run_query(conn, "POP107D_varste_judet", {}, ["TIME_PERIOD"])
+    assert county.get("unavailable") or county["scope"]["domain_complete"] is False
