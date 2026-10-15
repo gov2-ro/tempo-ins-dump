@@ -5,6 +5,7 @@
 // answers against this file.
 
 import { decideGrouped, sourceTotalGate, pyStr } from './policy.js';
+import { resultScope } from './scope.js';
 
 export const MISSING = undefined;          // an absent JSON parameter
 
@@ -222,6 +223,7 @@ export async function runQuery(loader, code, filters = MISSING, groupBy = MISSIN
 
     let aggregation = null;
     let aggFunc = 'SUM';
+    let scopeArgs = null;
     if (groupCols) {
         const ctx = policy.context;
         if (ctx) {
@@ -244,6 +246,10 @@ export async function runQuery(loader, code, filters = MISSING, groupBy = MISSIN
             filterDict = {};
             for (const [k, v] of Object.entries(dec.filters)) filterDict[k] = [...v];
             aggFunc = dec.agg_func || 'SUM';
+            // AT-01b: what part of the population/domain the executed total covers
+            const caller = {};
+            for (const [k, v] of Object.entries(sdFilters)) if (v && v.length) caller[k] = v;
+            scopeArgs = [ctx, dec, caller, sdGroup];
         } else {
             aggregation = { outcome: 'unavailable', reason: 'no_aggregation_context',
                             blocking_dimension: null, method: 'none' };
@@ -420,6 +426,14 @@ export async function runQuery(loader, code, filters = MISSING, groupBy = MISSIN
     const columns = [...resultDims.map(d => d.dim_column_name), 'OBS_VALUE'];
     const resp = { columns, column_labels: columnLabels, rows, total_rows: rowCount,
                    returned_rows: rows.length, truncated, aggregation, ...envelope(policy, grain) };
+    if (scopeArgs) {
+        try {
+            resp.scope = resultScope(...scopeArgs);
+        } catch (e) {
+            // mirrors run_query: an unknown scope, never a failed or silent total
+            resp.scope = { domain_complete: null, restrictions: [] };
+        }
+    }
     if (timeWindowed) resp.time_windowed = true;
     if (partialPeriod !== null) resp.partial_period_dropped = String(partialPeriod);
     if (!rows.length && requested.size && !resp.unavailable) {

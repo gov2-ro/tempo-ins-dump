@@ -203,6 +203,7 @@ def run_query(conn, matrix_code: str, filters=MISSING, group_by=MISSING,
     # filters (aggregate pins, verified levels) are applied to the query.
     aggregation = None
     agg_func = "SUM"
+    scope_args = None
     if group_by_cols:
         from app.services.dataset_meta import get_aggregation_context, decide_grouped
         ctx = get_aggregation_context(conn, matrix_code)
@@ -230,6 +231,9 @@ def run_query(conn, matrix_code: str, filters=MISSING, group_by=MISSING,
             group_by_cols = sd_group
             filter_dict = {k: list(v) for k, v in decision.effective_filters.items()}
             agg_func = decision.agg_func or "SUM"
+            # AT-01b: what part of the population/domain the executed total covers
+            scope_args = (ctx, aggregation, {k: v for k, v in sd_filters.items() if v},
+                          sd_group)
         else:
             # No context means no decision; an unguarded SUM is not a fallback.
             aggregation = {'outcome': 'unavailable', 'reason': 'no_aggregation_context',
@@ -413,6 +417,15 @@ def run_query(conn, matrix_code: str, filters=MISSING, group_by=MISSING,
         'aggregation': aggregation,
         **_envelope(matrix_code, grain),
     }
+    if scope_args is not None:
+        from app.services import scope
+        try:
+            resp['scope'] = scope.result_scope(*scope_args)
+        except Exception:
+            # a disclosure bug must not turn a computed total into a 500, nor
+            # into silence: report the scope as unknown
+            log.exception("scope disclosure failed matrix=%s", matrix_code)
+            resp['scope'] = {'domain_complete': None, 'restrictions': []}
     if time_windowed:
         resp['time_windowed'] = True
     if partial_period is not None:
