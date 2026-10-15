@@ -500,6 +500,11 @@ def _plan_source_total(aid, reason, col):
         recs.append(C.recovery(
             "tool_call", f"INS's own published total is served by the reviewed recipe '{rid}'.",
             "run_recipe", aid.recipe_args(rid)))
+    alts = aid.verified_alternatives(limit=1)       # related dataset whose own checks pass
+    recs += [aid.query_rec(
+        f"{a} has certified unique keys, the requested columns and values, and the policy and "
+        "INS-total checks do not withhold the same selection there: run it. This is a "
+        "candidate, not a verified answer.", a) for a in alts]
     recs.append(C.recovery(
         "narrow", "Ask for an explicit slice (pin the dimensions to single values or group by "
                   "them) instead of a combined total."))

@@ -194,12 +194,17 @@ def add_gate(corpus):
     without a Total row: INS disagrees / has no Total / was never checked / agrees."""
     for code in ("SRCMIS", "SRCNO", "SRCUNC", "SRCOK"):
         add_dataset(corpus, code, _sex_dims(False), [("Masculin", "2024", 60.0), ("Feminin", "2024", 40.0)])
+    add_dataset(corpus, "SRCPAR", _sex_dims(False), [("Masculin", "2024", 60.0), ("Feminin", "2024", 40.0)])
+    add_dataset(corpus, "SRCKID", _sex_dims(False), [("Masculin", "2024", 60.0), ("Feminin", "2024", 40.0)],
+                parent="SRCPAR")
+    add_split(corpus, "SRCPAR", "SRCKID", "SRCKID", {})
     db = duckdb.connect(str(corpus / "metadata.duckdb"))
     db.execute("CREATE TABLE kpi_total_checks (matrix_code VARCHAR, status VARCHAR, period VARCHAR, "
                "ins DOUBLE, rel DOUBLE, reason VARCHAR)")
     db.execute("INSERT INTO kpi_total_checks VALUES ('SRCMIS', 'mismatch', '2024', 130.0, 0.3, NULL), "
                "('SRCNO', 'unresolved', NULL, NULL, NULL, 'no_total_option:SEX'), "
-               "('SRCOK', 'match', '2024', 100.0, 0.0, NULL)")
+               "('SRCOK', 'match', '2024', 100.0, 0.0, NULL), "
+               "('SRCPAR', 'match', '2024', 100.0, 0.0, NULL)")
     db.close()
 
 
@@ -662,6 +667,17 @@ def test_unchecked_or_unanchored_sums_are_withheld(genv, code, reason, text):
     assert e["status"] == "unavailable" and e["reason"] == reason and rows(e) == []
     assert text in e["message"]
     assert any(r["kind"] == "narrow" for r in e["recovery"]) and recs(e, "describe_dataset")
+
+
+def test_an_unchecked_child_points_to_a_related_dataset_that_passes_its_checks(genv):
+    e = q(dataset="SRCKID", group_by=["TIME_PERIOD"])
+    assert e["status"] == "unavailable" and e["reason"] == "source_total_unchecked"
+    alt = recs(e, "query_data")
+    assert [r["arguments"]["dataset"] for r in alt] == ["SRCPAR"]
+    out = q(**alt[0]["arguments"])
+    assert out["status"] == "ok" and rows(out) == [["2024", 100.0]]
+    # a dataset with no such relative offers none
+    assert not recs(q(dataset="SRCUNC", group_by=["TIME_PERIOD"]), "query_data")
 
 
 def test_a_sum_that_ins_confirms_is_served(genv):
