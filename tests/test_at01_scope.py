@@ -368,6 +368,24 @@ def test_result_scope_needs_an_available_decision(client):
                         {}, ["TIME_PERIOD"]) is None
 
 
+# ----------------------------------------------------- 7. the insights KPI
+
+def test_insights_headline_carries_the_same_scope(client):
+    rest = q(client, "AGEX", ["TIME_PERIOD"])
+    ins = client.get("/api/datasets/AGEX/insights").json()
+    latest = next(k for k in ins["kpis"] if k["key"] == "latest")
+    assert latest["value"] == AGEX_TOTALS["2025"]                # the value is not withheld or changed
+    assert latest["provenance"]["scope"] == rest["scope"]
+    assert latest["provenance"]["scope"]["domain_complete"] is False
+    assert latest["provenance"]["outcome"] == "valid_total"
+    sibling = client.get("/api/datasets/AGEG/insights").json()
+    k = next(k for k in sibling["kpis"] if k["key"] == "latest")
+    assert k["value"] == AGEG_TOTALS["2025"] and k["provenance"]["scope"]["restrictions"] == []
+    # the English page reads the same scope
+    en = client.get("/api/datasets/AGEX/insights", params={"lang": "en"}).json()
+    assert next(k for k in en["kpis"] if k["key"] == "latest")["provenance"]["scope"] == rest["scope"]
+
+
 # ------------------------------------------- 6. REST and the static engine agree
 
 NODE = shutil.which("node")
