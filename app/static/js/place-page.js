@@ -60,12 +60,13 @@ class PlaceProfileApp {
     constructor() {
         this.data = null;
         this.activeKpiIndex = 0;
+        this.activeThemeId = 'general';
         this.activePeers = new Set();
         this.comparisonChart = null;
         this.comparisonData = {};
         this.sparklines = [];
         this.allPlaces = null;
-        this.lang = localStorage.getItem('lens_lang') || 'ro';
+        this.lang = new URLSearchParams(location.search).get('lang') || localStorage.getItem('lens_lang') || 'ro';
         this.theme = document.documentElement.getAttribute('data-theme') || 'dark';
     }
 
@@ -102,6 +103,10 @@ class PlaceProfileApp {
             localStorage.setItem('lens_lang', this.lang);
             document.getElementById('lang-label').textContent = this.lang === 'ro' ? 'EN' : 'RO';
             document.documentElement.setAttribute('lang', this.lang);
+            const url = new URL(location.href);
+            if (this.lang === 'en') url.searchParams.set('lang', 'en');
+            else url.searchParams.delete('lang');
+            history.replaceState(null, '', url);
             this._applyLangStrings();
             this._rerenderForLang();
         });
@@ -112,6 +117,8 @@ class PlaceProfileApp {
 
     _applyLangStrings() {
         const t = this.ui;
+        document.documentElement.lang = this.lang;
+        document.getElementById('comparison-section-title').textContent = this.lang === 'en' ? 'Comparison' : 'Comparație';
         const themesTitle = document.getElementById('section-title-themes');
         if (themesTitle) themesTitle.textContent = t.themes;
         const navInput = document.getElementById('place-nav-input');
@@ -183,6 +190,10 @@ class PlaceProfileApp {
         this.placeSlug = parts[2];
 
         this._initNav();
+        window.addEventListener('resize', () => {
+            this.sparklines.forEach(c => { if (!c.isDisposed()) c.resize(); });
+            this.comparisonChart?.resize();
+        });
 
         try {
             this.data = await API.fetch(`/places/${this.placeType}/${this.placeSlug}`);
@@ -287,8 +298,8 @@ class PlaceProfileApp {
             return `
                 <div class="kpi-card ${i === this.activeKpiIndex ? 'active' : ''}"
                      data-kpi-index="${i}" data-kpi-key="${_esc(kpi.key)}"
-                     title="${_esc(def)}"
-                     onclick="app._selectKpi(${i})">
+                     title="${_esc(def)}">
+                    <button type="button" class="kpi-select" aria-label="${_esc(this._kl(kpi))} — ${this.lang === 'en' ? 'compare' : 'compară'}" onclick="app._compareKpi(${i})">
                     <div class="kpi-label">${_esc(this._kl(kpi))}</div>
                     <div>
                         <span class="kpi-value">${this._fmtValue(kpi, kpi.value)}</span>
@@ -298,7 +309,11 @@ class PlaceProfileApp {
                     ${deltaHtml}
                     <div class="kpi-badges">${this._methodBadge(kpi)}${staleHtml}</div>
                     <div class="kpi-sparkline" id="kpi-spark-${i}"></div>
-                    <div class="kpi-source" title="${_esc(srcTitle)}">${_esc(t.source)}: ${_esc(src.code || '')}${note ? ` · ${_esc(note)}` : ''}</div>
+                    ${this._sparkRange(kpi.sparkline)}
+                    <span class="kpi-actions"><span>${this.lang === 'en' ? 'Compare' : 'Compară'} ↓</span></span>
+                    </button>
+                    <div class="kpi-source" title="${_esc(srcTitle)}">${_esc(t.source)}: <a href="${this._sourceUrl(kpi)}">${_esc(src.code || '')} ↗</a></div>
+                    ${note || def ? `<details class="kpi-method"><summary>${this.lang === 'en' ? 'Definition & method' : 'Definiție și metodă'}</summary><p>${_esc(def)} ${_esc(note)}</p></details>` : ''}
                 </div>`;
         }).join('');
 
@@ -318,13 +333,33 @@ class PlaceProfileApp {
         });
     }
 
+    _sourceUrl(kpi) {
+        const code = kpi.source?.dataset || kpi.source?.code;
+        return `/dataset/${encodeURIComponent(code || '')}?place=${encodeURIComponent(`${this.data.place.type}:${this.data.place.slug}`)}${this.lang === 'en' ? '&lang=en' : ''}`;
+    }
+
+    _sparkRange(series) {
+        if (!series?.length) return '';
+        return `<div class="chart-range"><span>${_esc(series[0].year)}</span><span>${_esc(series[series.length - 1].year)}</span></div>`;
+    }
+
+    _compareKpi(index) {
+        this._activateTheme('general');
+        this._selectKpi(index);
+        const section = document.querySelector('.comparison-section');
+        section.setAttribute('tabindex', '-1');
+        section.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+        section.focus({ preventScroll: true });
+    }
+
     _renderSparkline(containerId, series) {
         const el = document.getElementById(containerId);
-        if (!el || !series || series.length < 2) return;
+        if (!el || !el.clientWidth || !series || series.length < 2 || echarts.getInstanceByDom(el)) return;
         const chart = echarts.init(el, null, { renderer: 'svg' });
         this.sparklines.push(chart);
         chart.setOption({
             animation: false,
+            tooltip: { trigger: 'axis', confine: true, valueFormatter: v => this._fmtValue({}, v) },
             grid: { top: 2, right: 2, bottom: 2, left: 2 },
             xAxis: { type: 'category', show: false, data: series.map(r => r.year) },
             yAxis: { type: 'value', show: false },
@@ -371,82 +406,89 @@ class PlaceProfileApp {
 
     _renderThemes() {
         const { datasets } = this.data;
-        const grid = document.getElementById('indicator-grid');
-        let html = '';
-
         const en = this.lang === 'en';
-        const item = d => `
-                <a class="accordion-item" href="/dataset-v2.html?code=${encodeURIComponent(d.code)}&place=${encodeURIComponent(`${this.data.place.type}:${this.data.place.slug}`)}${en ? '&lang=en' : ''}">
-                    <span class="acc-title">${_esc(d.title)}</span>
-                    <span class="acc-code">${_esc(d.code)}</span>
-                </a>`;
-        const section = (id, icon, label, list, chartsHtml = '') => `
-                <div class="theme-section" id="theme-${id}">
-                    <button type="button" class="theme-header" aria-expanded="false" aria-controls="accordion-${id}"
-                            onclick="app._toggleThemeAccordion('${id}')">
-                        <span class="theme-icon">${icon}</span>
-                        <span class="theme-label">${_esc(label)}</span>
-                        <span class="theme-count">${list.length}</span>
-                        <span class="theme-chevron" aria-hidden="true">▼</span>
-                    </button>
-                    ${chartsHtml ? `<div class="theme-charts">${chartsHtml}</div>` : ''}
-                    <div class="theme-accordion hidden" id="accordion-${id}">${list.map(item).join('')}</div>
-                </div>`;
-
+        const groups = [];
         for (const theme of THEMES) {
-            const themeDatasets = datasets.filter(d => d.theme === theme.id);
-            const themeKpis = theme.kpi_keys
-                .map(key => this.data.kpis.find(k => k.key === key))
-                .filter(Boolean);
-            if (themeDatasets.length === 0 && themeKpis.length === 0) continue;
-            const chartsHtml = themeKpis.slice(0, 3).map((kpi, i) => `
-                <div class="mini-chart-cell">
-                    <div class="mini-chart-title">${_esc(this._kl(kpi))}</div>
-                    <div class="mini-chart-canvas" id="mini-${theme.id}-${i}"></div>
-                    <div class="mini-chart-stat">${this._fmtValue(kpi, kpi.value)} ${_esc(this._ku(kpi))} · ${_esc(kpi.period || '')}${kpi.method && kpi.method.approximation ? ` · ${_esc(this.ui.approx)}` : ''}</div>
-                </div>
-            `).join('');
-            html += section(theme.id, theme.icon, en ? theme.label_en : theme.label, themeDatasets, chartsHtml);
+            const list = datasets.filter(d => d.theme === theme.id);
+            const kpis = theme.kpi_keys.map(key => this.data.kpis.find(k => k.key === key)).filter(Boolean);
+            if (list.length || kpis.length) groups.push({...theme, label: en ? theme.label_en : theme.label, list, kpis});
         }
-
-        // Contexts without a curated theme keep their own TEMPO group (by
-        // stable context code), so nothing disappears into one "Other" bucket.
-        const groups = new Map();
+        const other = new Map();
         for (const d of datasets) {
             if (d.theme) continue;
-            const g = d.group || { code: 'other', name: 'Alte seturi de date', name_en: 'Other datasets' };
-            if (!groups.has(g.code)) groups.set(g.code, { g, list: [] });
-            groups.get(g.code).list.push(d);
+            const g = d.group || {code:'other',name:'Alți indicatori',name_en:'Other indicators'};
+            const raw = (en ? g.name_en || g.name : g.name || g.name_en) || '';
+            const label = raw === raw.toLocaleUpperCase() ? raw.charAt(0) + raw.slice(1).toLocaleLowerCase() : raw;
+            if (!other.has(g.code)) other.set(g.code,{id:`ctx-${g.code}`,label,icon:'',list:[],kpis:[]});
+            other.get(g.code).list.push(d);
         }
-        const cap = s => s ? s.charAt(0) + s.slice(1).toLowerCase() : s;
-        for (const { g, list } of [...groups.values()].sort((a, b) => b.list.length - a.list.length)) {
-            html += section(`ctx-${g.code}`, '📋', cap(en ? g.name_en : g.name), list);
+        groups.push(...other.values());
+        if (!groups.some(g => g.id === this.activeThemeId)) this.activeThemeId = 'general';
+        const nav = document.getElementById('county-theme-tabs');
+        nav.setAttribute('aria-label',en ? 'Themes' : 'Teme');
+        if (!this._themeTabsObserver) {
+            this._themeTabsObserver = new ResizeObserver(() => document.documentElement.style.setProperty('--county-tabs-h',`${nav.offsetHeight}px`));
+            this._themeTabsObserver.observe(nav);
         }
+        const shortLabels = en ? {'ctx-37':'Research','ctx-58':'Communications','ctx-70':'Utilities','ctx-75':'Territory'}
+            : {'ctx-37':'Cercetare','ctx-58':'Comunicații','ctx-70':'Utilități','ctx-75':'Teritoriu'};
+        const tabLabel = g => shortLabels[g.id] || (g.label === g.label.toLocaleUpperCase()
+            ? g.label.charAt(0) + g.label.slice(1).toLocaleLowerCase() : g.label);
+        nav.innerHTML = [{id:'general',label:'General'},...groups].map(g =>
+            `<button type="button" role="tab" id="county-tab-${g.id}" data-theme-id="${g.id}" aria-controls="${g.id === 'general' ? 'county-general' : 'theme-' + g.id}" aria-selected="${this.activeThemeId === g.id}" tabindex="${this.activeThemeId === g.id ? '0' : '-1'}" title="${_esc(g.label)}">${_esc(tabLabel(g))}${g.list ? ` <span class="county-tab-count">${g.list.length}</span>` : ''}</button>`).join('');
+        nav.querySelectorAll('[role="tab"]').forEach(btn => btn.addEventListener('click', () => this._activateTheme(btn.dataset.themeId)));
+        nav.onkeydown = event => {
+            if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+            const tabs = [...nav.querySelectorAll('[role="tab"]')];
+            const index = tabs.indexOf(document.activeElement);
+            if (index < 0) return;
+            event.preventDefault();
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+                : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+            tabs[next].focus();
+            this._activateTheme(tabs[next].dataset.themeId);
+        };
+        document.getElementById('indicator-grid').innerHTML = groups.map(g => {
+            const charts = g.kpis.map(kpi => {
+                const i = this.data.kpis.indexOf(kpi);
+                return `<div class="mini-chart-cell"><button type="button" class="mini-chart-open" onclick="app._compareKpi(${i})" aria-label="${_esc(this._kl(kpi))} — ${en ? 'compare' : 'compară'}">
+                    <div class="mini-chart-title">${_esc(this._kl(kpi))}<span aria-hidden="true">↓</span></div>
+                    <div class="mini-chart-canvas" id="mini-${g.id}-${i}" data-kpi-index="${i}"></div>
+                    ${this._sparkRange(kpi.sparkline)}
+                    <div class="mini-chart-stat">${this._fmtValue(kpi,kpi.value)} ${_esc(this._ku(kpi))} · ${_esc(kpi.period || '')}${kpi.method?.approximation ? ` · ${_esc(this.ui.approx)}` : ''}</div>
+                    <span class="kpi-actions">${en ? 'Compare' : 'Compară'} ↓</span></button>
+                    <div class="kpi-source">${_esc(this.ui.source)}: <a href="${this._sourceUrl(kpi)}">${_esc(kpi.source?.code || '')} ↗</a></div></div>`;
+            }).join('');
+            return `<section class="theme-section hidden" role="tabpanel" id="theme-${g.id}" aria-labelledby="county-tab-${g.id}">
+                <h2 class="county-theme-heading">${_esc(g.label)}</h2>
+                ${charts ? `<div class="theme-charts">${charts}</div>` : ''}
+                <div class="theme-datasets">${g.list.map(d => `<a class="accordion-item" href="/dataset/${encodeURIComponent(d.code)}?place=${encodeURIComponent(`${this.data.place.type}:${this.data.place.slug}`)}${en ? '&lang=en' : ''}">
+                    <span class="acc-title">${_esc(d.title)}</span><span class="acc-code">${_esc(d.code)}</span></a>`).join('')}</div>
+            </section>`;
+        }).join('');
+        this._activateTheme(this.activeThemeId);
+    }
 
-        grid.innerHTML = html;
-
-        // Render mini charts
+    _activateTheme(id) {
+        this.activeThemeId = id;
+        document.getElementById('county-general').classList.toggle('hidden',id !== 'general');
+        document.querySelectorAll('#indicator-grid [role="tabpanel"]').forEach(panel => panel.classList.toggle('hidden',panel.id !== `theme-${id}`));
+        document.querySelectorAll('#county-theme-tabs [role="tab"]').forEach(tab => {
+            const selected = tab.dataset.themeId === id;
+            tab.setAttribute('aria-selected',String(selected));
+            tab.tabIndex = selected ? 0 : -1;
+        });
         requestAnimationFrame(() => {
-            for (const theme of THEMES) {
-                const themeKpis = theme.kpi_keys
-                    .map(key => this.data.kpis.find(k => k.key === key))
-                    .filter(Boolean)
-                    .slice(0, 3);
-                themeKpis.forEach((kpi, i) => {
-                    this._renderSparkline(`mini-${theme.id}-${i}`, kpi.sparkline);
+            if (id === 'general') {
+                this.data.kpis.forEach((kpi,i) => this._renderSparkline(`kpi-spark-${i}`,kpi.sparkline));
+                this.comparisonChart?.resize();
+            } else {
+                document.querySelectorAll(`#theme-${id} .mini-chart-canvas`).forEach(el => {
+                    this._renderSparkline(el.id,this.data.kpis[Number(el.dataset.kpiIndex)].sparkline);
+                    echarts.getInstanceByDom(el)?.resize();
                 });
             }
         });
-    }
-
-    _toggleThemeAccordion(id) {
-        const accordion = document.getElementById(`accordion-${id}`);
-        const chevron = document.querySelector(`#theme-${id} .theme-chevron`);
-        if (!accordion) return;
-        const isOpen = !accordion.classList.contains('hidden');
-        accordion.classList.toggle('hidden', isOpen);
-        chevron.textContent = isOpen ? '▼' : '▲';
-        document.querySelector(`#theme-${id} .theme-header`)?.setAttribute('aria-expanded', String(!isOpen));
     }
 
     _renderComparison() {

@@ -32,13 +32,13 @@
         categoryAxis: {
             axisLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
             axisTick: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
-            axisLabel: { color: '#71717a', fontSize: 11 },
+            axisLabel: { color: '#9393a2', fontSize: 11 },
             splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
         },
         valueAxis: {
             axisLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
             axisTick: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
-            axisLabel: { color: '#71717a', fontSize: 11 },
+            axisLabel: { color: '#9393a2', fontSize: 11 },
             splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
         },
         visualMap: { textStyle: { color: '#71717a' } },
@@ -65,13 +65,13 @@
         categoryAxis: {
             axisLine: { lineStyle: { color: 'rgba(0,0,0,0.1)' } },
             axisTick: { lineStyle: { color: 'rgba(0,0,0,0.06)' } },
-            axisLabel: { color: '#8a8a99', fontSize: 11 },
+            axisLabel: { color: '#626877', fontSize: 11 },
             splitLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } },
         },
         valueAxis: {
             axisLine: { lineStyle: { color: 'rgba(0,0,0,0.1)' } },
             axisTick: { lineStyle: { color: 'rgba(0,0,0,0.06)' } },
-            axisLabel: { color: '#8a8a99', fontSize: 11 },
+            axisLabel: { color: '#626877', fontSize: 11 },
             splitLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } },
         },
         visualMap: { textStyle: { color: '#8a8a99' } },

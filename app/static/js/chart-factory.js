@@ -195,7 +195,7 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
         });
     }
 
-    const showTotal = series.length > 1;
+    const showTotal = series.length > 1 && config._sumSeries === true;
 
     const vfmt = config._valueFormat;
     const fmtVal = v => {
@@ -249,7 +249,7 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
         xAxis: {
             type: 'category',
             data: xData,
-            axisLabel: { fontSize: 11, rotate: xData.length > 20 ? 45 : 0 },
+            axisLabel: { fontSize: 11, showMinLabel: true, showMaxLabel: true, rotate: xData.length > 20 ? 45 : 0 },
         },
         yAxis: {
             // log scale only when requested AND representable (all values > 0)

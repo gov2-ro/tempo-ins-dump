@@ -452,6 +452,7 @@ function _orderedHorizontalBars(chart, config, data, metadata, catDim, catIdx, s
                  formatter: p => (p.value == null ? '' : formatNumber(p.value)) },
     }));
 
+    const labelSpace = Math.min(200, Math.round(chart.getDom().clientWidth * .4));
     chart.setOption({
         tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' },
             formatter(params) {
@@ -464,12 +465,12 @@ function _orderedHorizontalBars(chart, config, data, metadata, catDim, catIdx, s
                 return html;
             } },
         legend: { show: series.length > 1, type: 'scroll', bottom: 0, textStyle: { fontSize: 11 } },
-        grid: { left: 200, right: single ? 56 : 20, top: 10, bottom: series.length > 1 ? 50 : 24 },
+        grid: { left: labelSpace, right: single ? 56 : 20, top: 10, bottom: series.length > 1 ? 50 : 24 },
         xAxis: { type: (config._logScale && !stacked) ? 'log' : 'value',
                  axisLabel: { fontSize: 11, formatter: v => axisNumber(v) } },
         yAxis: { type: 'category', data: yData,
                  axisTick: { show: false },
-                 axisLabel: { fontSize: 11, width: 190, overflow: 'truncate', interval: 0 } },
+                 axisLabel: { fontSize: 11, width: labelSpace - 10, overflow: 'truncate', interval: 0 } },
         series,
         animationDuration: 300,
     });
@@ -1111,13 +1112,13 @@ function createSmallMultiplesChart(container, config, data, metadata) {
         .slice(0, 16);
 
     const n = facetIds.length;
-    const nCols = Math.min(4, n);
+    const nCols = Math.min(container.clientWidth < 600 ? 2 : 4, n);
     const nRows = Math.ceil(n / nCols);
 
     const gridArr = [], xAxes = [], yAxes = [], seriesArr = [], titles = [];
     const cellW = 100 / nCols;
     const cellH = 100 / nRows;
-    const pad = 2;
+    container.style.minHeight = `${Math.max(parseFloat(getComputedStyle(container).minHeight) || 0, nRows * 130)}px`;
 
     for (let i = 0; i < n; i++) {
         const fid = facetIds[i];
@@ -1125,20 +1126,21 @@ function createSmallMultiplesChart(container, config, data, metadata) {
         const r = Math.floor(i / nCols);
 
         gridArr.push({
-            left: `${c * cellW + pad}%`, top: `${r * cellH + pad + 6}%`,
-            width: `${cellW - pad * 2}%`, height: `${cellH - pad * 2 - 8}%`,
-            containLabel: false,
+            left: `${c * cellW + cellW * .12}%`, top: `${r * cellH + cellH * .24}%`,
+            width: `${cellW * .8}%`, height: `${cellH * .5}%`,
+            containLabel: true,
         });
         xAxes.push({
             type: 'category', data: xData, gridIndex: i,
-            axisLabel: { show: r === nRows - 1, fontSize: 9, rotate: 45 },
+            axisLabel: { show: true, fontSize: 10, rotate: 0, showMinLabel: true, showMaxLabel: true,
+                interval: index => index === 0 || index === xData.length - 1 },
             axisTick: { show: false },
-            axisLine: { lineStyle: { color: '#ddd' } },
+            axisLine: { lineStyle: { color: getComputedStyle(container).getPropertyValue('--border-hover').trim() } },
         });
         yAxes.push({
             type: 'value', gridIndex: i,
             axisLabel: { show: c === 0, fontSize: 9, formatter: v => axisNumber(v) },
-            splitLine: { lineStyle: { color: '#f0f0f0' } },
+            splitLine: { lineStyle: { color: getComputedStyle(container).getPropertyValue('--border').trim() } },
         });
 
         const dataMap = {};
@@ -1159,9 +1161,9 @@ function createSmallMultiplesChart(container, config, data, metadata) {
         titles.push({
             text: lbl.length > 22 ? lbl.slice(0, 20) + '…' : lbl,
             left: `${c * cellW + cellW / 2}%`,
-            top:  `${r * cellH + pad}%`,
+            top:  `${r * cellH + cellH * .02}%`,
             textAlign: 'center',
-            textStyle: { fontSize: 10, fontWeight: 'normal', color: '#555' },
+            textStyle: { fontSize: 10, fontWeight: 'normal', color: getComputedStyle(container).getPropertyValue('--text-1').trim() },
         });
     }
 
@@ -1169,7 +1171,6 @@ function createSmallMultiplesChart(container, config, data, metadata) {
     const dataZoomArr = [];
     for (let i = 0; i < n; i++) {
         dataZoomArr.push({ type: 'inside', xAxisIndex: i });
-        dataZoomArr.push({ type: 'slider', xAxisIndex: i, height: 16 });
     }
 
     chart.setOption({
@@ -1182,6 +1183,7 @@ function createSmallMultiplesChart(container, config, data, metadata) {
         dataZoom: dataZoomArr,
         animationDuration: 300,
     });
+    chart.resize();
     return chart;
 }
 

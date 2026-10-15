@@ -168,8 +168,10 @@
             white-space:nowrap;
         }
     </style>
+    <link rel="stylesheet" href="/css/ui-rhythm.css?v=3">
+    <script src="/js/ui-preferences.js?v=2" defer></script>
 </head>
-<body>
+<body class="place-page">
     <nav class="topbar">
         <div class="topbar-left">
             <a href="/" class="logo"><span class="logo-dot"></span>INS<span style="margin:-1ex 0 0 -1ex;">+</span></a>
@@ -206,29 +208,30 @@
                 </div>
                 <div class="dataset-count" id="dataset-count"></div>
             </div>
+            <nav class="county-theme-tabs" id="county-theme-tabs" role="tablist" aria-label="Teme"></nav>
+            <section id="county-general" role="tabpanel" aria-labelledby="county-tab-general">
             <div class="kpi-grid" id="kpi-grid"></div>
             <div class="kpi-omitted" id="kpi-omitted"></div>
 
-            <!-- Section B: Themed Sections -->
-            <div class="section-title" id="section-title-themes">Seturi de date pe teme</div>
-            <div class="indicator-grid" id="indicator-grid"></div>
-
             <!-- Section C: Comparison -->
             <div class="comparison-section">
-                <div class="section-title">Comparație — <span id="comparison-kpi-label" style="color:var(--text-primary)"></span></div>
+                <div class="section-title"><span id="comparison-section-title">Comparație</span> — <span id="comparison-kpi-label" style="color:var(--text-primary)"></span></div>
                 <div class="comparison-meta" id="comparison-kpi-meta"></div>
                 <div class="always-chips" id="always-chips"></div>
                 <div class="peer-groups" id="peer-groups"></div>
                 <div class="comparison-note" id="comparison-note"></div>
                 <div id="comparison-chart"></div>
             </div>
+            </section>
+            <div class="indicator-grid" id="indicator-grid"></div>
         </div>
     </div>
 
     <script src="/js/config.js?v=1"></script>
 
-    <script src="/js/api.js?v=30"></script>
+    <script src="/js/api.js?v=31"></script>
+    <script src="/js/theme-overviews.js?v=2"></script>
 
-    <script src="/js/place-page.js?v=7"></script>
+    <script src="/js/place-page.js?v=9"></script>
 </body>
 </html>

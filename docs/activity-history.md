@@ -1,5 +1,126 @@
 # Activity History
 
+## 2026-10-16 — Final landing layout
+
+Moved the sample questions below the domain navigation on the landing and theme
+profiles. Every RO/EN question set, including subthemes, now contains six inline
+links. Landing previews show three charts per theme: two themes and six charts
+per desktop row, with fewer columns at narrow widths. Theme profiles retain four
+previews. Made preview and county chart titles bold and added modest spacing
+around each teaser, keeping its source scope, units and period endpoints.
+
+Browser validation checked the question order/count, desktop chart arrangement,
+RO/EN, M as the default size, XL text and 320/390/768/1440 px layouts. Landing,
+county and Dimensions had no horizontal overflow; county tabs and the dataset
+page also passed smoke checks. Full suite: **621 passed, 72 skipped** (the
+isolated checkout has no corpus); JavaScript syntax and `git diff --check` also
+passed. The static preview remains on port 8092.
+
+## 2026-10-16 — Compact theme profiles, county tabs and chart teasers
+
+Refined the isolated `ui/rhythm` preview after design review:
+
+- Landing now starts with the five original/general search questions as inline
+  links, followed by one compact theme navigation with General selected. Removed
+  the introductory heading and the duplicate question-theme chooser. Theme and
+  subtheme profiles have their own five questions. Navigation uses bold text and
+  an underline, including county tabs and catalogue sort/filter controls.
+- More compact overview: each of the main themes has four source-backed previews.
+  Subtheme cards also get a preview. `theme-overviews.js` resolves curated extras
+  through existing insights/query endpoints and limits concurrent work to three
+  jobs. A subtheme fallback uses one actual observed cell to pin every non-time
+  dimension, then requests that exact series through the shared query policy.
+  It does not invent totals, add values in JavaScript, or combine independently
+  selected dimension options. Scope, unit, period range and source filters travel
+  with the preview and its dataset link. Duplicate periods, non-numeric values,
+  unknown dates and refused queries cannot become a chart.
+- GDP previews explicitly pin `PRODUS INTERN BRUT`; generic insights for these
+  tables can select gross value added instead. Legacy period IDs are sorted by
+  their source period labels before choosing the plotted window.
+- County profiles use a wrapping, keyboard-accessible tab list with a General
+  overview and one visible theme panel. Both chart and comparison actions retain
+  the curated KPI. Mini charts initialize only when visible. Tabs remain visible
+  while browsing a long indicator list, and comparison scrolling accounts for the
+  tab list's actual wrapped height. Additional source groups remain accessible.
+- M (17 px) is the default reading size; explicit saved sizes are retained. The
+  desktop search dialog is wider and result titles/coverage wrap in full.
+  The requested **🤖 Ask** navigation is visible in static mode too; the existing
+  availability gate still disables Ask without a backend. No keys/model calls
+  were enabled.
+
+Validation: full suite **621 passed, 72 skipped**; browser checks covered every
+main theme with four previews and its subtheme previews on the copied corpus.
+Source-selection fixtures check GDP versus GVA, actual-cell pinning, units,
+missing/invalid dates, duplicate periods, and legacy ID chronology. The final
+chronology refinement also passed its two focused tests. Playwright checked
+keyboard tabs, comparison focus/scrolling, General/themed questions, the Ask
+availability page, and the wider search dialog. Responsive checks include
+320/390/768/1440 px and XL text; identified toolbar/filter wrapping issues were
+fixed. No server `/api/` calls were needed by the static pages.
+
+Preview is still `http://localhost:8092/`. Dated insight records for the selected
+examples were regenerated only in the temporary overlay; the frozen build and
+corpus are unchanged. Publishing still requires a fresh static build/recording
+and release validation.
+
+## 2026-10-15 — Shared UI rhythm and static preview
+
+UI work lives in the isolated `ui/rhythm` worktree, based on `pa/00-baseline`
+(`8a9689d`), separately from the analytical-tools implementation.
+
+- Landing: removed the title/tagline/statistics block and the two oversized entry
+  cards. County choice, corpus statistics and Dimensions sit beside search.
+  Eight question themes each have three RO/EN search examples; one disclosure
+  panel opens at a time and can be collapsed. Horizontal catalogue navigation
+  follows it; quick navigation remains available on dataset/category pages.
+- Shared presentation: wider, aligned content, consistent spacing and stronger
+  headings, open summaries instead of filled cards, higher-contrast secondary
+  text, and four saved text presets (16/17/18/20 px). Chart label fonts scale too,
+  preserving plotted values, zoom and legend state.
+- County: both headline and theme charts explicitly open the comparison of the
+  curated KPI, using buttons and keyboard focus. Source datasets have separate
+  links retaining the place selection. This distinction matters: a published
+  total or weighted rate is not necessarily the raw dataset's default slice.
+  Definitions/methods remain in disclosures; approximation/staleness badges stay
+  visible. Every sparkline has its actual first/last source period.
+- Dataset presentation: time×category tiles open as grouped bars for small sets,
+  or single-series bars with a visible picker for dense sets. Existing verified
+  stacking permissions are preserved; heatmap is an explicit alternative.
+  Slices, filters and server aggregation policy are unchanged. Grouped rate
+  tooltips no longer imply that their series can be summed. Small multiples show
+  endpoint dates in every panel and use fewer columns on phones; category bars
+  reserve less label space on narrow screens.
+- Dimensions: searchable dimension list, larger controls, clearer result rows
+  with actual dataset links, RO/EN labels, filter reset and the existing native
+  mobile picker. Stale asynchronous responses cannot replace a newer selection.
+  Removed its invalid embedded flag images and aligned its theme preference.
+- Period metadata: `headlines` and `insights` now return `sparkline_periods`
+  alongside values. Older recorded responses without matching periods omit the
+  sparkline; dates are never inferred from the latest period or sample count.
+
+Validation: full suite **618 passed, 72 skipped** in the isolated checkout
+(corpus-dependent checks skip there); focused headline/structural-view/bar
+numerical checks **27 passed**. JavaScript syntax and `git diff --check` passed.
+Playwright checked landing, county and Dimensions at 320/390/768/1440 px,
+including the largest text size, and v1/v2, Places and Compare smoke checks.
+RO/EN, light/dark, disclosure/search/navigation, keyboard comparison, retained
+county filters, bar selection and all four chart-font sizes were checked.
+No page errors or failed requests remained in those checks. Static flows made
+no `/api/` calls. The grouped-bar fixture retains missing periods as null and
+preserves individual rate values without stacking or a summed tooltip.
+
+Chart-selection and search evaluations used the read-only copied corpus in
+`tempo-gen-20261012/data`. Outputs exactly match the unchanged alpha checkout
+(chart result SHA-256 starts `34e1ee482cb1`, search `ce1ac2c53670`); the historical
+committed baselines already differ on this corpus. No baseline was rewritten.
+
+Review preview: `http://localhost:8092/`, with the original preview on `8090`.
+The temporary preview server overlays these assets on the frozen static build;
+only dated headline records and a few example insight records were regenerated
+under `/tmp/tempo-ui-records`. The original build and corpus were not modified.
+Rebuild/record and validate the static release before publishing these changes;
+this work did not deploy, upload or commit them.
+
 ## 2026-10-15 — Ask debug mode
 
 A question that "stays on loading" now explains itself.

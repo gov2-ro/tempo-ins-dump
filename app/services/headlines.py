@@ -161,6 +161,7 @@ def resolve_indicator(conn, parquet_dir: str, ind: dict, lang: str = "ro"):
         "unit": unit,
         "format": ind.get("format", "number"),
         "sparkline": [v for _, v in chrono[-12:]],
+        "sparkline_periods": [p for p, _ in chrono[-12:]],
         "provenance": ap.provenance(
             decision, source_code=ind["code"], period=latest_period, unit=unit,
             comparison=ap.comparison_of(change)),
