@@ -309,8 +309,10 @@ def query_limits(res: dict, returned: int) -> dict:
     dropped = res.get("partial_period_dropped")
     unavailable = bool(res.get("unavailable"))
     complete = None if unavailable else not (truncated or windowed or dropped is not None)
+    # a windowed or period-dropped result has rows beyond what was read: size unknown
+    unknown = truncated or unavailable or windowed or dropped is not None
     return {"returned_rows": returned,
-            "total_rows": None if (truncated or unavailable) else res.get("returned_rows"),
+            "total_rows": None if unknown else res.get("returned_rows"),
             "preview_truncated": truncated or returned < (res.get("returned_rows") or 0),
             "source_complete": complete, "time_windowed": windowed,
             "partial_period_dropped": None if dropped is None else str(dropped)}

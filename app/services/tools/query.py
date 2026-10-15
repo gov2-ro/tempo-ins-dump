@@ -109,8 +109,6 @@ def _answer(aid: "_Aid", warnings: list) -> dict:
     grouped = bool(request["group_by"])
     prov = C.query_provenance(ctx, aid.code, request, res)
     limits = C.query_limits(res, len(rows))
-    if limits["time_windowed"] or limits["partial_period_dropped"] is not None:
-        limits["total_rows"] = None      # the selection has rows beyond the window: size unknown
     warnings = warnings + _result_warnings(aid, rows, columns, grouped)
     recs = []
     status, reason = "ok", None

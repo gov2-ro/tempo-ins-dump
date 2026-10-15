@@ -74,6 +74,17 @@ def add_split(corpus, parent: str, child: str, label: str, split_dimensions: dic
     db.close()
 
 
+def add_search_columns(corpus):
+    """Columns dataset_search filters on that fix02b's minimal schema lacks
+    (discover_indicators' family results go through it)."""
+    db = duckdb.connect(str(corpus / "metadata.duckdb"))
+    db.execute("ALTER TABLE matrices ADD COLUMN is_canonical BOOLEAN DEFAULT TRUE")
+    for ddl in ("has_time BOOLEAN", "has_geo BOOLEAN", "time_granularity VARCHAR",
+                "has_gender BOOLEAN", "has_age BOOLEAN", "has_residence BOOLEAN"):
+        db.execute(f"ALTER TABLE matrix_profiles ADD COLUMN {ddl}")
+    db.close()
+
+
 def write_manifest(corpus, generation_id: str = GENERATION, *, conflicting=(), duplicate=()):
     m = {"generation_id": generation_id, "built_at": "2026-10-15T00:00:00+00:00",
          "db": {"size": (corpus / "metadata.duckdb").stat().st_size},
