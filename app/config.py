@@ -28,6 +28,11 @@ LARGE_DATASET_THRESHOLD = 50_000  # Require filters above this row count
 
 DEBUG = os.environ.get("TEMPO_DEBUG", "false").lower() in ("1", "true", "yes")
 
+# Trusted public origin for citations, downloads and evidence links of the
+# analytical tools (e.g. https://ins.gov2.ro). Unset: root-relative links. Links
+# are never derived from a request's Host or forwarded headers.
+PUBLIC_BASE_URL = os.environ.get("TEMPO_PUBLIC_BASE_URL", "").strip()
+
 # LLM agent (POST /api/ask) — disabled by default
 ASK_ENABLED        = os.environ.get("TEMPO_ASK_ENABLED", "false").lower() in ("1", "true", "yes")
 # Bring-your-own-key Ask is a separate switch, also off by default: Ask stays out
