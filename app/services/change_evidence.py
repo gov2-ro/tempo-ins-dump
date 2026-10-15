@@ -97,7 +97,7 @@ for iv in method["intervals"]:
         pt, t = endpoint(key, yt)
         if pf or pt:
             bad = [(n, p) for n, p in (("from", pf), ("to", pt)) if p]
-            excl_rows.append([yf, yt, *key, bad[0][1], ";".join(n for n, _ in bad], "", "", ""])
+            excl_rows.append([yf, yt, *key, bad[0][1], ";".join(n for n, _ in bad), "", "", ""])
             continue
         absolute = t - f
         if not math.isfinite(absolute):

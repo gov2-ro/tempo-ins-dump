@@ -626,3 +626,349 @@ def test_multi_interval_exclusions_are_per_interval(env):
     counts = [(i["eligible_count"], i["excluded_count"]) for i in e["data"]["intervals"]]
     assert counts == [(3, 1), (4, 0), (3, 1)]
     assert e["data"]["intervals"][2]["excluded"][0]["missing"] == ["from"]
+
+
+# ------------------------------------------------------------ the byte budget
+
+def build_many(corpus, n=300, nulls=40):
+    """300 entities with long Romanian names; the last `nulls` have a suppressed 2010 value."""
+    names = [f"Comuna Șugătag-Câmpulung între Dunăre și Prutul de Sus nr. {i:04d}" for i in range(n)]
+    rows = []
+    for i, name in enumerate(names):
+        rows.append((name, "2000", UNIT, 1000.0 + i))
+        rows.append((name, "2010", UNIT, None if i >= n - nulls else 1000.0 + i * 3 - 200))
+        rows.append((name, "2020", UNIT, 1500.0 + i * 7))
+    add_dataset(corpus, "MANYX", [area_dim(names), time_dim(("2000", "2010", "2020")),
+                                  unit_dim(UNIT)], rows)
+    return names
+
+
+@pytest.fixture
+def many(tmp_path, monkeypatch):
+    names = []
+    env_ = make_env(tmp_path, monkeypatch, build=lambda c: names.extend(build_many(c)))
+    env_.names = names
+    return env_
+
+
+def test_a_large_result_is_shortened_to_the_budget_without_losing_counts_or_warnings(many):
+    from app.services.tools import contract
+    e = call("compare_periods", dataset="MANYX", entity_columns=["REF_AREA"],
+             intervals=[iv("2000", "2010"), iv("2000", "2020")], top_k=100)
+    assert contract.size(e) <= contract.MAX_RESULT_BYTES
+    first, second = e["data"]["intervals"]
+    assert (first["eligible_count"], first["excluded_count"]) == (260, 40)      # every entity counted
+    assert (second["eligible_count"], second["excluded_count"]) == (300, 0)
+    assert first["exclusion_counts"] == {"value_missing": 40}
+    assert first["exclusions_truncated"] is True and len(first["excluded"]) < 40
+    for i in (first, second):
+        assert 0 < len(i["rows"]) < 100
+        assert [r["rank"] for r in i["rows"]] == list(range(1, len(i["rows"]) + 1))   # a ranking prefix
+    assert e["limits"]["preview_truncated"] is True
+    assert e["limits"]["returned_rows"] == len(first["rows"]) + len(second["rows"])
+    assert e["limits"]["total_rows"] == 560
+    assert sum(w["code"] == "preview_shortened" for w in e["warnings"]) == 1
+    assert {"entities_excluded", "boundary_continuity_unverified"} <= {w["code"] for w in e["warnings"]}
+    assert e["recovery"][0]["tool"] == "get_evidence_links"
+    # provenance is untouched by the shortening
+    assert e["provenance"]["source_query"]["group_by"] == ["REF_AREA", "TIME_PERIOD"]
+    assert e["provenance"]["sources"][0]["unit"] == UNIT
+
+
+def test_shrink_cuts_exclusion_samples_first_then_rows_then_reports_nothing_left():
+    from app.services.tools import changes, contract
+    rows = [{"entity": {"A": str(i)}, "from_value": 1.0, "to_value": 2.0, "absolute": 1.0,
+             "percent": 100.0, "rank": i + 1} for i in range(8)]
+    env_ = {"data": {"intervals": [{"from": "2000", "to": "2010", "rows": list(rows),
+                                    "eligible_count": 8, "excluded_count": 4,
+                                    "excluded": [{"entity": {"A": "x"}, "reason": "no_observation",
+                                                  "missing": ["to"]}] * 4,
+                                    "exclusion_counts": {"no_observation": 4},
+                                    "exclusions_truncated": False}]},
+            "limits": {"returned_rows": 8, "preview_truncated": False}, "warnings": [],
+            "recovery": [], "provenance": {"selection": None, "generation": {"id": "g"}}}
+    iv0 = env_["data"]["intervals"][0]
+    steps = 0
+    while changes.shrink(env_):
+        steps += 1
+        if iv0["excluded"]:
+            assert len(iv0["rows"]) == 8                          # samples go first
+    assert iv0["excluded"] == [] and iv0["exclusions_truncated"] is True
+    assert len(iv0["rows"]) == 1 and iv0["rows"][0]["rank"] == 1  # then rows, halved to one
+    assert env_["limits"]["returned_rows"] == 1 and env_["limits"]["preview_truncated"] is True
+    assert iv0["eligible_count"] == 8 and iv0["excluded_count"] == 4
+    assert [w["code"] for w in env_["warnings"]] == ["preview_shortened"]    # once
+    assert steps == 6                                             # samples 4->2->1->0, rows 8->4->2->1
+    assert changes.shrink(env_) is False
+    assert contract.size(env_) < 2000
+
+
+def test_a_selection_that_cannot_fit_gets_response_budget(many, monkeypatch):
+    from app.services.tools import changes
+    monkeypatch.setattr(changes, "shrink", lambda env: False)
+    e = call("compare_periods", dataset="MANYX", entity_columns=["REF_AREA"],
+             intervals=[iv("2000", "2010"), iv("2000", "2020")], top_k=100)
+    assert (e["status"], e["reason"]) == ("unavailable", "response_budget")
+    assert e["data"]["request"]["sha256"] and e["provenance"]["selection"] is None
+
+
+# ------------------------------------------------------------ routes
+
+def params(**kw):
+    p = {"dataset": "COUNTX", "entity_columns": json.dumps(["REF_AREA"]),
+         "intervals": json.dumps([iv("1992", "2002"), iv("2010", "2020")])}
+    for k, v in kw.items():
+        p[k] = v if isinstance(v, str) else json.dumps(v)
+    return p
+
+
+def test_json_route_returns_the_tool_envelope(env):
+    from app.services.tools import registry
+    r = env.client.get("/api/period-changes", params=params(top_k="2", metric="percent"))
+    assert r.status_code == 200
+    body = r.json()
+    direct = registry.call_tool("compare_periods", {
+        "dataset": "COUNTX", "entity_columns": ["REF_AREA"],
+        "intervals": [iv("1992", "2002"), iv("2010", "2020")], "top_k": 2, "metric": "percent"})
+    registry.validate_result("compare_periods", body)
+    assert body == direct
+    assert [[r_["entity"]["REF_AREA"] for r_ in i["rows"]] for i in body["data"]["intervals"]] == [
+        ["B", "A"], ["D", "A"]]
+
+
+def test_json_route_filters_and_status_codes(env):
+    ok = env.client.get("/api/period-changes", params=params(filters={"REF_AREA": ["A", "B"]}))
+    assert ok.status_code == 200 and len(ok.json()["data"]["intervals"][0]["rows"]) == 2
+    # refusals are ordinary 200 outcomes
+    r = env.client.get("/api/period-changes", params={**params(), "intervals": json.dumps([iv("1992", "2005")])})
+    assert r.status_code == 200 and r.json()["reason"] == "period_unavailable"
+    # malformed or invalid input -> 400 with the envelope
+    for bad in (params(entity_columns="not json"), params(top_k="abc"), params(top_k="0"),
+                params(metric="median"), params(lang="fr"),
+                {k: v for k, v in params().items() if k != "entity_columns"},
+                {**params(), "intervals": json.dumps([iv("2020", "2010")])}):
+        r = env.client.get("/api/period-changes", params=bad)
+        assert r.status_code == 400, bad
+        assert r.json()["reason"] == "invalid_input" and r.json()["contract"] == "tempo-tools/1"
+    r = env.client.get("/api/period-changes", params=params(entity_columns=["NOPE"]))
+    assert r.status_code == 400 and r.json()["reason"] == "unknown_column"
+    r = env.client.get("/api/period-changes", params={**params(), "dataset": "NOPEX"})
+    assert r.status_code == 404 and r.json()["reason"] == "unknown_dataset"
+
+
+def test_json_route_server_fault_is_500_with_an_envelope(env, monkeypatch):
+    from app.services import period_changes
+    monkeypatch.setattr(period_changes, "run", lambda *a, **k: 1 / 0)
+    r = env.client.get("/api/period-changes", params=params())
+    assert r.status_code == 500 and r.json()["reason"] == "execution_failed"
+    assert "division" not in r.text and "Traceback" not in r.text
+
+
+# ------------------------------------------------------------ evidence bundle
+
+def open_zip(data):
+    z = zipfile.ZipFile(io.BytesIO(data))
+    m = json.loads(z.read("manifest.json"))
+    for name, h in m["files"].items():
+        assert hashlib.sha256(z.read(name)).hexdigest() == h, name
+    assert sorted(m["files"]) == sorted(n for n in z.namelist() if n != "manifest.json")
+    return z, m
+
+
+def recompute(directory):
+    return subprocess.run([sys.executable, "-I", "recompute.py"], cwd=directory, capture_output=True,
+                          text=True, timeout=60)
+
+
+def get_zip(env_, **kw):
+    r = env_.client.get("/api/period-changes/evidence", params=params(**kw))
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"] == "application/zip"
+    return r
+
+
+def test_bundle_holds_the_complete_ranking_and_recomputes_offline(env, tmp_path):
+    r = get_zip(env, top_k="1")                                  # the preview is 1 row; the bundle has all
+    z, m = open_zip(r.content)
+    assert m["schema"] == "tempo-evidence/1" and m["kind"] == "period_changes"
+    assert m["generation"]["id"] == GENERATION and m["dataset"] == "COUNTX"
+    assert sorted(z.namelist()) == sorted([
+        "manifest.json", "selection.json", "result.csv", "exclusions.csv", "inputs/endpoints.csv",
+        "method.json", "attribution.json", "README.txt", "recompute.py"])
+    res = list(csv.reader(io.StringIO(z.read("result.csv").decode())))
+    assert res[0] == ["interval_from", "interval_to", "rank", "REF_AREA", "from_value", "to_value",
+                      "absolute", "percent", "percent_note"]
+    assert [(x[0], x[1], x[2], x[3], x[6]) for x in res[1:]] == [
+        ("1992", "2002", "1", "B", "-50.0"), ("1992", "2002", "2", "A", "-20.0"),
+        ("1992", "2002", "3", "C", "0.0"),
+        ("2010", "2020", "1", "D", "-90.0"), ("2010", "2020", "2", "A", "-30.0"),
+        ("2010", "2020", "3", "B", "-20.0"), ("2010", "2020", "4", "C", "5.0")]
+    c_row = next(x for x in res[1:] if x[1] == "2020" and x[3] == "C")
+    assert c_row[7] == "" and c_row[8] == "zero_baseline"
+    assert [x[7] for x in res[1:] if x[3] == "A"] == ["-20.0", repr(100 * -30.0 / 90.0)]
+    exc = list(csv.reader(io.StringIO(z.read("exclusions.csv").decode())))
+    assert exc[1:] == [["1992", "2002", "D", "no_observation", "to", "", "", ""]]
+    ep = list(csv.reader(io.StringIO(z.read("inputs/endpoints.csv").decode())))
+    assert ep[0] == ["REF_AREA", "year", "value"] and ["D", "2002", ""] not in ep
+    assert ["A", "1992", "100.0"] in ep and len(ep) == 1 + 15            # 4 years x 4 entities - D's 2002
+    sel = json.loads(z.read("selection.json"))
+    assert sel["source_query"]["group_by"] == ["REF_AREA", "TIME_PERIOD"]
+    assert sel["normalized"]["kind"] == "period_changes" and sel["link"].startswith("/api/period-changes?")
+    method = json.loads(z.read("method.json"))
+    assert method["formulas"]["percent"].endswith("only when from_value > 0")
+    assert method["ranking"]["tie_break"].startswith("full entity key")
+    assert method["aggregation"]["outcome"] in ("valid_total", "valid_slice")
+    assert "NOT raw INS observations" in z.read("README.txt").decode()
+    # offline recomputation
+    out = tmp_path / "bundle"
+    z.extractall(out)
+    p = recompute(out)
+    assert p.returncode == 0, p.stderr
+    assert "1992,2002,1,B,-50.0,-25.0" in p.stdout and "2010,2020,1,D,-90.0,-100.0" in p.stdout
+    assert "result.csv matches" in p.stderr and "exclusions.csv matches" in p.stderr
+
+
+def test_percent_bundle_recomputes_with_baseline_exclusions(env, tmp_path):
+    z, _ = open_zip(get_zip(env, metric="percent", order="desc").content)
+    exc = list(csv.reader(io.StringIO(z.read("exclusions.csv").decode())))
+    assert ["2010", "2020", "C", "zero_baseline", "", "0.0", "5.0", "5.0"] in exc
+    z.extractall(tmp_path)
+    assert recompute(tmp_path).returncode == 0
+
+
+def test_tampering_with_the_bundle_is_detected(env, tmp_path):
+    z, _ = open_zip(get_zip(env).content)
+    z.extractall(tmp_path)
+    p = tmp_path / "result.csv"
+    text = p.read_text()
+    assert "-50.0" in text
+    p.write_text(text.replace("-50.0", "-49.0", 1))
+    r = recompute(tmp_path)
+    assert r.returncode == 1 and "result.csv DIFFERS" in r.stderr
+    p.write_text(text)
+    assert recompute(tmp_path).returncode == 0
+    e = tmp_path / "inputs" / "endpoints.csv"
+    e.write_text(e.read_text().replace("B,1992,200.0", "B,1992,300.0"))   # the inputs changed
+    assert recompute(tmp_path).returncode == 1
+
+
+def test_bundle_for_a_large_selection_has_every_row_and_exclusion(many, tmp_path):
+    r = many.client.get("/api/period-changes/evidence", params={
+        "dataset": "MANYX", "entity_columns": json.dumps(["REF_AREA"]),
+        "intervals": json.dumps([iv("2000", "2010")]), "top_k": "5"})
+    assert r.status_code == 200
+    z, _ = open_zip(r.content)
+    res = list(csv.reader(io.StringIO(z.read("result.csv").decode())))
+    exc = list(csv.reader(io.StringIO(z.read("exclusions.csv").decode())))
+    assert len(res) - 1 == 260 and len(exc) - 1 == 40
+    assert {x[3] for x in exc[1:]} == {"value_missing"}
+    z.extractall(tmp_path)
+    assert recompute(tmp_path).returncode == 0
+    # the tool preview of the same request carries far fewer rows and says so
+    t = call("compare_periods", dataset="MANYX", entity_columns=["REF_AREA"],
+             intervals=[iv("2000", "2010")], top_k=5)
+    assert len(t["data"]["intervals"][0]["rows"]) == 5 and t["limits"]["total_rows"] == 260
+
+
+def test_localities_bundle_keeps_every_key_column(places, tmp_path):
+    r = places.client.get("/api/period-changes/evidence", params={
+        "dataset": "PLACEX", "entity_columns": json.dumps(["REF_AREA_2"]),
+        "intervals": json.dumps([iv("2000", "2010")]), "filters": json.dumps({"REF_AREA": ["Cluj"]})})
+    z, _ = open_zip(r.content)
+    assert z.read("result.csv").decode().splitlines()[0].split(",")[3:5] == ["REF_AREA", "REF_AREA_2"]
+    z.extractall(tmp_path)
+    assert recompute(tmp_path).returncode == 0
+
+
+def test_evidence_route_refuses_what_is_not_certifiable(env, tmp_path, monkeypatch):
+    r = env.client.get("/api/period-changes/evidence",
+                       params={**params(), "intervals": json.dumps([iv("1992", "2005")])})
+    assert r.status_code == 422 and r.json()["detail"]["reason"] == "period_unavailable"
+    assert r.headers["content-type"].startswith("application/json")
+    r = env.client.get("/api/period-changes/evidence", params=params(entity_columns=["NOPE"]))
+    assert r.status_code == 400 and r.json()["detail"]["reason"] == "unknown_column"
+    r = env.client.get("/api/period-changes/evidence", params={**params(), "dataset": "NOPEX"})
+    assert r.status_code == 404
+    r = env.client.get("/api/period-changes/evidence", params=params(top_k="0"))
+    assert r.status_code == 400 and r.json()["detail"]["reason"] == "invalid_input"
+    r = env.client.get("/api/period-changes/evidence", params=params(entity_columns="[oops"))
+    assert r.status_code == 400
+    # nothing to rank: no bundle
+    r = env.client.get("/api/period-changes/evidence", params={
+        **params(), "intervals": json.dumps([iv("1992", "2002")]),
+        "filters": json.dumps({"REF_AREA": ["D"]})})
+    assert r.status_code == 422 and r.json()["detail"]["reason"] == "no_eligible_entities"
+
+
+def test_evidence_route_413_when_the_endpoint_table_is_too_large(env, monkeypatch):
+    from app.services import evidence
+    monkeypatch.setattr(evidence, "MAX_INPUT_ROWS", 3)
+    r = env.client.get("/api/period-changes/evidence", params=params())
+    assert r.status_code == 413 and r.json()["detail"]["reason"] == "bundle_too_large"
+
+
+def test_evidence_route_uses_the_export_slots(env, monkeypatch):
+    from app.services import export
+    assert export._active["all"] == 0
+    r = env.client.get("/api/period-changes/evidence", params={
+        **params(), "intervals": json.dumps([iv("1992", "2005")])})     # a 422 still frees its slot
+    assert r.status_code == 422 and export._active["all"] == 0
+    monkeypatch.setattr(export, "try_acquire", lambda kind: None)
+    r = env.client.get("/api/period-changes/evidence", params=params())
+    assert r.status_code == 503 and r.headers["retry-after"] == "15"
+
+
+def test_expected_generation_is_checked_before_and_after(env, monkeypatch):
+    from app.services import change_evidence
+    ok = get_zip(env, expected_generation=GENERATION)
+    assert json.loads(zipfile.ZipFile(io.BytesIO(ok.content)).read("manifest.json"))["generation"]["id"] == GENERATION
+    r = env.client.get("/api/period-changes/evidence", params=params(expected_generation="gen-old"))
+    assert r.status_code == 409
+    d = r.json()["detail"]
+    assert d["reason"] == "generation_changed" and d["expected_generation"] == "gen-old"
+    assert d["served_generation"] == GENERATION
+    assert r.headers["content-type"].startswith("application/json")          # no ZIP
+
+    real = change_evidence.bundle
+
+    def swap_generation(result, link=None):
+        data = real(result, link)
+        p = env.corpus / "generation-manifest.json"
+        m = json.loads(p.read_text())
+        m["generation_id"] = "gen-swapped-during-build"
+        p.write_text(json.dumps(m))
+        return data
+    monkeypatch.setattr(change_evidence, "bundle", swap_generation)
+    r = env.client.get("/api/period-changes/evidence", params=params(expected_generation=GENERATION))
+    assert r.status_code == 409 and r.json()["detail"]["reason"] == "generation_changed"
+    assert r.json()["detail"]["served_generation"] == "gen-swapped-during-build"
+
+
+def test_a_generation_swapped_mid_build_is_refused_without_an_expectation_too(env, monkeypatch):
+    from app.services import change_evidence
+    real = change_evidence.bundle
+
+    def swap(result, link=None):
+        data = real(result, link)
+        p = env.corpus / "generation-manifest.json"
+        m = json.loads(p.read_text())
+        m["generation_id"] = "gen-other"
+        p.write_text(json.dumps(m))
+        return data
+    monkeypatch.setattr(change_evidence, "bundle", swap)
+    r = env.client.get("/api/period-changes/evidence", params=params())
+    assert r.status_code == 409 and r.json()["detail"]["reason"] == "generation_changed"
+
+
+def test_bundle_link_is_none_when_the_url_would_exceed_4_kib(env):
+    from app.services import change_evidence
+    a = {"dataset": "COUNTX", "entity_columns": ["REF_AREA"], "intervals": [iv("1992", "2002")],
+         "filters": {"REF_AREA": [f"Entity number {i} with a long label" for i in range(200)]},
+         "metric": "absolute", "order": "asc", "top_k": 20, "lang": "ro"}
+    assert change_evidence.live_link(a) is None                  # never a shorter, different selection
+    short = {**a, "filters": {}}
+    url = change_evidence.live_link(short, evidence=True, expected_generation="g1")
+    assert url.startswith("/api/period-changes/evidence?") and "expected_generation=g1" in url
+    from urllib.parse import parse_qs, urlparse
+    q = parse_qs(urlparse(url).query)
+    assert json.loads(q["intervals"][0]) == [iv("1992", "2002")] and "filters" not in q
