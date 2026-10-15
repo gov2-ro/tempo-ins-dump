@@ -978,6 +978,16 @@ def test_no_message_leaks_sql_paths_or_internals(senv):
         assert len(e["recovery"]) <= 3
 
 
+def test_the_selection_it_reports_is_accepted_by_the_evidence_tool(env):
+    e = q(dataset="ADDX", group_by=["TIME_PERIOD"], filters={"TIME_PERIOD": ["2023"]})
+    links = call("get_evidence_links", selection=e["provenance"]["selection"],
+                 generation_id=e["provenance"]["generation"]["id"])
+    assert links["status"] == "ok" and links["data"]["selection"]["dataset"] == "ADDX"
+    stale = call("get_evidence_links", selection=e["provenance"]["selection"],
+                 generation_id="gen-of-another-corpus")
+    assert stale["status"] == "unavailable" and stale["reason"] == "generation_changed"
+
+
 # ================================================================== real corpus (read-only)
 
 PINNED = "9b3e065d"
