@@ -313,7 +313,7 @@ def _population_note(text: str) -> str | None:
             "do not read it as a resident count.")
 
 
-def _warnings(src: dict, facts: dict | None, geo: bool, intervals, counts: dict) -> list:
+def _warnings(notes: list, facts: dict | None, geo: bool, intervals, counts: dict) -> list:
     out = []
     if counts:
         total = sum(counts.values())
@@ -331,7 +331,7 @@ def _warnings(src: dict, facts: dict | None, geo: bool, intervals, counts: dict)
         out.append(contract.warning("boundary_continuity_unverified",
                                     f"{text} {pop}" if pop else text))
     spans = [(iv["from"], iv["to"]) for iv in intervals]
-    for n in src.get("notes") or []:
+    for n in notes:
         if n.get("kind") not in ("series_break", "definition", "coverage"):
             continue
         text = n.get("text") or ""
@@ -545,7 +545,8 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
             counts[r] = counts.get(r, 0) + n
     geo = any((dims.get(c) or {}).get("dim_type") == "geo" or c.startswith("REF_AREA")
               for c in key_cols)
-    warnings = _warnings(src, facts, geo, intervals, counts)
+    from app.services import dataset_notes
+    warnings = _warnings(dataset_notes.for_code(code, lang), facts, geo, intervals, counts)
 
     scope = prov["scope"]
     if not any(iv["eligible_count"] for iv in intervals):
