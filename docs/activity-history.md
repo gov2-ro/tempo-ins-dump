@@ -1,5 +1,29 @@
 # Activity History
 
+## 2026-10-16 — Integration branch: ui/rhythm + AT-01
+
+`integ/at01-ui-rhythm` starts at `pa/00-baseline` 8a9689d. It merges `ui/rhythm`
+(04beb89), then `at/01-analytical-tools` (9c89d02), both `--no-ff`, so either can
+still be reviewed or reverted on its own. Only script tags and this file
+conflicted. Both branches had used `utils.js?v=32` and `dashboard-v2.js?v=33`
+for different file contents, and git keeps a version string both sides share.
+The merged pages now load `utils.js?v=33`, `dashboard-v2.js?v=34` and
+`explore-app.js?v=105`. The cache-buster numbers in the AT-01 record describe
+the AT-01 branch alone.
+
+Checks on the merge:
+- Synthetic suite: **941 passed, 79 skipped**.
+- Copied generation 9b3e065d: **1020 passed, 0 skipped**.
+- Browser smoke, 11 pages at 390 and 1280 px: no console errors, no 4xx/5xx, no
+  horizontal scroll. Pages: home, v1 single-age and age-group, v2 single-age
+  RO/EN and age-group, places, Cluj, compare, dimensions, Ask.
+- The age note still shows on the single-age v2 tiles in the new layout.
+
+The Playwright Chromium cache had gone missing, so the browser tests were being
+skipped as "chromium unavailable". Reinstalling it with
+`python -m playwright install chromium` (build 1187) made them run again.
+Not pushed, not merged into `pa/00-baseline` or `main`, not deployed.
+
 ## 2026-10-16 — Final landing layout
 
 Moved the sample questions below the domain navigation on the landing and theme
