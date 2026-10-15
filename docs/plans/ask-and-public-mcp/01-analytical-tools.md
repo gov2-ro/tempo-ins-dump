@@ -2,7 +2,7 @@
 
 ## Problem and ownership
 
-**AT-01: pending.** Implement the shared tool service and its numerical tests.
+**AT-01: implemented 2026-10-15, owner review pending** ([record](at-01-record.md)). Implement the shared tool service and its numerical tests.
 This package is useful before any model or MCP transport is enabled.
 
 Reuse these target-checkout services:

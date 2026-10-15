@@ -5,6 +5,11 @@
 **Specification only, 2026-10-15. No package is implemented or accepted by this
 handoff.** Earlier completed work remains completed; preserve it.
 
+Implementation status: **AT-01 implemented 2026-10-15** on branch
+`at/01-analytical-tools` (from `pa/00-baseline` 8a9689d), awaiting owner review.
+See [at-01-record.md](at-01-record.md), including the proposed AT-00 amendments.
+AT-02…AT-04 are not started.
+
 People should be able to ask a supported statistical question, clarify its
 definition, obtain a correct bounded calculation or an actionable refusal, and
 open the underlying evidence. They should also be able to use these capabilities

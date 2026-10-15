@@ -1,5 +1,43 @@
 # Activity History
 
+## 2026-10-15 — AT-01: shared analytical tools (Ask / public MCP groundwork)
+
+Seven tools behind one entry point, `app/services/tools/registry.call_tool`, on the
+`tempo-tools/1` envelope (spec `docs/plans/ask-and-public-mcp/`, record
+[at-01-record.md](plans/ask-and-public-mcp/at-01-record.md)). Branch
+`at/01-analytical-tools` from `pa/00-baseline` 8a9689d; not merged or deployed.
+- **Contract:** strict argument models are checked before any DB work (16 KiB, unknown
+  keys, no bool-as-int). Each call owns its cursor and re-checks the generation after
+  execution (`generation_changed`). Errors carry no internals, recovery calls must
+  validate, and results stay under 32 KiB in UTF-8 (previews shrink, else
+  `response_budget`).
+- **Scope disclosure:** grouped `/data`, the static engine, the insights KPI and the
+  v1/v2 pages now say which ages a total covers. `POP107D_varste_localitate` 2026 =
+  21,179,764 is labelled "Vârste 0–84 ani (fără 85+)"; the complete sibling gives
+  INS's 21,646,220. `domain_complete` stays null unless coverage is proven.
+- **Tools:**
+  - `discover_indicators`: concept-first, with clarification choices for generic
+    words and city/county names.
+  - `describe_dataset` / `find_dimension_values`: actual period bounds and values,
+    and whether a metadata Total exists in the data.
+  - `query_data`: one `run_query` call, native verdicts, and recoveries built from
+    metadata only (a unique parent/sibling, a verified level, a complete sibling, a
+    total recipe).
+  - `compare_periods`: ranks every eligible entity; a full entity key is required.
+  - `run_recipe`: INS totals, with the reconstruction as a check.
+  - `get_evidence_links`: generation-bound links.
+- **Routes:** `/api/period-changes` and its evidence ZIP (with `recompute.py`). The
+  dataset/recipe evidence routes take an optional `expected_generation` (409 on
+  mismatch).
+- **Why:** the Oct 15 Ask logs showed refusal loops, row floods and no way to compute
+  multi-period changes. The tools fix that once for Ask (AT-02) and MCP (AT-03).
+  Ask itself is unchanged in this package.
+- **How:** Opus wrote the contract; five Sonnet sub-agents in worktrees implemented
+  scope, discovery, query, period changes and recipes/links, and the orchestrator
+  reviewed and merged them. Recipe candidates now name a `recipe` instead of a fake
+  dataset code, and `total_rows` is null for windowed results (contract fixes at
+  merge).
+
 ## 2026-10-15 — Ask debug mode
 
 A question that "stays on loading" now explains itself.

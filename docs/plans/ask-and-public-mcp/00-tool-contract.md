@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-**AT-00: proposed `tempo-tools/1`, 2026-10-15.** This is a transport-neutral contract for
+**AT-00: proposed `tempo-tools/1`, 2026-10-15; implemented by AT-01 with the amendments listed in [at-01-record.md](at-01-record.md).** This is a transport-neutral contract for
 the new analytical tools. Preserve the existing `tempo-query/1` REST response;
 carry its aggregation/quality/selection evidence inside the new envelope rather
 than renaming existing fields. Both Ask and public MCP use the same tool service.
