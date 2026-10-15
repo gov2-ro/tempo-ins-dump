@@ -27,7 +27,7 @@ const WEAK_VERIFICATIONS = new Set(['profile_flat', 'metadata', 'label', 'unveri
 // Python str.strip() / lstrip(): Unicode whitespace.
 const pyStrip = s => String(s).replace(/^[\s\u001c-\u001f\u0085]+|[\s\u001c-\u001f\u0085]+$/gu, '');
 const pyLstrip = s => String(s).replace(/^[\s\u001c-\u001f\u0085]+/u, '');
-const norm = v => pyStrip(pyStr(v));
+export const norm = v => pyStrip(pyStr(v));
 
 /** Python str() of a scalar as it appears in filters/data. */
 export function pyStr(v) {
@@ -100,13 +100,13 @@ export function ageRangesOverlap(options) {
     return false;
 }
 
-function optKeys(opt, dv) {
+export function optKeys(opt, dv) {
     const out = new Set();
     for (const x of [dv, opt.label, opt.sdmx_value]) if (x != null) out.add(norm(x));
     return out;
 }
 
-function isTotalOption(dim, opt, dv, struct) {
+export function isTotalOption(dim, opt, dv, struct) {
     const agg = struct ? aggregateValue(struct, dim.dim_column_name) : null;
     if (agg != null && optKeys(opt, dv).has(norm(agg))) return true;
     if (dim.dim_type === 'geo' && (opt.parsed || {}).geo_level === 'national') return true;
