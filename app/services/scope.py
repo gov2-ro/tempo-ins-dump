@@ -73,6 +73,9 @@ grouped (aggregated) result:
       count through their treatment above.
     - Returns None for no decision or an `unavailable` one: a refused
       aggregation has no result to disclose a scope for.
+    - `caller_filters` are the request's own non-empty filters (SDMX names);
+      `group_by` is part of the contract signature but unused: the decision's
+      audit already says which dimensions are grouped.
 """
 from __future__ import annotations
 
