@@ -295,22 +295,33 @@ def _native_refusal(res: dict, code: str, lang: str, prov, limits) -> ToolFailur
                         limits=limits)
 
 
-def _population_note(text: str) -> str | None:
+_DOMICILE_RE = re.compile(r"\b(?:populati\w*\s+(?:dupa\s+)?domiciliu\w*|dupa domiciliu|"
+                          r"population\s+(?:by|according to)\s+domicile|domicile population)\b")
+_RESIDENT_RE = re.compile(r"\b(?:populati\w*\s+(?:rezident\w*|stabil\w*)|resedinta obisnuita|"
+                          r"resident population|usual residence)\b")
+
+
+def _population_note(title: str, definition: str) -> str | None:
+    """What the source says its population counts: domicile or usual residence.
+    Judged on the title, else the opening of the definition (a definition that
+    leads with one concept may mention the other in passing: "usual residence may
+    differ from domicile"); the unit-type word "medii de rezidenta" (urban/rural)
+    is not a resident-population statement. Nothing is guessed."""
     from app.services.concept_search import fold
-    t = fold(text)
-    if "populati" not in t:
-        return None
-    dom = "domicili" in t
-    res = "rezident" in t or "stabil" in t
-    if dom and res:
-        return ("The source text mentions both domicile and resident/usual-residence wording; "
-                "check which one this series counts.")
-    if dom:
-        return "The source definition refers to domicile (domiciliu) population, which is not a count of residents."
-    if res:
-        return "The source definition refers to resident (usual residence) population."
-    return ("The source definition does not say whether it counts domicile or usual residence; "
-            "do not read it as a resident count.")
+    for text in (fold(title), fold(definition)[:240]):
+        dom, res = bool(_DOMICILE_RE.search(text)), bool(_RESIDENT_RE.search(text))
+        if dom and not res:
+            return ("The source defines this as the domicile (domiciliu) population, which is "
+                    "not a count of residents.")
+        if res and not dom:
+            return "The source defines this as the resident (usual residence) population."
+        if dom and res:
+            return ("The source text names both domicile and usual residence; check which one "
+                    "this series counts.")
+    if "populati" in fold(f"{title} {definition[:240]}") or "population" in fold(title):
+        return ("The source definition does not say whether it counts domicile or usual "
+                "residence; do not read it as a resident count.")
+    return None
 
 
 def _warnings(notes: list, facts: dict | None, geo: bool, intervals, counts: dict) -> list:
@@ -326,8 +337,7 @@ def _warnings(notes: list, facts: dict | None, geo: bool, intervals, counts: dic
         text = ("Stable labels or codes do not prove unchanged territory: boundary changes, mergers "
                 "and splits between the endpoint years are not tracked, so a change can reflect "
                 "territory as well as real change.")
-        pop = _population_note(f"{(facts or {}).get('title') or ''} "
-                               f"{(facts or {}).get('definition') or ''}")
+        pop = _population_note((facts or {}).get("title") or "", (facts or {}).get("definition") or "")
         out.append(contract.warning("boundary_continuity_unverified",
                                     f"{text} {pop}" if pop else text))
     spans = [(iv["from"], iv["to"]) for iv in intervals]

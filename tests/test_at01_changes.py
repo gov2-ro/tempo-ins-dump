@@ -519,6 +519,18 @@ def test_a_missing_manifest_cannot_certify_anything(tmp_path, monkeypatch):
     assert e["data"] == {} and e["provenance"]["generation"]["status"] == "missing"
 
 
+def test_a_split_parent_without_a_data_file_points_at_its_children(tmp_path, monkeypatch):
+    def build(corpus):
+        add_dataset(corpus, "PARENTX", [area_dim(["A"]), time_dim(("2000", "2010")), unit_dim(UNIT)],
+                    [], file=False)
+    make_env(tmp_path, monkeypatch, build=build)
+    e = call("compare_periods", dataset="PARENTX", entity_columns=["REF_AREA"],
+             intervals=[iv("2000", "2010")])
+    assert (e["status"], e["reason"]) == ("error", "unknown_dataset")
+    assert "sub-datasets" in e["message"] and e["recovery"][0]["tool"] == "describe_dataset"
+    assert "/" not in e["message"].replace("sub-datasets", "")          # no filesystem path
+
+
 def test_unknown_dataset_and_unknown_columns(env):
     e = call("compare_periods", dataset="NOPEX", entity_columns=["REF_AREA"],
              intervals=[iv("2010", "2020")])
@@ -589,23 +601,30 @@ def test_series_breaks_and_definition_notes_are_warnings(tmp_path, monkeypatch):
     assert e["provenance"]["sources"][0]["notes"]
 
 
-@pytest.mark.parametrize("definition,expect", [
-    ("Populatia cu domiciliul in localitate la 1 iulie", "domicile (domiciliu)"),
-    ("Populatia stabila a localitatii", "resident (usual residence)"),
-    ("Populatia localitatii", "does not say whether it counts domicile or usual residence"),
+@pytest.mark.parametrize("name,definition,expect", [
+    ("POPULATIA DUPA DOMICILIU la 1 ianuarie pe judete", "Populatia dupa domiciliu reprezinta persoanele cu "
+     "domiciliu in tara; nu se tine cont de resedinta obisnuita.", "domicile (domiciliu) population"),
+    ("Populatia rezidenta la 1 ianuarie pe medii de rezidenta", "Populatia rezidenta reprezinta persoanele "
+     "care au resedinta obisnuita; poate sa fie aceeasi cu domiciliul.", "resident (usual residence)"),
+    ("Populatie pe judete", "Populatia localitatii", "does not say whether it counts domicile"),
+    ("Numar de unitati", "Unitati locale active", None),
 ])
-def test_population_definition_is_stated_not_guessed(tmp_path, monkeypatch, definition, expect):
+def test_population_definition_is_stated_not_guessed(tmp_path, monkeypatch, name, definition, expect):
     def build(corpus):
         add_dataset(corpus, "POPZ", [area_dim(["A", "B"]), time_dim(("2000", "2010")),
                                      unit_dim(UNIT)],
                     [(e, y, UNIT, v) for e, y, v in (("A", "2000", 1.0), ("A", "2010", 2.0),
                                                      ("B", "2000", 3.0), ("B", "2010", 2.0))],
-                    definition=definition, name="Populatie")
+                    definition=definition, name=name)
     make_env(tmp_path, monkeypatch, build=build)
     e = call("compare_periods", dataset="POPZ", entity_columns=["REF_AREA"],
              intervals=[iv("2000", "2010")])
     w = next(x for x in e["warnings"] if x["code"] == "boundary_continuity_unverified")
-    assert expect in w["message"] and "unchanged territory" in w["message"]
+    assert "unchanged territory" in w["message"]
+    if expect:
+        assert expect in w["message"]
+    else:
+        assert "domicile" not in w["message"] and "resident" not in w["message"]
 
 
 def test_a_non_geographic_entity_gets_no_boundary_warning(tmp_path, monkeypatch):
@@ -972,3 +991,89 @@ def test_bundle_link_is_none_when_the_url_would_exceed_4_kib(env):
     from urllib.parse import parse_qs, urlparse
     q = parse_qs(urlparse(url).query)
     assert json.loads(q["intervals"][0]) == [iv("1992", "2002")] and "filters" not in q
+
+
+# ------------------------------------------------------------ scope (shared run_query scope metadata)
+
+def test_a_restricted_source_scope_makes_the_result_partial(env, monkeypatch):
+    """run_query reports a restricted domain (e.g. single ages 0-84 without 85+) as
+    `scope`; the comparison must carry it and not present itself as complete."""
+    import app.services.data_query as dq
+    real = dq.run_query
+
+    def with_scope(*a, **k):
+        res = real(*a, **k)
+        res["scope"] = {"domain_complete": False, "restrictions": [
+            {"kind": "age_range", "column": "AGE", "covered": [[0, 84]], "domain": [0, None],
+             "requested": False}]}
+        return res
+    monkeypatch.setattr(dq, "run_query", with_scope)
+    e = cp(intervals=[iv("2010", "2020")], lang="en")
+    assert e["status"] == "partial" and e["reason"] == "incomplete_domain"
+    sc = e["provenance"]["scope"]
+    assert sc["domain_complete"] is False and "0–84" in sc["description"]
+    assert sc["limitations"][0]["code"] == "age_range_restricted"
+    assert len(rows_of(e)) == 4                                   # still ranked, with the limit stated
+
+
+# ------------------------------------------------------------ real corpus (read-only, generation-pinned)
+
+PINNED = "9b3e065d"
+
+
+@pytest.fixture
+def real():
+    from app.services import generation
+    if not (generation.current().get("id") or "").startswith(PINNED):
+        pytest.skip("probe numbers are for corpus generation 9b3e065d")
+
+
+@pytest.mark.corpus
+def test_real_counties_bundle_recomputes_offline(real, tmp_path):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    p = {"dataset": "POP105A", "entity_columns": json.dumps(["REF_AREA"]),
+         "intervals": json.dumps([iv("2012", "2021")]), "top_k": "3"}
+    t = TestClient(app).get("/api/period-changes", params=p).json()
+    i = t["data"]["intervals"][0]
+    assert t["status"] == "ok" and i["eligible_count"] == 42 and i["excluded_count"] == 0
+    top = i["rows"][0]
+    assert (top["entity"], top["from_value"], top["to_value"], top["absolute"]) == (
+        {"REF_AREA": "Prahova"}, 761699.0, 703580.0, -58119.0)
+    brk = next(w for w in t["warnings"] if w["code"] == "series_break")       # shown, but the
+    assert not brk["message"].startswith("Inside the compared interval")      # 2021/2022 break is outside
+    z = TestClient(app).get("/api/period-changes/evidence", params=p)
+    assert z.status_code == 200
+    zf, m = open_zip(z.content)
+    assert m["generation"]["id"].startswith(PINNED)
+    zf.extractall(tmp_path)
+    assert recompute(tmp_path).returncode == 0
+    assert len(list(csv.reader(io.StringIO(zf.read("result.csv").decode())))) - 1 == 42
+
+
+@pytest.mark.corpus
+def test_real_refusals(real):
+    def run(code, **kw):
+        kw.setdefault("entity_columns", ["REF_AREA"])
+        kw.setdefault("intervals", [iv("2015", "2020")])
+        return call("compare_periods", dataset=code, **kw)
+    e = run("POP107A")                                            # AGE spans singles and bands
+    assert (e["reason"], e["provenance"]["aggregation"]["blocking_dimension"]) == (
+        "overlapping_levels", "AGE")
+    assert run("SOM103A")["reason"] == "unsupported_measure"      # unemployment rate
+    assert run("SOM101E_lunar_localitate", entity_columns=["REF_AREA", "REF_AREA_2"])["reason"] == \
+        "unsupported_frequency"
+    e = run("POP105A", intervals=[iv("1990", "2020")])
+    assert e["reason"] == "period_unavailable" and "2012 to " in e["message"]
+
+
+@pytest.mark.corpus
+def test_real_localities_keep_county_and_locality(real):
+    e = call("compare_periods", dataset="POP107D", entity_columns=["REF_AREA_2"],
+             intervals=[iv("2012", "2021")], top_k=1)
+    i = e["data"]["intervals"][0]
+    assert e["data"]["key_columns"] == ["REF_AREA", "REF_AREA_2"]
+    assert i["eligible_count"] == 3181 and i["rows"][0]["entity"] == {
+        "REF_AREA": "Braila", "REF_AREA_2": "42682 MUNICIPIUL BRAILA"}
+    w = next(x for x in e["warnings"] if x["code"] == "boundary_continuity_unverified")
+    assert "domicile (domiciliu) population" in w["message"]
