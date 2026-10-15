@@ -133,7 +133,7 @@ def get_corpus_summary(lang: str = Query("ro", regex="^(ro|en)$")):
                m.ultima_actualizare,
                t.trend_direction, t.yoy_growth_latest,
                p.time_year_min, p.time_year_max,
-               {def_col} AS definitie
+               {def_col} AS definitie, m.context_code
         FROM matrices m
         LEFT JOIN dataset_trends t ON m.matrix_code = t.matrix_code
         LEFT JOIN matrix_profiles p ON m.matrix_code = p.matrix_code
@@ -156,6 +156,8 @@ def get_corpus_summary(lang: str = Query("ro", regex="^(ro|en)$")):
             'yoy_growth_latest': float(r[4]) if r[4] is not None else None,
             'time_range': time_range,
             'excerpt': excerpt,
+            # Lets the landing list an update under its theme or category.
+            'context_code': r[8],
         })
 
     return {

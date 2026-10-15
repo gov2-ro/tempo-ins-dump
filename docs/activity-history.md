@@ -1,5 +1,40 @@
 # Activity History
 
+## 2026-10-16 — Landing: themes and category listing combined
+
+The landing used to show three blocks: theme chart previews, a "Recently updated"
+card grid and the "Thematic categories" listing. They are now one listing.
+- A category that contains themes (Social and Economic statistics) lists those
+  themes. Each theme shows two chart previews (was three), its subsections, and
+  any recent updates that belong to it. The category's other subsections and
+  other recent updates follow.
+- Categories without a theme keep the three-column listing.
+- Recent updates use the same criterion as before: the 12 most recently updated
+  datasets overall. The 2026-10-16 copy places 6 in Tourism and 6 in A.1
+  population, under Social statistics' other subsections. Most themes show none.
+- Each update is one line: change first, then title, code and date. The
+  definition excerpt was dropped. Lines link to `/dataset/{code}`; the old cards
+  opened the v1 view in place.
+- The corpus summary now gives each recent item a `context_code`, which places
+  it in the tree. An item that can't be placed is listed at the end rather than
+  dropped.
+- Subsection links are real anchors (`/?cat=A:B:C`). A plain click still drills
+  down in place.
+
+Across every page, body line-height went from 1.55 to 1.45. The default text
+size is now L (18px); a size the reader already chose is kept.
+
+Checks:
+- New `tests/test_landing_summary.py`.
+- Synthetic suite: 941 passed, 79 skipped.
+- Copied generation: 1019 passed. The one failure,
+  `test_fix04_exports::test_xlsx_tempfile_removed_after_success_and_error`,
+  checks the shared temp dir, and the synthetic suite was running in parallel.
+  It passes on its own.
+- Browser: 11 pages at 390 and 1280 px, plus the landing at 320, 768 and 1440
+  and in English. No console errors, no 4xx/5xx, no horizontal scroll.
+- Clicks checked: subsection drill-down and back, deep link, recent-line link.
+
 ## 2026-10-16 — Integration branch: ui/rhythm + AT-01
 
 `integ/at01-ui-rhythm` starts at `pa/00-baseline` 8a9689d. It merges `ui/rhythm`

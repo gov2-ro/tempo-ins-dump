@@ -31,8 +31,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/explore.css?v=44">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-    <link rel="stylesheet" href="/css/ui-rhythm.css?v=3">
-    <script src="/js/ui-preferences.js?v=2" defer></script>
+    <link rel="stylesheet" href="/css/ui-rhythm.css?v=4">
+    <script src="/js/ui-preferences.js?v=3" defer></script>
 </head>
 <body>
     <!-- Notice bar (above everything) -->
@@ -112,15 +112,7 @@
         <section id="browse-view" class="browse-view">
             <nav class="theme-nav" id="theme-nav" aria-label="Teme"></nav>
             <div class="entry-points" id="entry-points"></div>
-            <!-- Headline indicators grid (themed KPI cards) -->
-            <div class="headlines-section" id="headlines-section"></div>
-            <!-- Recently updated datasets -->
-            <div class="recent-section hidden" id="recent-section">
-                <h3 class="section-label" id="recent-label"></h3>
-                <div id="recent-grid"></div>
-            </div>
-            <!-- Section label before category grid -->
-            <h3 class="section-label" id="categories-label"></h3>
+            <!-- Categories with their themes: chart previews, subsections, recent updates -->
             <div class="category-grid" id="category-grid"></div>
             <div class="dataset-panel hidden" id="dataset-panel">
                 <div class="panel-header">
@@ -213,7 +205,7 @@
     <script src="/js/chart-new-types.js?v=36"></script>
     <script src="/js/chart-geo.js?v=23"></script>
     <script src="/js/chart-demographic.js?v=26"></script>
-    <script src="/js/explore-app.js?v=105"></script>
+    <script src="/js/explore-app.js?v=106"></script>
 <style>
     #page-loader {
         display: flex;
