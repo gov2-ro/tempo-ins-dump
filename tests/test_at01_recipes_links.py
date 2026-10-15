@@ -453,6 +453,58 @@ def test_a_generation_swap_during_the_recipe_is_not_reported(env, monkeypatch):
     assert out["data"] == {} and "rows" not in out["data"]
 
 
+def build_refusals(corpus):
+    build_core(corpus)
+    series(corpus, "DJ1", "Stays 2023 only", "Numar", {("Alfa", 2023): 1.0}, ys=(2023,))
+    series(corpus, "DJ2", "Population 2025 only", "Numar persoane", {("Alfa", 2025): 1.0}, ys=(2025,))
+    # two labels of one area (same id after normalization) in the same year
+    series(corpus, "DUPL1", "Stays, one area twice", "Numar",
+           {("Alfa", 2024): 1.0, ("ALFA", 2024): 2.0}, names=["Alfa", "ALFA"], ys=(2024,))
+    db = duckdb.connect(str(corpus / "metadata.duckdb"))
+    db.execute("INSERT INTO published_totals VALUES ('PUBN', 'Romania', '2024', 7.5, 'Lei', 'q', "
+               "'2026-10-12T00:00:00+00:00', 'f', 'm', '04-09-2025')")
+    db.close()
+
+
+@pytest.fixture
+def refusal_env(tmp_path, monkeypatch):
+    e = make_env(tmp_path, monkeypatch, build=build_refusals)
+    install_recipes(tmp_path, monkeypatch, *RECIPES,
+                    make_recipe("fx_nocommon", "DJ1", "DJ2"),
+                    make_recipe("fx_dupkey", "DUPL1", "RESPOP"),
+                    make_recipe("fx_nopub", "PSTAY", "PPOP", published={**PUBLISHED, "matrix": "PUBN"}))
+    return e
+
+
+@pytest.mark.parametrize("rid,reason,source", [
+    ("fx_nocommon", "no_common_year", None),
+    ("fx_dupkey", "duplicate_key", "stays"),
+    ("fx_nopub", "no_published_data", None)])
+def test_native_refusals_keep_their_reason(refusal_env, rid, reason, source):
+    out = call("run_recipe", recipe=rid, lang="en")
+    assert out["status"] == "unavailable" and out["reason"] == reason
+    assert out["data"].get("source") == source and "rows" not in out["data"]
+    assert out["provenance"]["selection"] is None and out["limits"]["source_complete"] is None
+    if reason == "no_common_year":
+        assert out["data"]["years_numerator"] == ["2023"] and out["data"]["years_denominator"] == ["2025"]
+    if reason == "duplicate_key":
+        assert out["recovery"][0]["arguments"]["dataset"] == "DUPL1"
+
+
+def test_nothing_ranked_is_unavailable_and_keeps_the_reasons(env):
+    out = call("run_recipe", recipe="fx_intensity", year="2023", areas=["Atlantis", "Narnia"], lang="en")
+    assert out["status"] == "unavailable" and out["reason"] == "incomplete_domain"
+    d = out["data"]
+    assert d["rows"] == [] and d["exclusion_counts"] == {"not_in_data": 2} and d["universe"] == 0
+    assert [e["label"] for e in d["excluded"]] == ["Atlantis", "Narnia"]
+    assert "no area could be ranked" in out["message"]
+    assert out["provenance"]["scope"]["domain_complete"] is False
+    assert out["limits"]["returned_rows"] == 0 and out["limits"]["total_rows"] == 0
+    assert out["recovery"][0] == {
+        "kind": "tool_call", "message": "Run the recipe for every area to see the names the data uses.",
+        "tool": "run_recipe", "arguments": {"recipe": "fx_intensity", "year": "2023", "lang": "en"}}
+
+
 # ============================================================ run_recipe: budget
 
 def test_large_result_is_shortened_to_the_budget_without_losing_provenance(tmp_path, monkeypatch):
@@ -996,3 +1048,12 @@ def test_real_tourism_intensity_and_net_earnings_through_the_tool():
     R.validate_result("run_recipe", pub)
     assert pub["data"]["recipe"]["value_source"] in ("ins_published", "reconstruction")
     assert C.size(pub) <= C.MAX_RESULT_BYTES
+    # the evidence link opens against the served generation and is refused for any other
+    from fastapi.testclient import TestClient
+    from app.main import app
+    url = link_map(links)["evidence"]["url"]
+    client = TestClient(app)
+    r = client.get(url)
+    assert r.status_code == 200 and zip_manifest(r.content)[1]["generation"]["id"] == gid
+    stale = client.get(url.replace(gid, "not-the-served-generation"))
+    assert stale.status_code == 409 and stale.json()["detail"]["served_generation"] == gid

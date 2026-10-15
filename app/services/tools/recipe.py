@@ -40,6 +40,9 @@ _TX = {
         "ok": "Recipe {id}, {year}: {n} areas ranked.",
         "partial": "Recipe {id}, {year}: {n} of {universe} eligible areas ranked; {k} excluded. The "
                    "ranking covers only the eligible areas (see exclusion_counts and excluded).",
+        "none_ranked": "Recipe {id}, {year}: no area could be ranked ({k} excluded: "
+                       "{reasons}). Nothing was computed for them.",
+        "r_all_areas": "Run the recipe for every area to see the names the data uses.",
         "scope_ranked": "{n} of {universe} eligible areas ranked for {year}",
         "scope_excluded": "; {k} excluded ({reasons})",
         "scope_all": ". Every area of the recipe's universe was considered.",
@@ -85,6 +88,9 @@ _TX = {
         "ok": "Rețeta {id}, {year}: {n} zone clasate.",
         "partial": "Rețeta {id}, {year}: {n} din {universe} zone eligibile clasate; {k} excluse. "
                    "Clasamentul acoperă doar zonele eligibile (vezi exclusion_counts și excluded).",
+        "none_ranked": "Rețeta {id}, {year}: nicio zonă nu a putut fi clasată ({k} excluse: "
+                       "{reasons}). Pentru ele nu s-a calculat nimic.",
+        "r_all_areas": "Rulează rețeta pentru toate zonele ca să vezi numele folosite de date.",
         "scope_ranked": "{n} din {universe} zone eligibile clasate pentru {year}",
         "scope_excluded": "; {k} excluse ({reasons})",
         "scope_all": ". Au fost luate în calcul toate zonele din universul rețetei.",
@@ -320,7 +326,8 @@ def run_recipe(args, ctx):
     provenance = {
         "sources": _sources(ctx, native_sources),
         # canonical: the implicit latest year is resolved before anything cites it
-        "selection": {"kind": "recipe", "recipe": args.recipe, "year": year, "areas": args.areas},
+        "selection": {"kind": "recipe", "recipe": args.recipe, "year": year,
+                      "areas": args.areas or None},
         "requested_selection": {"year": args.year, "areas": args.areas},
         "effective_selection": {"source_queries": {s["role"]: s.get("query") for s in native_sources}},
         "aggregation": {"sources": {s["role"]: s.get("aggregation") for s in native_sources}},
@@ -340,7 +347,16 @@ def run_recipe(args, ctx):
     if len(all_rows) > len(rows):
         warnings.append(C.warning("preview_shortened", PREVIEW_SHORTENED))
 
-    if n_excl:
+    recovery = []
+    if not all_rows:
+        # nothing could be ranked: no usable result, only the reasons
+        status, reason = "unavailable", "incomplete_domain"
+        message = tx["none_ranked"].format(id=args.recipe, year=year, k=n_excl,
+                                           reasons=_reasons(counts))
+        if args.areas:
+            recovery.append(C.recovery("tool_call", tx["r_all_areas"], "run_recipe",
+                                       {"recipe": args.recipe, "year": year, "lang": ctx.lang}))
+    elif n_excl:
         status, reason = "partial", "incomplete_domain"
         message = tx["partial"].format(id=args.recipe, year=year, n=len(all_rows),
                                        universe=universe, k=n_excl)
@@ -349,7 +365,7 @@ def run_recipe(args, ctx):
         message = tx["ok"].format(id=args.recipe, year=year, n=len(all_rows))
     return C.envelope(
         "run_recipe", ctx, status=status, reason=reason, message=message, data=data,
-        provenance=provenance, warnings=warnings,
+        provenance=provenance, warnings=warnings, recovery=recovery,
         limits={"returned_rows": len(rows), "total_rows": len(all_rows),
                 "preview_truncated": len(all_rows) > len(rows), "source_complete": True,
                 "time_windowed": False, "partial_period_dropped": None})
