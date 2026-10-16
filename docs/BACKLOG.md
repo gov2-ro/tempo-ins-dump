@@ -17,6 +17,8 @@ Evidence and ground truth: `docs/plans/ask-and-public-mcp/at-04-initial-mcp-eval
   200-row cap, models may not rank raw rows; `compare_periods` ranks change only). Needs a spec
   for a `tempo-tools/1` addition: rank over all eligible entities with an entity-class filter
   (municipii + orașe), a joined second measure (density), and a two-entity difference/ratio.
+  Data exists for cities: `GOS102A` built-up area joins the locality population on the SIRUTA
+  code (319/319); whole-UAT area is not in the corpus.
 - [ ] **P1 Unverified sums returned as `ok`**: births 2023 is 164,004 (`POP201E`) or 168,079
   (`POP201D`), both `valid_total` with `domain_complete: null`. A total with no agreement with a
   published figure should be `partial`/flagged, not `ok` (FIX-02 class).

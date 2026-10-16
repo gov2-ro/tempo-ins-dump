@@ -27,7 +27,7 @@ spent. Nothing deployed; no corpus table changed (copied generation `9b3e065d`, 
 | # | Question | Ground truth (direct read of the Parquet) |
 |---|---|---|
 | 1 | populația curentă a celor mai populate 30 de orașe | domicile population 2025, summed over the 18 five-year bands, localities `MUNICIPIUL …`/`ORAS …`: București 2,124,150; Iași 379,371; Cluj-Napoca 325,408; Timișoara 296,936; Constanța 295,767 … 30th Tulcea 78,862 |
-| 2 | … cu populație și densitate de populație | needs the same plus an area per locality (`AGR101B_localitate` is a land-use table) |
+| 2 | … cu populație și densitate de populație | computable today for the 319 municipalities and towns as population per built-up hectare: `GOS102A` (intravilan area, hectares, 1993–2024) joins `POP107D_grupe_localitate` on the SIRUTA code prefix of `REF_AREA_2`, 319 of 319 (2024: București 2,145,041 / 23,896 ha = 89.8, Iași 56.4, Timișoara 39.8, Cluj-Napoca 32.1). Administrative surface per UAT is **not** in the corpus (see finding 4) |
 | 3 | Ce județe au pierdut cel mai mult din populație între 2012 și 2021? | `POP105A`, 5-year bands: Prahova −58,119, București −58,085, Teleorman −53,623, Olt −47,904, Buzău −45,281 (percent: Teleorman −14.18%, Brăila −12.16%, Olt −11.04%) |
 | 4 | Câte înnoptări … revin la un locuitor în Brașov, în 2025? | recipe `tourism_intensity` |
 | 5 | Cum a evoluat rata șomajului în România în ultimii ani? | two official definitions (registered `SOM103A`, ILO `AMG157A`) |
@@ -85,7 +85,12 @@ a clarification, no figures; `no` = declined as not answerable with the tools.
 3. **`interpretation` misses the words:** `level` stays null for "orașe", `latest` stays false for
    "curentă".
 4. **No density or area concept**; searches return green-space area and street length. `ok` with
-   no density in it reads as a match.
+   no density in it reads as a match. What the corpus holds: `GOS102A`, the built-up (intravilan)
+   area of the 320 municipalities and towns, 1993–2024, which also defines the set of cities
+   (it joins the locality population on the SIRUTA code, 319/319). The land-fund tables that would
+   give the whole UAT surface (`AGR101B_localitate`) stop at 2014, and the corpus holds only their
+   `Proprietate privata` rows (INS lists a `Total` option; why it is absent from the Parquet was
+   not checked). `data/meta/uat-siruta.csv` has the UAT type (municipality/town/commune) but no area.
 5. **No two-entity comparison.** Q7 got both figures but could not state the gap without breaking
    the arithmetic rule.
 6. **Choices are not actionable:** `choices[].next_call` re-runs `discover_indicators` with a
@@ -125,8 +130,9 @@ a clarification, no figures; `no` = declined as not answerable with the tools.
    second measure joined by entity (population + area) so density is a tool figure. Plus a
    difference/ratio for two named entities. This is a contract change to `tempo-tools/1`
    (AT-00), so it needs its own spec.
-3. **Area per locality** as a reviewed dataset or recipe (needs a decision on whether
-   `AGR101B_localitate` totals equal administrative area).
+3. **Area per locality.** Either label density as population per built-up hectare (`GOS102A`, usable
+   now, and it names the cities), or obtain administrative area from outside the corpus (INS
+   `Total` land-fund rows end in 2014; a cadastre/SIRUTA source would be new). Owner choice.
 4. **Totals without agreement** must not be `ok`: either `partial`/`unverified_total`, or the
    tool says which published total it was checked against (FIX-02).
 5. Interpretation: map "curentă" → latest and "orașe" → level; make `choices[].next_call` a
