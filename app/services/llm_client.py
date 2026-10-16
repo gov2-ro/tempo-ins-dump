@@ -68,6 +68,23 @@ def classify_provider_error(e: BaseException) -> LLMError:
     return LLMError("provider_error", "The provider request failed", 502)
 
 
+def _server_key_env(provider: str) -> str:
+    if provider == "anthropic":
+        return "ANTHROPIC_API_KEY"
+    if provider == "openai":
+        return "OPENAI_API_KEY"
+    return OPENAI_COMPATIBLE.get(provider, ("", "NO_SUCH_ENV"))[1]
+
+
+def _scrub(text: str, *secrets: str | None) -> str:
+    """A provider's own error text may echo the request's key, in any format: remove the exact
+    strings (the user's key and this provider's server key) before the text travels anywhere."""
+    for sec in secrets:
+        if sec and len(sec) >= 4:
+            text = text.replace(sec, "[REDACTED]")
+    return text
+
+
 def _key(api_key: str | None, env: str) -> str:
     """The user's key, else the server's own for this provider. Never another provider's:
     the OpenAI SDK would otherwise fall back to OPENAI_API_KEY and send it elsewhere."""
@@ -219,7 +236,8 @@ def complete_with_tools(
     except Exception as e:  # noqa: BLE001 — classified, original text dropped
         err = classify_provider_error(e)
         if err is not e:
-            err.debug_detail = f"{type(e).__name__}: {str(e)[:500]}"
+            err.debug_detail = _scrub(f"{type(e).__name__}: {str(e)[:500]}",
+                                      api_key, os.environ.get(_server_key_env(prov), ""))
         raise err from None
     resp.requested_tokens = requested
     return resp

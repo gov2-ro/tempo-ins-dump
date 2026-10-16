@@ -5,6 +5,7 @@ All limits are read from ``app.config`` at call time.
 """
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import re
@@ -184,15 +185,36 @@ def redact(obj, secrets: tuple = ()):
     return obj
 
 
+# The key of the request being served, visible to every log record emitted while it runs.
+# Pattern redaction alone cannot know an arbitrary-format key (a Mistral or OpenRouter key has
+# no recognizable prefix); the actual secrets of the request can be removed exactly.
+_request_secrets: contextvars.ContextVar[tuple] = contextvars.ContextVar("ask_request_secrets", default=())
+
+
+def active_secrets() -> tuple:
+    return _request_secrets.get()
+
+
+@contextmanager
+def secrets_scope(*secrets):
+    """Within this block, RedactingFilter also removes these exact strings from log records."""
+    token = _request_secrets.set(tuple(s for s in secrets if s and len(s) >= 4))
+    try:
+        yield
+    finally:
+        _request_secrets.reset(token)
+
+
 class RedactingFilter(logging.Filter):
-    """Scrubs credential patterns from any record on the loggers it is attached to."""
+    """Scrubs credential patterns, and the active request's own key, from any record on the
+    loggers it is attached to."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         try:
             msg = record.getMessage()
         except Exception:
             msg = str(record.msg)
-        record.msg = redact_text(msg)
+        record.msg = redact_text(msg, active_secrets())
         record.args = None
         if record.exc_info:  # tracebacks may embed provider messages; keep the type only
             record.exc_text = None
@@ -229,3 +251,137 @@ def concurrency_slot():
     finally:
         with _gate_lock:
             _active -= 1
+
+
+# ---------------------------------------------------------------------------
+# Bounded debug fields and content-free metrics (AT-02)
+# ---------------------------------------------------------------------------
+
+def bound(obj, *, max_str: int = 300, max_items: int = 20, max_depth: int = 4):
+    """A bounded copy for debug events: long strings, lists and dicts are shortened with an
+    explicit marker and depth is capped, so the serialized record stays valid JSON (never
+    sliced mid-string) and small."""
+    if isinstance(obj, str):
+        return obj if len(obj) <= max_str else obj[:max_str] + f"…(+{len(obj) - max_str} chars)"
+    if max_depth <= 0 and isinstance(obj, (dict, list, tuple, set)):
+        return f"<{type(obj).__name__} of {len(obj)}>"
+    if isinstance(obj, dict):
+        items = list(obj.items())
+        out = {str(k)[:60]: bound(v, max_str=max_str, max_items=max_items, max_depth=max_depth - 1)
+               for k, v in items[:max_items]}
+        if len(items) > max_items:
+            out["…"] = f"+{len(items) - max_items} keys"
+        return out
+    if isinstance(obj, (list, tuple, set)):
+        seq = list(obj)
+        out = [bound(v, max_str=max_str, max_items=max_items, max_depth=max_depth - 1)
+               for v in seq[:max_items]]
+        if len(seq) > max_items:
+            out.append(f"…(+{len(seq) - max_items} items)")
+        return out
+    if obj is None or isinstance(obj, (bool, int, float)):
+        return obj
+    return bound(str(obj), max_str=max_str)
+
+
+# What an ordinary (chat logging off) metrics line may contain: ids, counts, sizes, durations
+# and stable codes. Never the question, history, answer, tool filter values, a credential or
+# an exception body: anything else is dropped here, not trusted to the caller.
+METRIC_SCALARS = (
+    "request_id", "ts", "provider", "model", "byok", "status", "reason", "outcome", "stop_reason",
+    "question_chars", "history_turns", "context_entries", "model_attempts", "retries",
+    "tool_dispatches", "tool_executions", "cache_hits", "iterations", "tools", "elapsed_s",
+    "duration_ms", "request_bytes", "tool_result_bytes", "requested_output_tokens",
+    "dropped_debug_events", "cancelled", "timed_out",
+)
+_CODE_RE = re.compile(r"^[a-z0-9_]{1,40}$")
+
+
+def sanitize_metrics(fields: dict) -> dict:
+    out = {}
+    for k in METRIC_SCALARS:
+        v = fields.get(k)
+        if v is None or isinstance(v, (bool, int, float)):
+            out[k] = v
+        elif isinstance(v, str):
+            out[k] = v[:80]
+    usage = fields.get("usage")
+    if isinstance(usage, dict):
+        out["usage"] = {k: v for k, v in usage.items()
+                        if k in ("input_tokens", "output_tokens", "reasoning_tokens", "cached_tokens")
+                        and (v is None or isinstance(v, int))}
+    codes = fields.get("refusal_codes")
+    if isinstance(codes, dict):
+        out["refusal_codes"] = {k: v for k, v in codes.items()
+                                if isinstance(k, str) and _CODE_RE.match(k) and isinstance(v, int)}
+    return {k: v for k, v in out.items() if v is not None}
+
+
+# ---------------------------------------------------------------------------
+# Cancellation (AT-02)
+# ---------------------------------------------------------------------------
+
+class Cancelled(Exception):
+    """The request was abandoned (browser abort / disconnect) or its deadline passed mid-operation."""
+
+
+class CancelToken:
+    """Carries a cancellation from the HTTP layer into the agent loop and, through the cursor
+    the agent owns, into a running DuckDB query.
+
+    `cancel()` is safe from any thread. It interrupts only the cursor currently attached with
+    `running()`: that cursor belongs to this request (the agent opens its own), so another
+    user's query and the shared parent connection are never touched. A provider call already
+    in flight cannot be interrupted; it ends at its own (deadline-bounded) timeout, and the
+    caller's concurrency slot stays occupied until the work actually stops."""
+
+    def __init__(self):
+        self._event = threading.Event()
+        self._lock = threading.Lock()
+        self._cursor = None
+        self.reason: str | None = None
+        self.timed_out = False
+
+    @property
+    def cancelled(self) -> bool:
+        return self._event.is_set()
+
+    def cancel(self, reason: str = "cancelled") -> None:
+        with self._lock:
+            if not self._event.is_set():
+                self.reason = reason
+                self._event.set()
+            cursor = self._cursor
+        self._interrupt(cursor)
+
+    @staticmethod
+    def _interrupt(cursor) -> None:
+        if cursor is not None:
+            try:
+                cursor.interrupt()
+            except Exception:  # noqa: BLE001 — a closed cursor has nothing left to interrupt
+                pass
+
+    @contextmanager
+    def running(self, cursor, deadline_in: float | None = None):
+        """Attach `cursor` while one operation runs; optionally interrupt it when
+        `deadline_in` seconds pass. Raises Cancelled up front if already cancelled."""
+        with self._lock:
+            if self._event.is_set():
+                raise Cancelled(self.reason or "cancelled")
+            self._cursor = cursor
+        timer = None
+        if deadline_in is not None:
+            def expire():
+                self.timed_out = True
+                self._interrupt(cursor)
+            timer = threading.Timer(max(0.0, deadline_in), expire)
+            timer.daemon = True
+            timer.start()
+        try:
+            yield
+        finally:
+            if timer is not None:
+                timer.cancel()
+            with self._lock:
+                self._cursor = None
