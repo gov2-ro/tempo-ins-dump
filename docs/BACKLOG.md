@@ -8,6 +8,34 @@ see also [charting-ideas.md](charting-ideas.md)
 
 Evidence and ground truth: `docs/plans/ask-and-public-mcp/at-04-initial-mcp-eval.md`.
 
+- [ ] **Direction: analytical tools for complex questions (cross-dataset, correlations,
+  patterns)**: the seven `tempo-tools/1` tools answer one dataset at a time, so questions that
+  mix datasets ("population vs surface", "top 30 cities with density") or ask for
+  relationships ("what moves with unemployment across counties?") cannot be answered by any
+  model. Build the missing layer as tools, so the model orchestrates and explains but never
+  joins, ranks or computes by itself. Scope to spec (next package after AT-04, owner review
+  first; it changes the shared tool contract, so a `tempo-tools` version bump):
+  - **Mix datasets**: join by entity key (SIRUTA/county code) after checking level, period
+    and unit compatibility and definition (resident vs domicile population); the join states
+    what matched, what did not, and refuses mismatches instead of aligning silently. Entity
+    classes (cities, communes) come from reference data (`data/meta/uat-siruta.csv`, or the
+    dataset that defines the set, e.g. `GOS102A`).
+  - **Derived measures as tool figures**: ratios, per-capita and density, differences between
+    entities, ranking by value with an entity-class filter and the full eligible set, each with
+    a denominator and a unit the tool checked.
+  - **Correlations and patterns**: correlation between two measures over the same entities and
+    period, trend and outlier/peer search, each reporting n, period, excluded entities and
+    missing values; descriptive only, with fixed wording against causal claims and a visible
+    ecological-fallacy / small-n / series-break warning.
+  - **Understanding datasets**: a reviewed catalogue of which datasets are joinable and on
+    which key, with concept cards (unit, definition, coverage, level) so discovery can propose
+    a combination, not just a dataset.
+  - **Guard rails**: everything goes through the existing aggregation policy and grain checks
+    (FIX-02); results carry provenance for every source; bounded scans and wire size
+    (AT-03 gate); a sum or ratio with no agreement with a published figure is not `ok`.
+  - **Evidence**: grow the question set in `at-04-initial-mcp-eval.md` with these questions
+    and re-run it (`scripts/mcp_eval_client.py`) before and after each tool.
+
 - [ ] **P1 Ambiguity stops instead of defaulting**: every "populația"/"rata șomajului"
   question returns `needs_clarification/ambiguous_definition`; Haiku always stops, Sonnet
   stops or breaks prompt rule 1, and rules 1 and 5 contradict each other. Give concepts a
