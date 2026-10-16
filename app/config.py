@@ -91,4 +91,22 @@ ASK_RETRY_AFTER_SECONDS = _int_env("TEMPO_ASK_RETRY_AFTER_SECONDS", 10)
 
 # Provider call limits
 ASK_PROVIDER_TIMEOUT     = _float_env("TEMPO_ASK_PROVIDER_TIMEOUT", 30.0)  # per provider call
-ASK_PROVIDER_MAX_RETRIES = _int_env("TEMPO_ASK_PROVIDER_MAX_RETRIES", 1)   # SDK-level retries
+# SDK-level retries for callers outside the Ask loop. The loop itself passes 0: it owns
+# the one retry its policy allows, inside the request deadline (AT-02).
+ASK_PROVIDER_MAX_RETRIES = _int_env("TEMPO_ASK_PROVIDER_MAX_RETRIES", 1)
+
+# --- AT-02: model output, context and debug bounds -------------------------
+# Output tokens requested per model call. Reasoning tokens count against the limit, so a
+# reasoning-capable model gets a larger allowance (provider:model, a trailing * matches
+# any model). The defaults are engineering starting points, not measured guarantees;
+# revisit them with the AT-04 cost/quality evidence.
+ASK_OUTPUT_TOKENS            = _int_env("TEMPO_ASK_OUTPUT_TOKENS", 2048)
+ASK_REASONING_OUTPUT_TOKENS  = _int_env("TEMPO_ASK_REASONING_OUTPUT_TOKENS", 8000)
+ASK_REASONING_MODELS         = _csv_env("TEMPO_ASK_REASONING_MODELS") or ["deepseek:*"]
+ASK_RESPONSES_MIN_OUTPUT_TOKENS = _int_env("TEMPO_ASK_RESPONSES_MIN_OUTPUT_TOKENS", 8000)  # OpenAI Responses
+# Aggregate requested output tokens per Ask turn (every call, retry and the final answer).
+ASK_TURN_OUTPUT_TOKENS       = _int_env("TEMPO_ASK_TURN_OUTPUT_TOKENS", 64000)
+# Serialized tool output kept in the model's context across one turn (UTF-8 bytes).
+ASK_CONTEXT_BYTES            = _int_env("TEMPO_ASK_CONTEXT_BYTES", 96 * 1024)
+# Debug events kept per request (the rest are counted, not stored).
+ASK_DEBUG_MAX_EVENTS         = _int_env("TEMPO_ASK_DEBUG_MAX_EVENTS", 200)
