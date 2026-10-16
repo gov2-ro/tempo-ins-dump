@@ -96,7 +96,9 @@ reads env: `TEMPO_DATA_DIR`, `TEMPO_MAX_ROWS` (50,000), `TEMPO_DEBUG`,
 `TEMPO_ASK_ENABLED` (hosted Ask) and `TEMPO_ASK_BYOK_ENABLED` (own-key Ask), both
 off by default (set the second for local Ask work), and other `TEMPO_ASK_*`/`TEMPO_LLM_*`.
 `TEMPO_PUBLIC_BASE_URL` is the trusted origin of the tools' citation/evidence links
-(unset: root-relative links; never derived from a request's Host header).
+(unset: root-relative links; never derived from a request's Host header). The public MCP
+(`TEMPO_MCP_ENABLED`, default off, and its `TEMPO_MCP_*` limits, listed in
+`docs/plans/ask-and-public-mcp/at-03-record.md`) is read when the app is built, not at import.
 
 - **Routers:** `datasets` (catalog/search/detail), `dataset_data` (data, insights,
   CSV/XLSX download), `categories`, `sdmx` (SDMX 2.1 data/datastructure/dataflow),
@@ -117,6 +119,22 @@ off by default (set the second for local Ask work), and other `TEMPO_ASK_*`/`TEM
   entry point, `registry.call_tool(name, arguments)`. It validates arguments before any
   DB work, owns the cursor, re-checks the generation and keeps results under 32 KiB.
   Handlers call the shared services above; adapters must not re-implement their rules.
+- **Ask** (`services/agent.py`, record `at-02-record.md`): the model sees only those seven
+  tools. One turn is bounded by counted model calls (8, the last one reserved for a final
+  answer with tools disabled), tool dispatches (12), wall clock (90 s) and requested output
+  tokens (64,000); identical requests are served from the turn cache, tool results are kept
+  to 96 KiB of model context, and the response carries `outcome`/`reason` (answered,
+  clarification, refused, partial, failed), `verification.claims` and `context` (up to four
+  canonical selections the client echoes back as untrusted hints). `ask_context.py` (context,
+  compaction), `ask_present.py` (the page's table/citations), `ask_guard.py` (redaction,
+  `CancelToken`, metrics whitelist). Never log or return a credential: the request's own key
+  is scrubbed by `ask_guard.secrets_scope`.
+- **Public MCP** (`services/public_mcp.py`, `/mcp`, record `at-03-record.md`): a read-only
+  Streamable HTTP endpoint over the same seven tools, disabled by default (404 for every method
+  and subpath). Per-worker gate: one operation at a time, no queue, a deadline that interrupts
+  the operation's own cursor, a scan admission limit from Parquet footers, a generation-keyed
+  cache. It never calls a model, asks for sampling, or runs SQL/code. `scripts/mcp_probe.py`
+  smokes a running endpoint.
 - **Pages** (`static/`):
   - `dataset-v2.html` + `js/dashboard-v2.js` — main dataset page
   - `index.html` + `js/explore-app.js` — v1 explorer: home, catalog, legacy

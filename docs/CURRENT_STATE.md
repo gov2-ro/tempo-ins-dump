@@ -230,13 +230,32 @@ is set (see [agent-setup.md](agent-setup.md)). FIX-08: history
 is validated before any provider call (user/assistant text only, 20 turns, 8k
 chars per turn, 40k total). Providers/models come from an allowlist
 (`ask-models.json` for BYOK; only `TEMPO_LLM_PROVIDER:TEMPO_LLM_MODEL` for
-server-funded calls unless `TEMPO_ASK_SERVER_MODELS`). Independent budgets: 8 model
-calls, 12 dispatched tools, 90 s; exhausting one returns a 200 partial result
-with `stop_reason`. At most 2 concurrent Ask requests (else 503 + Retry-After).
-Provider errors are stable and secret-free. Chat content logging is off by
-default, including in `fly.toml`; `ASK_METRICS` lines carry no content. BYOK keys
-stay per-tab unless the user opts in to "remember"; Clear wipes both scopes; keys
-transit the server. `GET /api/ask/config` drives the disclosure banner.
+server-funded calls unless `TEMPO_ASK_SERVER_MODELS`). At most 2 concurrent Ask
+requests (else 503 + Retry-After). Provider errors are stable and secret-free. Chat
+content logging is off by default, including in `fly.toml`; `ASK_METRICS` lines are a
+whitelist of ids, counts and codes with no content. BYOK keys stay per-tab unless the
+user opts in to "remember"; Clear wipes both scopes; keys transit the server.
+`GET /api/ask/config` drives the disclosure banner.
+
+AT-02 (2026-10-16, on `at/02-ask-runtime`, not deployed): the model works with the seven
+shared tools (`tempo-tools/1`) instead of its own four. Counted budgets: 8 model calls (the
+last reserved for the final answer with tools off), 12 tool dispatches, 90 s, 64,000 requested
+output tokens; identical requests are served from a per-turn cache, a repeated refusal is not
+re-run, and older tool results shrink to compact summaries beyond 96 KiB of model context.
+An empty `length`/whitespace reply gets one bounded retry, then an explicit failure
+(`outcome`: answered / clarification / refused / partial / failed, with a stable `reason`).
+The browser echoes back up to four canonical selections (`context`) for follow-ups; they are
+revalidated and re-run, never trusted. A browser abort interrupts the query the request owns;
+the request's own key is scrubbed before anything is logged. See
+[at-02-record.md](plans/ask-and-public-mcp/at-02-record.md).
+
+Public MCP (AT-03, same branch, not deployed, off unless `TEMPO_MCP_ENABLED`): `/mcp`
+serves the same seven tools read-only over Streamable HTTP, with a per-worker gate (one
+operation at a time, no queue, 10 s deadline, 1,000,000-row scan admission limit, a bounded
+generation-keyed cache) and Host/Origin/body checks. See
+[at-03-record.md](plans/ask-and-public-mcp/at-03-record.md). `/api/health` reports
+`mcp.enabled`. Neither package has run against a live provider, a ChatGPT/Claude connector or
+Fly yet (AT-04).
 
 ## Dated inventory, not permanent constants
 

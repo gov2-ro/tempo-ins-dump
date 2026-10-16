@@ -1,5 +1,44 @@
 # Activity History
 
+## 2026-10-16 — Ask runtime (AT-02) and public MCP (AT-03)
+
+Built on `integ/at01-ui-rhythm` in a new worktree (`../tempo-at23`, branch `at/02-ask-runtime`),
+sequentially because both packages touch configuration and startup. Records:
+`docs/plans/ask-and-public-mcp/at-02-record.md` and `at-03-record.md`. Nothing deployed.
+
+**Ask.** The loop now calls the seven shared tools through `registry.call_tool`. Why: the logged
+runs ended in 200 + `(no answer)`, a 187 KB raw-row result resent on every call and eight model
+calls spent searching a refused dataset. What changed:
+- model calls, tool dispatches, wall clock and requested output tokens are counted together, and
+  the last model call is reserved for a final answer with tools disabled (before, a model that
+  asked for tools on its last call had them discarded);
+- identical requests come from a per-turn cache and a repeated refusal is not re-run;
+- an empty `length` stop is retried once with more room, then reported as `output_limit`;
+- older tool results shrink to compact summaries beyond 96 KiB of context; the page keeps its
+  table and gets links to the complete data;
+- follow-up selections (at most four, 8 KiB) come back from the browser as untrusted hints;
+- a browser abort interrupts the DuckDB query the request owns;
+- the request's own key is scrubbed from every log record, error text and debug event (a
+  non-`sk-` key used to survive in the agent log).
+
+Non-obvious decisions: the old tool names and handlers are gone with no alias (the parity
+tests now compare REST and the dev MCP with the shared tool via `tests/ask_adapter.py`); the
+model-visible budgets are deterministic byte limits, not token estimates; `outcome` is separate
+from `stop_reason` so HTTP 200 never reads as an answer; a number or flag is never redacted
+for having a key like `max_tokens`.
+
+**MCP.** `/mcp` over the same tools, stateless Streamable HTTP, off by default. Why a gate: the
+Fly machine is 512 MiB and unmeasured, so one operation at a time with no queue, a deadline that
+really stops the query, a scan limit from Parquet footers (never a COUNT) and a bounded cache.
+Non-obvious: the low-level SDK `Server` so the schemas are the registry's own; the app's
+development CORS (`*`) is carved out for `/mcp`; GET is 405 (a stateless server has no stream and
+the SDK's GET would hang); POP107D's single-age child is now refused by the scan limit before the
+scope check AT-01 gave it.
+
+Checks: 1139 passed / 73 skipped synthetic (948 / 73 at the start); 1212 passed / 0 skipped on the
+copied generation (read-only); a runtime-only venv served the real app and the probe passed. Not done: live providers, ChatGPT/Claude
+interoperability, Fly load, Docker image smoke.
+
 ## 2026-10-16 — Landing: themes and category listing combined
 
 The landing used to show three blocks: theme chart previews, a "Recently updated"

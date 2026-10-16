@@ -2,7 +2,7 @@
 
 ## Problem and ownership
 
-**AT-02: pending.** Make the existing Ask loop a bounded adapter over AT-01.
+**AT-02: implemented 2026-10-16** (see [at-02-record.md](at-02-record.md); owner review pending). Make the existing Ask loop a bounded adapter over AT-01.
 Primary files: `agent.py`, `llm_client.py`, `ask_guard.py`, Ask router/config,
 `ask.js` and focused tests. Preserve disabled-by-default hosted/BYOK switches,
 history validation, allowlists, concurrency limits and existing data/chart UI.

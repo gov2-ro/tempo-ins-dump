@@ -8,7 +8,13 @@ handoff.** Earlier completed work remains completed; preserve it.
 Implementation status: **AT-01 implemented 2026-10-15** on branch
 `at/01-analytical-tools` (from `pa/00-baseline` 8a9689d), awaiting owner review.
 See [at-01-record.md](at-01-record.md), including the proposed AT-00 amendments.
-AT-02…AT-04 are not started.
+**AT-02 and AT-03 implemented 2026-10-16** on branch `at/02-ask-runtime`, built on the
+owner-reviewed integration branch `integ/at01-ui-rhythm` (81030f5), awaiting owner review:
+[at-02-record.md](at-02-record.md) (bounded, recoverable Ask over the shared tools),
+[at-03-record.md](at-03-record.md) (public read-only MCP at `/mcp`, disabled by default).
+Neither is deployed, pushed or merged; no live provider, client or Fly run has happened.
+AT-04 (task evaluations, onboarding artifacts, resource and cost evidence) is not started.
+The hosting split and cutover steps are in [05-hosting-and-cutover.md](05-hosting-and-cutover.md).
 
 People should be able to ask a supported statistical question, clarify its
 definition, obtain a correct bounded calculation or an actionable refusal, and
@@ -73,8 +79,8 @@ sample does not estimate an overall answer-success rate.
 |---|---|---|---|
 | AT-00 | [00-tool-contract.md](00-tool-contract.md) | Versioned tool inputs, results, provenance and limits | Baseline for AT-01 and adapters |
 | AT-01 | [01-analytical-tools.md](01-analytical-tools.md) | Shared discovery/options/query/recipe/change/evidence tools and numerical tests | Contract |
-| AT-02 | [02-ask-runtime.md](02-ask-runtime.md) | Bounded, recoverable Ask using AT-01; safe logs and follow-ups | AT-01 |
-| AT-03 | [03-public-mcp.md](03-public-mcp.md) | Disabled-by-default public MCP with seven read-only tools and resource bounds | AT-01 |
+| AT-02 | [02-ask-runtime.md](02-ask-runtime.md) (done: [record](at-02-record.md)) | Bounded, recoverable Ask using AT-01; safe logs and follow-ups | AT-01 |
+| AT-03 | [03-public-mcp.md](03-public-mcp.md) (done: [record](at-03-record.md)) | Disabled-by-default public MCP with seven read-only tools and resource bounds | AT-01 |
 | AT-04 | [04-evaluation-and-release.md](04-evaluation-and-release.md) | Task evaluations, package/onboarding artifacts and release evidence | AT-01/02/03 |
 
 Use small functional commits within each package. AT-01 includes fixtures and

@@ -44,8 +44,12 @@ uploads each need the owner's explicit go-ahead.
 - CORS restricted to `https://ins.gov2.ro` through an env var (`app/main.py` has
   `allow_origins=["*"]`).
 - Request keys are redacted before Ask events are logged.
-- `TEMPO_MCP_ENABLED` / `TEMPO_PUBLIC_BASE_URL=https://api-ins.gov2.ro` set only when the
-  MCP ships.
+- MCP (AT-03, implemented, off by default): set `TEMPO_MCP_ENABLED=true`,
+  `TEMPO_PUBLIC_BASE_URL=https://api-ins.gov2.ro` (a bare https origin; startup fails otherwise)
+  and `TEMPO_MCP_ALLOWED_HOSTS=api-ins.gov2.ro,tempo-ins-explorer.fly.dev` only when the endpoint
+  is to be public. The endpoint is `https://api-ins.gov2.ro/mcp`; check it with
+  `python scripts/mcp_probe.py https://api-ins.gov2.ro <DATASET>` and `/api/health` (`mcp.enabled`).
+  All limits are per worker; keep one machine until AT-04 shows a load/memory result.
 
 ## B. Fly (`api-ins.gov2.ro`)
 

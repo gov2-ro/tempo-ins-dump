@@ -2,7 +2,7 @@
 
 ## Problem and ownership
 
-**AT-03: pending.** Add a public, bounded MCP interface over AT-01 so visitors can
+**AT-03: implemented 2026-10-16, disabled by default** (see [at-03-record.md](at-03-record.md); owner review pending). Add a public, bounded MCP interface over AT-01 so visitors can
 use supported chat clients without supplying a model key to INS+. This is a data
 server: the client model chooses tools and synthesizes answers. Do not proxy Ask,
 invoke `run_agent` or request client-side model sampling inside a public tool.

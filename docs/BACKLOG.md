@@ -40,41 +40,65 @@ Four DeepSeek Flash runs with `TEMPO_ASK_DEBUG` (server log
 `tempo-gen-20261012/reports/uvicorn-8080.log`): none failed at the provider; each hit
 one of these.
 
-- [ ] **Compatible providers stop with an empty answer at 2,048 tokens**: DeepSeek
+- [x] **Compatible providers stop with an empty answer at 2,048 tokens**: DeepSeek
   Flash ended its last call with `finish_reason: length` and 0 text chars, because
   its reasoning used up `max_tokens`. The page showed "(no answer)". Apply
   `RESPONSES_MIN_OUTPUT_TOKENS` (8,000) to `_openai` in `llm_client.py` too. Treat an
-  empty `length` stop as a recoverable error, not an answer.
-- [ ] **"Total" filter values are refused with an unhelpful hint**: the model asked
+  empty `length` stop as a recoverable error, not an answer. **Done 2026-10-16 (AT-02):** allowances per provider/model (8,000 for configured reasoning models, 64,000 per turn), an empty `length` stop gets one bounded retry then an explicit `output_limit` failure, never `(no answer)`; see [at-02-record.md](plans/ask-and-public-mcp/at-02-record.md).
+- [x] **"Total" filter values are refused with an unhelpful hint**: the model asked
   `POP108D_grupe_judet` for `AGE: ["Total"]` → `slice_value_missing`. INS total rows
   aren't stored. When a refused value looks like a total, `_REASON_HINTS` in
   `agent.py` should say "no total rows are stored; omit the filter to sum the
   categories". *AT-01 (2026-10-15): the `query_data` tool explains the missing Total
   and offers the reviewed recipe, a policy-checked query without the pin and a value
-  lookup; Ask still uses its old handler until AT-02.*
-- [ ] **Raw rows flood the model context**: the data tool lets up to 5,000 rows
+  lookup; Ask still uses its old handler until AT-02.* **Done 2026-10-16 (AT-02):** Ask calls `query_data`, whose refusal explains the missing Total and offers the recipe, the unpinned query and a value lookup.
+- [x] **Raw rows flood the model context**: the data tool lets up to 5,000 rows
   through (`limit=5000` in `_handle_query_dataset_data`). One refused aggregation
   fell back to 2,732 raw rows (187k chars), and `list_categories` returns 49k
   chars. Every later model call resends them, which slows it (14 s) and costs
   tokens. Cap rows sent to the model at a few hundred, with `row_count` and a
   "narrow it" note. The page keeps the full data. *AT-01: tool results are capped at
-  200 rows and 32 KiB with explicit preview flags; Ask adopts them in AT-02.*
-- [ ] **Conflicting-grain refusals give no way forward**: `POP10xD_*_judet` and
+  200 rows and 32 KiB with explicit preview flags; Ask adopts them in AT-02.* **Done 2026-10-16 (AT-02):** the model gets 32 KiB / 200-row envelopes and at most 96 KiB of tool output per turn (older results compacted); the page keeps its table and gets links to the complete data.
+- [x] **Conflicting-grain refusals give no way forward**: `POP10xD_*_judet` and
   `TUR105H_judet` are among the 160 conflicting-grain files (see "County hierarchy
   grain repair" below), so totals and group-bys are refused. The model then
   searched again and ran out of calls (8-model-call and 12-tool limits). The hint
   should name a working alternative: the `_localitate` child, or `POP105A` for
   county population. Search should rank such datasets above refused ones. *AT-01:
   `query_data` names a certified-unique parent/sibling as a candidate and discovery
-  does not prefer conflicting files; Ask adopts them in AT-02.*
-- [ ] **Multi-step comparisons exceed the Ask budget**: "municipalities with the
+  does not prefer conflicting files; Ask adopts them in AT-02.* **Done 2026-10-16 (AT-02):** Ask follows the tool's recovery candidates; a repeated refusal is not re-run and three failures in a row go to the final answer.
+- [x] **Multi-step comparisons exceed the Ask budget**: "municipalities with the
   biggest population drop, 1992–2002 and 2010–2020" needs every municipality at
   four points in time, differences and a ranking; it ended partial. Consider a
   change/ranking tool (period A vs period B per area), or a recipe, instead of
   raising the 8-call limit. *AT-01: `compare_periods` (+ `/api/period-changes`)
-  ranks every eligible entity per interval; Ask adopts it in AT-02.*
+  ranks every eligible entity per interval; Ask adopts it in AT-02.* **Done 2026-10-16 (AT-02):** Ask uses `compare_periods`; the 8-call/12-tool limits are unchanged.
 - [ ] **Ask eval on the new providers**: no listed model has run `tempo_eval_agent`
   yet (needs a key per provider). Mistral `-latest` ids are unconfirmed in its docs.
+
+## AT-02 / AT-03 follow-ups — 2026-10-16
+
+From the Ask runtime and public MCP packages ([AT-02](plans/ask-and-public-mcp/at-02-record.md),
+[AT-03](plans/ask-and-public-mcp/at-03-record.md)). Nothing is deployed.
+
+- [ ] **Ask and MCP have had no live evidence**: no real provider, ChatGPT/Claude connector or Fly load
+  run. AT-04: task evaluations with a budget, allowance defaults (2,048 / 8,000 reasoning / 64,000 per
+  turn; `deepseek:*` is the only configured reasoning model), cost and quality per provider.
+- [ ] **Ask page on a separate origin**: `ask.js` uses relative `/api/ask`. For the static site on
+  DreamHost and the API on Fly: an API base in the generated `config.js`, CORS limited to the site
+  origin instead of `*`, links resolved against the API base ([runbook](plans/ask-and-public-mcp/05-hosting-and-cutover.md)).
+  Also check NDJSON streaming and the 90 s limit through Cloudflare's proxy (about 100 s).
+- [ ] **MCP resource gate on the 512 MiB machine**: untested on Linux with the real corpus. One worker,
+  per-worker limits only; `min_machines_running = 0` cold-starts may time out a connector.
+- [ ] **MCP scan limit is the whole file**: split families over 1,000,000 rows (e.g. POP107D single-age
+  children) are refused even for a one-county filter. Use partition statistics to admit them, with
+  AT-04 evidence, or point clients to smaller sub-datasets.
+- [ ] **Docker image smoke for MCP was not run** (`release-check.py --docker`, no Docker here).
+- [ ] **Live MCP client compatibility**: schema acceptance, anonymous access and timeouts in ChatGPT and
+  Claude connectors; directory submission.
+- [ ] **Ask claim binding is sentence-level**: the entity must be named in the same sentence; period and
+  unit are reported, not required. Add period/unit checks, or a structured answer format.
+- [ ] **Tool messages are English only** (AT-01) and show on Romanian Ask pages.
 
 ## Data refresh findings — 2026-10-15
 
@@ -93,8 +117,8 @@ one of these.
 
 From the analytical-tools package ([record](plans/ask-and-public-mcp/at-01-record.md)).
 
-- [ ] **Scope note is missing from Ask, compare and place pages**: only v1/v2 dataset
-  pages show the restriction badge. Add it where those pages show a summed total.
+- [ ] **Scope note is missing from compare and place pages**: v1/v2 dataset pages and (AT-02,
+  2026-10-16) Ask tables show the restriction note. Add it where compare and place pages show a summed total.
 - [ ] **Coverage is checked for age dimensions only**: a split child that keeps one
   value of a non-age dimension (e.g. one sex) is not flagged; `domain_complete` then
   stays null. Also, the note says "Vârste/Ages" for every age-typed dimension,
@@ -168,7 +192,7 @@ acceptance checks and capability proposals:
 - [x] **P0 — Preserve geographic series in Ask charts (A03)**. `ask.js::renderChart` excludes REF_AREA from series identity; two counties across two years become one last-county series. Use explicit roles/full remaining grain, reject duplicate chart keys, and verify chart/table agreement. **Done 2026-10-11 (PA-01c, 94d8d27):** `chartSeries` keys on every varying column and refuses repeated keys; `tests/test_pa01_frontend.py`.
 - [x] **P1 — Prevent stale year-slider rendering (A05)**. FOM106F with an older response delayed 900ms displays 2000 values under a 2001 label/URL after rapid changes. Add per-tile request version/cancellation and invalidate pending responses after filters, views or datasets change. **Done 2026-10-11 (PA-01c, 94d8d27):** selection versions on refresh/refreshTile. `tests/browser/audit_pa01_races.py` FAILs on 6a727a2 and passes after.
 - [x] **P1 — Require intentional alignment for correlations (A06)**. Compare currently independently selects latest periods; a fixture reports r=1.00 for 2023 versus 2025 without explicit lag. Use latest common compatible period by default, assert unique geo keys and disclose exclusions. Return undefined for constant axes, not r=0. Extend the existing Compare polish item rather than creating another comparison page. **Done 2026-10-11 (PA-01c, 94d8d27):** latest common period, per-period duplicate-county refusal, exclusions listed, r undefined (null) for constant/insufficient input; lag controls deferred.
-- [ ] **P1 — Make Ask dimension options searchable and actual periods discoverable (A07)**. AMG157G schema exposes only the first 20 historical months and a null time range. Add bounded option search/pagination and actual available period bounds, with explicit truncation and valid levels. Reuse for public MCP. *Partly done 2026-10-11 (070b589): `/api/datasets/{code}/options` (search, pagination, truncation, actual period bounds). Not yet an Ask tool (Ask excluded).*
+- [x] **P1 — Make Ask dimension options searchable and actual periods discoverable (A07)**. AMG157G schema exposes only the first 20 historical months and a null time range. Add bounded option search/pagination and actual available period bounds, with explicit truncation and valid levels. Reuse for public MCP. *Partly done 2026-10-11 (070b589): `/api/datasets/{code}/options` (search, pagination, truncation, actual period bounds). Ask uses it as the `find_dimension_values` tool since AT-02 (2026-10-16).*
 - [x] **P1 — Parameterize MCP samples (A08)**. `_sample_parquet` interpolates filter values as SQL literals. Bind values/paths and validate identifiers, shapes and positive limits; exercise apostrophes and adversarial literal input on synthetic data before exposing this tool publicly. **Done 2026-10-11 (PA-01a, bc7c509):** filters validated against the file's columns, values and path bound; adversarial-literal tests.
 - [ ] **P1 — Fix Ask citations and mobile selectors (A09/A10)**. Citation/data links use nonexistent `/dataset.html`; 320px settings begin at x=-72; mobile Dimension Browser removes its selector with no replacement. Link to the current dataset slice and provide fitted, keyboard-accessible mobile controls. *Partly done 2026-10-11 (PA-01c, 94d8d27): citations open `/dataset-v2.html` in the current language and `/dataset.html` 301-redirects; links do not yet carry the query slice. Mobile selectors (A10) remain.* *Dimension Browser mobile select done 2026-10-11 (9b8829b); Ask 320px settings remain (Ask excluded).*
 - [ ] **P1 — Improve concept discovery and family grouping (A11/A12)**. Full repaired index coverage is available, but common vocabulary ranks unrelated concepts/variants; place theme substring matching leaves most Cluj datasets in “Alte”. Curate aliases, extract place/time context, group split families, map stable categories and explain definition differences in related results. Audit canonical v2 indexing (`noindex` currently set), meaningful initial HTML and sitemap; existing clean-URL/OG ideas remain relevant. *Partly done 2026-10-11 (PA-02, 070b589…072ff92): reviewed concepts with ambiguity/alternatives for Q1–Q4, place/year parsing, family grouping, stable place themes, relation labels, canonical `/dataset/{code}` pages, sitemap and robots. Open: broader vocabulary, locality resolution.*
