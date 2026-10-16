@@ -130,6 +130,7 @@ _NOTICE = {
         "cut_note": "(Răspunsul a fost întrerupt de limita de ieșire a modelului.)",
         "no_result": "Nu am obținut o valoare verificată pentru această întrebare{why}.",
         "cancelled": "Cererea a fost oprită.",
+        "provider": "Furnizorul modelului {why}. {partial}Încercați din nou sau alegeți alt model.",
     },
     "en": {
         "budget": "I could not finish within the request limits. {partial}Please ask a more specific question.",
@@ -141,7 +142,16 @@ _NOTICE = {
         "cut_note": "(The answer was cut off by the model's output limit.)",
         "no_result": "I could not obtain a verified value for this question{why}.",
         "cancelled": "The request was stopped.",
+        "provider": "The model provider {why}. {partial}Try again or choose another model.",
     },
+}
+
+# What stopped the turn when the provider failed after tools had run (stable codes only).
+_PROVIDER_WHY = {
+    "ro": {"provider_timeout": "nu a răspuns la timp", "provider_rate_limited": "a limitat cererile (rate limit)",
+           "provider_unavailable": "nu a fost disponibil"},
+    "en": {"provider_timeout": "did not answer in time", "provider_rate_limited": "rate-limited the request",
+           "provider_unavailable": "was unavailable"},
 }
 
 # ---------------------------------------------------------------------------
@@ -266,6 +276,7 @@ class _Run:
         self.consecutive_failures = 0
         self.force_final: str | None = None   # why the next model call is the final one
         self.provider_retry_used = False
+        self.provider_code: str | None = None  # the stable code of the failure that ended the turn
         self.output_retry_used = False
         self.repair_used = False
         self.guardrail_fired = False
@@ -382,6 +393,7 @@ class _Run:
                 return None
             if err.code in RETRYABLE and any(t.get("executed", True) for t in self.trace):
                 log.warning("Provider error after %d tools: %s", len(self.trace), err.code)
+                self.provider_code = err.code
                 raise _Stop(self.finish_without_model("provider")) from None
             raise err from None
         self.emit("model_done", iteration=self.iterations, took_ms=int((time.monotonic() - t_call) * 1000),
@@ -619,8 +631,8 @@ class _Run:
         """The loop cannot make another model call: end with what exists."""
         self.emit("stopped", reason=stop)
         if stop == "provider":
-            self.warnings.append("The model provider became unavailable before a final answer; "
-                                 "the result is partial.")
+            self.warnings.append(f"The model provider failed ({self.provider_code or 'provider_error'}) "
+                                 "before a final answer; the result is partial.")
         return self.conclude(None, failed="cancelled" if stop == "cancelled" else None,
                              stopped=None if stop == "cancelled" else stop)
 
@@ -638,8 +650,13 @@ class _Run:
 
         if text is None or not str(text).strip():
             key = failed or stopped
-            text = (notices[key] if key in notices else
-                    notices["budget"].format(partial=notices["partial_data"] if usable else ""))
+            partial = notices["partial_data"] if usable else ""
+            if key == "provider":
+                whys = _PROVIDER_WHY[self.lang]
+                why = whys.get(self.provider_code or "", whys["provider_unavailable"])
+                text = notices["provider"].format(why=why, partial=partial)
+            else:
+                text = notices[key] if key in notices else notices["budget"].format(partial=partial)
         elif cut:
             text = text.rstrip() + "\n\n" + notices["cut_note"]
 

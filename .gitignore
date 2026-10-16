@@ -205,3 +205,4 @@ cython_debug/
 deploy-data.prev/
 deploy-data.tmp.*/
 deploy-data.tar.gz.tmp
+mcp-eval-runs/

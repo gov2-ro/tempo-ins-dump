@@ -57,6 +57,31 @@ class TestProviderOutcomes:
         assert (res.outcome, res.reason) == ("partial", "output_limit")
         assert res.answer.startswith("Populația a crescut") and "cut off" in res.answer
 
+    @pytest.mark.parametrize("error, code, ro, en", [
+        ("RateLimitError", "provider_rate_limited", "rate limit", "rate-limited"),
+        ("APITimeoutError", "provider_timeout", "nu a răspuns la timp", "did not answer in time"),
+        ("APIConnectionError", "provider_unavailable", "nu a fost disponibil", "was unavailable")])
+    def test_a_provider_failure_after_tools_names_the_cause_not_the_request_limits(
+            self, monkeypatch, error, code, ro, en):
+        """The user saw "I could not finish within the request limits" when the provider had
+        timed out: the notice, the warning and the model call log must say what really happened."""
+        monkeypatch.setattr(agent, "RETRY_PAUSE_SECONDS", 0.0)
+        exc = type(error, (Exception,), {})
+
+        def resp(n, m, kw):
+            if n == 1:
+                return tools_resp(1)
+            raise exc("secret provider text")
+        for question, word in (("Care este populația?", ro), ("What is the population?", en)):
+            install(monkeypatch, resp)
+            res = agent.run_agent(question, provider="anthropic", model="m", api_key="k-123456")
+            assert res.outcome in ("partial", "failed")        # partial when a tool result was usable
+            assert (res.reason, res.stop_reason) == ("provider", "provider")
+            assert word in res.answer
+            assert "limitele cererii" not in res.answer and "request limits" not in res.answer
+            assert "secret provider text" not in res.answer
+            assert any(code in w for w in res.warnings)
+
     def test_whitespace_success_gets_one_repair_with_tools_off(self, monkeypatch):
         calls = install(monkeypatch, lambda n, m, kw: text_resp("   \n ") if n == 1 else text_resp("Gata."))
         res = agent.run_agent("Care este populatia?", provider="anthropic", api_key="k")

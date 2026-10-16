@@ -1,5 +1,21 @@
 # Activity History
 
+## 2026-10-16 — Initial model evaluation of the tools over MCP
+
+Why: the first browser runs of Ask were poor and it was unclear whether tools, prompt or the
+provider were to blame. Haiku and Sonnet (low/high effort, eight Claude Code sub-agents) answered
+eight questions through `scripts/mcp_eval_client.py` against the local public MCP with Ask's real
+system prompt; 67 traced calls, no tool errors, 1–5 calls per question. Record and ground truth:
+`docs/plans/ask-and-public-mcp/at-04-initial-mcp-eval.md`.
+- The tools are not what failed. What blocks answers: a clarification gate with no default (4 of 8
+  questions), no ranked-level query (top-30 cities), no density, and unverified sums returned as
+  `ok` (two disagreeing births series). Nobody invented a figure.
+- Fixed here: a provider failure after tools said "could not finish within the request limits";
+  it now names the cause (timeout / rate limit / unavailable). Everything else is in BACKLOG as
+  owner decisions (defaults, a ranking tool spec).
+- The agents' own tool-usability notes were kept as findings; effort level changed literalness,
+  not accuracy.
+
 ## 2026-10-16 — Ask runtime (AT-02) and public MCP (AT-03)
 
 Built on `integ/at01-ui-rhythm` in a new worktree (`../tempo-at23`, branch `at/02-ask-runtime`),

@@ -4,6 +4,31 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Ask/MCP initial model evaluation — 2026-10-16
+
+Evidence and ground truth: `docs/plans/ask-and-public-mcp/at-04-initial-mcp-eval.md`.
+
+- [ ] **P1 Ambiguity stops instead of defaulting**: every "populația"/"rata șomajului"
+  question returns `needs_clarification/ambiguous_definition`; Haiku always stops, Sonnet
+  stops or breaks prompt rule 1, and rules 1 and 5 contradict each other. Give concepts a
+  reviewed default, return `ok` with `assumed` + `alternatives`, keep clarification for choices
+  that change the answer, and fix the prompt.
+- [ ] **P1 No ranked level query**: "top 30 cities" is unanswerable (`query_data` has no order,
+  200-row cap, models may not rank raw rows; `compare_periods` ranks change only). Needs a spec
+  for a `tempo-tools/1` addition: rank over all eligible entities with an entity-class filter
+  (municipii + orașe), a joined second measure (density), and a two-entity difference/ratio.
+- [ ] **P1 Unverified sums returned as `ok`**: births 2023 is 164,004 (`POP201E`) or 168,079
+  (`POP201D`), both `valid_total` with `domain_complete: null`. A total with no agreement with a
+  published figure should be `partial`/flagged, not `ok` (FIX-02 class).
+- [ ] **Interpretation and choices**: "curentă" should set `latest`, "orașe" the level;
+  `choices[].next_call` should be a concrete call, not a reworded `discover_indicators`;
+  `choice.recipe` disagrees with the concept card; lookup for `run_recipe` areas; series
+  breaks belong in `warnings`; no area/density concept or recipe.
+- [ ] **Capped unordered preview shown as the answer table** (Ask page): caption it "first N
+  rows" or hide it for ranking questions.
+- [ ] **Re-run the initial evaluation** after the two P1 tool changes
+  (`scripts/mcp_eval_client.py`), then AT-04 with real providers.
+
 ## Theme preview findings — 2026-10-16
 
 - [ ] **Repair category ancestry on canonical splits**: split datasets can have
