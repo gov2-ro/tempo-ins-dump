@@ -456,12 +456,48 @@ def run_tests(rep: Report):
 
 
 # ------------------------------------------------------------------ docker smoke
+def _wait_health(base: str, tries: int = 40):
+    import urllib.request
+    for _ in range(tries):
+        try:
+            return json.load(urllib.request.urlopen(base + "/api/health", timeout=3))
+        except Exception:
+            time.sleep(1)
+    return None
+
+
+def _mcp_smoke(rep: Report, tag: str, port: int, code: str):
+    """The same image with the public MCP switched on (local-test origin): initialize, list the
+    seven tools and make one read-only call, checking structuredContent == the text fallback."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import mcp_probe
+    cid = subprocess.run(
+        ["docker", "run", "-d", "--rm", "-p", f"{port}:8080",
+         "-e", "TEMPO_MCP_ENABLED=true", "-e", "TEMPO_MCP_LOCAL_TEST=true",
+         "-e", f"TEMPO_PUBLIC_BASE_URL=http://127.0.0.1:{port}", tag],
+        capture_output=True, text=True).stdout.strip()
+    try:
+        base = f"http://127.0.0.1:{port}"
+        health = _wait_health(base)
+        if not health or not health.get("mcp", {}).get("enabled"):
+            rep.fail(f"MCP image did not start with the endpoint enabled: {health and health.get('mcp')}")
+            return
+        out = mcp_probe.probe(base, dataset=code)
+        rep.ok(f"image serves the public MCP: {len(out['tools'])} tools, {code} describe -> "
+               f"{out['call_status']}, structured == text fallback")
+    except mcp_probe.ProbeError as e:
+        rep.fail(f"MCP smoke failed: {e}")
+    finally:
+        subprocess.run(["docker", "stop", cid], capture_output=True)
+
+
 def docker_smoke(rep: Report, stage: Path, port: int):
     print("== docker build + smoke")
     if not shutil.which("docker") or subprocess.run(
             ["docker", "info"], capture_output=True).returncode != 0:
         rep.fail("docker unavailable (use CI/another host, or omit --docker)")
         return
+    import urllib.error
     import urllib.request
     m = json.loads((stage / MANIFEST_NAME).read_text())
     tag = "tempo-release-check:" + m["generation"]["id"]
@@ -472,13 +508,7 @@ def docker_smoke(rep: Report, stage: Path, port: int):
                          capture_output=True, text=True).stdout.strip()
     try:
         base = f"http://127.0.0.1:{port}"
-        health = None
-        for _ in range(40):
-            try:
-                health = json.load(urllib.request.urlopen(base + "/api/health", timeout=3))
-                break
-            except Exception:
-                time.sleep(1)
+        health = _wait_health(base)
         if not health:
             rep.fail("container did not become healthy")
             return
@@ -486,6 +516,14 @@ def docker_smoke(rep: Report, stage: Path, port: int):
             rep.fail(f"image runs without FTS: {health['search']}")
         else:
             rep.ok("image: LOAD fts works offline, search mode fts")
+        if (health.get("mcp") or {}).get("enabled") is not False:
+            rep.fail(f"the public MCP must ship disabled by default: {health.get('mcp')}")
+        try:
+            urllib.request.urlopen(urllib.request.Request(base + "/mcp", data=b"{}", method="POST",
+                                                          headers={"content-type": "application/json"}))
+            rep.fail("/mcp answered although TEMPO_MCP_ENABLED is off")
+        except urllib.error.HTTPError as e:
+            (rep.ok if e.code == 404 else rep.fail)(f"disabled /mcp answers {e.code} (expected 404)")
         res = json.load(urllib.request.urlopen(base + "/api/datasets?q=population&limit=1"))
         if res.get("search_mode") != "fts" or not res["datasets"]:
             rep.fail(f"FTS query via image returned nothing/non-fts: {res.get('search_mode')}")
@@ -495,6 +533,7 @@ def docker_smoke(rep: Report, stage: Path, port: int):
         rep.ok(f"image serves FTS query and data endpoint ({code}, keys {sorted(d)[:4]})")
     finally:
         subprocess.run(["docker", "stop", cid], capture_output=True)
+    _mcp_smoke(rep, tag, port + 1, code)
     return tag
 
 

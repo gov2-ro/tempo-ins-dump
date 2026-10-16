@@ -56,26 +56,9 @@ _BUDGET_NOTE = {"iterations": "Reached the model-call limit", "tools": "Reached 
 # ---------------------------------------------------------------------------
 
 
-def _inline(schema: dict) -> dict:
-    """The registry's JSON Schema without $defs/$ref and title annotations: providers differ
-    in how much of JSON Schema they accept, and the service validates regardless."""
-    defs = schema.get("$defs", {})
-
-    def walk(node):
-        if isinstance(node, dict):
-            if "$ref" in node:
-                return walk(defs[node["$ref"].rsplit("/", 1)[-1]])
-            return {k: walk(v) for k, v in node.items()
-                    if k != "$defs" and not (k == "title" and isinstance(v, str))}
-        if isinstance(node, list):
-            return [walk(x) for x in node]
-        return node
-    return walk(schema)
-
-
 def tool_definitions() -> list[dict]:
     return [{"name": name, "description": registry.TOOLS[name].description,
-             "input_schema": _inline(registry.input_schema(name))}
+             "input_schema": registry.inline_schema(registry.input_schema(name))}
             for name in registry.tool_names()]
 
 

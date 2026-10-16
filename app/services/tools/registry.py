@@ -88,6 +88,24 @@ def input_schema(name: str) -> dict:
     return TOOLS[name].args.model_json_schema(by_alias=True)
 
 
+def inline_schema(schema: dict) -> dict:
+    """A JSON Schema without $defs/$ref, title annotations and the OpenAPI `discriminator` (its
+    mapping points into $defs; each oneOf branch already pins `kind` with a const): clients and
+    providers differ in how much of JSON Schema they accept, and the service validates regardless."""
+    defs = schema.get("$defs", {})
+
+    def walk(node):
+        if isinstance(node, dict):
+            if "$ref" in node:
+                return walk(defs[node["$ref"].rsplit("/", 1)[-1]])
+            return {k: walk(v) for k, v in node.items()
+                    if k not in ("$defs", "discriminator") and not (k == "title" and isinstance(v, str))}
+        if isinstance(node, list):
+            return [walk(x) for x in node]
+        return node
+    return walk(schema)
+
+
 _OUTPUT_MODELS: dict[str, type[BaseModel]] = {}
 
 
@@ -163,6 +181,45 @@ def _fit(env: dict, spec: ToolSpec | None, args_hash: str, args_bytes: int) -> d
     return env
 
 
+def precheck(name: str, arguments) -> dict | None:
+    """The failure envelope of a call that cannot run (unknown tool, arguments that are not
+    plain JSON, over 16 KiB, or failing the strict schema), or None when it is valid. No database
+    work: an adapter uses it to refuse a bad call before it takes an execution slot."""
+    spec = TOOLS.get(name)
+    lang = arguments.get("lang") if isinstance(arguments, dict) else None
+    ctx = ToolContext(conn=None, lang=lang if lang in ("ro", "en") else "ro",
+                      generation=generation.current(), request_id=uuid.uuid4().hex[:12])
+    tool = str(name)[:64]
+
+    def fail(status, reason, message, **kw):
+        return failure_envelope(tool, ctx, ToolFailure(status, reason, message, **kw))
+
+    if spec is None:
+        return fail("error", "unknown_tool", f"Unknown tool {tool!r}; available: " + ", ".join(TOOLS) + ".")
+    if not isinstance(arguments, dict):
+        return fail("error", "invalid_input", "Arguments must be a JSON object.")
+    try:
+        raw = dumps(arguments)
+    except (TypeError, ValueError):
+        return fail("error", "invalid_input", "Arguments must be plain JSON (no NaN/Infinity).")
+    nbytes = len(raw.encode("utf-8"))
+    if nbytes > MAX_ARGUMENT_BYTES:
+        return fail("error", "invalid_input",
+                    f"Arguments are {nbytes} bytes; the limit is {MAX_ARGUMENT_BYTES}. Ask for fewer values.",
+                    recovery=[recovery("narrow", "Send fewer filter values or areas.")])
+    try:
+        spec.args.model_validate(arguments)
+    except ValidationError as e:
+        return fail("error", "invalid_input", _validation_message(e))
+    return None
+
+
+def shrinker(name: str):
+    """The tool's hook for shortening an oversized envelope in place (False: nothing left to cut)."""
+    spec = TOOLS.get(name)
+    return _resolve(spec.shrink) if spec and spec.shrink else shrink_rows
+
+
 def call_tool(name: str, arguments, *, conn=None) -> dict:
     """Run one tool and return its `tempo-tools/1` envelope (never raises for
     bad input, refusals or execution failures)."""
@@ -233,5 +290,5 @@ def tool_names() -> list[str]:
     return list(TOOLS)
 
 
-__all__ = ["TOOLS", "ToolSpec", "call_tool", "input_schema", "output_schema", "output_model",
-           "validate_result", "tool_names", "envelope", "MAX_RESULT_BYTES"]
+__all__ = ["TOOLS", "ToolSpec", "call_tool", "precheck", "shrinker", "input_schema", "inline_schema",
+           "output_schema", "output_model", "validate_result", "tool_names", "envelope", "MAX_RESULT_BYTES"]

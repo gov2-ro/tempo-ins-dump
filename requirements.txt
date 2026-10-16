@@ -9,3 +9,4 @@ pydantic==2.12.5
 openpyxl==3.1.2
 anthropic==0.112.0
 openai==2.52.0
+mcp==1.27.0            # public MCP endpoint (app/services/public_mcp.py); off unless TEMPO_MCP_ENABLED

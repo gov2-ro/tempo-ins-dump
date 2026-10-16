@@ -3,5 +3,5 @@
 pytest==9.0.3
 httpx==0.28.1         # fastapi.testclient
 PyYAML==6.0.2         # app/services/agent_eval.py (optional import)
-mcp==1.27.0           # tools/tempo-dev-mcp
+# mcp is pinned in requirements.txt (runtime): the public endpoint and tools/tempo-dev-mcp use it
 jsonschema==4.23.0    # tests: published tool schemas (tempo-tools/1)

@@ -1,4 +1,6 @@
 """INS TEMPO Data Explorer — FastAPI application."""
+import contextlib
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi import Request
@@ -10,8 +12,16 @@ from pathlib import Path
 from app.config import CORPUS_DIR
 from app.routers import categories, datasets, dataset_data, sdmx, ask, places, pages, recipes
 from app.routers import changes
+from app.services import public_mcp
 
-app = FastAPI(title="INS TEMPO Explorer", version="0.1.0")
+
+@contextlib.asynccontextmanager
+async def _lifespan(app):
+    async with public_mcp.lifespan(app):      # the MCP session manager lives with the app (if enabled)
+        yield
+
+
+app = FastAPI(title="INS TEMPO Explorer", version="0.1.0", lifespan=_lifespan)
 
 log = logging.getLogger("app.api")
 
@@ -24,9 +34,21 @@ async def _unhandled(request, exc):
     return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
 
+class _CorsExceptMcp:
+    """The broad development CORS for the web app, never for /mcp: that endpoint has its own
+    Host/Origin policy (public_mcp), and CORS is not authentication."""
+
+    def __init__(self, app, **cors):
+        self.plain, self.cors = app, CORSMiddleware(app, **cors)
+
+    async def __call__(self, scope, receive, send):
+        mcp = scope["type"] == "http" and (scope["path"] == "/mcp" or scope["path"].startswith("/mcp/"))
+        await (self.plain if mcp else self.cors)(scope, receive, send)
+
+
 # CORS for development
 app.add_middleware(
-    CORSMiddleware,
+    _CorsExceptMcp,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -57,7 +79,7 @@ async def llms_txt():
     return FileResponse(_LLMS_TXT, media_type="text/plain")
 
 @app.get("/api/health", include_in_schema=False)
-def health():
+def health(request: Request):
     """Release/ops status: FTS mode (observable production fallback), the staged
     MANIFEST.json and the served corpus generation (corpus/generation-manifest.json)."""
     import json
@@ -78,8 +100,13 @@ def health():
             manifest = {"error": "unreadable"}
     from app.services.generation import summary as generation_summary
     return {"status": "ok" if st["mode"] == "fts" else "degraded",
-            "search": st, "manifest": manifest, "generation": generation_summary()}
+            "search": st, "manifest": manifest, "generation": generation_summary(),
+            "mcp": public_mcp.health_summary(request.app)}
 
+
+# The public MCP endpoint (/mcp): off by default; raises at startup for an enabled but invalid
+# configuration. Mounted before the catch-all static mount below.
+public_mcp.install(app)
 
 # Serve view profiles (must come before catch-all static mount)
 view_profiles_dir = CORPUS_DIR / "view-profiles"
