@@ -2,7 +2,12 @@
  * ask.js — Chat UI for POST /api/ask (NL→Data agent)
  *
  * Manages multi-turn conversation history, renders assistant responses
- * (text + citations + data table + chart + warnings + tool trace).
+ * (text + outcome + citations + data table with links + chart + warnings + tool trace).
+ *
+ * Follow-ups (AT-02): the server returns the canonical selections behind its answers
+ * (`context`, at most four). They are kept in memory for this tab, sent back with the next
+ * question and cleared by "New conversation". They are hints the server re-validates and re-runs;
+ * they carry no values and certify nothing.
  */
 
 // ---------------------------------------------------------------------------
@@ -10,6 +15,7 @@
 // ---------------------------------------------------------------------------
 
 const history = [];   // [{role:'user'|'assistant', content: str}]
+let askContext = [];  // follow-up selections from the server; in memory only, cleared on reset
 let isLoading = false;
 let MAX_HISTORY_TURNS = 20;  // overwritten from /api/ask/config
 let ASK_UNAVAILABLE = false; // /api/ask/config: neither hosted nor own-key Ask
@@ -21,6 +27,54 @@ function debugOn() {
     if (!DEBUG_AVAILABLE) return false;
     if (new URLSearchParams(location.search).get('debug') === '1') return true;
     try { return localStorage.getItem('ask_debug') === '1'; } catch { return false; }
+}
+
+function isRo() {
+    try { return (localStorage.getItem('lens_lang') || 'ro') !== 'en'; } catch { return true; }
+}
+const tr = (ro, en) => (isRo() ? ro : en);
+
+/** Terminal outcome of a turn (AT-02). HTTP 200 and a text answer are not enough to call it a
+ *  substantive answer: partial, refused, clarification and failed are shown as such. */
+const OUTCOME_LABEL = {
+    clarification: ['Precizare necesară', 'Clarification needed'],
+    partial: ['Răspuns parțial', 'Partial answer'],
+    refused: ['Nu se poate calcula în siguranță', 'Cannot be computed safely'],
+    failed: ['Răspunsul nu a putut fi generat', 'No answer could be produced'],
+};
+const REASON_TEXT = {
+    iterations: ['s-a atins limita de pași ai modelului', 'the model-step limit was reached'],
+    tools: ['s-a atins limita de apeluri către instrumente', 'the tool-call limit was reached'],
+    deadline: ['s-a depășit timpul alocat', 'the time limit was reached'],
+    output_budget: ['bugetul de ieșire al modelului a fost depășit', 'the model output budget was exceeded'],
+    output_limit: ['modelul a întrerupt răspunsul', 'the model cut the answer off'],
+    empty_output: ['modelul nu a dat niciun răspuns', 'the model gave no answer'],
+    content_filter: ['filtrul de conținut al furnizorului a oprit răspunsul', "the provider's content filter stopped the answer"],
+    provider: ['furnizorul modelului nu a răspuns', 'the model provider did not respond'],
+    cancelled: ['cererea a fost oprită', 'the request was stopped'],
+    no_valid_query: ['nicio interogare validă nu susține cifrele', 'no valid query supports the figures'],
+    conflicting_grain: ['setul repetă aceeași observație cu valori diferite', 'the dataset repeats the same observation with different values'],
+    duplicate_keys: ['setul repetă observații, un total ar număra dublu', 'the dataset repeats observations, a total would double-count'],
+    overlapping_levels: ['nivelurile se suprapun, un total ar număra dublu', 'the levels overlap, a total would double-count'],
+    incomplete_domain: ['domeniul nu este complet (ex. fără 85 de ani și peste)', 'the domain is incomplete (e.g. without 85 and over)'],
+    missing_weights: ['nu există ponderi pentru o medie', 'there are no weights for an average'],
+    generation_unverified: ['datele nu au o generație verificată', 'the data has no verified generation'],
+    generation_changed: ['datele s-au actualizat în timpul întrebării', 'the data was updated during the request'],
+};
+const LINK_LABEL = {
+    live_selection: ['Selecția, rulată din nou', 'The selection, re-run'],
+    csv: ['Date CSV', 'CSV data'],
+    evidence: ['Pachet de dovezi', 'Evidence bundle'],
+    dataset: ['Pagina setului de date', 'Dataset page'],
+    share: ['Link de partajare', 'Share link'],
+};
+
+/** Only same-site paths and http(s) URLs become links (never javascript: and the like). */
+function safeHref(u) {
+    try {
+        const url = new URL(u, window.location.origin);
+        return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+    } catch { return null; }
 }
 
 let askConfigPromise = null;
@@ -321,7 +375,7 @@ function renderDataTable(data) {
 
     const meta = document.createElement('div');
     meta.className = 'chat-data-meta';
-    meta.textContent = `${data.row_count ?? data.rows.length} rows`;
+    meta.textContent = `${data.row_count ?? data.rows.length} ${tr('rânduri', 'rows')}`;
     if (data.matrix_code) {
         const link = document.createElement('a');
         link.href = datasetHref(data.matrix_code);
@@ -331,7 +385,23 @@ function renderDataTable(data) {
         meta.appendChild(document.createTextNode(' · '));
         meta.appendChild(link);
     }
+    if (data.status === 'partial') {
+        const b = document.createElement('span');
+        b.className = 'agg-badge agg-badge-slice';
+        b.textContent = tr('parțial', 'partial');
+        meta.appendChild(document.createTextNode(' '));
+        meta.appendChild(b);
+    }
     wrap.appendChild(meta);
+
+    // What part of the domain these values cover, when it is not the whole of it
+    const sc = data.scope;
+    if (sc && sc.description && sc.domain_complete !== true) {
+        const note = document.createElement('div');
+        note.className = 'chat-data-scope';
+        note.textContent = sc.description;
+        wrap.appendChild(note);
+    }
 
     const tableWrap = document.createElement('div');
     tableWrap.className = 'chat-table-scroll';
@@ -367,6 +437,25 @@ function renderDataTable(data) {
 
     tableWrap.appendChild(table);
     wrap.appendChild(tableWrap);
+
+    // The complete data and its evidence, one click away (the table above is a bounded preview)
+    const links = (data.links || []).map(l => ({ ...l, href: safeHref(l.url) })).filter(l => l.href);
+    if (links.length) {
+        const box = document.createElement('div');
+        box.className = 'chat-links';
+        links.forEach(l => {
+            const a = document.createElement('a');
+            a.href = l.href;
+            a.target = '_blank';
+            a.rel = 'noopener';
+            a.dataset.kind = l.kind || '';
+            const label = LINK_LABEL[l.kind];
+            a.textContent = label ? tr(label[0], label[1]) : (l.description || l.kind || l.href);
+            if (l.description) a.title = l.description;
+            box.appendChild(a);
+        });
+        wrap.appendChild(box);
+    }
     return wrap;
 }
 
@@ -503,11 +592,25 @@ function appendAssistantResponse(result) {
     const list = document.getElementById('chat-messages');
     const div = document.createElement('div');
     div.className = 'chat-msg chat-msg--assistant';
+    div.dataset.outcome = result.outcome || 'answered';
+
+    // Outcome first: a partial, refused, failed or clarifying turn must not read as an answer
+    const outcome = result.outcome;
+    if (outcome && outcome !== 'answered' && OUTCOME_LABEL[outcome]) {
+        const banner = document.createElement('div');
+        banner.className = `chat-outcome chat-outcome--${outcome}`;
+        banner.setAttribute('role', 'status');
+        const lab = OUTCOME_LABEL[outcome];
+        const why = REASON_TEXT[result.reason];
+        banner.textContent = tr(lab[0], lab[1])
+            + (result.reason && outcome !== 'clarification' ? ' — ' + (why ? tr(why[0], why[1]) : result.reason) : '');
+        div.appendChild(banner);
+    }
 
     // Answer text
     const bubble = document.createElement('div');
     bubble.className = 'chat-bubble';
-    bubble.innerHTML = renderMarkdown(result.answer || '(no answer)');
+    bubble.innerHTML = renderMarkdown(result.answer || tr('(fără răspuns)', '(no answer)'));
     div.appendChild(bubble);
 
     // Citations
@@ -527,9 +630,9 @@ function appendAssistantResponse(result) {
             const q = (c.queries || []);
             const tag = q.some(x => x.approximation) ? 'approx'
                 : q.length && q.every(x => x.status === 'unavailable') ? 'unavail'
-                : q.some(x => x.outcome === 'valid_slice') ? 'slice' : null;
+                : q.some(x => x.outcome === 'valid_slice' || x.status === 'partial') ? 'slice' : null;
             if (tag) {
-                const ro = (localStorage.getItem('lens_lang') || 'ro') !== 'en';
+                const ro = isRo();
                 const label = { approx: ro ? 'aproximare' : 'approximation',
                                 unavail: ro ? 'indisponibil' : 'unavailable',
                                 slice: ro ? 'selecție parțială' : 'partial selection' }[tag];
@@ -559,11 +662,19 @@ function appendAssistantResponse(result) {
     // Numbers the deterministic check could not find in any query result
     const unc = (result.verification && result.verification.uncited_numbers) || [];
     if (unc.length && result.verification.status === 'unverified_numbers') {
-        const ro = (localStorage.getItem('lens_lang') || 'ro') !== 'en';
         const note = document.createElement('div');
         note.className = 'chat-unverified';
-        note.textContent = (ro ? 'Cifre negăsite în rezultatele interogărilor: '
-                               : 'Numbers not found in the query results: ') + unc.slice(0, 8).join(', ');
+        note.textContent = tr('Cifre negăsite în rezultatele interogărilor: ',
+                              'Numbers not found in the query results: ') + unc.slice(0, 8).join(', ');
+        div.appendChild(note);
+    }
+    // Figures found in a result but not tied to a row the answer names
+    const cs = result.verification && result.verification.claim_summary;
+    if (cs && cs.unverified > 0 && result.verification.status === 'verified') {
+        const note = document.createElement('div');
+        note.className = 'chat-unverified';
+        note.textContent = tr('Unele cifre nu au putut fi legate de un anumit rând din rezultate.',
+                              'Some figures could not be tied to a specific result row.');
         div.appendChild(note);
     }
 
@@ -627,17 +738,23 @@ function fmtEvent(ev) {
     const t = `${(ev.ms / 1000).toFixed(1)}s`.padStart(6);
     const secs = ms => `${(ms / 1000).toFixed(1)}s`;
     switch (ev.event) {
-        case 'start': return `${t}  start · ${ev.provider} / ${ev.model} · ${ev.history_turns} earlier turns`;
-        case 'model_call': return `${t}  → model call #${ev.iteration} (${ev.messages} messages)`;
-        case 'model_done': return `${t}  ← model #${ev.iteration} in ${secs(ev.took_ms)}: ${ev.stop_reason}`
-            + (ev.tool_calls.length ? ` · tools: ${ev.tool_calls.join(', ')}` : '') + ` · text ${ev.text_chars} chars`;
+        case 'start': return `${t}  start · ${ev.provider} / ${ev.model} · ${ev.history_turns} earlier turns`
+            + (ev.context_entries ? ` · ${ev.context_entries} earlier selections` : '');
+        case 'model_call': return `${t}  → model call #${ev.iteration} (${ev.messages} messages`
+            + `${ev.max_tokens ? `, ≤${ev.max_tokens} tokens` : ''})${ev.final ? ' · final answer, tools off' : ''}`;
+        case 'model_done': return `${t}  ← model #${ev.iteration} in ${secs(ev.took_ms)}: ${ev.finish || ev.stop_reason}`
+            + ((ev.tool_calls || []).length ? ` · tools: ${ev.tool_calls.join(', ')}` : '') + ` · text ${ev.text_chars} chars`
+            + (ev.usage ? ` · ${ev.usage.input_tokens ?? '?'} in / ${ev.usage.output_tokens ?? '?'} out tokens` : '');
         case 'model_error': return `${t}  ✗ model #${ev.iteration} after ${secs(ev.took_ms)}: ${ev.code} · ${ev.detail}`;
+        case 'retry': return `${t}  ↻ one retry (${ev.code})`;
+        case 'compact': return `${t}  ⇣ ${ev.results} earlier result(s) shortened to fit the context budget`;
         case 'tool': return `${t}  ⚙ ${ev.name} ${JSON.stringify(ev.input).slice(0, 160)}`;
         case 'tool_done': return `${t}  ✓ ${ev.name} in ${secs(ev.took_ms)}`
-            + (ev.status ? ` · ${ev.status}` : '') + (ev.rows != null ? ` · ${ev.rows} rows` : '')
-            + (ev.error ? ` · error: ${ev.error}` : '') + ` · ${ev.result_chars} chars`;
+            + (ev.status ? ` · ${ev.status}` : '') + (ev.reason ? ` (${ev.reason})` : '')
+            + (ev.cached ? ' · from this turn\'s cache' : '') + (ev.rows != null ? ` · ${ev.rows} rows` : '')
+            + ` · ${ev.result_bytes ?? ev.result_chars} bytes`;
         case 'guardrail': return `${t}  ! guardrail: ${ev.note}`;
-        case 'answer': return `${t}  ✔ answer (${ev.text_chars} chars)`;
+        case 'answer': return `${t}  ✔ answer (${ev.text_chars} chars)${ev.outcome ? ` · ${ev.outcome}` : ''}${ev.reason ? ` (${ev.reason})` : ''}`;
         case 'stopped': return `${t}  ■ stopped: ${ev.reason}`;
         case 'server_error': return `      ✗ server error: ${ev.detail}`;
         default: return `${t}  ${JSON.stringify(ev)}`;
@@ -674,9 +791,9 @@ function appendDebugPanel(parent, events, raw) {
 }
 
 /** Debug mode: POST /api/ask/stream, show each step live, resolve with the result. */
-async function askStreaming(body, loadingEl) {
+async function askStreaming(body, loadingEl, signal) {
     const resp = await fetch('/api/ask/stream', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal,
     });
     if (!resp.ok || !resp.body) return { error: { status: resp.status, detail: resp.statusText }, events: [] };
     const reader = resp.body.getReader();
@@ -711,6 +828,41 @@ function scrollToBottom() {
 // Send message
 // ---------------------------------------------------------------------------
 
+/** Start over: history, follow-up selections and the thread are dropped (nothing was stored server-side). */
+function resetChat() {
+    history.length = 0;
+    askContext = [];
+    document.querySelectorAll('#chat-messages .chat-msg').forEach(el => el.remove());
+    const empty = document.getElementById('chat-empty');
+    if (empty) empty.style.display = '';
+    document.getElementById('chat-reset')?.classList.add('hidden');
+    document.getElementById('chat-input')?.focus();
+}
+
+/** A failed turn: say why, keep the question for editing, and suggest what to do next. */
+function appendFailure(text, question, opts = {}) {
+    const el = appendMessage('assistant', text);
+    el.classList.add('chat-msg--error');
+    el.dataset.outcome = 'error';
+    const input = document.getElementById('chat-input');
+    if (question && input && !input.value) { input.value = question; autoResize(input); }
+    const next = document.createElement('div');
+    next.className = 'chat-next';
+    const search = document.createElement('a');
+    search.href = '/';
+    search.textContent = tr('Caută direct în date', 'Search the data directly');
+    next.appendChild(search);
+    if (opts.reset) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = tr('Conversație nouă', 'New conversation');
+        b.addEventListener('click', resetChat);
+        next.appendChild(b);
+    }
+    el.appendChild(next);
+    return el;
+}
+
 async function sendMessage() {
     if (ASK_UNAVAILABLE) return;
     const input = document.getElementById('chat-input');
@@ -726,19 +878,23 @@ async function sendMessage() {
     const loadingEl = appendLoadingIndicator();
 
     // server caps history; send only the most recent turns (see /api/ask/config limits)
-    const body = { question, history: history.slice(-MAX_HISTORY_TURNS), ...byokPayload() };
+    const body = { question, history: history.slice(-MAX_HISTORY_TURNS),
+                   ...(askContext.length ? { context: askContext } : {}), ...byokPayload() };
     // Never wait forever: the server stops at MAX_SECONDS; allow a margin for the last call.
+    // Aborting also tells the server to stop the work (it sees the disconnect).
     const ctl = new AbortController();
     const abortTimer = setTimeout(() => ctl.abort(), (MAX_SECONDS + 30) * 1000);
     try {
         let result;
         if (debugOn()) {
-            const out = await askStreaming(body, loadingEl);
+            const out = await askStreaming(body, loadingEl, ctl.signal);
             loadingEl.remove();
             if (out.error) {
                 const d = out.error.detail;
-                appendMessage('assistant', `Error ${out.error.status}: ${typeof d === 'string' ? d : JSON.stringify(d)}`);
-                appendDebugPanel(document.getElementById('chat-messages').lastElementChild, out.events, out.error);
+                if (out.error.status === 409 && d && d.action === 'refresh') askContext = [];
+                const el = appendFailure(`Error ${out.error.status}: ${typeof d === 'string' ? d : (d && d.message) || JSON.stringify(d)}`,
+                                         question, { reset: out.error.status === 409 });
+                appendDebugPanel(el, out.events, out.error);
                 return;
             }
             result = { ...out.result, debug: { events: out.events } };
@@ -757,12 +913,17 @@ async function sendMessage() {
                 const detail = typeof err.detail === 'string' ? err.detail
                     : (err.detail && typeof err.detail.message === 'string') ? err.detail.message : 'Request rejected';
                 const retry = resp.headers.get('Retry-After');
-                appendMessage('assistant', `Error ${resp.status}: ${detail}` + (retry ? ` (retry in ~${retry}s)` : ''));
+                const stale = resp.status === 409 && err.detail && err.detail.action === 'refresh';
+                if (stale) askContext = [];            // the earlier selections belong to older data
+                appendFailure(`Error ${resp.status}: ${detail}` + (retry ? ` (retry in ~${retry}s)` : ''),
+                              question, { reset: stale });
                 return;
             }
             result = await resp.json();
         }
         appendAssistantResponse(result);
+        if (Array.isArray(result.context)) askContext = result.context;
+        document.getElementById('chat-reset')?.classList.remove('hidden');
 
         // Update history for next turn
         history.push({ role: 'user', content: question });
@@ -770,9 +931,10 @@ async function sendMessage() {
 
     } catch (e) {
         loadingEl.remove();
-        appendMessage('assistant', e.name === 'AbortError'
-            ? `No answer after ${MAX_SECONDS + 30}s. The server may still be working; its log has the details.`
-            : `Network error: ${e.message}`);
+        appendFailure(e.name === 'AbortError'
+            ? tr(`Niciun răspuns după ${MAX_SECONDS + 30}s; cererea a fost oprită. Încercați o întrebare mai restrânsă (un singur indicator, un an, un județ).`,
+                 `No answer after ${MAX_SECONDS + 30}s; the request was stopped. Try a narrower question (one indicator, one year, one county).`)
+            : `Network error: ${e.message}`, question);
     } finally {
         clearTimeout(abortTimer);
         isLoading = false;
@@ -813,6 +975,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Send button
     document.getElementById('chat-send').addEventListener('click', sendMessage);
+    document.getElementById('chat-reset')?.addEventListener('click', resetChat);
 
     // Enter to send (Shift+Enter = newline)
     const input = document.getElementById('chat-input');

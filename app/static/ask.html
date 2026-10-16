@@ -183,6 +183,36 @@
         }
 
         /* ---------------------------------------------------------------
+           Outcome of a turn (AT-02): partial, refused, failed, clarification
+        --------------------------------------------------------------- */
+        .chat-outcome {
+            font-size: 0.8rem;
+            font-weight: 600;
+            border-radius: var(--radius-sm);
+            padding: 5px 10px;
+            max-width: 100%;
+            overflow-wrap: anywhere;
+            border-left: 3px solid currentColor;
+        }
+        .chat-outcome--partial { color: var(--amber); background: var(--amber-dim); }
+        .chat-outcome--refused { color: var(--amber); background: var(--amber-dim); }
+        .chat-outcome--failed { color: var(--red); background: var(--red-dim); }
+        .chat-outcome--clarification { color: var(--accent); background: var(--accent-dim); }
+        .chat-msg--error .chat-bubble { border-left: 3px solid var(--red); }
+        .chat-next { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 0.8rem; margin-top: 6px; }
+        .chat-next a { color: var(--accent); }
+        .chat-next button, .chat-reset {
+            font: inherit; font-size: 0.78rem; cursor: pointer; color: var(--accent);
+            background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm);
+            padding: 2px 8px;
+        }
+        .chat-reset { margin-left: 10px; }
+        .chat-reset.hidden { display: none; }
+        .chat-data-scope { font-size: 0.78rem; color: var(--amber); margin-bottom: 6px; overflow-wrap: anywhere; }
+        .chat-links { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.78rem; margin-top: 6px; }
+        .chat-links a { color: var(--accent); overflow-wrap: anywhere; }
+
+        /* ---------------------------------------------------------------
            Data table
         --------------------------------------------------------------- */
         .chat-data-table-wrap { max-width: 100%; }
@@ -599,7 +629,8 @@
                     </svg>
                 </button>
             </div>
-            <div class="chat-hint">Enter to send · Shift+Enter for newline</div>
+            <div class="chat-hint">Enter to send · Shift+Enter for newline
+                <button id="chat-reset" class="chat-reset hidden" type="button">Conversație nouă / New conversation</button></div>
         </div>
     </div>
 
@@ -614,7 +645,7 @@
     </script>
     <script src="/js/config.js?v=1"></script>
     <script src="/js/api.js?v=31"></script>
-    <script src="/js/ask.js?v=4"></script>
+    <script src="/js/ask.js?v=5"></script>
     <script>
         // Patch appendMessage to hide empty state on first message
         const _orig = window.appendMessage;
