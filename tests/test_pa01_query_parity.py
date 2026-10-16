@@ -10,14 +10,16 @@ from pathlib import Path
 
 import pytest
 
-from fix02b_corpus import POPX_NAIVE_2025, make_client
+from ask_adapter import ask
+from at01_fixtures import make_env
+from fix02b_corpus import POPX_NAIVE_2025
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
-    client = make_client(tmp_path, monkeypatch)
+    client = make_env(tmp_path, monkeypatch).client      # with a generation manifest: Ask's tools need one
     spec = importlib.util.spec_from_file_location(
         "tempo_dev_mcp_server", ROOT / "tools" / "tempo-dev-mcp" / "server.py")
     server = importlib.util.module_from_spec(spec)
@@ -35,23 +37,6 @@ def rest(client, code, filters=None, group_by=None, approximate=False):
         params["group_by"] = json.dumps(group_by)
     r = client.get(f"/api/datasets/{code}/data", params=params)
     return r.status_code, r.json()
-
-
-def ask(code, filters=None, group_by=None, approximate=None):
-    from app.db import get_conn
-    from app.services.agent import _handle_query_dataset_data
-    inp = {"matrix_code": code}
-    if filters is not None:
-        inp["filters"] = filters
-    if group_by is not None:
-        inp["group_by"] = group_by
-    if approximate is not None:
-        inp["approximate"] = approximate
-    conn = get_conn()
-    try:
-        return _handle_query_dataset_data(inp, conn)
-    finally:
-        conn.close()
 
 
 def mcp(server, code, filters=None, group_by=None, approximate=False):
@@ -73,7 +58,7 @@ def test_invalid_filters_fail_in_every_adapter(env, filters):
     status, body = rest(client, "POPX", filters, ["TIME_PERIOD"])
     assert status == 400 and body["detail"].startswith("Invalid filters")
     a = ask("POPX", filters, ["TIME_PERIOD"])
-    assert a["error"].startswith("Invalid filters") and "rows" not in a
+    assert "filters" in a["error"].lower() and "rows" not in a      # schema layer or run_query, never a query
     m = mcp(server, "POPX", filters, ["TIME_PERIOD"])
     assert m["error"].startswith("Invalid filters") and "rows" not in m
 
@@ -81,7 +66,7 @@ def test_invalid_filters_fail_in_every_adapter(env, filters):
 def test_unknown_group_by_and_bad_approximate_fail(env):
     client, server = env
     assert rest(client, "POPX", group_by=["NOPE"])[0] == 400
-    assert ask("POPX", group_by=["NOPE"])["error"].startswith("Invalid group_by")
+    assert "group_by" in ask("POPX", group_by=["NOPE"])["error"].lower()
     assert mcp(server, "POPX", group_by=["NOPE"])["error"].startswith("Invalid group_by")
     assert "error" in ask("POPX", group_by=["TIME_PERIOD"], approximate="yes")
 
@@ -149,8 +134,9 @@ def test_empty_selection_is_explicit_and_never_broadened(env):
     for res in (r, a, m):
         assert res["rows"] == []
         assert res["selection"] == {"empty": True, "missing_values": {"TIME_PERIOD": ["1999"]}}
-    assert any("EMPTY SELECTION" in w for w in a["warnings"])
-    assert not any("Retried" in w for w in a["warnings"])
+    # Ask's tool says so in words and offers the periods the data has; nothing stands in for 1999
+    assert a["status"] == "unavailable" and "Nothing was substituted" in a["envelope"]["message"]
+    assert a["envelope"]["recovery"][0]["tool"] == "find_dimension_values"
 
 
 # ------------------------------------------------------------ MCP samples (A08)

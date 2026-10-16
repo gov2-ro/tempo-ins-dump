@@ -1,4 +1,8 @@
-"""FIX-08 items 3, 4: independent budgets, deadlines, concurrency bound."""
+"""FIX-08 items 3, 4 (reworked by AT-02): independent budgets, deadlines, concurrency bound.
+
+The loop reserves its last model call for the final answer with tools disabled, so a model
+that keeps asking for tools is answered from what was gathered rather than discarded.
+"""
 import threading
 import time
 
@@ -23,7 +27,7 @@ def test_many_tools_in_one_response_never_exceed_budget(monkeypatch):
     monkeypatch.setattr(config, "ASK_MAX_TOOL_CALLS", 5)
     dispatched = []
     install(monkeypatch, lambda n, m, kw: tools_resp(50),
-            handler=lambda inp, conn: dispatched.append(1) or {"categories": []})
+            handler=lambda name, args: dispatched.append(1) or agent._synthetic(name, "ok", None, "ok"))
     res = run()
     assert len(dispatched) == 5
     assert res.stop_reason == "tools"
@@ -32,25 +36,48 @@ def test_many_tools_in_one_response_never_exceed_budget(monkeypatch):
     assert res.answer  # useful bounded message, not an exception
 
 
+def test_calls_over_the_tool_budget_still_get_a_result_for_the_provider(monkeypatch):
+    """The 45 calls that cannot run are answered (call/result pairing), just not executed."""
+    monkeypatch.setattr(config, "ASK_MAX_TOOL_CALLS", 5)
+    calls = install(monkeypatch, lambda n, m, kw: tools_resp(50) if n == 1 else text_resp("gata"))
+    res = run()
+    sent = calls[1]["messages"]
+    ids = {b["id"] for b in sent[-2]["content"] if b["type"] == "tool_use"}      # anthropic blocks
+    answered = {b["tool_use_id"] for b in sent[-1]["content"]}
+    assert ids == answered and len(ids) == 50
+    assert res.answer == "gata" and res.outcome == "partial" and res.reason == "tools"
+
+
 def test_tool_budget_spans_iterations(monkeypatch):
     monkeypatch.setattr(config, "ASK_MAX_TOOL_CALLS", 7)
     dispatched = []
     install(monkeypatch, lambda n, m, kw: tools_resp(3),
-            handler=lambda inp, conn: dispatched.append(1) or {"categories": []})
+            handler=lambda name, args: dispatched.append(1) or agent._synthetic(name, "ok", None, "ok"))
     res = run()
     assert len(dispatched) == 7 and res.stop_reason == "tools"
 
 
-def test_iteration_budget_stops_before_extra_provider_call(monkeypatch):
+def test_iteration_budget_reserves_the_last_call_for_the_answer(monkeypatch):
     monkeypatch.setattr(config, "ASK_MAX_ITERATIONS", 3)
     monkeypatch.setattr(config, "ASK_MAX_TOOL_CALLS", 100)
     calls = install(monkeypatch, lambda n, m, kw: tools_resp(1, text="partial thoughts"))
     res = run()
     assert len(calls) == 3
+    assert [c["tool_choice"] for c in calls] == ["auto", "auto", "none"]   # tools off on the last
     assert res.stop_reason == "iterations"
     assert res.answer == "partial thoughts"
-    # the last model response asked for a tool that could never be read: not dispatched
+    # the last response still asked for a tool: it could never be read, so it was not run
     assert res.budget["tools"] == 2
+
+
+def test_the_final_call_is_a_real_answer_not_a_discarded_tool_request(monkeypatch):
+    monkeypatch.setattr(config, "ASK_MAX_ITERATIONS", 3)
+    calls = install(monkeypatch,
+                    lambda n, m, kw: tools_resp(1) if kw["tool_choice"] == "auto" else text_resp("din ce am"))
+    res = run()
+    assert [c["tool_choice"] for c in calls] == ["auto", "auto", "none"]
+    assert res.answer == "din ce am"
+    assert (res.outcome, res.reason, res.stop_reason) == ("partial", "iterations", "iterations")
 
 
 def test_normal_answer_reports_budget(monkeypatch):
@@ -58,11 +85,13 @@ def test_normal_answer_reports_budget(monkeypatch):
     res = run()
     assert res.stop_reason == "end_turn" and res.answer == "gata"
     assert res.budget["tools"] == 2 and res.budget["iterations"] == 2 and len(calls) == 2
+    assert res.outcome == "answered" and res.reason is None
 
 
 def test_deadline_stops_before_next_call_and_caps_provider_timeout(monkeypatch):
     monkeypatch.setattr(config, "ASK_MAX_SECONDS", 0.3)
     monkeypatch.setattr(config, "ASK_PROVIDER_TIMEOUT", 30)
+    monkeypatch.setattr(agent, "MIN_CALL_SECONDS", 0.05)
 
     def stall(n, m, kw):
         time.sleep(0.4)  # a provider call that overruns the whole request budget
@@ -77,14 +106,23 @@ def test_deadline_stops_before_next_call_and_caps_provider_timeout(monkeypatch):
     assert res.stop_reason == "deadline"
 
 
+def test_no_provider_call_starts_without_time_for_it(monkeypatch):
+    monkeypatch.setattr(config, "ASK_MAX_SECONDS", 1.0)             # < MIN_CALL_SECONDS
+    calls = install(monkeypatch, lambda n, m, kw: text_resp())
+    res = run()
+    assert calls == [] and res.stop_reason == "deadline" and res.outcome == "failed"
+    assert res.answer
+
+
 def test_deadline_between_tools(monkeypatch):
     monkeypatch.setattr(config, "ASK_MAX_SECONDS", 0.3)
+    monkeypatch.setattr(agent, "MIN_CALL_SECONDS", 0.05)
     n_done = []
 
-    def slow(inp, conn):
+    def slow(name, args):
         time.sleep(0.2)
         n_done.append(1)
-        return {"categories": []}
+        return agent._synthetic(name, "ok", None, "ok")
 
     install(monkeypatch, lambda n, m, kw: tools_resp(10), handler=slow)
     res = run()
@@ -100,29 +138,32 @@ def test_transient_provider_failure_after_tools_returns_partial(monkeypatch):
             return tools_resp(1)
         raise APITimeoutError("stalled")
 
-    install(monkeypatch, resp)
+    calls = install(monkeypatch, resp)
     res = run()
     assert res.stop_reason == "provider" and len(res.tool_trace) == 1
+    assert len(calls) == 3                       # the first call, the failure, its one retry
+    assert res.outcome in ("partial", "failed") and res.reason == "provider"
 
 
-def test_provider_retry_limit_is_passed_to_sdk(monkeypatch):
-    """Explicit timeout/max_retries reach the SDK constructors (mocked, no network)."""
-    import sys
-    import types
-    import app.services.llm_client as lc
-    seen = {}
+def test_one_provider_retry_recovers_a_transient_failure(monkeypatch):
+    class APITimeoutError(Exception):
+        pass
 
-    class FakeAnthropic:
-        def __init__(self, **kw):
-            seen.update(kw)
-            self.messages = types.SimpleNamespace(
-                create=lambda **k: types.SimpleNamespace(content=[], stop_reason="end_turn"))
+    def resp(n, m, kw):
+        if n == 1:
+            raise APITimeoutError("stalled")
+        return text_resp("gata")
 
-    monkeypatch.setitem(sys.modules, "anthropic", types.SimpleNamespace(Anthropic=FakeAnthropic))
-    monkeypatch.setattr(config, "ASK_PROVIDER_MAX_RETRIES", 1)
-    lc.complete_with_tools([{"role": "user", "content": "x"}], [], provider="anthropic",
-                           model="claude-sonnet-5-5", api_key="k", timeout=12)
-    assert seen["timeout"] == 12 and seen["max_retries"] == 1
+    calls = install(monkeypatch, resp)
+    res = run()
+    assert res.answer == "gata" and len(calls) == 2 and res.budget["iterations"] == 2
+    assert res.metrics["retries"] == 1
+
+
+def test_the_loop_owns_retries_so_the_sdk_gets_none(monkeypatch):
+    calls = install(monkeypatch, lambda n, m, kw: text_resp())
+    run()
+    assert calls[0]["max_retries"] == 0
 
 
 # --- concurrency ----------------------------------------------------------

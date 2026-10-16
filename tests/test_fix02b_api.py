@@ -4,6 +4,8 @@ import json
 import duckdb
 import pytest
 
+from at01_fixtures import make_env
+from ask_adapter import ask
 from fix02b_corpus import make_client, POPX_NAIVE_2025, POPX_TRUE_2025
 
 from app.services import aggregation_policy as ap
@@ -118,10 +120,8 @@ def _insight(client, code):
     return r.json()
 
 
-def test_api_insights_composer_agent_agree_when_unavailable(client):
-    from app.db import get_conn
-    from app.services.agent import _handle_query_dataset_data
-
+def test_api_insights_composer_agent_agree_when_unavailable(tmp_path, monkeypatch):
+    client = make_env(tmp_path, monkeypatch).client      # with a generation manifest: Ask's tools need one
     api = q(client, "POPX", ["TIME_PERIOD"])["aggregation"]
 
     ins = _insight(client, "POPX")
@@ -141,33 +141,22 @@ def test_api_insights_composer_agent_agree_when_unavailable(client):
         assert replay["aggregation"]["method"] == spec["aggregation"]["method"]
         assert POPX_NAIVE_2025 not in [r[-1] for r in replay["rows"]]
 
-    conn = get_conn()
-    try:
-        agent = _handle_query_dataset_data(
-            {"matrix_code": "POPX", "group_by": ["TIME_PERIOD"]}, conn)
-    finally:
-        conn.close()
+    agent = ask("POPX", None, ["TIME_PERIOD"])
 
     assert api["reason"] == sup["reason"] == agent["reason"] == "overlapping_levels"
     assert api["blocking_dimension"] == sup["column"] == agent["blocking_dimension"] == "AGE"
     assert agent["status"] == "unavailable" and agent["rows"] == []
-    assert "suggestion" in agent
+    assert agent["envelope"]["recovery"] or agent["envelope"]["message"]      # a safe next step is offered
 
 
-def test_api_insights_agent_headline_agree_when_available(client, tmp_path):
-    from app.db import get_conn
-    from app.services.agent import _handle_query_dataset_data
+def test_api_insights_agent_headline_agree_when_available(tmp_path, monkeypatch):
     from app.services import headlines as hl
+    client = make_env(tmp_path, monkeypatch).client      # with a generation manifest: Ask's tools need one
 
     api = q(client, "ADDX", ["TIME_PERIOD"])
     ins = _insight(client, "ADDX")
     latest = next(k for k in ins["kpis"] if k["key"] == "latest")
-    conn = get_conn()
-    try:
-        agent = _handle_query_dataset_data(
-            {"matrix_code": "ADDX", "group_by": ["TIME_PERIOD"]}, conn)
-    finally:
-        conn.close()
+    agent = ask("ADDX", None, ["TIME_PERIOD"])
     card, status = hl.resolve_indicator(
         duckdb.connect(), str(tmp_path / "corpus" / "parquet"),
         {"code": "ADDX", "label_en": "x", "measure": "additive",

@@ -176,7 +176,9 @@ def redact_text(s: str, secrets: tuple = ()) -> str:
 def redact(obj, secrets: tuple = ()):
     """Recursively redact credentials from dict/list/str structures (returns a copy)."""
     if isinstance(obj, dict):
+        # a number or flag cannot carry a credential: `max_tokens: 2048` is a count, not a token
         return {k: (REDACTED if isinstance(k, str) and _SECRET_KEY_RE.search(k)
+                    and not isinstance(v, (bool, int, float, type(None)))
                     else redact(v, secrets)) for k, v in obj.items()}
     if isinstance(obj, (list, tuple, set)):
         return [redact(v, secrets) for v in obj]

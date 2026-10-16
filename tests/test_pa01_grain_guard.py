@@ -10,7 +10,8 @@ import duckdb
 import pytest
 
 from fix02b_corpus import _write, make_client
-from test_pa01_query_parity import ask, mcp, rest  # same adapters
+from ask_adapter import ask
+from test_pa01_query_parity import mcp, rest  # same adapters
 
 
 def _add_dataset(corpus, code, rows):
@@ -62,7 +63,12 @@ GROUP = ["TIME_PERIOD", "CATEGORY"]
 
 @pytest.mark.parametrize("code,reason", [("DUPX", "conflicting_grain"), ("EQX", "duplicate_keys")])
 def test_repeated_keys_refuse_aggregation_everywhere(env, code, reason):
-    client, server, _ = env
+    client, server, corpus = env
+    # a present generation without recorded findings: Ask's tools need the generation, and the
+    # slice is then checked at query time, in every adapter alike
+    _manifest(corpus, recorded=False)
+    from app.services import grain_guard
+    grain_guard._cache.clear()
     status, r = rest(client, code, group_by=GROUP)
     assert status == 200 and r["unavailable"] is True and r["rows"] == []
     assert r["aggregation"]["reason"] == reason

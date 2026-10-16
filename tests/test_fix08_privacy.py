@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from fix08_helpers import FAKE_KEY, install, make_client, text_resp, tools_resp
+from fix08_helpers import FAKE_KEY, fake_env, install, make_client, text_resp, tools_resp
 from app import config
 from app.services import ask_guard
 
@@ -47,10 +47,10 @@ def test_default_request_writes_metrics_only(monkeypatch, caplog, tmp_path):
 def test_opt_in_content_log_is_separate_and_redacted(monkeypatch, caplog, tmp_path):
     monkeypatch.setattr(config, "ASK_LOG_CHATS", True)
 
-    def handler(inp, conn):
+    def handler(name, args):
         # sentinel nested inside tool output
-        return {"categories": [{"meta": {"headers": {"Authorization": f"Bearer {FAKE_KEY}"},
-                                         "note": f"url?api_key={FAKE_KEY}"}}]}
+        return fake_env(name, data={"categories": [{"meta": {"headers": {"Authorization": f"Bearer {FAKE_KEY}"},
+                                                             "note": f"url?api_key={FAKE_KEY}"}}]})
 
     install(monkeypatch, lambda n, m, kw: tools_resp(1) if n == 1 else text_resp(f"answer {FAKE_KEY}"),
             handler=handler)
@@ -66,11 +66,11 @@ def test_opt_in_content_log_is_separate_and_redacted(monkeypatch, caplog, tmp_pa
     assert "q with" in entry["question"] and "api_key" not in entry
     # operational metrics line carries no content
     metrics = [rec.getMessage() for rec in caplog.records if "ASK_METRICS" in rec.getMessage()]
-    assert metrics and all("q with" not in m and "answer" not in m for m in metrics)
+    assert metrics and all("q with" not in m and "answer " not in m for m in metrics)
 
 
 def test_sentinel_in_tool_exception_and_provider_error_never_logged(monkeypatch, caplog):
-    def bad_tool(inp, conn):
+    def bad_tool(name, args):
         raise RuntimeError(f"db down; Authorization: Bearer {FAKE_KEY}; api_key={FAKE_KEY}")
 
     install(monkeypatch, lambda n, m, kw: tools_resp(1) if n == 1 else text_resp("done"), handler=bad_tool)

@@ -280,23 +280,6 @@ def rest(env, code, filters=None, group_by=None, approximate=False, limit=50000)
     return r.json()
 
 
-def ask(code, filters=None, group_by=None, approximate=None):
-    from app.db import get_conn
-    from app.services.agent import _handle_query_dataset_data
-    inp = {"matrix_code": code}
-    if filters is not None:
-        inp["filters"] = filters
-    if group_by is not None:
-        inp["group_by"] = group_by
-    if approximate is not None:
-        inp["approximate"] = approximate
-    conn = get_conn()
-    try:
-        return _handle_query_dataset_data(inp, conn)
-    finally:
-        conn.close()
-
-
 def direct(code, filters=None, group_by=None, approximate=False, limit=100):
     from app.db import get_conn
     from app.services.data_query import run_query
@@ -349,7 +332,7 @@ CASES = [
 
 
 @pytest.mark.parametrize("code,filters,group_by,approximate", CASES)
-def test_tool_agrees_with_rest_run_query_and_the_old_ask_adapter(env, code, filters, group_by,
+def test_tool_agrees_with_rest_and_run_query(env, code, filters, group_by,
                                                                   approximate):
     kw = {"dataset": code, "approximate": approximate, "limit": 200}
     if filters is not None:
@@ -359,13 +342,11 @@ def test_tool_agrees_with_rest_run_query_and_the_old_ask_adapter(env, code, filt
     e = q(**kw)
     r = rest(env, code, filters, group_by, approximate, limit=200)
     d = direct(code, filters, group_by, approximate, limit=200)
-    a = ask(code, filters, group_by, approximate or None)
 
-    assert e["data"]["columns"] == r["columns"] == d["columns"] == a["columns"]
-    assert rows(e) == r["rows"] == d["rows"] == a["rows"]
+    assert e["data"]["columns"] == r["columns"] == d["columns"]
+    assert rows(e) == r["rows"] == d["rows"]
     agg = e["provenance"]["aggregation"]
-    assert verdict(agg) == verdict(r["aggregation"]) == verdict(d["aggregation"]) \
-        == verdict(a["aggregation"])
+    assert verdict(agg) == verdict(r["aggregation"]) == verdict(d["aggregation"])
     native = r["aggregation"] or {}
     want_filters = native["filters"] if "filters" in native else (filters or {})
     assert e["provenance"]["effective_selection"]["filters"] == want_filters
@@ -373,8 +354,8 @@ def test_tool_agrees_with_rest_run_query_and_the_old_ask_adapter(env, code, filt
     assert e["provenance"]["generation"]["id"] == r["generation"]["id"] == GENERATION
     assert e["provenance"]["generation"]["status"] == r["generation"]["status"] == "present"
     refused = bool(r.get("unavailable"))
-    assert (e["status"] == "unavailable") == refused == (a["status"] == "unavailable")
-    assert ("approximation" in codes(e)) == (a["status"] == "approximation")
+    assert (e["status"] == "unavailable") == refused
+    assert ("approximation" in codes(e)) == (agg.get("outcome") == "approximation")
     if refused:
         assert rows(e) == [] and e["reason"] == native["reason"]
         assert e["limits"]["returned_rows"] == 0 and e["limits"]["source_complete"] is None
