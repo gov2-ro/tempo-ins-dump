@@ -7,24 +7,43 @@ see also [charting-ideas.md](charting-ideas.md)
 ## Ask/MCP answer quality follow-up — 2026-10-17
 
 Implementation status: [AT-05](plans/ask-and-public-mcp/06-answer-quality.md).
-Remaining work is now split into [small implementation packages](plans/ask-and-public-mcp/remaining/README.md)
-with exact baseline, dependencies, acceptance tests and cheaper-model handoff prompts.
-These new packages are specs, not implemented work.
+Remaining work is split into [small implementation packages](plans/ask-and-public-mcp/remaining/README.md).
+On `fix/ask-answer-quality` (2026-10-17, code-ready, not deployed, not model/client-validated):
+01A, 02A/B, 03A/B, 04A/B/C and 05A, each with an `aq-*-record.md` beside the specs.
 
-- [ ] **Size public MCP for national locality rankings**: `rank_entities` works through the
-  native MCP client on synthetic data, but the default whole-file admission cap rejects
-  `POP107D_grupe_localitate`. Measure memory/latency on the 512 MB target before changing limits,
-  or design a generation-bound smaller ranking input / safely bounded scan estimate. Do not
-  bypass admission checks. Start [AQ-01 step 01A](plans/ask-and-public-mcp/remaining/01-mcp-capacity.md).
-- [ ] **Run the revised Ask prompt with native providers**: deterministic paraphrase, claim,
-  ranking and transport tests cannot measure how reliably each provider follows the tools.
-  Re-run the eight exploratory questions end to end, including omitted warnings and follow-ups.
-  [AQ-02](plans/ask-and-public-mcp/remaining/02-task-evaluation.md) separates offline fixtures/replay
-  from a budgeted, separately authorized live run.
-- [ ] **Extend semantic verification beyond explicit contradictions**: the checker catches
-  recognizable unit/year conflicts, not arbitrary semantic entailment, swapped multi-year
-  comparisons or every population definition. Keep the UI claim status conservative;
-  [AQ-03](plans/ask-and-public-mcp/remaining/03-claim-verification.md) defines the next bounded steps.
+- [ ] **Size public MCP for national locality rankings** (AQ-01B): 01A's harness
+  (`scripts/benchmark-mcp.py`) shows the default cap refuses `POP107D_grupe_localitate`
+  (3,898,870 rows) with no dispatch; a 5M cap in the child ranks 319 cities identically to
+  the direct tool on macOS. Still needed: `--mode container` on a Linux host with the
+  candidate image at 512 MiB, the AT-04 180 s/300 s mixed phases, and worst admitted
+  requests of every scan-gated tool. Do not change limits before that.
+- [ ] **Live task evaluation** (AQ-02C): runner `scripts/eval-ask-tasks.py` + `data/eval/ask_tasks.json`
+  is offline/scripted only (142/142 positives on generation 9b3e065d; scripted tool choice is not
+  model quality). The live mode needs explicit provider/model/budget authorization. Also check
+  whether real models pass `lang` (tool prose now defaults to Romanian).
+- [ ] **Clear resolved known-limitation declarations** in `data/eval/ask_tasks.json`
+  (T06, X03, X10 ×2, X10B ×2, X03B, X04B now show as `resolved`); `test_aq02_runner.py` uses
+  T06 and X10B as vehicles, so re-point those tests first.
+- [ ] **"Total" over a partial scope is still accepted** (AQ-02 T11 `ages_0_2_as_total`):
+  the cell is real; nothing ties the word "total" to an `incomplete_domain` result. New check.
+- [ ] **Claim checks, follow-ups** (AQ-03): recipe component columns (`stays`, `population`) as
+  cells (changes two controls from flagged to withheld), "respectively"/enumeration alignment,
+  number words, and whether `definition_mismatch`/`direction_mismatch` should withhold prose
+  (today only unit/period contradictions do; one line in `answer_check.CONTRADICTIONS`).
+- [ ] **Harmonize partial status for unverified domains**: `compare_periods` returns `ok` where
+  `rank_entities` returns `partial/unverified_total` for the same unverified collapsed domain
+  (pre-existing; changing it alters the default status of `compare_periods`). Owner decision.
+- [ ] **AQ-04A follow-ups** (product decisions): apply a county filter to city rankings
+  (reported, not applied today); a generic population default at national level (kept as before);
+  several years in one question pin only the last (`concept_search.parse_query`, raw search).
+- [ ] **Area identity for recipes** (AQ-04B): `run_recipe` matches areas by exact label only;
+  "Cluj-Napoca" → "Cluj", English names and cross-dataset labels need a reviewed contract.
+- [ ] **Default tool language** (AQ-04C): prose follows `lang`, default `ro`; MCP clients that omit
+  it get Romanian sentences (codes unchanged). Also: Ask HTTP-error texts are English, Pydantic
+  validation details are English, the caption says "1 rânduri", `constraint_not_applied` is not
+  shown on the page.
+- [ ] **Historical city membership / constant boundaries** (AQ-05A): needs a reviewed source;
+  until then those requests stay unavailable. Next analytical step is the 05B joinability audit.
 
 ## Ask/MCP initial model evaluation — 2026-10-16
 
@@ -63,20 +82,20 @@ Evidence and ground truth: `docs/plans/ask-and-public-mcp/at-04-initial-mcp-eval
 - [ ] **Definition/choice follow-up**: AT-05 now discloses a resident population default,
   or domicile for city rankings. Explicit definitions remain binding. Generic unemployment
   still clarifies; choosing a default is a product decision, not a coding task.
-  [AQ-04](plans/ask-and-public-mcp/remaining/04-discovery-and-messages.md) moves current policy
-  into reviewed configuration and improves concrete next actions without changing it.
+  AQ-04A moved the policy into `app/data/discovery_defaults.json` (validated at load);
+  AQ-04B gives each choice a validated `action`. The unemployment default stays open.
 - [x] **One-year ranked level query**: AT-05 adds `rank_entities` over the full eligible
   set, with SIRUTA city classification. Public national-query admission remains AQ-01.
-- [ ] **City-only changes, joined measures, density and correlations**:
-  [AQ-05](plans/ask-and-public-mcp/remaining/05-analytical-extensions.md) separates these steps.
+- [ ] **Joined measures, density and correlations** (city-only changes done in AQ-05A):
+  [AQ-05](plans/ask-and-public-mcp/remaining/05-analytical-extensions.md) 05B audit comes next.
   GOS102A built-up area is not administrative UAT area; ordinary population density remains
   unavailable without a suitable reviewed source. Do not silently substitute the denominator.
 - [x] **Unknown-domain sums returned as `ok`**: AT-05 marks `sum_partition` results with
   unknown completeness as `partial/unverified_total`, including the two disagreeing births
   series. This is a qualification, not a repair or verification of their source totals.
-- [ ] **Interpretation and choices**: AT-05 handles “curentă”, plural cities and tourism
-  ratio wording. Concrete choice calls, recipe-area lookup, series-break warnings and bilingual
-  explanations remain [AQ-04](plans/ask-and-public-mcp/remaining/04-discovery-and-messages.md).
+- [x] **Interpretation and choices**: AT-05 handles “curentă”, plural cities and tourism
+  ratio wording; AQ-04B/C add concrete choice calls, recipe-area lookup, series-break warnings
+  and bilingual explanations.
 - [x] **Capped unordered preview shown as a ranking answer**: AT-05 captions previews and
   withholds an unranked query table/prose when a ranking was requested.
 - [ ] **Re-run task quality with actual providers**: see AQ-02; the original CLI experiment
@@ -177,9 +196,10 @@ From the Ask runtime and public MCP packages ([AT-02](plans/ask-and-public-mcp/a
 - [ ] **Docker image smoke for MCP was not run** (`release-check.py --docker`, no Docker here).
 - [ ] **Live MCP client compatibility**: schema acceptance, anonymous access and timeouts in ChatGPT and
   Claude connectors; directory submission.
-- [ ] **Ask claim binding remains bounded**: AT-05 now rejects recognized unit/year contradictions;
-  multi-year/entity ambiguity and definition checks remain [AQ-03](plans/ask-and-public-mcp/remaining/03-claim-verification.md).
-- [ ] **Tool messages are English only** (AT-01) and show on Romanian Ask pages.
+- [x] **Ask claim binding remains bounded**: AQ-03 binds each number to one cell through its
+  wording (entity, years, direction, unit, definition); ambiguity stays unverified. Follow-ups above.
+- [x] **Tool messages are English only** (AT-01): AQ-04C localizes them (RO/EN catalogue
+  `services/tools/messages.py`).
 
 ## Data refresh findings — 2026-10-15
 

@@ -1,6 +1,39 @@
 # Activity History
 
 
+## 2026-10-17 — Ask/MCP remaining packages: AQ-01A, 02A/B, 03A/B, 04A/B/C, 05A
+
+Implemented the ready steps of the [remaining specs](plans/ask-and-public-mcp/remaining/README.md)
+with Sonnet sub-agents, one worktree and branch per package, merged `--no-ff` into
+`fix/ask-answer-quality`; each has an `aq-*-record.md`. Not pushed or deployed, no paid calls,
+no limit or corpus change; the copied generation 9b3e065d was read only.
+
+- **01A** `scripts/benchmark-mcp.py`: isolated child, real MCP client, cold/cache/miss/mixed
+  states never pooled. Default cap refuses the 3.9M-row locality file with no dispatch; a 5M cap
+  in the child only ranks 319 cities identically to the direct tool. Linux 512 MiB gate not run.
+- **02A/B** `data/eval/ask_tasks.json` (42 RO/EN tasks, hand-derived numbers, 42 wrong-answer
+  controls) and `scripts/eval-ask-tasks.py` (real tools and Ask checks behind a scripted model).
+  Its first run on the merged head found five false positives in 03B, fixed before 04C.
+- **03A/B** claim checks bind each number to one cell by its own wording (entity, endpoint
+  years, direction, unit, definition); ambiguity stays `unverified`. Only unit/period
+  contradictions still withhold prose. 1011 no longer matches 1010 (tolerance only for
+  rounded-looking figures).
+- **04A** discovery defaults are validated configuration (`app/data/discovery_defaults.json`),
+  policy unchanged; unapplied sex/age/denominator constraints are reported and no data call
+  that ignores them is offered. **04B** choices carry a validated `action`; recipe-area lookup;
+  `series_break` warnings. **04C** RO/EN tool messages from one catalogue; the Ask page lists
+  qualifications a model omits; a ranked `compare_periods` top K is no longer captioned a preview.
+- **05A** `compare_periods` `entity_class: cities` classifies the full endpoint table by GOS102A
+  SIRUTA before ranking; carried through MCP, REST, links, follow-ups and the evidence ZIP.
+  2015→2020: Brăila −12,827 leads 319 cities (independent DuckDB check equal).
+
+Final head 61964f6: `pytest tests` 1,812 passed / 85 skipped (synthetic) and 1,896 passed /
+1 skipped (copied generation; the skip is the AQ-02 self-skip, nothing left accepted); task runner 142/142 positives, controls 30 detected / 2 known limitations (T11 "total" over a
+partial age scope) / 0 mismatch. Catalog search byte-identical to the starting commit.
+Decisions left to the owner are in BACKLOG (default tool language, unverified-domain status
+for `compare_periods`, AQ-04A follow-ups, unemployment default).
+
+
 ## 2026-10-17 — Save Ask/MCP quality implementation and handoff
 
 Prepared the complete AT-05 implementation, regression tests and six remaining-work

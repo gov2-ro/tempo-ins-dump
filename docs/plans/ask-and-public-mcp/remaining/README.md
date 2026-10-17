@@ -1,7 +1,11 @@
 # Remaining Ask/MCP work: implementation handoff
 
-Written 2026-10-17. **Specifications only: none of these packages is implemented
-by this handoff.** Implement one numbered step per session, then stop. These
+Written 2026-10-17. **Status, later on 2026-10-17:** 01A, 02A/B, 03A/B, 04A/B/C and
+05A are implemented on `fix/ask-answer-quality` (code-ready; completion records
+`aq-*-record.md` in this folder). Not done: 01B/01C (need a Linux 512 MiB run),
+02C (live runs need authorization), 05B–05D, AQ-06. Nothing deployed.
+
+Originally: implement one numbered step per session, then stop. These
 packages break the remaining AT-04/backlog work into tasks suitable for cheaper
 coding models; they do not authorize deployment or paid evaluations.
 
