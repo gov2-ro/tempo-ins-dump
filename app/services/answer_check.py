@@ -51,13 +51,38 @@ _EN_HINTS = {'what', 'how', 'many', 'much', 'the', 'is', 'are', 'of', 'in', 'by'
              'population', 'rate', 'which', 'where'}
 
 
-def guess_lang(text: str) -> str:
-    toks = re.findall(r"[a-zăâîșțşţ]+", (text or '').lower())
-    if re.search(r'[ăâîșțşţ]', text or ''):
+_LANG_LETTERS = 'ăâîșțşţ'
+
+
+def lang_signal(text: str) -> str | None:
+    """The language a question itself shows: 'ro' on a Romanian letter or more Romanian than
+    English hint words, 'en' on more English ones, None on a tie (no hint words at all included:
+    "PIB Cluj 2023" says nothing)."""
+    t = (text or '').lower()
+    if re.search(f'[{_LANG_LETTERS}]', t):
         return 'ro'
-    ro = sum(t in _RO_HINTS for t in toks)
-    en = sum(t in _EN_HINTS for t in toks)
-    return 'ro' if ro > en else 'en'
+    toks = re.findall(f'[a-z{_LANG_LETTERS}]+', t)
+    ro = sum(w in _RO_HINTS for w in toks)
+    en = sum(w in _EN_HINTS for w in toks)
+    return 'ro' if ro > en else 'en' if en > ro else None
+
+
+def guess_lang(text: str, default: str | None = None) -> str:
+    """`lang_signal`, or `default` when the text has none. Without a default a tie reads 'en'
+    (what this function always returned); `resolve_lang` is the one that weighs the site."""
+    return lang_signal(text) or default or 'en'
+
+
+def resolve_lang(question: str, site: str | None = None) -> tuple[str, str]:
+    """The language an Ask turn is written in, and where it came from: a clear signal in the
+    question wins ('question'), an ambiguous question follows the site's language ('site', the
+    request's `lang`), and with neither the default is Romanian ('default')."""
+    sig = lang_signal(question)
+    if sig:
+        return sig, 'question'
+    if site in ('ro', 'en'):
+        return site, 'site'
+    return 'ro', 'default'
 
 
 def _is_envelope(r) -> bool:

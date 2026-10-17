@@ -111,6 +111,12 @@ You have a limited number of tool calls and a short time. Your final turn has to
 Plain-language summary in the user's language with the unit, period and place, and the cited dataset code(s) in parentheses (e.g. AMG159E). Don't invent codes. Decline questions unrelated to Romanian statistics.
 """
 
+# Added only when the language came from the site (the question showed none): the model otherwise
+# guesses it, and the page's warnings would be in one language and its answer in another.
+LANG_NOTE = ("\n## Language\nThe question does not show its language; the user reads the site in "
+             "{name}. Answer in {name} and pass `lang` \"{code}\" to the tools.\n")
+LANG_NAME = {"ro": "Romanian", "en": "English"}
+
 FINAL_NOTE = """
 ## This is your final turn: tools are disabled
 Answer now, only from the tool results above. State plainly what you could not establish{gaps}. Do not invent or compute values. If nothing usable was obtained, say so, give the reason in plain words and suggest the next step from the results' recovery entries."""
@@ -183,6 +189,7 @@ class AgentResult:
     context: list = field(default_factory=list)   # follow-up selections for the next turn
     usage: dict | None = None
     metrics: dict = field(default_factory=dict)   # content-free, for the operational log
+    lang: str = "ro"                 # the language the warnings, captions and table prose are in
 
 
 # ---------------------------------------------------------------------------
@@ -225,10 +232,6 @@ def _assistant_turn(resp, provider: str | None = None) -> dict:
     }
 
 
-def _guess_lang(question: str) -> str:
-    return answer_check.guess_lang(question)
-
-
 # ---------------------------------------------------------------------------
 # The loop
 # ---------------------------------------------------------------------------
@@ -245,7 +248,7 @@ class _Run:
     _warned: set | None = None            # (code, subject) of the warnings listed so far, made on first use
 
     def __init__(self, question, history, *, provider, model, api_key, on_event, context, cancel,
-                 request_id):
+                 request_id, site_lang=None):
         self.question = question
         self.provider, self.model, self.api_key = provider, model, api_key
         self.prov_name = provider or config.LLM_PROVIDER
@@ -254,7 +257,8 @@ class _Run:
         self.cancel = cancel or CancelToken()
         self.request_id = request_id or uuid.uuid4().hex[:12]
         self.prior_context = list(context or [])
-        self.lang = _guess_lang(question)
+        # the question's own language, else the site's (the request's `lang`), else Romanian
+        self.lang, self.lang_source = answer_check.resolve_lang(question, site_lang)
 
         self.messages = list(history or [])
         self.messages.append({"role": "user", "content": question})
@@ -389,6 +393,8 @@ class _Run:
         self.last_requested = tokens
         system = SYSTEM_PROMPT + ("\n" + ask_context.prompt_section(self.prior_context)
                                   if self.prior_context else "")
+        if self.lang_source == "site":
+            system += LANG_NOTE.format(name=LANG_NAME[self.lang], code=self.lang)
         if final:
             system += FINAL_NOTE.format(gaps=self._gaps())
         system += system_extra
@@ -567,7 +573,8 @@ class _Run:
 
     def execute(self) -> AgentResult:
         self.emit("start", provider=self.prov_name, model=self.model_name,
-                  history_turns=len(self.messages) - 1, context_entries=len(self.prior_context))
+                  history_turns=len(self.messages) - 1, context_entries=len(self.prior_context),
+                  lang=self.lang, lang_source=self.lang_source)
         self.conn = get_conn()
         try:
             return self._loop()
@@ -709,7 +716,8 @@ class _Run:
         usage = self.usage if any(v is not None for v in self.usage.values()) else None
         metrics = {
             "request_id": self.request_id, "outcome": outcome, "reason": reason,
-            "stop_reason": stop_reason, "model_attempts": self.iterations, "retries": self.retries,
+            "stop_reason": stop_reason, "lang": self.lang, "lang_source": self.lang_source,
+            "model_attempts": self.iterations, "retries": self.retries,
             "tool_dispatches": self.tools_used, "tool_executions": self.executions,
             "cache_hits": self.cache_hits, "duration_ms": int((time.monotonic() - self.started) * 1000),
             "tool_result_bytes": self.tool_result_bytes, "usage": usage,
@@ -728,7 +736,8 @@ class _Run:
             answer=answer, citations=ask_present.citations(answer, self.trace),
             tool_trace=self.trace, data=table, chart_spec=self._chart_spec() if table is not None else None, warnings=self.warnings,
             stop_reason=stop_reason, budget=budget, verification=verification,
-            outcome=outcome, reason=reason, context=ctx_entries, usage=usage, metrics=metrics)
+            outcome=outcome, reason=reason, context=ctx_entries, usage=usage, metrics=metrics,
+            lang=self.lang)
 
     def _outcome(self, answer, failed, stopped, forced, cut, usable, verification) -> tuple[str, str | None]:
         """answered | clarification | refused | partial | failed, with a stable reason."""
@@ -864,6 +873,7 @@ def run_agent(
     context: list[dict] | None = None,
     cancel: CancelToken | None = None,
     request_id: str | None = None,
+    site_lang: str | None = None,
 ) -> AgentResult:
     """Run the NL→Data agent loop.
 
@@ -878,13 +888,16 @@ def run_agent(
                   step, each stamped with ms since start.
         context:  Validated follow-up selections from earlier turns (ask_context.validate).
         cancel:   CancelToken; cancelling it stops the loop and interrupts the running query.
+        site_lang: 'ro' | 'en', the language the site was showing when the question was asked. It
+                  decides only a question that shows no language of its own (`resolve_lang`).
 
     Returns an AgentResult. It raises LLMError (stable text) for a provider failure with
     nothing gathered yet; a failure after tools ran returns a partial result instead.
     """
     prov = provider or config.LLM_PROVIDER
     run = _Run(question, history, provider=provider, model=model, api_key=api_key,
-               on_event=on_event, context=context, cancel=cancel, request_id=request_id)
+               on_event=on_event, context=context, cancel=cancel, request_id=request_id,
+               site_lang=site_lang)
     with ask_guard.secrets_scope(api_key, os.environ.get(_server_key_env(prov), "")):
         try:
             return run.execute()

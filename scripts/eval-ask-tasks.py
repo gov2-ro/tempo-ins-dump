@@ -327,8 +327,10 @@ def run_direct_turn(world, turn, lang, *, history, context, secrets, answer=None
     t0 = time.perf_counter()
     with LogCapture() as logs:
         try:
+            # the variant's language is the language of the site the (simulated) user is on: it decides a
+            # prompt that shows none ("Acum pentru 2020."); a prompt that does show one is unaffected
             res = agent.run_agent(prompt, history, provider="anthropic", api_key=secrets[0] if secrets else "k",
-                                  on_event=obs["events"].append, context=validated, cancel=token)
+                                  on_event=obs["events"].append, context=validated, cancel=token, site_lang=lang)
         except LLMError as e:
             obs["raised"] = {"type": "LLMError", "code": e.code, "status": e.status, "message": str(e)}
             res = None

@@ -295,6 +295,7 @@ METRIC_SCALARS = (
     "tool_dispatches", "tool_executions", "cache_hits", "iterations", "tools", "elapsed_s",
     "duration_ms", "request_bytes", "tool_result_bytes", "requested_output_tokens",
     "dropped_debug_events", "cancelled", "timed_out",
+    "site_lang", "lang", "lang_source",       # the Ask language: asked by the site, resolved, and from where
 )
 _CODE_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 
