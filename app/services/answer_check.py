@@ -219,7 +219,8 @@ def numeric_leaves(env: dict, call_id: str | None = None) -> list[dict]:
     or a dimension code is not a statistic the answer may quote).
 
     `metric` says what the number is: observation, from_value / to_value (the value at that single
-    endpoint year), change_absolute / change_percent (spanning period_from..period_to). `key` is the
+    endpoint year), change_absolute / change_percent (spanning period_from..period_to), and for a
+    recipe reconstruction (the cross-check of a published value). `key` is the
     full entity key as {column: value}; `unit_norm` the normalized source unit; `scaled` the value in
     base units when the source unit has a scale (Mii persoane); `population` the reviewed definition."""
     tool, data = env.get('tool'), env.get('data') or {}
@@ -290,12 +291,14 @@ def numeric_leaves(env: dict, call_id: str | None = None) -> list[dict]:
                                    data.get('year')))
     elif tool == 'run_recipe':
         for m, row in enumerate(data.get('rows') or []):
+            name = str(row.get('label') or row.get('area') or '')
+            key, year = {'area': str(row.get('geo_id') or name)}, (str(data.get('year')) if data.get('year') else None)
+            unit_text = row.get('unit') or u_text
             if _num(row.get('value')):
-                name = str(row.get('label') or row.get('area') or '')
-                leaves.append(leaf(f'/data/rows/{m}/value', row['value'], [name],
-                                   {'area': str(row.get('geo_id') or name)},
-                                   str(data.get('year')) if data.get('year') else None,
-                                   text=row.get('unit') or u_text))
+                leaves.append(leaf(f'/data/rows/{m}/value', row['value'], [name], key, year, text=unit_text))
+            if _num(row.get('reconstructed')):      # the cross-check of a published value, in the same unit
+                leaves.append(leaf(f'/data/rows/{m}/reconstructed', row['reconstructed'], [name], key, year,
+                                   metric='reconstruction', text=unit_text))
     return leaves
 
 
@@ -371,8 +374,8 @@ def _sign_before(text: str, s: int) -> int:
 def _states_unit(text: str, end: int) -> bool:
     """Do the words right after the number (to the end of its clause) state a unit?"""
     after = re.split(r'[,;]|\.\s|\n', text[end:end + 48])[0]
-    u = claimed_unit(after)
-    return bool(u['measure'] or u['denominator'])
+    u = claimed_unit(re.split(r'\d', after)[0])           # a unit after the NEXT number is that number's ("0–4 ... 110 persons")
+    return bool(u['measure'] or u['denominator'] or claimed_unit(after)['denominator'] == 'thousand_persons')
 
 
 def _not_a_claim(text, m, raw, plain, asked, codes, date_spans) -> bool:
@@ -434,16 +437,28 @@ def find_numbers(text: str, ignore_text: str = '', codes=frozenset()) -> list[di
     return out
 
 
+def _looks_rounded(val: float, dec: int) -> bool:
+    """Does the printed number end in a zero digit (2.751.000, 4,90, 1010)? Only such a number
+    reads as an approximation; 1011 or 58.085 are meant exactly."""
+    return round(abs(val) * 10 ** dec) % 10 == 0
+
+
 def _matches_value(claim: dict, v: float, strict: bool = False) -> bool:
     """Does the claim's number read as v? Within the rounding of the digits it prints, or (not
-    `strict`) within 0.5% of v."""
+    `strict`) within 0.5% of v when the number looks rounded."""
     for val, dec in claim['readings']:
         c = val * claim['scale']
         half_ulp = 0.5 * (10 ** -dec) * claim['scale']
-        tol = half_ulp if strict else max(half_ulp, 0.005 * abs(v))
+        tol = half_ulp if strict or not _looks_rounded(val, dec) else max(half_ulp, 0.005 * abs(v))
         if abs(abs(c) - abs(v)) <= tol:       # "fell by 50" is a claim about a change of -50
             return True
     return False
+
+
+def _is_exact(claim: dict, v: float) -> bool:
+    """The printed number is v itself (not merely v rounded): 10 for 10.0, not for 9.9."""
+    return claim['scale'] == 1.0 and any(abs(abs(val) - abs(v)) <= 1e-9 * max(1.0, abs(v))
+                                         for val, _ in claim['readings'])
 
 
 def _matches(claim: dict, values: list[float]) -> bool:
@@ -509,19 +524,25 @@ _ABBREVIATIONS = ('i.e.', 'e.g.', 'mil.', 'mld.', 'nr.', 'ex.', 'etc.', 'cca.', 
                   'no.')
 
 
-def _sentences(text: str) -> list[str]:
-    """Sentences and lines of the answer. An abbreviation ("i.e.", "mil.", "nr.") does not end one:
-    its number and unit stay together."""
-    out, start = [], 0
+def _sentence_parts(text: str) -> list[tuple[str, bool]]:
+    """Sentences and lines of the answer, each with whether it continues the previous one (a ';'
+    ended that: "valoarea 10 (celula publicată; reconstrucția dă 9,9)" is one sentence). An
+    abbreviation ("i.e.", "mil.", "nr.") ends none: its number and unit stay together."""
+    out, start, joined = [], 0, False
     for m in re.finditer(r'(?<=[.!?;])\s+|\n+', text or ''):
         head = text[start:m.start()].lower()
         abbr = next((a for a in _ABBREVIATIONS if head.endswith(a)), None)
         if abbr and not m.group().startswith('\n') and not head[:-len(abbr)][-1:].isalpha():
             continue
-        out.append(text[start:m.start()])
+        out.append((text[start:m.start()], joined))
+        joined = not m.group().startswith('\n') and head.endswith(';')
         start = m.end()
-    out.append(text[start:])
-    return [p.strip() for p in out if p and p.strip()]
+    out.append((text[start:], joined))
+    return [(p.strip(), j) for p, j in out if p and p.strip()]
+
+
+def _sentences(text: str) -> list[str]:
+    return [p for p, _ in _sentence_parts(text)]
 
 
 def _num_like(s: str) -> bool:
@@ -668,6 +689,13 @@ def _matches_leaf(claim: dict, leaf: dict, strict: bool = False) -> str | None:
     return None
 
 
+def _match_tier(claim: dict, leaf: dict, form: str) -> int:
+    """0 the printed number is the cell's value, 1 it is the value rounded to the digits printed,
+    2 it is within the loose tolerance of a rounded-looking number."""
+    v = leaf['value'] if form == 'raw' else leaf['scaled']
+    return 0 if _is_exact(claim, v) else 1 if _matches_value(claim, v, strict=True) else 2
+
+
 def _first_reason(verdicts: list) -> str | None:
     """The reason to report when no candidate is free of conflict: a candidate that is merely
     unverifiable outranks one that contradicts, so an unknown unit never turns into an accusation."""
@@ -710,7 +738,8 @@ _DIRECTION = re.compile(rf'(?P<down>{_DOWN})\w*(?:\s+{_AMOUNT_OF})?\s*$|(?P<up>{
 _LEVEL_BEFORE = re.compile(r'\b(?:la|to|at|pana la|spre|from|de la|reaching|reached)\s*$')
 _FROM_BEFORE = re.compile(r'\b(?:de la|from)\s*$')
 _TO_BETWEEN = re.compile(r'(?:->|→|\b(?:pana la|la|to|until|up to|spre)\b)\W*$', re.I)
-_FILLER = frozenset('si and iar sau or ori dar but cu de in la din pentru for plus respectiv adica the per pe'.split())
+_FILLER = frozenset('si and iar sau or ori dar but cu de in la din pentru for plus respectiv adica the per pe '
+                    'from then apoi until with'.split())
 
 
 def _name_key(e) -> str | None:
@@ -786,11 +815,12 @@ def _is_enumeration(sent: str, fold: str, lo: int, hi: int, mentions: list) -> b
     return all(tok in _FILLER for tok in re.findall(r'[a-z]{3,}', gap))
 
 
-def _sentence_contexts(sent: str, found: list, mentions: list) -> list:
+def _sentence_contexts(sent: str, found: list, mentions: list, carry: dict | None = None) -> list:
     """What the wording around each number says about it: the entity mentions it belongs to, the
     years, the direction word, the from/to role. A mention or year right after a number that is
     joined to it by a locative ("300000 în Cluj") belongs to that number and not to the next one.
-    Context continues across an enumeration (names, units and "și" only) and otherwise is lost.
+    Context continues across an enumeration (names, units and "și" only) and otherwise is lost;
+    `carry` is the entity and years of the clause before a ';' when this clause names none.
     Each context records where it came from: stated | inherited | sentence."""
     fold = _pfold(sent)
     spans = [(c['start'], c['end']) for c in found]
@@ -816,6 +846,8 @@ def _sentence_contexts(sent: str, found: list, mentions: list) -> list:
             used_m.add(post[0])
         elif prev and prev['ents'] and enum:
             ents, ent_how = prev['ents'], 'inherited'
+        elif carry and carry['ents'] and not mentions:
+            ents, ent_how = carry['ents'], 'inherited'
         elif mentions:
             ents, ent_how = [m for m in mentions if m[2] not in _GENERIC_NAMES] or list(mentions), 'sentence'
         # years
@@ -839,6 +871,8 @@ def _sentence_contexts(sent: str, found: list, mentions: list) -> list:
                 used_y.add(end_y[0])
         elif prev and prev['years'] and enum:
             ys, y_how = prev['years'], 'inherited'
+        elif carry and carry['years'] and not sent_years:
+            ys, y_how = carry['years'], 'inherited'
         elif len(sent_years) == 1:
             ys, y_how, y_hard = set(sent_years), 'sentence', True
         # direction of a change and from/to role
@@ -858,7 +892,7 @@ def _sentence_contexts(sent: str, found: list, mentions: list) -> list:
         stated = stated_definition(sent[lo:s]) or stated_definition(sent[e:min(hi, e + 40)]) or sentence_def
         out.append({'ents': ents, 'ent_how': ent_how, 'years': ys, 'year_how': y_how, 'year_hard': y_hard,
                     'dir': direction, 'carry': direction or carried, 'role': role, 'unit_text': unit_text,
-                    'stated': stated, 'def_text': sent, 'sent_years': sent_years})
+                    'stated': stated, 'def_text': sent, 'sent_years': sent_years, 'enum': enum})
     return out
 
 
@@ -921,13 +955,27 @@ def _coordinate(lf: dict) -> tuple:
             lf['period_from'], lf['period_to'], lf['unit'])
 
 
-def _resolve(claim: dict, ctx: dict, leaves: list, requested) -> dict:
+_CHECK_CUE = re.compile(r'\b(?:reconstruc\w*|reconstitu\w*|verificare|cross[ -]?check|recomput\w*|recalcul\w*)\b')
+
+
+def _metric_verdict(ctx: dict, lf: dict) -> str | None:
+    """A reconstruction is only the cross-check of a published value: a sentence cites it by
+    saying so, and does not present it as the figure."""
+    if lf['metric'] == 'reconstruction' and not _CHECK_CUE.search(_fold(ctx['def_text'])):
+        return 'metric_mismatch'
+    return None
+
+
+def _resolve(claim: dict, ctx: dict, leaves: list, requested, chain=()) -> dict:
     """Narrow the cells that hold the number by the wording around it; never pick between
-    equals. Returns {leaf, form, reason, candidates} where leaf is set only for exactly one
-    distinct coordinate."""
+    equals. `chain` holds the cells bound to the earlier numbers of the same enumeration: when
+    the wording leaves a metric open (no unit, "B -50, A -20"), a candidate with a metric of the
+    chain is preferred, and only if that leaves exactly one. Returns {leaf, form, reason,
+    candidates} where leaf is set only for exactly one distinct coordinate."""
     claimed, stated = claimed_unit(ctx['unit_text']), ctx['stated']
     stages = (
         lambda lf, form: _entity_verdict(ctx, lf),
+        lambda lf, form: _metric_verdict(ctx, lf),
         lambda lf, form: _unit_verdict(claimed, lf, claim, form),
         lambda lf, form: _period_verdict(ctx, lf),
         lambda lf, form: _sign_verdict(claim, ctx, lf),
@@ -935,10 +983,11 @@ def _resolve(claim: dict, ctx: dict, leaves: list, requested) -> dict:
     alive = [(lf, form) for lf in leaves if (form := _matches_leaf(claim, lf))]
     if not alive:
         return {'leaf': None, 'reason': None, 'candidates': 0}
-    # A number printed exactly as one cell's value is that cell's: another cell within the loose
-    # rounding tolerance (1012 for "1010", the neighbour's -58085 for "58.085") is not a candidate,
-    # so a swapped pair of close values cannot slip through as a rounded match.
-    alive = [(lf, form) for lf, form in alive if _matches_leaf(claim, lf, strict=True)] or alive
+    # A number printed as one cell's value is that cell's: a cell it only approximates (9.9 for "10",
+    # 1012 for "1010", the neighbour's -58085 for "58.085") is not a candidate, so a swapped pair of
+    # close values cannot slip through as a rounded match.
+    tiers = [_match_tier(claim, lf, form) for lf, form in alive]
+    alive = [c for c, t in zip(alive, tiers) if t == min(tiers)]
     for stage in stages:
         verdicts = [(lf, stage(lf, form)) for lf, form in alive]
         kept = [(lf, form) for (lf, form), (_, r) in zip(alive, verdicts) if r is None]
@@ -948,13 +997,19 @@ def _resolve(claim: dict, ctx: dict, leaves: list, requested) -> dict:
     distinct = {}
     for lf, form in alive:
         distinct.setdefault(_coordinate(lf), (lf, form))
+    inherited = False
+    if len(distinct) > 1 and chain:
+        seen = {(_coordinate(c)[2], c['unit_norm']['measure']) for c in chain}
+        same = {k: v for k, v in distinct.items() if (k[2], v[0]['unit_norm']['measure']) in seen}
+        if len(same) == 1:
+            distinct, inherited = same, True
     names = {m[2] for m in ctx['ents'] or []}
     shared = len(names) > 1 and any(lf['keys'] for lf, _ in alive)      # one number for several names
     if len(distinct) > 1 or shared:
         return {'leaf': None, 'reason': 'ambiguous_binding', 'candidates': max(len(distinct), len(names))}
     lf, form = next(iter(distinct.values()))
     return {'leaf': lf, 'form': form, 'reason': None, 'candidates': 1,
-            'claimed': claimed, 'stated': stated}
+            'claimed': claimed, 'stated': stated, 'inherited_metric': inherited}
 
 
 def _anchors(res: dict, ctx: dict) -> dict:
@@ -962,11 +1017,14 @@ def _anchors(res: dict, ctx: dict) -> dict:
     only not contradicted) and whether that was all of it (`complete`). Detail beside
     `semantic_check: no_explicit_conflict`."""
     lf, claimed = res['leaf'], res['claimed']
+    if claimed['measure'] or claimed['denominator']:
+        unit = 'stated' if lf['unit_norm']['known'] else 'source_unknown'
+    else:
+        unit = 'inherited' if res['inherited_metric'] else 'unstated'
     out = {'entity': ctx['ent_how'] if lf['keys'] else 'not_needed',
-           'period': (ctx['year_how'] or 'unstated') if (lf.get('period_from') or lf.get('period_to'))
-           else 'not_needed',
-           'unit': ('stated' if lf['unit_norm']['known'] else 'source_unknown')
-           if (claimed['measure'] or claimed['denominator']) else 'unstated'}
+           'period': (ctx['year_how'] or 'unstated')
+           if (lf.get('period_from') or lf.get('period_to')) else 'not_needed',
+           'unit': unit}
     if lf['value'] < 0:
         out['direction'] = 'stated' if ctx['dir'] else 'sign'
     if lf.get('population'):
@@ -1005,15 +1063,20 @@ def bind_claims(answer: str, question: str, tool_trace: list[dict]) -> list[dict
     keys = sorted({k for lf in leaves for k in lf['keys']})[:MAX_NAMES]
     codes, cache = _entity_codes(leaves), {}
     requested = stated_definition(question)
-    claims = []
-    for sent in _sentences(answer):
+    claims, carry = [], None
+    for sent, joined in _sentence_parts(answer):
         found = find_numbers(sent, question, codes)[:MAX_CLAIMS - len(claims)]      # work is bounded by the cap
         if not found:
+            carry = None
             continue
         sent = sent[:found[-1]['end'] + 200]                  # nothing after the last bound claim is read
         mentions = _mentions(sent, _pfold(sent), keys, cache)
-        for c, ctx in zip(found, _sentence_contexts(sent, found, mentions)):
-            res = _resolve(c, ctx, leaves, requested)
+        contexts = _sentence_contexts(sent, found, mentions, carry if joined else None)
+        carry, chain = {'ents': contexts[-1]['ents'], 'years': contexts[-1]['years']}, []
+        for c, ctx in zip(found, contexts):
+            if not ctx['enum']:
+                chain = []                                   # a new enumeration starts here
+            res = _resolve(c, ctx, leaves, requested, chain)
             entry = {'text': sent[:200], 'tool_call_id': None, 'path': None, 'entity': None,
                      'period': None, 'unit': None, 'check': 'unverified'}
             if res['reason']:
@@ -1022,6 +1085,7 @@ def bind_claims(answer: str, question: str, tool_trace: list[dict]) -> list[dict
                 entry['candidates'] = res['candidates']
             lf = res['leaf']
             if lf:
+                chain.append(lf)
                 entry['semantic_check'] = 'no_explicit_conflict'
                 entry.update(tool_call_id=lf['call'], path=lf['path'],
                              entity=' · '.join(dict.fromkeys(lf['entity'])) or None,

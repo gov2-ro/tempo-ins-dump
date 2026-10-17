@@ -112,11 +112,7 @@
       "ro": "Populația rezidentă a județului Cluj era de 1011 persoane în 2021 (POPC).",
       "en": "The resident population of Cluj county was 1011 persons in 2021 (POPC)."
      },
-     "known_limitation": {
-      "package": "AQ-03",
-      "note": "A stated figure within 0.5% of a result value is matched even when it is written as an exact integer, so 1011 is accepted as the cell 1010 (tolerance = max(half unit, 0.005 * value))."
-     },
-     "detect": {"app": "accepted", "fails": ["stated.cluj_2021", "answer_numbers"], "hard": ["numerical_deviation"]}
+     "detect": {"app": "flagged", "fails": ["stated.cluj_2021", "answer_numbers"]}
     }
    ]
   },
@@ -374,12 +370,6 @@
    "answer": {
     "ro": "INS publică pentru Alfa, în 2024, valoarea 10 (celula publicată; reconstrucția din surse dă 9,9 și servește doar ca verificare, rețeta fx_published).",
     "en": "INS publishes the value 10 for Alfa in 2024 (the published cell; the reconstruction from sources gives 9.9 and is only a cross-check, recipe fx_published)."
-   },
-   "known_failure": {
-    "package": "AQ-03",
-    "categories": ["outcome_mismatch"],
-    "surfaces": ["direct"],
-    "note": "The cross-check value 9.9 (rows[].reconstructed) is not a citable numeric leaf, so a correct sentence that states it ends partial/unverified_numbers. Resolved when recipe leaves carry metric semantics (03A)."
    },
    "expect": {
     "outcome": ["answered"],
