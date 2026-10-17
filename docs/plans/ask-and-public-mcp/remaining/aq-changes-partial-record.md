@@ -174,3 +174,10 @@ Synthetic (`UNVX`, A 100 -> 60, B 200 -> 150, C 50 -> 80, D no 2020 row): `parti
 
 `git revert 23cca38`: one commit, no data, baseline, contract-version or file-format change. It removes the status rule, the
 two RO/EN message pairs and the new test file, and restores the one assertion in `test_at01_changes.py`.
+
+## Follow-up — 2026-10-18 (orchestrator)
+
+- `domain_complete: false` now also adds an `incomplete_domain` warning (text `query.incomplete_domain`
+  with the scope description), as `rank_entities` and `query_data` do; status/reason unchanged.
+- AQ-02 task X08 (pinned, POP105A counties 2012→2021) now requires `partial` / `unverified_total`
+  with warnings `series_break` + `unverified_total`, so a regression of the decision fails the runner.

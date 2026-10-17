@@ -547,6 +547,9 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
     complete = scope.get("domain_complete")
     if complete is None:        # the same disclosure as rank_entities: the total is not verified
         warnings.append(contract.warning("unverified_total", M.t(lang, "changes.unverified_total")))
+    elif complete is False:     # ... and a proven gap is a warning too, not only the reason
+        warnings.append(contract.warning("incomplete_domain", M.t(
+            lang, "query.incomplete_domain", desc=scope.get("description") or code)))
     # reason precedence is rank_entities': a domain reason wins over bare exclusions
     if not any(iv["eligible_count"] for iv in intervals):
         status, reason = "unavailable", "no_eligible_entities"

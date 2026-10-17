@@ -122,7 +122,8 @@ off by default (set the second for local Ask work), and other `TEMPO_ASK_*`/`TEM
   GOS102A SIRUTA catalogue keys and is not a historical classification (`compare_periods`
   takes the same `entity_class`). See `06-answer-quality.md` and `remaining/aq-*-record.md`.
   Handlers call the shared services above; adapters must not re-implement their rules.
-  Discovery defaults (resident/domicile population, tourism ratio route) live in
+  Discovery defaults (resident/domicile population, tourism ratio route, a named county narrowing
+  a city ranking, unemployment by level: county → registered, national → ILO) live in
   `app/data/discovery_defaults.json`, validated by `tools/discovery_policy.py`; tool prose
   comes from the RO/EN catalogue `tools/messages.py` (codes never change with `lang`).
   Evals: `scripts/eval-ask-tasks.py` (offline Ask task replay over `data/eval/ask_tasks.json`;

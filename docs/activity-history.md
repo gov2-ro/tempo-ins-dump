@@ -1,6 +1,30 @@
 # Activity History
 
 
+## 2026-10-18 — Owner decisions: language, unverified status, county-scoped cities, unemployment
+
+Implemented the owner's 2026-10-17 decisions with Sonnet sub-agents (branches merged `--no-ff`
+into `fix/ask-answer-quality`; records `aq-ask-ui-lang`, `aq-changes-partial`,
+`aq-discovery-county-unemployment` beside the specs). Not pushed or deployed; copy 9b3e065d read only.
+
+- **Language:** tool prose stays Romanian by default. The Ask page sends the switcher's language;
+  a question that shows its own language keeps it, an ambiguous one follows the site, else Romanian
+  (a tie used to read English). The signal now votes, so a capitalized place name ("How many people
+  live in Iași?") no longer makes an English question Romanian.
+- **`compare_periods`** is `partial/unverified_total` for an unverified domain, like `rank_entities`;
+  a proven gap also gets an `incomplete_domain` warning. Values unchanged (Brăila −12,827 among 319
+  cities; Prahova −58,119 among 42 counties). Task X08 now pins this.
+- **Discovery:** a single named county narrows city rankings and city changes ("top 5 orașe din Cluj
+  după populație": Cluj-Napoca 324,860, Turda 51,377 … 6 eligible); București is never a filter.
+  Generic unemployment: county → registered (Cluj 2023: 1.2), national → ILO, region/no level → ask;
+  explicit definitions win. Open: the national ILO default has no single total cell, and INS's
+  national registered rate (2.9 in 2023) is a published-totals cell no tool serves (BACKLOG).
+- Claim withholding stays as is (only unit/period contradictions hide prose), recorded as decided.
+  The 512 MiB container test is postponed.
+- Final head: `pytest tests` 2,037 passed / 89 skipped (synthetic) and 2,125 passed / 1 skipped
+  (copy; the AQ-02 self-skip); task runner 144/144, controls 30 detected / 2 known limitations / 0 mismatch.
+
+
 ## 2026-10-17 — Ask/MCP remaining packages: AQ-01A, 02A/B, 03A/B, 04A/B/C, 05A
 
 Implemented the ready steps of the [remaining specs](plans/ask-and-public-mcp/remaining/README.md)

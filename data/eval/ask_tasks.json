@@ -1839,8 +1839,9 @@
       {
        "call": 0,
        "tool": "compare_periods",
-       "status": ["ok", "partial"],
-       "warnings": ["series_break"],
+       "status": ["partial"],
+       "reason": ["unverified_total"],
+       "warnings": ["series_break", "unverified_total"],
        "equals": {"/data/intervals/0/eligible_count": 42, "/data/intervals/0/excluded_count": 0, "/data/intervals/0/rows/0/entity/REF_AREA": "Prahova"}
       }
      ],

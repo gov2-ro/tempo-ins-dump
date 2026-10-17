@@ -33,15 +33,24 @@ On `fix/ask-answer-quality` (2026-10-17, code-ready, not deployed, not model/cli
   number words. **Decided 2026-10-17 (owner):** only unit/period contradictions withhold prose;
   `definition_mismatch`/`direction_mismatch` and the other new reasons keep the claim unverified
   (turn partial). Revisit only with false-positive evidence from task runs.
-- [ ] **Harmonize partial status for unverified domains**: `compare_periods` returns `ok` where
+- [x] **Harmonize partial status for unverified domains**: `compare_periods` returned `ok` where
   `rank_entities` returns `partial/unverified_total` for the same unverified collapsed domain.
   **Decided 2026-10-17 (owner):** `compare_periods` becomes `partial/unverified_total` too,
-  values unchanged. In progress on `aq/changes-unverified-partial`.
-- [ ] **County-scoped city rankings and unemployment default** — **Decided 2026-10-17 (owner):**
+  values unchanged. Done (merged 2026-10-18); `false` also adds an `incomplete_domain` warning.
+- [x] **County-scoped city rankings and unemployment default** — **Decided 2026-10-17 (owner):**
   "a county named in a city ranking narrows it to cities in that county" (exact county label,
   disclosed); generic unemployment defaults by level: county → registered (ILO has no county
   series), national → ILO, region/unknown → keep asking; explicit definitions always win.
-  In progress on `aq/discovery-county-unemployment`.
+  Done (merged 2026-10-18; config in `discovery_defaults.json`, `place_filter` / `level_defaults`).
+  București is never a county filter (city and county-level unit at once). A region around a
+  city ranking is reported, not applied.
+- [ ] **National unemployment default needs a figure**: the national ILO default leads to
+  `describe_dataset AMG157A_anual` (age bands by sex, no total cell), so it gives no single rate;
+  meanwhile INS's national *registered* rate exists only as a `published_totals` cell (SOM103A
+  `TOTAL`, 2.9 in 2023) that no tool serves. Owner to choose: keep asking at national level
+  (`levels` without `national`), or serve one of these as a reviewed national figure first.
+- [ ] **Unknown place names in a city ranking vanish silently** (e.g. "orașe din Turda"):
+  neither county nor region, so not reported. Report as not applied.
 - [ ] **AQ-04A follow-ups**: a generic population default at national level (kept as before);
   several years in one question pin only the last (`concept_search.parse_query`, raw search).
 - [ ] **Area identity for recipes** (AQ-04B): `run_recipe` matches areas by exact label only;
@@ -49,7 +58,8 @@ On `fix/ask-answer-quality` (2026-10-17, code-ready, not deployed, not model/cli
 - [x] **Default tool language** (AQ-04C): prose follows `lang`, default `ro`; MCP clients that omit
   it get Romanian sentences (codes unchanged). **Decided 2026-10-17 (owner):** Romanian stays the
   default; Ask also uses the site's language switcher (`lens_lang`) when the question's own
-  language is ambiguous (`aq/ask-ui-lang`).
+  language is ambiguous (merged 2026-10-18). A capitalized place name with Romanian letters no
+  longer makes an English question Romanian; a lower-case one ("live in iași") still does.
 - [ ] **Ask/tool text gaps** (AQ-04C): Ask HTTP-error texts are English, Pydantic
   validation details are English, the caption says "1 rânduri", `constraint_not_applied` is not
   shown on the page.

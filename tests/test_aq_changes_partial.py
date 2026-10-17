@@ -106,6 +106,7 @@ def test_status_and_reason_follow_the_domain_verdict(env, code, complete, status
     assert e["provenance"]["scope"]["domain_complete"] is complete        # the real policy's verdict
     assert (e["status"], e["reason"]) == (status, reason)
     assert ("unverified_total" in codes(e)) is (complete is None)
+    assert ("incomplete_domain" in codes(e)) is (complete is False)        # a proven gap is a warning too (2026-10-18)
     assert ("entities_excluded" in codes(e)) is excluded
     assert codes(e).count("unverified_total") <= 1
     # the numbers are the fixture's, whatever the verdict
@@ -126,6 +127,8 @@ def test_the_unverified_message_and_warning_say_what_is_unverified(env):
     ok, restricted = cp("FULLC"), cp("RESTC")
     assert "unverified" not in ok["message"] and "unverified" not in restricted["message"]
     assert "Restricted domain: Ages 0–1 (2 and over not included)" in restricted["message"]
+    w = next(x for x in restricted["warnings"] if x["code"] == "incomplete_domain")
+    assert "Ages 0–1 (2 and over not included)" in w["message"] and "Do not present it as one" in w["message"]
 
 
 def test_the_texts_follow_the_language(env):
@@ -172,7 +175,7 @@ def test_the_same_values_under_every_verdict_differ_only_in_status_reason_warnin
     assert out[None]["limits"]["total_rows"] == 3 and out[None]["limits"]["preview_truncated"] is True
     base = {c for c in codes(out[True])}
     assert set(codes(out[None])) - base == {"unverified_total"}
-    assert set(codes(out[False])) == base                                  # `false` adds no warning, as before
+    assert set(codes(out[False])) - base == {"incomplete_domain"}         # mirrors rank_entities (2026-10-18)
 
 
 def test_the_fixture_values_are_the_same_across_the_three_datasets(env):

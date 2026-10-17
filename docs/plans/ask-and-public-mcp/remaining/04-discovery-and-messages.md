@@ -1,7 +1,7 @@
 # AQ-04 — Discovery policy, next actions and bilingual messages
 
 **Status: planned. Three independent bounded steps; preserve current statistical
-choices.** Do not use this work to invent a new default for unemployment.
+choices.** Do not use this work to invent a new default for unemployment. *(Superseded 2026-10-17 by an owner decision: level-scoped unemployment defaults and county-scoped city rankings, see `aq-discovery-county-unemployment-record.md`.)*
 
 ## Read first
 

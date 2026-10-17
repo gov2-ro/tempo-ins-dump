@@ -87,6 +87,7 @@ Each of these is a statistical-contract choice made without a reviewer; none is 
    selections and bundles keep their exact bytes; `cities` always appears. `rank_entities` shows its class always,
    so the two tools differ here on purpose.
 5. **Status is not stricter in class mode.** The real city run is `ok` although `scope.domain_complete` is `null`
+   *Superseded 2026-10-18 (owner decision): `compare_periods` returns `partial/unverified_total` for a null domain, in every class mode — see `aq-changes-partial-record.md`.*
    ("cannot verify the domain is complete"), exactly as the same query without the class. `rank_entities` returns
    `partial/unverified_total` for the same condition. Harmonizing it would change the default's status, so it is
    left for a decision (backlog candidate).
