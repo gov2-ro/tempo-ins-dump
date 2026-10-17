@@ -11,6 +11,9 @@ route from "overnight stays per resident" to the reviewed tourism recipe. They l
   * explicit domicile             -> respected
   * generic unemployment          -> no default (`clarify_only`): the user is asked
   * stays per resident            -> the reviewed tourism recipe
+  * city change (AQ-05A)          -> compare_periods with entity_class=cities, only for two
+                                     exact years and a stated direction; historical membership
+                                     or constant boundaries stay unavailable
 
 This is configuration for tool discovery only. It is not a query language and not a second
 search: `plan` can put one reviewed phrase in front of the question, swap one concept's
@@ -37,9 +40,10 @@ POLICY_PATH = Path(__file__).resolve().parents[2] / "data" / "discovery_defaults
 
 LEVELS = ("locality", "county", "region", "macroregion", "national")
 OPERATIONS = ("lookup", "rank", "change")
-# What the shared tools can serve at a level. A rule may claim a subset, never more:
-# there is no city change ranking (AT-05), so a locality rule cannot allow "change".
-SERVED = {"locality": {"rank"}, **{lv: set(OPERATIONS) for lv in LEVELS if lv != "locality"}}
+# What the shared tools can serve at a level. A rule may claim a subset, never more. At the
+# locality level "change" exists only as compare_periods with entity_class=cities (AQ-05A), which
+# `_structure` requires of any rule that claims it.
+SERVED = {"locality": {"rank", "change"}, **{lv: set(OPERATIONS) for lv in LEVELS if lv != "locality"}}
 ENTITY_CLASSES = ("all", "cities")
 ROUTE_INTENTS = ("tourism_ratio",)          # flags of intent.interpret that a route may use
 MAX_TOP_K = 100                             # rank_entities' own limit (schemas.RankEntitiesArgs)
@@ -70,6 +74,7 @@ class Plan:
     recipe: str | None = None               # concept id the question is routed to
     rank: dict = field(default_factory=lambda: {**DEFAULT_RANK, "entity_columns": list(DEFAULT_RANK["entity_columns"])})
     unapplied: list = field(default_factory=list)   # constraints discovery does not apply
+    change: dict | None = None              # the one supported city change: intervals, metric, order
 
 
 # ------------------------------------------------------------------ validation
@@ -136,6 +141,9 @@ def _structure(raw: dict) -> list:
         bad.append(f"population.cities.entity_class must be one of {list(ENTITY_CLASSES)}")
     elif cities["entity_class"] == "cities" and "REF_AREA_2" not in cols:
         bad.append("entity_class 'cities' requires REF_AREA_2 in entity_columns")
+    if isinstance(ops, list) and "change" in ops and cities.get("entity_class") != "cities":
+        bad.append("population.cities.operations 'change' is served at the locality level only "
+                   "through entity_class 'cities'")
     if not _text(cities.get("alias")):
         bad.append("population.cities.alias must be a non-empty string")
     routes = raw.get("recipe_routes")
@@ -265,6 +273,67 @@ def _refuse(status: str, reason: str, message: str):
     raise C.ToolFailure(status, reason, message)
 
 
+# --- city change (AQ-05A). intent.interpret recognizes a few exact change words; for a city
+# question the direction words below (stems, both languages) also mean "change", so a phrasing it
+# misses ("scaderea populatiei") is refused or answered as a change, never as a plain ranking.
+# Anything outside the exact supported meaning is refused, never approximated.
+_DECLINE = re.compile(r"\b(?:pierd\w*|scad\w*|descresc\w*|diminu\w*|fell|fall\w*|declin\w*|"
+                      r"decreas\w*|los(?:t|e|es|ing)|drop(?:s|ped|ping)?|shr[iau]nk|shrink\w*)\b")
+_GROWTH = re.compile(r"\b(?:cresc\w*|crester\w*|grew|grow\w*|gain\w*|increas\w*|rose|rise\w*|rising)\b")
+_LEAST = re.compile(r"\b(?:bottom|smallest|lowest|least|slowest|minim\w*|ce\w* mai (?:mic\w*|putin\w*|slab\w*))\b")
+_PERCENT = re.compile(r"\b(procent\w*|percent\w*)\b")
+_YEAR = re.compile(r"\b(?:19|20)\d{2}\b")
+_HISTORICAL = re.compile(
+    r"\b(?:constant|unchanged|same|fixed|stable|identical)\s+(?:administrative\s+)?(?:boundar\w*|borders?|limits)\b|"
+    r"\b(?:boundar\w*|borders?)\s+(?:unchanged|constant|fixed)\b|"
+    r"\b(?:granit\w*\s+(?:constante|neschimbate|identice|fixe)|aceleasi\s+granit\w*|aceleasi\s+limite)\b|"
+    r"\b(?:historical\w*|istoric\w*)\s+(?:status|statut|membership|classification|clasificare|cit\w+|oras\w*)\b|"
+    r"\b(?:that|which|care|ce)\s+(?:were|was|erau|era)\s+(?:already\s+|deja\s+)?(?:cities|towns|a city|a town|orase|oras|municipii)\b|"
+    r"\bat\s+the\s+time\b|\bla\s+acea\s+data\b")
+
+
+CITY_CHANGE_NOTE = ("A city change ranking covers the municipalities and towns in the referenced catalogue "
+                    "(INS GOS102A, SIRUTA keys), not communes. Membership does not prove historical city "
+                    "status or unchanged boundaries.")
+
+
+def asks_city_change(intent: dict, query: str) -> bool:
+    """Does a city question ask for a change over time (intent's change words or a direction word)?"""
+    if not intent["cities"]:
+        return False
+    t = cs.fold(query)
+    return intent["operation"] == "change" or bool(_DECLINE.search(t) or _GROWTH.search(t))
+
+
+def city_change(query: str, intent: dict) -> dict:
+    """The one supported city change meaning, parsed from the folded question: two exact years,
+    a stated direction (decline: most negative first; growth: largest first) and absolute change,
+    or percent change when the question says so. Raises the refusal otherwise."""
+    t = cs.fold(query)
+    if _HISTORICAL.search(t):
+        _refuse("unavailable", "unsupported_operation",
+                "City change rankings use the current catalogue of municipalities and towns "
+                "(INS GOS102A): a question that needs historical city status or constant "
+                "boundaries cannot be answered, because no reviewed source records them.")
+    years = sorted(set(_YEAR.findall(t)))
+    if len(years) != 2:
+        _refuse("unavailable", "unsupported_operation",
+                "City change rankings need exactly two exact years (for example between 2015 and "
+                "2020); no latest, nearby or default year is assumed.")
+    down, up = bool(_DECLINE.search(t)), bool(_GROWTH.search(t))
+    if down == up:
+        _refuse("unavailable", "unsupported_operation",
+                "City change rankings need a stated direction: growth or decline. Absolute change "
+                "or both directions in one question are not ranked.")
+    if intent["order"] == "asc" or _LEAST.search(t):    # "smallest decline" is not "decline"
+        _refuse("unavailable", "unsupported_operation",
+                "City change rankings follow the stated direction (growth: largest first; decline: "
+                "most negative first); 'bottom', 'smallest' or 'lowest' wording is ambiguous for "
+                "changes and is not interpreted.")
+    return {"intervals": [{"from": years[0], "to": years[1]}],
+            "metric": "percent" if _PERCENT.search(t) else "absolute", "order": "asc" if down else "desc"}
+
+
 def named_definitions(query: str, lang: str, policy: Policy) -> set:
     """Definitions the question names itself: by a configured term, or by one of the
     definition's specific (non-generic) aliases in the catalogue in use."""
@@ -293,7 +362,8 @@ def plan(intent: dict, query: str, by_id: dict, lang: str, policy: Policy | None
     pop = pol.data["population"]
     cities = pop["cities"]
     out = Plan(query=query, unapplied=list(intent["constraints"]))
-    if intent["cities"] and (intent["operation"] or "rank") not in cities["operations"]:
+    change = asks_city_change(intent, query)
+    if intent["cities"] and ("change" if change else intent["operation"] or "rank") not in cities["operations"]:
         _refuse("unavailable", "unsupported_operation",
                 "City-only change rankings are not yet supported. Specify a county change "
                 "comparison or a city population ranking for one year.")
@@ -320,6 +390,8 @@ def plan(intent: dict, query: str, by_id: dict, lang: str, policy: Policy | None
         out.locality = {**by_id[cities["concept"]], "variants": dict(cities["variants"])}
         out.locality_alias = cities["alias"]
         out.rank = {"entity_columns": list(cities["entity_columns"]), "entity_class": cities["entity_class"]}
+        if change:
+            out.change = city_change(query, intent)
     route = next((r for r in pol.data["recipe_routes"] if intent.get(r["intent"])), None)
     if route:
         if not _usable(by_id, route):

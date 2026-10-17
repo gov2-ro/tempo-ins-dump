@@ -171,6 +171,7 @@ def compact(env: dict, call_id: str) -> dict:
                      "definition": _clip(s.get("definition"), _DEFINITION_CHARS)}
                     for s in (prov.get("sources") or [])[:4]],
         "selection": prov.get("selection"), "effective_selection": prov.get("effective_selection"),
+        "classification": prov.get("classification"),
         "scope": prov.get("scope"), "limits": env.get("limits"),
         "warnings": [{"code": w.get("code"), "message": _clip(w.get("message"), 240)}
                      for w in env.get("warnings") or []],
@@ -186,12 +187,15 @@ def _result_summary(tool: str | None, data: dict) -> dict:
         return {"columns": data.get("columns"), "rows": rows[:_KEPT_ROWS],
                 "rows_omitted": max(0, len(rows) - _KEPT_ROWS)}
     if tool == "compare_periods":
-        return {"metric": data.get("metric"), "unit": data.get("unit"), "intervals": [
+        out = {"metric": data.get("metric"), "unit": data.get("unit"), "intervals": [
             {"from": iv.get("from"), "to": iv.get("to"),
              "eligible_count": iv.get("eligible_count"), "excluded_count": iv.get("excluded_count"),
              "rows": (iv.get("rows") or [])[:_KEPT_ROWS],
              "rows_omitted": max(0, len(iv.get("rows") or []) - _KEPT_ROWS)}
             for iv in data.get("intervals") or []]}
+        if data.get("entity_class"):        # which class the counts above are over (AQ-05A)
+            out.update(entity_class=data["entity_class"], outside_class_count=data.get("outside_class_count"))
+        return out
     if tool == "rank_entities":
         rows = data.get("rows") or []
         return {"year": data.get("year"), "unit": data.get("unit"),

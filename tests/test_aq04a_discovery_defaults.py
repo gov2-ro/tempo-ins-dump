@@ -155,7 +155,8 @@ def test_the_reviewed_table_is_pinned_in_the_configuration():
     assert p["population"]["default"] == {"concept": "resident_population", "phrase": "populatia rezidenta"}
     cities = p["population"]["cities"]
     assert cities["concept"] == "domicile_population" and cities["phrase"] == "populatia dupa domiciliu"
-    assert cities["variants"] == {"locality": "POP107D_grupe_localitate"} and cities["operations"] == ["rank"]
+    # AQ-05A: a city may also be ranked by change, but only through the catalogue class below
+    assert cities["variants"] == {"locality": "POP107D_grupe_localitate"} and cities["operations"] == ["rank", "change"]
     assert (cities["entity_columns"], cities["entity_class"]) == (["REF_AREA", "REF_AREA_2"], "cities")
     assert p["recipe_routes"] == [{"intent": "tourism_ratio", "concept": "tourism_intensity",
                                    "phrase": "innoptari pe locuitor"}]
@@ -196,7 +197,8 @@ STRUCTURAL = [
     ("unknown level", _set([POP_, "cities", "variants"], {"locality": "X1", "district": "X2"}), "unknown level 'district'"),
     ("dataset code", _set([POP_, "cities", "variants", "locality"], "POP 107D; drop"), "is not a dataset code"),
     ("unknown operation", _set([POP_, "cities", "operations"], ["sum"]), "non-empty subset"),
-    ("city change", _set([POP_, "cities", "operations"], ["rank", "change"]), "cannot be served at level 'locality'"),
+    ("city change without the city class", lambda p: p[POP_]["cities"].update(operations=["rank", "change"], entity_class="all"),
+     "only through entity_class 'cities'"),
     ("city lookup", _set([POP_, "cities", "operations"], ["lookup"]), "cannot be served at level 'locality'"),
     ("duplicate entity column", _set([POP_, "cities", "entity_columns"], ["REF_AREA", "REF_AREA"]), "unique non-time"),
     ("time entity column", _set([POP_, "cities", "entity_columns"], ["REF_AREA", "TIME_PERIOD"]), "unique non-time"),
@@ -685,7 +687,7 @@ def test_catalogue_search_ignores_the_discovery_policy(env, monkeypatch, tmp_pat
 
 def test_an_invalid_policy_fails_closed_instead_of_guessing(env, monkeypatch, tmp_path):
     bad = shipped()
-    bad["population"]["cities"]["operations"] = ["rank", "change"]
+    bad["population"]["cities"]["operations"] = ["rank", "lookup"]
     (tmp_path / "bad.json").write_text(json.dumps(bad), encoding="utf-8")
     monkeypatch.setattr(dp, "POLICY_PATH", tmp_path / "bad.json")
     out = R.call_tool("discover_indicators", {"query": "populatie pe judete"})

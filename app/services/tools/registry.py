@@ -65,7 +65,10 @@ TOOLS: dict[str, ToolSpec] = {t.name: t for t in (
              f"{_PKG}.query:shrink"),
     ToolSpec("compare_periods", "Compare periods",
              "Per-entity change between exact annual endpoints (1–4 intervals) of an additive "
-             "count, ranked over every eligible entity, with exclusions stated.",
+             "count, ranked over every eligible entity, with exclusions stated. "
+             "entity_class=cities (with REF_AREA_2) ranks only municipalities and towns in INS "
+             "GOS102A's SIRUTA catalogue, classified before ranking; that is not historical city "
+             "status or constant boundaries.",
              S.ComparePeriodsArgs, S.CompareData, f"{_PKG}.changes:compare_periods",
              f"{_PKG}.changes:shrink"),
     ToolSpec("rank_entities", "Rank entities",
