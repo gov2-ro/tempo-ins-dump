@@ -230,9 +230,10 @@ def test_a_stated_definition_must_be_the_cells_reviewed_definition():
     unknown = bind(text, population_trace('POP999Z'))[0]                           # unclassified proves nothing
     assert unknown['check'] == 'unverified' and unknown['reason'] == 'definition_unverified'
     assert {wrong['reason'], unknown['reason']}.isdisjoint(A.CONTRADICTIONS)
-    assert bind('Cluj had 700000 residents in 2025.', population_trace('POP105A_judete_grupe'))[0]['check'] == 'matched'
-    assert bind('Cluj had 700000 residents in 2025.', population_trace('POP107A_judete_grupe'))[0]['reason'] \
-        == 'definition_mismatch'
+    said = 'Cluj had a resident population of 700000 in 2025.'          # plain "residents" is just inhabitants
+    assert bind(said, population_trace('POP105A_judete_grupe'))[0]['check'] == 'matched'
+    assert bind(said, population_trace('POP107A_judete_grupe'))[0]['reason'] == 'definition_mismatch'
+    assert bind('Cluj had 700000 residents in 2025.', population_trace('POP999Z'))[0]['check'] == 'matched'
 
 
 def test_an_explicitly_requested_definition_needs_a_classified_source():
@@ -318,7 +319,7 @@ def test_only_explicit_contradictions_withhold_prose():
              (change([ROW]), 'Cluj avea 100 de persoane în 2020.', 'verified')]
     for trace, text, status in cases:
         run = agent._Run.__new__(agent._Run)
-        run.lang, run.question, run.trace, run.warnings = 'ro', '', trace, []
+        run.lang, run.question, run.trace, run.warnings, run.on_event = 'ro', '', trace, [], None
         answer, ver = run._check_answer(text)
         assert ver['status'] == status, (text, ver['claims'])
         assert (answer == text) == (status != 'claim_mismatch')
