@@ -1,7 +1,7 @@
 """NL→Data agent for the INS TEMPO explorer (AT-02).
 
-``run_agent(question, history)`` runs a bounded tool-calling loop over the seven shared
-analytical tools (`tempo-tools/1`, ``app.services.tools.registry.call_tool``). The model
+``run_agent(question, history)`` runs a bounded tool-calling loop over the eight shared
+analytical tools (`tempo-tools/2`, ``app.services.tools.registry.call_tool``). The model
 never generates SQL and the agent re-implements none of the tools' statistical rules: every
 number comes from a tool result, and the deterministic checks here only decide what the
 answer may claim.
@@ -80,27 +80,28 @@ Reply in the user's language (RO or EN). Dataset names in the catalog are Romani
 - find_dimension_values: the exact values a column has (search or page; time is newest first).
 - query_data: one validated selection. Collapsed dimensions follow the aggregation policy.
 - compare_periods: change between exact years, ranked over every eligible entity. Use it for "which grew/fell most" and "change from X to Y". Never subtract or rank numbers yourself.
+- rank_entities: value rankings for one year over every eligible entity; entity_class=cities excludes communes. Use for top/bottom cities or counties. Never rank a query preview yourself.
 - run_recipe: a reviewed cross-dataset recipe offered by discovery (e.g. tourism intensity).
 - get_evidence_links: links for a selection. The page already links the main result: call it only to cite a different one.
 
 ## Workflow
-1. discover_indicators with 2-3 Romanian keywords, unless the dataset is given or an earlier selection (below) applies. If it returns needs_clarification, ask the user that question with its choices; do not guess a definition, place or period.
+1. discover_indicators with the full question, preserving the requested measure, denominator, geography, period and operation, unless the dataset is given or an earlier selection (below) applies. If it returns needs_clarification, ask the user that question with its choices; do not guess a definition, place or period.
 2. describe_dataset before query_data. Use find_dimension_values for exact values (counties, ages, periods). Never guess columns or values.
 3. A `recovery` entry or a candidate's `next_call` is a candidate, not an answer: call it and read its status.
 4. Use group_by for aggregates (trends, comparisons). Do not pull raw rows when a grouped summary suffices.
 5. Never ask "would you like me to fetch X?". Fetch it and caveat in the answer.
-6. If the requested granularity does not exist (county-level labour data, say), use the closest available and say so in one sentence.
+6. Never substitute county for city, counts for per-capita values, or domicile for explicitly requested resident population. If the requested definition/level/operation is unavailable, explain what is missing. Report any default assumption returned by discovery.
 
 ## Vocabulary
 - șomaj / rata șomajului → unemployment / rate; pe județe → by county (REF_AREA, 42); pe regiuni → by region (8 NUTS-2)
 - pe sexe → by gender (SEX); pe grupe de vârstă → by age (AGE); IPC → CPI, PIB → GDP, salarii → wages, natalitate → births, mortalitate → deaths
 
 ## Results
-- ok: valid for the selection and scope stated in provenance. partial: usable only for the narrower scope or eligible subset stated (an age range, excluded entities) — say so.
+- ok: valid for the selection and scope stated in provenance. partial: usable only with the stated scope and uncertainty (an age range, excluded entities, or unverified total completeness) — say so.
 - needs_clarification: ask the user. error: the request was invalid; fix it from the message.
 - unavailable: no value exists for this request. Give no figure for it, never total or rank the raw rows yourself, never repeat the same call. Follow a recovery candidate that fits the question, or explain the limitation and the reason.
 - Always pass on warnings and scope.description that change the meaning: approximations, age ranges (e.g. 0–84), truncated previews, excluded entities, series breaks.
-- Only cite numbers that appear in an ok or partial result. Changes and rankings come from compare_periods or run_recipe.
+- Only cite numbers that appear in an ok or partial result. Changes and rankings come from compare_periods, rank_entities or run_recipe.
 
 ## Limits
 You have a limited number of tool calls and a short time. Your final turn has tools disabled: it must answer from what you gathered and state what you could not establish.
@@ -663,6 +664,15 @@ class _Run:
         answer, verification = self._check_answer(text)
         outcome, reason = self._outcome(answer, failed, stopped, forced, cut, usable, verification)
         table = ask_present.display_table(self.trace)
+        from app.services.tools.intent import interpret
+        if table is not None and interpret(self.question)["operation"] == "rank" and table.get("tool") == "query_data":
+            table = None
+            outcome, reason = "partial", "ranking_unverified"
+            answer = ("Nu am obținut un clasament verificat pentru întreaga selecție. "
+                      "Rezultatul disponibil este doar o interogare fără clasare." if self.lang == "ro" else
+                      "I could not obtain a verified ranking over the full selection. "
+                      "The available result is an unranked query.")
+            self.warnings.append("An unranked query preview was hidden: it does not answer the requested ranking.")
         if table is not None:
             table["links"] = self._links()
         ctx_entries = ask_context.merge(
@@ -687,7 +697,7 @@ class _Run:
             budget["dropped_debug_events"] = self.dropped_events
         return AgentResult(
             answer=answer, citations=ask_present.citations(answer, self.trace),
-            tool_trace=self.trace, data=table, chart_spec=self._chart_spec(), warnings=self.warnings,
+            tool_trace=self.trace, data=table, chart_spec=self._chart_spec() if table is not None else None, warnings=self.warnings,
             stop_reason=stop_reason, budget=budget, verification=verification,
             outcome=outcome, reason=reason, context=ctx_entries, usage=usage, metrics=metrics)
 
@@ -708,6 +718,10 @@ class _Run:
             return ("failed", stopped) if stopped else ("partial", forced)
         if cut:
             return "partial", "output_limit"
+        if verification["status"] == "claim_mismatch":
+            return "partial", "claim_mismatch"
+        if verification["status"] == "unverified_numbers":
+            return "partial", "unverified_numbers"
         if verification["status"] == "values_withheld":
             return "refused", "no_valid_query"
         if not usable:
@@ -761,6 +775,16 @@ class _Run:
             ver["claim_summary"] = {
                 "matched": sum(c["check"] == "matched" for c in ver["claims"]),
                 "unverified": sum(c["check"] == "unverified" for c in ver["claims"])}
+            if ver["claim_summary"]["unverified"]:
+                ver["status"] = "unverified_numbers"
+            contradictions = [c for c in ver["claims"] if c.get("reason") in ("unit_mismatch", "period_mismatch")]
+            if contradictions:
+                ver["status"] = "claim_mismatch"
+                answer = ("Am retras explicația deoarece unitatea sau perioada nu corespund datelor. "
+                          "Consultați tabelul și sursele pentru selecția verificată." if lang == "ro" else
+                          "I withheld the explanation because its unit or period contradicts the data. "
+                          "See the table and sources for the validated selection.")
+                warns.append("Answer withheld: explicit unit or period contradicts the cited result.")
             notes = answer_check.approximation_notes(answer, self.trace, lang)
             if notes:
                 answer = answer.rstrip() + "\n\n" + "\n".join(notes)

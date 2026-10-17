@@ -1,4 +1,4 @@
-"""Discovery tools of `tempo-tools/1` (AT-01c): discover_indicators,
+"""Discovery tools of `tempo-tools/2` (AT-01c): discover_indicators,
 describe_dataset and find_dimension_values.
 
 They are adapters over the shared statistical services and never decide a
@@ -656,14 +656,73 @@ def _shrink_discover(data: dict) -> bool:
 
 def discover_indicators(args, ctx):
     conn, lang = ctx.conn, ctx.lang
-    res = cs.search(args.query, conn, lang=lang, limit=args.limit)
-    parsed = res["interpretation"]
-    places = [dict(p) for p in parsed.get("places") or []]
+    from app.services.tools.intent import interpret
+    intent = interpret(args.query)
+    if intent["cities"] and intent["operation"] == "change":
+        raise C.ToolFailure("unavailable", "unsupported_operation",
+                            "City-only change rankings are not yet supported. Specify a county change "
+                            "comparison or a city population ranking for one year.")
+    if intent["unsupported_measure"]:
+        raise C.ToolFailure("unavailable", "unsupported_operation",
+                            "This question needs a different denominator, density or correlation operation. "
+                            "No count or built-up-area ratio was substituted. Ask separately for the "
+                            "population ranking or the reviewed overnight-stays-per-resident recipe.")
     by_id = {c["id"]: c for c in cs.load_concepts()}
+    query, assumed = args.query, None
+    if intent["tourism_ratio"]:
+        query = "innoptari pe locuitor " + query
+    elif intent["population"] and not intent["explicit_population"]:
+        default = "domicile_population" if intent["cities"] else "resident_population"
+        if default in by_id:
+            assumed = default
+            query = ("populatia dupa domiciliu " if intent["cities"] else "populatia rezidenta ") + query
+    res = cs.search(query, conn, lang=lang, limit=args.limit)
+    parsed = res["interpretation"]
+    parsed["latest"] = parsed.get("latest") or intent["latest"]
+    if intent["cities"]:
+        parsed["level"] = "locality"
+        if not intent["population"] or (intent["explicit_population"] and "domicili" not in cs.fold(query)):
+            raise C.ToolFailure("unavailable", "level_unavailable",
+                                "No reviewed annual resident-population city ranking is available here. "
+                                "The locality series counts legal domicile; explicitly ask for domicile "
+                                "population to use it. County data was not substituted.")
+        definition = by_id.get("domicile_population")
+        if definition:
+            definition = {**definition, "variants": {"locality": "POP107D_grupe_localitate"}}
+            by_id["domicile_population"] = definition
+            raw = cs.concept_card(conn, definition, parsed, lang, "domiciliu", False)
+            res["concepts"] = [raw] if raw else []
+    if intent["tourism_ratio"]:
+        res["concepts"] = [c for c in res["concepts"] if c["id"] == "tourism_intensity"]
+        if not res["concepts"]:
+            raise C.ToolFailure("unavailable", "recipe_unavailable", "The per-resident recipe is unavailable; no raw count was substituted.")
+    places = [dict(p) for p in parsed.get("places") or []]
     cards = [_concept_card(ctx, raw, by_id, parsed, args.query)
              for raw in res["concepts"][:args.limit]]
+    if intent["operation"] == "rank" or intent["cities"]:
+        if intent["top_k"] > 100:
+            raise C.ToolFailure("error", "invalid_input", "At most 100 ranked entities can be returned; ask for a smaller top K.")
+        for card in cards:
+            for cand in card["candidates"]:
+                if cand.get("kind") != "dataset" or not cand.get("queryable"):
+                    continue
+                prev = (cand.get("next_call") or {}).get("arguments") or {}
+                filters = {k: v for k, v in prev.get("filters", {}).items() if k != "TIME_PERIOD"}
+                keys = ["REF_AREA", "REF_AREA_2"] if intent["cities"] else ["REF_AREA"]
+                cand["next_call"] = _call("rank_entities", dataset=cand["dataset"],
+                    entity_columns=keys, year=str(parsed["period"]) if parsed.get("period") else None,
+                    filters=filters, entity_class="cities" if intent["cities"] else "all",
+                    top_k=intent["top_k"], order=intent["order"], lang=lang)
+            pref = next((c for c in card["candidates"] if c.get("preferred")), None)
+            card["next_call"] = pref.get("next_call") if pref else None
 
     ambiguities, warnings = [], _generation_warnings(ctx)
+    if assumed:
+        label = (by_id.get(assumed, {}).get("name") or {}).get(lang, assumed)
+        warnings.append(C.warning("assumed_definition", f"Definition assumed: {label}. State it explicitly; alternatives remain available.", assumed))
+    for card in cards:
+        if assumed and card["id"] == assumed:
+            card["assumed"] = True
     for c in cards:
         if c["generic_match"] and c["alternatives"]:
             ambiguities.append({
@@ -721,7 +780,7 @@ def discover_indicators(args, ctx):
 
     interp = {"places": places, "level": parsed.get("level"), "period": parsed.get("period"),
               "latest": parsed.get("latest"), "family_query": parsed.get("fts"),
-              "ambiguities": ambiguities}
+              "ambiguities": ambiguities, "operation": intent["operation"], "assumed_definition": assumed}
     data = {"interpretation": interp, "concepts": cards, "families": families,
             "families_info": families_info, "choices": choices}
 

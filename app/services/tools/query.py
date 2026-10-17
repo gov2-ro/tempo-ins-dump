@@ -2,7 +2,7 @@
 
 The data comes from exactly one `data_query.run_query` call. Its verdicts are
 carried verbatim (aggregation decision, grain status, scope, native flags); this
-module only wraps them in the `tempo-tools/1` envelope, says in words what the
+module only wraps them in the `tempo-tools/2` envelope, says in words what the
 numbers are and are not, and, when the shared policy refuses, names a safe next
 step. It never chooses SUM/AVG, drops a filter, widens an empty selection,
 substitutes a nearby period or sets `approximate`.
@@ -155,8 +155,10 @@ def _answer(aid: "_Aid", warnings: list) -> dict:
                           "Quote the figure only for the covered range above, or choose "
                           "another dataset with discover_indicators."))
     elif grouped and native_scope.get("domain_complete") is None:
-        # unknown, not a failure: say so rather than imply a verified full-domain total
         message += " Whether it covers the whole domain is unverified (provenance.scope)."
+        if (res.get("aggregation") or {}).get("method") == "sum_partition":
+            status, reason = "partial", "unverified_total"
+            warnings.append(C.warning("unverified_total", "This sum has unverified domain completeness. It is not a verified official total; preserve the source definition and scope."))
     if limits["preview_truncated"] or limits["time_windowed"]:
         recs.append(aid.narrowing_rec())
     data = {"columns": columns, "rows": rows, "column_labels": _labels(res),

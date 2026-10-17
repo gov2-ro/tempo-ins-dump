@@ -114,12 +114,14 @@ off by default (set the second for local Ask work), and other `TEMPO_ASK_*`/`TEM
   `place_service`, `agent` + `llm_client`, `agent_eval`, `scope` (which part of an
   age domain a grouped total covers; mirrored in `static/js/engine/scope.js`),
   `period_changes` + `change_evidence`.
-- **Analytical tools** (`services/tools/`, contract `tempo-tools/1`, spec in
-  `docs/plans/ask-and-public-mcp/`): seven tools for Ask and the public MCP behind one
+- **Analytical tools** (`services/tools/`, contract `tempo-tools/2`, spec in
+  `docs/plans/ask-and-public-mcp/`): eight tools for Ask and the public MCP behind one
   entry point, `registry.call_tool(name, arguments)`. It validates arguments before any
   DB work, owns the cursor, re-checks the generation and keeps results under 32 KiB.
+  `rank_entities` ranks a complete one-year selection before top K; city membership uses
+  GOS102A SIRUTA catalogue keys and is not a historical classification. See `06-answer-quality.md`.
   Handlers call the shared services above; adapters must not re-implement their rules.
-- **Ask** (`services/agent.py`, record `at-02-record.md`): the model sees only those seven
+- **Ask** (`services/agent.py`, record `at-02-record.md`): the model sees only those eight
   tools. One turn is bounded by counted model calls (8, the last one reserved for a final
   answer with tools disabled), tool dispatches (12), wall clock (90 s) and requested output
   tokens (64,000); identical requests are served from the turn cache, tool results are kept
@@ -130,7 +132,7 @@ off by default (set the second for local Ask work), and other `TEMPO_ASK_*`/`TEM
   `CancelToken`, metrics whitelist). Never log or return a credential: the request's own key
   is scrubbed by `ask_guard.secrets_scope`.
 - **Public MCP** (`services/public_mcp.py`, `/mcp`, record `at-03-record.md`): a read-only
-  Streamable HTTP endpoint over the same seven tools, disabled by default (404 for every method
+  Streamable HTTP endpoint over the same eight tools, disabled by default (404 for every method
   and subpath). Per-worker gate: one operation at a time, no queue, a deadline that interrupts
   the operation's own cursor, a scan admission limit from Parquet footers, a generation-keyed
   cache. It never calls a model, asks for sampling, or runs SQL/code. `scripts/mcp_probe.py`

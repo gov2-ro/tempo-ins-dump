@@ -81,5 +81,6 @@ CALLS = {
     "query_data": {"dataset": "POPC", "group_by": ["REF_AREA", "TIME_PERIOD"]},
     "compare_periods": {"dataset": "COUNTX", "entity_columns": ["REF_AREA"],
                         "intervals": [{"from": "1992", "to": "2002"}]},
+    "rank_entities": {"dataset": "COUNTX", "entity_columns": ["REF_AREA"], "year": "2002"},
     "run_recipe": {"recipe": "fx_intensity", "year": "2024"},
 }

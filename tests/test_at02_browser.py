@@ -215,3 +215,29 @@ def test_a_timeout_stops_the_spinner_and_offers_what_to_do(page):
         or "mai restrânsă" in page.locator(".chat-msg--error").inner_text()
     assert page.input_value("#chat-input") == "Întrebare lentă?"
     no_sideways_scroll(page)
+
+
+def test_ranked_table_has_readable_headings_and_eligible_count(page):
+    srv = Server(page)
+    msg = ask(page, srv, 'Top orașe', result(data=table(
+        ['RANK', 'REF_AREA', 'REF_AREA_2', 'TIME_PERIOD', 'OBS_VALUE'],
+        [[1, 'Cluj', '54975 MUNICIPIUL CLUJ-NAPOCA', '2025', 324000]],
+        ranked=True, eligible_count=230, unit='Numar persoane')))
+    headers = msg.locator('.chat-table th').all_inner_texts()
+    assert 'REF_AREA_2' not in headers and 'OBS_VALUE' not in headers
+    assert '230' in msg.inner_text() and 'Numar persoane' in msg.inner_text()
+    assert msg.locator('.chat-table th[title="OBS_VALUE"]').count() == 1
+    no_sideways_scroll(page)
+    assert page.problems == []
+
+
+def test_truncated_preview_renders_its_footer_without_console_errors(page):
+    srv = Server(page)
+    msg = ask(page, srv, 'Datele disponibile', result(data=table(
+        ['REF_AREA', 'TIME_PERIOD', 'OBS_VALUE'], [['Cluj', '2025', 324000]],
+        truncated=True, preview=True)))
+    assert 'Previzualizare' in msg.locator('.chat-data-meta').inner_text()
+    assert 'nu este un clasament' in msg.locator('.chat-data-meta').inner_text()
+    assert 'Previzualizare limitată' in msg.locator('.chat-table-truncated').inner_text()
+    no_sideways_scroll(page)
+    assert page.problems == []

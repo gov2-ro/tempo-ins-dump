@@ -4,17 +4,41 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Ask/MCP answer quality follow-up — 2026-10-17
+
+Implementation status: [AT-05](plans/ask-and-public-mcp/06-answer-quality.md).
+Remaining work is now split into [small implementation packages](plans/ask-and-public-mcp/remaining/README.md)
+with exact baseline, dependencies, acceptance tests and cheaper-model handoff prompts.
+These new packages are specs, not implemented work.
+
+- [ ] **Size public MCP for national locality rankings**: `rank_entities` works through the
+  native MCP client on synthetic data, but the default whole-file admission cap rejects
+  `POP107D_grupe_localitate`. Measure memory/latency on the 512 MB target before changing limits,
+  or design a generation-bound smaller ranking input / safely bounded scan estimate. Do not
+  bypass admission checks. Start [AQ-01 step 01A](plans/ask-and-public-mcp/remaining/01-mcp-capacity.md).
+- [ ] **Run the revised Ask prompt with native providers**: deterministic paraphrase, claim,
+  ranking and transport tests cannot measure how reliably each provider follows the tools.
+  Re-run the eight exploratory questions end to end, including omitted warnings and follow-ups.
+  [AQ-02](plans/ask-and-public-mcp/remaining/02-task-evaluation.md) separates offline fixtures/replay
+  from a budgeted, separately authorized live run.
+- [ ] **Extend semantic verification beyond explicit contradictions**: the checker catches
+  recognizable unit/year conflicts, not arbitrary semantic entailment, swapped multi-year
+  comparisons or every population definition. Keep the UI claim status conservative;
+  [AQ-03](plans/ask-and-public-mcp/remaining/03-claim-verification.md) defines the next bounded steps.
+
 ## Ask/MCP initial model evaluation — 2026-10-16
 
 Evidence and ground truth: `docs/plans/ask-and-public-mcp/at-04-initial-mcp-eval.md`.
 
 - [ ] **Direction: analytical tools for complex questions (cross-dataset, correlations,
-  patterns)**: the seven `tempo-tools/1` tools answer one dataset at a time, so questions that
+  patterns)**: the original seven `tempo-tools/1` tools answered one dataset at a time, so questions that
   mix datasets ("population vs surface", "top 30 cities with density") or ask for
   relationships ("what moves with unemployment across counties?") cannot be answered by any
   model. Build the missing layer as tools, so the model orchestrates and explains but never
   joins, ranks or computes by itself. Scope to spec (next package after AT-04, owner review
-  first; it changes the shared tool contract, so a `tempo-tools` version bump):
+  first; it changes the shared tool contract, so a `tempo-tools` version bump).
+  The one-year, entity-class ranking subset is now implemented in AT-05 (`tempo-tools/2`);
+  joins, density and correlations remain open:
   - **Mix datasets**: join by entity key (SIRUTA/county code) after checking level, period
     and unit compatibility and definition (resident vs domicile population); the join states
     what matched, what did not, and refuses mismatches instead of aligning silently. Entity
@@ -36,28 +60,30 @@ Evidence and ground truth: `docs/plans/ask-and-public-mcp/at-04-initial-mcp-eval
   - **Evidence**: grow the question set in `at-04-initial-mcp-eval.md` with these questions
     and re-run it (`scripts/mcp_eval_client.py`) before and after each tool.
 
-- [ ] **P1 Ambiguity stops instead of defaulting**: every "populația"/"rata șomajului"
-  question returns `needs_clarification/ambiguous_definition`; Haiku always stops, Sonnet
-  stops or breaks prompt rule 1, and rules 1 and 5 contradict each other. Give concepts a
-  reviewed default, return `ok` with `assumed` + `alternatives`, keep clarification for choices
-  that change the answer, and fix the prompt.
-- [ ] **P1 No ranked level query**: "top 30 cities" is unanswerable (`query_data` has no order,
-  200-row cap, models may not rank raw rows; `compare_periods` ranks change only). Needs a spec
-  for a `tempo-tools/1` addition: rank over all eligible entities with an entity-class filter
-  (municipii + orașe), a joined second measure (density), and a two-entity difference/ratio.
-  Data exists for cities: `GOS102A` built-up area joins the locality population on the SIRUTA
-  code (319/319); whole-UAT area is not in the corpus.
-- [ ] **P1 Unverified sums returned as `ok`**: births 2023 is 164,004 (`POP201E`) or 168,079
-  (`POP201D`), both `valid_total` with `domain_complete: null`. A total with no agreement with a
-  published figure should be `partial`/flagged, not `ok` (FIX-02 class).
-- [ ] **Interpretation and choices**: "curentă" should set `latest`, "orașe" the level;
-  `choices[].next_call` should be a concrete call, not a reworded `discover_indicators`;
-  `choice.recipe` disagrees with the concept card; lookup for `run_recipe` areas; series
-  breaks belong in `warnings`; no area/density concept or recipe.
-- [ ] **Capped unordered preview shown as the answer table** (Ask page): caption it "first N
-  rows" or hide it for ranking questions.
-- [ ] **Re-run the initial evaluation** after the two P1 tool changes
-  (`scripts/mcp_eval_client.py`), then AT-04 with real providers.
+- [ ] **Definition/choice follow-up**: AT-05 now discloses a resident population default,
+  or domicile for city rankings. Explicit definitions remain binding. Generic unemployment
+  still clarifies; choosing a default is a product decision, not a coding task.
+  [AQ-04](plans/ask-and-public-mcp/remaining/04-discovery-and-messages.md) moves current policy
+  into reviewed configuration and improves concrete next actions without changing it.
+- [x] **One-year ranked level query**: AT-05 adds `rank_entities` over the full eligible
+  set, with SIRUTA city classification. Public national-query admission remains AQ-01.
+- [ ] **City-only changes, joined measures, density and correlations**:
+  [AQ-05](plans/ask-and-public-mcp/remaining/05-analytical-extensions.md) separates these steps.
+  GOS102A built-up area is not administrative UAT area; ordinary population density remains
+  unavailable without a suitable reviewed source. Do not silently substitute the denominator.
+- [x] **Unknown-domain sums returned as `ok`**: AT-05 marks `sum_partition` results with
+  unknown completeness as `partial/unverified_total`, including the two disagreeing births
+  series. This is a qualification, not a repair or verification of their source totals.
+- [ ] **Interpretation and choices**: AT-05 handles “curentă”, plural cities and tourism
+  ratio wording. Concrete choice calls, recipe-area lookup, series-break warnings and bilingual
+  explanations remain [AQ-04](plans/ask-and-public-mcp/remaining/04-discovery-and-messages.md).
+- [x] **Capped unordered preview shown as a ranking answer**: AT-05 captions previews and
+  withholds an unranked query table/prose when a ranking was requested.
+- [ ] **Re-run task quality with actual providers**: see AQ-02; the original CLI experiment
+  and deterministic tests are not native-provider acceptance.
+- [ ] **Separate-origin Ask and hosted-client/release validation**:
+  [AQ-06](plans/ask-and-public-mcp/remaining/06-client-and-release.md) scopes code, local gates
+  and externally authorized checks separately.
 
 ## Theme preview findings — 2026-10-16
 
@@ -151,8 +177,8 @@ From the Ask runtime and public MCP packages ([AT-02](plans/ask-and-public-mcp/a
 - [ ] **Docker image smoke for MCP was not run** (`release-check.py --docker`, no Docker here).
 - [ ] **Live MCP client compatibility**: schema acceptance, anonymous access and timeouts in ChatGPT and
   Claude connectors; directory submission.
-- [ ] **Ask claim binding is sentence-level**: the entity must be named in the same sentence; period and
-  unit are reported, not required. Add period/unit checks, or a structured answer format.
+- [ ] **Ask claim binding remains bounded**: AT-05 now rejects recognized unit/year contradictions;
+  multi-year/entity ambiguity and definition checks remain [AQ-03](plans/ask-and-public-mcp/remaining/03-claim-verification.md).
 - [ ] **Tool messages are English only** (AT-01) and show on Romanian Ask pages.
 
 ## Data refresh findings — 2026-10-15

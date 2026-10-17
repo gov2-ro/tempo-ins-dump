@@ -2,7 +2,7 @@
 
 The arithmetic, the unit/year/duplicate rules and the choice between INS's
 published totals and a reconstruction all stay in `recipes.run`; this module
-only translates its result into the `tempo-tools/1` envelope. It never
+only translates its result into the `tempo-tools/2` envelope. It never
 recomputes a value, never sends raw `inputs` or the reconstruction tables
 (they travel in the evidence bundle) and never switches the requested year or
 matches an area name loosely.

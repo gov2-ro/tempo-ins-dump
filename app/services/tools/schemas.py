@@ -1,4 +1,4 @@
-"""Argument and result models of the shared analytical tools (`tempo-tools/1`).
+"""Argument and result models of the shared analytical tools (`tempo-tools/2`).
 
 Arguments are strict: no type coercion (a boolean is not an integer, a number
 is not a string), unknown keys are rejected, and every bound below is checked
@@ -170,6 +170,30 @@ class ComparePeriodsArgs(_PeriodChanges):
     lang: Lang = "ro"
 
 
+class RankEntitiesArgs(_Args):
+    dataset: DatasetCode
+    entity_columns: list[Column] = Field(min_length=1, max_length=MAX_GROUP_COLUMNS)
+    year: Year | None = Field(None, description="Exact annual year; null = latest actual year")
+    filters: Filters = Field(default_factory=dict)
+    entity_class: Literal["all", "cities"] = "all"
+    order: Literal["asc", "desc"] = "desc"
+    top_k: StrictInt = Field(30, ge=1, le=100)
+    lang: Lang = "ro"
+
+    @field_validator("filters")
+    @classmethod
+    def v_filters(cls, v):
+        _check_filters(v)
+        if "TIME_PERIOD" in v:
+            raise ValueError("use year instead of filtering TIME_PERIOD")
+        return v
+
+    @field_validator("entity_columns")
+    @classmethod
+    def v_entities(cls, v):
+        return _check_columns(v, "entity_columns")
+
+
 class RunRecipeArgs(_Args):
     recipe: StrictStr = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_]+$",
                               description="Recipe id from discover_indicators")
@@ -209,7 +233,12 @@ class PeriodChangesSelection(_PeriodChanges):
     kind: Literal["period_changes"]
 
 
-Selection = Annotated[Union[DatasetSelection, RecipeSelection, PeriodChangesSelection],
+class EntityRankingSelection(RankEntitiesArgs):
+    kind: Literal["entity_ranking"]
+    year: Year
+
+
+Selection = Annotated[Union[DatasetSelection, RecipeSelection, PeriodChangesSelection, EntityRankingSelection],
                       Field(discriminator="kind")]
 
 
@@ -287,7 +316,7 @@ class Limits(_Closed):
 
 
 class Envelope(_Closed):
-    contract: Literal["tempo-tools/1"]
+    contract: Literal["tempo-tools/2"]
     tool: str
     status: Status
     reason: str | None
@@ -413,6 +442,16 @@ class CompareData(_Open):
     metric: str
     order: str
     intervals: list[IntervalResult]
+
+
+class RankingData(_Open):
+    dataset: str
+    entity_columns: list[str]
+    year: str
+    unit: str | None
+    rows: list[dict[str, Any]]
+    eligible_count: int
+    excluded_count: int
 
 
 class RecipeInfo(_Open):

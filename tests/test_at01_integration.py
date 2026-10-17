@@ -1,7 +1,7 @@
 """AT-01 end to end: the seven tools as one flow on one synthetic generation.
 
 Network, model providers and DuckDB writers fail if touched: the tools need
-none of them. Each result is a valid `tempo-tools/1` envelope within 32 KiB, its
+none of them. Each result is a valid `tempo-tools/2` envelope within 32 KiB, its
 canonical selection is accepted by get_evidence_links, the live links re-run to
 the same values and the evidence links refuse once the generation changes.
 """

@@ -2,7 +2,7 @@
 
 A data server: the chat client's model chooses tools and writes the answer; nothing here calls a
 model, asks the client for one (no sampling/elicitation), runs SQL or code, reads files or logs,
-or dispatches to the app's other endpoints. `tools/list` is exactly the seven AT-00 tools and
+or dispatches to the app's other endpoints. `tools/list` is exactly the eight shared tools and
 every call goes through `registry.call_tool`, the same service Ask and REST use, so values,
 refusals, scope and generation evidence are identical across transports.
 
@@ -53,19 +53,19 @@ from app.services.tools import registry
 log = logging.getLogger("app.mcp")
 
 SERVER_NAME = "ins-plus-statistics"
-SERVER_VERSION = "1.0.0"
-POLICY_VERSION = "mcp-1"                   # part of every cache key: bump when result policy changes
+SERVER_VERSION = "2.0.0"
+POLICY_VERSION = "mcp-2"                   # part of every cache key: bump when result policy changes
 MAX_WIRE_BYTES = 72 * 1024                 # the complete JSON-RPC response (both representations)
 WIRE_ALLOWANCE = 512                       # JSON-RPC wrapper around the result
 DEADLINE_GRACE = 2.0                       # seconds the caller waits past the interrupt before answering
-SCAN_TOOLS = ("query_data", "compare_periods", "find_dimension_values", "run_recipe")
+SCAN_TOOLS = ("rank_entities", "query_data", "compare_periods", "find_dimension_values", "run_recipe")
 TRANSIENT_REASONS = frozenset({"busy", "query_timeout", "query_budget", "response_budget",
                                "generation_changed", "generation_unverified", "execution_failed"})
 
 INSTRUCTIONS = (
-    "Official Romanian statistics (INS TEMPO) as read-only tools. Start with discover_indicators, "
+    "Official Romanian statistics (INS TEMPO) as read-only tools. Start with discover_indicators using the full question (keep denominator, geography, period and ranking), "
     "then describe_dataset and find_dimension_values for exact columns and values, then query_data, "
-    "compare_periods (changes and rankings between exact years) or run_recipe. Every result states "
+    "compare_periods (changes between exact years), rank_entities (one-year value rankings) or run_recipe. Every result states "
     "its source, definition, unit, period, scope and data generation. A refusal means no safe value "
     "exists for that request: follow its recovery suggestion; do not total or rank raw rows yourself. "
     "The server never calls a model.")

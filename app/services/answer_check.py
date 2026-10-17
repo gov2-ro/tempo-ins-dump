@@ -3,7 +3,7 @@
 Pure functions, no model calls and nothing in the prompt: the agent loop hands
 over the final text and the tool trace, and gets back what can be verified.
 
-* ``valid_queries`` — `tempo-tools/1` results of the data tools (query_data,
+* ``valid_queries`` — `tempo-tools/2` results of the data tools (query_data,
   compare_periods, run_recipe) that returned values (status ok / partial).
 * ``find_numbers`` / ``uncited_numbers`` — numeric claims in the answer that no
   valid result contains (within rounding/scale tolerance; a sign is not compared,
@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-DATA_TOOLS = ('query_data', 'compare_periods', 'run_recipe')
+DATA_TOOLS = ('rank_entities', 'query_data', 'compare_periods', 'run_recipe')
 MAX_CLAIMS = 20
 
 # number token: 1.234.567,8 | 1,234,567.8 | 12 345 | 3,5 | 42
@@ -50,7 +50,7 @@ def guess_lang(text: str) -> str:
 
 
 def _is_envelope(r) -> bool:
-    return isinstance(r, dict) and r.get('contract') == 'tempo-tools/1'
+    return isinstance(r, dict) and r.get('contract') == 'tempo-tools/2'
 
 
 def valid_queries(tool_trace: list[dict]) -> list[dict]:
@@ -83,7 +83,7 @@ def numeric_leaves(env: dict, call_id: str | None = None) -> list[dict]:
     count or a dimension code is not a statistic the answer may quote)."""
     tool, data = env.get('tool'), env.get('data') or {}
     srcs = (env.get('provenance') or {}).get('sources') or []
-    unit = data.get('unit') or (srcs[0].get('unit') if srcs else None)
+    unit = data.get('unit') or (data.get('recipe') or {}).get('unit') or ((srcs[0].get('unit') or srcs[0].get('unit_type')) if srcs else None)
     leaves = []
     if tool == 'query_data':
         cols, labels = data.get('columns') or [], _aliases(data)
@@ -98,8 +98,12 @@ def numeric_leaves(env: dict, call_id: str | None = None) -> list[dict]:
                     if k in (j, ti) or _num(row[k]):
                         continue
                     ent += [str(row[k])] + ([labels[c][str(row[k])]] if str(row[k]) in labels.get(c, {}) else [])
+                geo = [cols.index(c) for c in ('REF_AREA', 'REF_AREA_2') if c in cols]
+                if geo:
+                    area = row[geo[-1]]
+                    ent = [str(area)] + ([labels[cols[geo[-1]]][str(area)]] if str(area) in labels.get(cols[geo[-1]], {}) else [])
                 leaves.append({'path': f'/data/rows/{i}/{j}', 'value': float(cell), 'entity': ent,
-                               'period': str(row[ti]) if ti is not None else None, 'unit': unit})
+                               'period': str(row[ti]) if ti is not None else _selection_period(env), 'unit': unit})
     elif tool == 'compare_periods':
         for k, iv in enumerate(data.get('intervals') or []):
             period = f"{iv.get('from')}→{iv.get('to')}"
@@ -110,6 +114,14 @@ def numeric_leaves(env: dict, call_id: str | None = None) -> list[dict]:
                         leaves.append({'path': f'/data/intervals/{k}/rows/{m}/{f}',
                                        'value': float(row[f]), 'entity': ent, 'period': period,
                                        'unit': '%' if f == 'percent' else unit})
+    elif tool == 'rank_entities':
+        for m, row in enumerate(data.get('rows') or []):
+            if _num(row.get('value')):
+                leaves.append({'path': f'/data/rows/{m}/value', 'value': float(row['value']),
+                               'entity': [str(row['entity'][c]) for c in
+                                          (['REF_AREA_2'] if 'REF_AREA_2' in row['entity'] else
+                                           ['REF_AREA'] if 'REF_AREA' in row['entity'] else row['entity'])],
+                               'period': data.get('year'), 'unit': unit})
     elif tool == 'run_recipe':
         for m, row in enumerate(data.get('rows') or []):
             if _num(row.get('value')):
@@ -188,7 +200,7 @@ def find_numbers(text: str, ignore_text: str = '') -> list[dict]:
         reads = _interpretations(raw)
         if reads:
             out.append({'raw': (raw + (' ' + suffix if suffix else '')).strip(),
-                        'readings': reads, 'scale': scale, 'percent': pct})
+                        'readings': reads, 'scale': scale, 'percent': pct, 'start': m.start(), 'end': m.end()})
     return out
 
 
@@ -271,7 +283,7 @@ def _entity_named(sentence: str, sentence_norm: str, entity: list[str]) -> bool:
     the same case, so the Romanian word "a" is not mistaken for entity A."""
     names = [e for e in entity if e and not _num_like(e)]
     for e in names:
-        n = _norm(e)
+        n = re.sub(r'^(?:\d+ )?(?:municipiul |orasul |oras )?', '', _norm(e))
         if len(n) >= 2 and n in sentence_norm:
             return True
         if len(e.strip()) == 1 and re.search(rf'(?<![\w]){re.escape(e.strip())}(?![\w])', sentence):
@@ -281,6 +293,49 @@ def _entity_named(sentence: str, sentence_norm: str, entity: list[str]) -> bool:
 
 def _num_like(s: str) -> bool:
     return bool(re.fullmatch(r'[\d.,\s-]+', s or ''))
+
+
+def _selection_period(env):
+    filters = ((env.get('provenance') or {}).get('effective_selection') or {}).get('filters') or \
+              ((env.get('provenance') or {}).get('selection') or {}).get('filters') or {}
+    values = filters.get('TIME_PERIOD') or []
+    return str(values[0]) if len(values) == 1 else None
+
+
+def _unit_kind(text):
+    t = _norm(text)
+    if re.search(r'\b(pe|per|la(?: un)?) locuitor\b|\bper (resident|inhabitant|capita)\b', t):
+        return 'per_resident'
+    if re.search(r'\b(mia de locuitori|1000 locuitori)\b', t):
+        return 'per_thousand'
+    if '%' in text or re.search(r'\b(procente?|percent(?:age)?|percentage points|puncte procentuale)\b', t):
+        return 'percent'
+    if re.search(r'\b(lei|ron)\b', t):
+        return 'ron'
+    if re.search(r'\b(euro|eur)\b', t):
+        return 'eur'
+    if re.search(r'\b(hectare|hectares|ha)\b', t):
+        return 'area'
+    if re.search(r'\b(persoane|persons|people|locuitori|inhabitants)\b', t):
+        return 'persons'
+    if re.search(r'\b(innoptari|overnight stays|nights)\b', t):
+        return 'stays'
+    return None
+
+
+def _semantic_conflict(sentence, leaf, unit_text=None):
+    # Explicit contradictions are enforceable. Missing units/years are not a
+    # successful semantic check; the result records those as unstated below.
+    claimed, source = _unit_kind(unit_text if unit_text is not None else sentence), _unit_kind(leaf.get('unit') or '')
+    if claimed in ('per_resident', 'per_thousand', 'percent', 'ron', 'eur', 'area') and source != claimed:
+        return 'unit_mismatch'
+    if claimed and source and claimed != source:
+        return 'unit_mismatch'
+    years = set(re.findall(r'\b(?:19|20)\d{2}\b', sentence))
+    actual = set(re.findall(r'\b(?:19|20)\d{2}\b', leaf.get('period') or ''))
+    if len(years) == 1 and actual and not years <= actual:
+        return 'period_mismatch'
+    return None
 
 
 def bind_claims(answer: str, question: str, tool_trace: list[dict]) -> list[dict]:
@@ -302,13 +357,24 @@ def bind_claims(answer: str, question: str, tool_trace: list[dict]) -> list[dict
         if not found:
             continue
         snorm = _norm(sent)
-        for c in found:
+        for index, c in enumerate(found):
+            # Associate a suffix with its own statistic, not another number's
+            # unit later in a comparison sentence. Prefix units remain usable.
+            end = found[index + 1]['start'] if index + 1 < len(found) else len(sent)
+            unit_text = sent[c['start']:end]
+            if _unit_kind(unit_text) is None:
+                begin = found[index - 1]['end'] if index else 0
+                unit_text = sent[begin:c['start']]
             cands = [lf for lf in leaves if _matches_value(c, lf['value'])]
-            pick = next((lf for lf in cands
-                         if not lf['entity'] or _entity_named(sent, snorm, lf['entity'])), None)
+            located = [lf for lf in cands if not lf['entity'] or _entity_named(sent, snorm, lf['entity'])]
+            pick = next((lf for lf in located if not _semantic_conflict(sent, lf, unit_text)), None)
+            conflict = next((_semantic_conflict(sent, lf, unit_text) for lf in located), None) if not pick else None
             entry = {'text': sent[:200], 'tool_call_id': None, 'path': None, 'entity': None,
                      'period': None, 'unit': None, 'check': 'unverified'}
+            if conflict:
+                entry['reason'] = conflict
             if pick:
+                entry['semantic_check'] = 'no_explicit_conflict'
                 entry.update(tool_call_id=pick['call'], path=pick['path'],
                              entity=' · '.join(dict.fromkeys(pick['entity'])) or None,
                              period=pick['period'], unit=pick['unit'], check='matched')

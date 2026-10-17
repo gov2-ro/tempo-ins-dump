@@ -1,4 +1,4 @@
-"""Synthetic corpora for the AT-01 tool tests (`tempo-tools/1`).
+"""Synthetic corpora for the AT-01 tool tests (`tempo-tools/2`).
 
 Builds on fix02b_corpus (POPX, ADDX, RATEX, INCX with complete metadata tables)
 and adds datasets with `add_dataset`. Order matters:

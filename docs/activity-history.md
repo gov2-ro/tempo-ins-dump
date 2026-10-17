@@ -1,5 +1,60 @@
 # Activity History
 
+
+## 2026-10-17 — Save Ask/MCP quality implementation and handoff
+
+Prepared the complete AT-05 implementation, regression tests and six remaining-work
+specifications as one commit on `fix/ask-answer-quality`. Updated the handoff to use
+the commit containing this work rather than its older base. The full pre-commit
+suite passed (1,175 passed, 73 skipped); existing warnings remain documented in AT-05.
+Review caught a row-variable/translation-function collision in the truncated-table
+footer, corrected before saving; its dedicated browser regression passed at all
+three viewport widths (3 passed).
+This commit does not deploy, change production limits or write the corpus.
+
+## 2026-10-17 — Remaining Ask/MCP implementation specs
+
+Documented the work left after AT-05 as six [bounded packages](plans/ask-and-public-mcp/remaining/README.md):
+MCP capacity, offline/live task evaluation, claim verification, discovery/messages,
+analytical extensions and client/release validation. Each identifies files, small
+steps, prerequisites, numerical acceptance checks and stopping boundaries for cheaper
+coding models. The handoff explicitly requires the existing uncommitted AT-05 working
+state, not just its older base commit.
+
+The scan-cap package begins with cold/warm/cache and Linux mixed-load measurements:
+metadata/context preparation can scan the whole source, so filtered-result row counts
+are not a safe admission estimate. Larger profiles require measured headroom; deeper
+scan/artifact optimization is a separate design gate. Density still needs the right
+area definition/source. Updated stale backlog items to distinguish completed AT-05
+behavior from remaining work. Linked the existing evaluation/release specs to this
+breakdown. This session changes documentation only; no runtime implementation,
+provider calls, corpus writes, commits or deployment. Checked local documentation
+links (all resolve), `git diff --check`, and a before/after implementation-content hash
+(app/tests/scripts unchanged). Runtime tests were not rerun for this documentation-only change.
+
+
+## 2026-10-17 — Ask answer quality and one-year entity rankings
+
+Implemented the approved quality pass in `.worktrees/ask-answer-quality`, branch
+`fix/ask-answer-quality`, from the newer Ask/MCP integration (`22d9d4d`). The original
+checkout's existing work is preserved. Record: [AT-05](plans/ask-and-public-mcp/06-answer-quality.md).
+
+- Discovery now keeps consequential wording, including tourism denominators, “current”,
+  cities and top K. Generic population has a disclosed resident/domicile default; explicit
+  unavailable definitions and operations are refused.
+- Added `rank_entities` across the shared registry, native public MCP, Ask context,
+  tables, claims and generation-bound JSON replay. `tempo-tools/2` exposes eight tools;
+  one-year rankings use the full eligible set and GOS102A SIRUTA city membership.
+- Explicit unit/year contradictions withhold prose. Recipe tables use recipe units;
+  unknown-domain sums are partial. Ranking requests cannot display an unranked query
+  as their answer. Human-readable headings and preview/ranking captions clarify the table.
+- Numerical, transport, browser and copied-corpus checks are recorded in AT-05. Search
+  and chart evaluations match the starting code on the same corpus; old baseline drift
+  was retained rather than rebuilt. No live-provider calls, corpus writes or deployment.
+- Public capacity remains open: the default whole-file scan cap rejects the national
+  locality population file. The new tool does not bypass that gate. Density, correlations
+  and native-provider evaluation remain backlog work.
+
 ## 2026-10-16 — Initial model evaluation of the tools over MCP
 
 Why: the first browser runs of Ask were poor and it was unclear whether tools, prompt or the

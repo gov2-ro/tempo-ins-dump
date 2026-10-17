@@ -1,4 +1,4 @@
-"""The `tempo-tools/1` envelope, budgets and helpers shared by every tool (AT-00).
+"""The `tempo-tools/2` envelope, budgets and helpers shared by every tool (AT-00).
 
 Every invocation returns one envelope, failures included:
 
@@ -22,7 +22,7 @@ from urllib.parse import quote, urlencode
 from app import config
 from app.services import generation
 
-CONTRACT = "tempo-tools/1"
+CONTRACT = "tempo-tools/2"
 MAX_ARGUMENT_BYTES = 16 * 1024      # logical arguments, UTF-8 JSON
 MAX_RESULT_BYTES = 32 * 1024        # logical envelope, UTF-8 JSON
 MAX_TABLE_ROWS = 200                # model-visible rows in one result

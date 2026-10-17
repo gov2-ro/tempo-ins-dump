@@ -1,4 +1,4 @@
-"""How an Ask turn's `tempo-tools/1` results reach the browser (AT-02).
+"""How an Ask turn's `tempo-tools/2` results reach the browser (AT-02).
 
 The model sees the tool envelopes; the page keeps its existing shapes. This module adapts
 one into the other and nothing else:
@@ -16,13 +16,13 @@ from __future__ import annotations
 
 import re
 
-DATA_TOOLS = ("query_data", "compare_periods", "run_recipe")
+DATA_TOOLS = ("rank_entities", "query_data", "compare_periods", "run_recipe")
 
 
 def _usable(entry: dict) -> bool:
     o = entry.get("output")
     return (entry.get("tool") in DATA_TOOLS and isinstance(o, dict)
-            and o.get("contract") == "tempo-tools/1" and o.get("status") in ("ok", "partial")
+            and o.get("contract") == "tempo-tools/2" and o.get("status") in ("ok", "partial")
             and entry.get("executed", True))
 
 
@@ -62,7 +62,14 @@ def display_table(trace: list[dict]) -> dict | None:
         if (prov.get("aggregation") or {}).get("approximation"):
             common["status"] = "approximation"
         return {**common, "matrix_code": sel.get("dataset"), "columns": data.get("columns"),
-                "rows": data.get("rows"), "row_count": limits.get("returned_rows", len(data.get("rows") or []))}
+                "rows": data.get("rows"), "preview": bool(limits.get("preview_truncated")), "unit": (prov.get("sources") or [{}])[0].get("unit"), "row_count": limits.get("returned_rows", len(data.get("rows") or []))}
+    if tool == "rank_entities":
+        keys = data["entity_columns"]
+        return {**common, "matrix_code": data["dataset"],
+                "columns": ["RANK", *keys, "TIME_PERIOD", "OBS_VALUE"],
+                "rows": [[r["rank"], *[r["entity"].get(k) for k in keys], data["year"], r["value"]]
+                         for r in data["rows"]], "row_count": len(data["rows"]),
+                "eligible_count": data["eligible_count"], "unit": data["unit"], "ranked": True}
     if tool == "compare_periods":
         ent_cols = list(data.get("entity_columns") or [])
         cols = [*ent_cols, "INTERVAL", "FROM_VALUE", "TO_VALUE", "ABSOLUTE", "PERCENT", "RANK"]
@@ -82,7 +89,7 @@ def display_table(trace: list[dict]) -> dict | None:
     rows = [[r.get("label") or r.get("area"), r.get("value")] for r in data.get("rows") or []]
     return {**common, "matrix_code": None, "columns": ["LABEL", "VALUE"], "rows": rows,
             "row_count": len(rows), "recipe": rec.get("id"), "year": data.get("year"),
-            "unit": (env.get("provenance", {}).get("sources") or [{}])[0].get("unit")}
+            "unit": rec.get("unit") or data.get("unit")}
 
 
 def chart_dataset(trace: list[dict]) -> str | None:
@@ -133,7 +140,7 @@ def citations(answer: str, trace: list[dict]) -> list[dict]:
 
     for t in trace:
         env = t.get("output")
-        if not (isinstance(env, dict) and env.get("contract") == "tempo-tools/1") \
+        if not (isinstance(env, dict) and env.get("contract") == "tempo-tools/2") \
                 or not t.get("executed", True):
             continue
         prov = env.get("provenance") or {}

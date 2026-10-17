@@ -1,5 +1,10 @@
 # AT-04: Evaluation, client onboarding and release evidence
 
+Implementation breakdown (2026-10-17): [remaining-work index](remaining/README.md).
+AQ-01 covers capacity, AQ-02 task evaluation and AQ-06 integration/release.
+AT-05 now provides disclosed population defaults and one-year city rankings;
+use those semantics in new evaluations. This AT-04 release gate remains pending.
+
 ## Problem and ownership
 
 **AT-04: pending.** Demonstrate that supported tasks reach useful, statistically
@@ -21,7 +26,7 @@ Required task set (at least these cases):
 | ID | Task | Expected evidence |
 |---|---|---|
 | T01 | Resident population for a named county/year | Correct source definition, exact value, unit, period, scope and generation |
-| T02 | Generic population/unemployment question | Consequential definition alternatives; no guessed official statistic |
+| T02 | Generic population/unemployment question | Disclosed reviewed population default; consequential alternatives/clarification for unresolved definitions, including unemployment |
 | T03 | County versus same-named city | Explicit place-level clarification before claiming a value |
 | T04 | Recent monthly value outside schema examples | Actual bounds and option lookup reach the requested period |
 | T05 | Requested historical year absent | Explicit unavailable year with alternatives; no implicit latest fallback |

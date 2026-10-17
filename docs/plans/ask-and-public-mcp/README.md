@@ -1,9 +1,14 @@
 # Ask and public MCP implementation handoff
 
+**Current handoff (2026-10-17):** use [remaining work](remaining/README.md) for the
+next implementation session. AT-05 and this handoff are saved together on `fix/ask-answer-quality` in the isolated
+quality worktree; the older baseline/prompt below is historical and must not be
+used to recreate completed work. The new packages are specifications only.
+
 ## Status and outcome
 
-**Specification only, 2026-10-15. No package is implemented or accepted by this
-handoff.** Earlier completed work remains completed; preserve it.
+Original specification dated 2026-10-15. The implementation records below describe
+subsequent completed work; the current next-step handoff is linked above.
 
 Implementation status: **AT-01 implemented 2026-10-15** on branch
 `at/01-analytical-tools` (from `pa/00-baseline` 8a9689d), awaiting owner review.
@@ -13,7 +18,8 @@ owner-reviewed integration branch `integ/at01-ui-rhythm` (81030f5), awaiting own
 [at-02-record.md](at-02-record.md) (bounded, recoverable Ask over the shared tools),
 [at-03-record.md](at-03-record.md) (public read-only MCP at `/mcp`, disabled by default).
 Neither is deployed, pushed or merged; no live provider, client or Fly run has happened.
-AT-04 (task evaluations, onboarding artifacts, resource and cost evidence) is not started.
+Formal AT-04 acceptance (task evaluations, onboarding, resource/cost evidence) is pending.
+The [exploratory CLI evaluation](at-04-initial-mcp-eval.md) is not native-provider acceptance.
 The hosting split and cutover steps are in [05-hosting-and-cutover.md](05-hosting-and-cutover.md).
 
 People should be able to ask a supported statistical question, clarify its
@@ -27,7 +33,12 @@ Implement shared analytical tools first, then their Ask and public-MCP adapters.
 Improving the tools is necessary for both interfaces. MCP transport alone does
 not fix discovery, missing options, incomplete data or numerical mistakes.
 
-## Baseline and source of truth
+Answer-quality follow-up: [AT-05](06-answer-quality.md), on `fix/ask-answer-quality`
+from `22d9d4d`: eight tools under `tempo-tools/2`, full-question discovery, explicit claim
+contradictions and one-year entity rankings. Not deployed; native-provider evaluation and
+public capacity sizing remain open.
+
+## Historical AT-01 baseline and source of truth
 
 The code to extend is **`pa/00-baseline`**, inspected at
 `8a9689d959637c47453bc25f1f1dd5c4cfb3f787`, local worktree
@@ -126,7 +137,7 @@ skipped test, mock-provider conversation or inspected manifest is not a live
 provider/client/load pass. Keep implementation, client validation and production
 release statuses separate. Never rebaseline unexplained numerical changes.
 
-## Copy-paste handoff prompt
+## Historical AT-01 handoff prompt (superseded for new work)
 
 ```text
 Implement AT-01 from docs/plans/ask-and-public-mcp/, then stop with its completion

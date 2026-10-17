@@ -871,8 +871,6 @@ def test_corpus_tourism_intensity_returns_the_recipe(real):
 
 @pytest.mark.corpus
 @pytest.mark.parametrize("q,reason,ids", [
-    ("populatie", "ambiguous_definition", {"resident_population", "domicile_population",
-                                           "resident_population_july"}),
     ("somaj", "ambiguous_definition", {"registered_unemployment_rate", "ilo_unemployment_rate"}),
     ("turism", "ambiguous_definition", {"tourist_overnight_stays", "tourism_intensity"}),
 ])
@@ -925,3 +923,12 @@ def test_corpus_every_reviewed_concept_is_discoverable_within_budget(real):
             assert C.size(out) <= C.MAX_RESULT_BYTES
             assert out["data"]["concepts"] and out["data"]["concepts"][0]["id"] == c["id"], (c["id"], lang)
             assert_calls_valid(out)
+
+
+@pytest.mark.corpus
+def test_corpus_generic_population_uses_disclosed_resident_default(real):
+    out = disc('populatie')
+    assert out['status'] == 'ok'
+    assert out['data']['interpretation']['assumed_definition'] == 'resident_population'
+    assert any(w['code'] == 'assumed_definition' for w in out['warnings'])
+    assert card(out, 'resident_population')['next_call']

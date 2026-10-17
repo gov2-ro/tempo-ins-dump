@@ -1,4 +1,4 @@
-"""The seven public tools and the one dispatcher every adapter calls (AT-00/01).
+"""The eight public tools and the one dispatcher every adapter calls (AT-00/01).
 
 `call_tool(name, arguments)` is the whole service boundary: argument bytes,
 schema validation (unknown keys, types, bounds) before any DB work, a cursor
@@ -43,8 +43,9 @@ TOOLS: dict[str, ToolSpec] = {t.name: t for t in (
     ToolSpec("discover_indicators", "Discover indicators",
              "Find official Romanian statistics (INS TEMPO) for a question: reviewed concepts "
              "with their definition, unit, actual period coverage and geographic levels, "
-             "candidate datasets and the next call to make. Generic or ambiguous wording "
-             "returns needs_clarification with labelled choices; pick one before querying.",
+             "candidate datasets and the next call to make. Pass the full question, preserving "
+             "denominator, geography, period and ranking. State any assumed definition; "
+             "unresolved ambiguity returns needs_clarification with labelled choices.",
              S.DiscoverIndicatorsArgs, S.DiscoverData, f"{_PKG}.discovery:discover_indicators"),
     ToolSpec("describe_dataset", "Describe dataset",
              "Compact schema of one dataset: definition, measure, unit, actual first/last "
@@ -67,6 +68,12 @@ TOOLS: dict[str, ToolSpec] = {t.name: t for t in (
              "count, ranked over every eligible entity, with exclusions stated.",
              S.ComparePeriodsArgs, S.CompareData, f"{_PKG}.changes:compare_periods",
              f"{_PKG}.changes:shrink"),
+    ToolSpec("rank_entities", "Rank entities",
+             "Rank a complete eligible entity set by value in one annual period. "
+             "year=null selects the latest actual year. entity_class=cities uses INS's "
+             "SIRUTA municipality/town catalogue, excluding communes. Never ranks a capped "
+             "preview. Use for top/bottom cities or counties, not changes or density.",
+             S.RankEntitiesArgs, S.RankingData, f"{_PKG}.ranking:rank_entities"),
     ToolSpec("run_recipe", "Run recipe",
              "Run a reviewed cross-dataset recipe (e.g. tourism intensity). Serves INS's own "
              "published totals where they exist, with reconstruction only as a cross-check.",
@@ -221,7 +228,7 @@ def shrinker(name: str):
 
 
 def call_tool(name: str, arguments, *, conn=None) -> dict:
-    """Run one tool and return its `tempo-tools/1` envelope (never raises for
+    """Run one tool and return its `tempo-tools/2` envelope (never raises for
     bad input, refusals or execution failures)."""
     request_id = uuid.uuid4().hex[:12]
     gen0 = generation.current()

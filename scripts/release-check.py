@@ -468,7 +468,7 @@ def _wait_health(base: str, tries: int = 40):
 
 def _mcp_smoke(rep: Report, tag: str, port: int, code: str):
     """The same image with the public MCP switched on (local-test origin): initialize, list the
-    seven tools and make one read-only call, checking structuredContent == the text fallback."""
+    eight tools and make one read-only call, checking structuredContent == the text fallback."""
     sys.path.insert(0, str(ROOT / "scripts"))
     import mcp_probe
     cid = subprocess.run(

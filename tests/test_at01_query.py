@@ -1,4 +1,4 @@
-"""AT-01d: query_data and its refusal recoveries (`tempo-tools/1`).
+"""AT-01d: query_data and its refusal recoveries (`tempo-tools/2`).
 
 Real services end to end (run_query, aggregation policy, grain guard, scope,
 dimension structure) on small synthetic corpora; nothing mocks the calculation.
@@ -423,12 +423,12 @@ def test_overlap_recovery_offers_each_verified_level_and_they_validate(senv):
         ["0-4 ani"], [f"{a} ani" for a in range(5)]]          # coarsest level first, one level each
     for c in cands:                                            # each runs under the same policy
         out = q(**c["arguments"])
-        assert out["status"] == "ok"
+        assert out["status"] == "partial"
         assert [r[0] for r in rows(out)] == ["2024", "2025"]
         assert [r[1] for r in rows(out)] == pytest.approx([100.0, 110.0])
     # the unfiltered request is answered by the default verified level, with a pin warning
     ok = q(dataset="POPX", group_by=["TIME_PERIOD"])
-    assert ok["status"] == "ok" and [r[1] for r in rows(ok)] == pytest.approx([100.0, 110.0])
+    assert ok["status"] == "partial" and [r[1] for r in rows(ok)] == pytest.approx([100.0, 110.0])
     assert ok["provenance"]["effective_selection"]["levels"]["AGE"] == "age_y1"
     assert "level age_y1" in [w for w in ok["warnings"] if w["code"] == "auto_pinned"][0]["message"]
 
@@ -449,7 +449,7 @@ def test_conflicting_child_names_a_verified_parent_or_sibling(env):
     for r in recs(e, "query_data"):
         assert r["arguments"]["group_by"] == ["TIME_PERIOD"]   # same group_by, never raw rows
     alt = _run_candidate(recs(e, "query_data")[0])
-    assert alt["status"] == "ok" and rows(alt) == [["2024", 100.0]]       # 10+20+30+40, once
+    assert alt["status"] == "partial" and rows(alt) == [["2024", 100.0]]       # 10+20+30+40, once
     assert "10.0" not in json.dumps(e) and "11.0" not in json.dumps(e)
 
 
@@ -499,7 +499,7 @@ def test_unverifiable_slice_asks_for_a_narrower_one(env, monkeypatch):
 
 def test_a_clean_slice_of_a_flagged_file_is_answered_and_labelled(env):
     e = q(dataset="CHILDX", group_by=["TIME_PERIOD"], filters={"SEX": ["Feminin"]})
-    assert e["status"] == "ok" and rows(e) == [["2024", 60.0]]               # 20 + 40
+    assert e["status"] == "partial" and rows(e) == [["2024", 60.0]]               # 20 + 40
     assert e["provenance"]["quality"]["grain"]["status"] == "conflicting"
     assert e["provenance"]["quality"]["slice"]["ok"] is True
     assert "data_quality" in codes(e)
@@ -656,14 +656,14 @@ def test_an_unchecked_child_points_to_a_related_dataset_that_passes_its_checks(g
     alt = recs(e, "query_data")
     assert [r["arguments"]["dataset"] for r in alt] == ["SRCPAR"]
     out = q(**alt[0]["arguments"])
-    assert out["status"] == "ok" and rows(out) == [["2024", 100.0]]
+    assert out["status"] == "partial" and rows(out) == [["2024", 100.0]]
     # a dataset with no such relative offers none
     assert not recs(q(dataset="SRCUNC", group_by=["TIME_PERIOD"]), "query_data")
 
 
 def test_a_sum_that_ins_confirms_is_served(genv):
     e = q(dataset="SRCOK", group_by=["TIME_PERIOD"])
-    assert e["status"] == "ok" and rows(e) == [["2024", 100.0]]
+    assert e["status"] == "partial" and rows(e) == [["2024", 100.0]]
 
 
 # ================================================================== empty and missing
@@ -757,8 +757,8 @@ def test_single_age_child_is_partial_and_names_the_complete_sibling(env):
     rec = recs(e, "query_data")
     assert [r["arguments"]["dataset"] for r in rec] == ["AGES"]
     assert "candidate, not a verified answer" in rec[0]["message"]
-    full = q(**rec[0]["arguments"])                            # the sibling gives 100, status ok
-    assert full["status"] == "ok" and rows(full) == [["2024", 100.0]]
+    full = q(**rec[0]["arguments"])                            # the sibling gives 100; completeness remains unverified
+    assert full["status"] == "partial" and rows(full) == [["2024", 100.0]]
     assert full["provenance"]["scope"]["domain_complete"] is not False
     assert full["provenance"]["scope"]["limitations"] == []
 
@@ -768,10 +768,10 @@ def test_scope_text_follows_the_language(env):
     assert e["provenance"]["scope"]["description"] == "Ages 0–2 (3 and over not included)"
 
 
-def test_explicit_request_for_the_covered_range_is_an_ok_restricted_answer(env):
+def test_explicit_range_is_preserved_but_other_domain_coverage_is_unverified(env):
     ages = ["0 ani", "1 ani", "2 ani"]
     e = q(dataset="AGEC", group_by=["TIME_PERIOD"], filters={"AGE": ages})
-    assert e["status"] == "ok" and e["reason"] is None and rows(e) == [["2024", 90.0]]
+    assert e["status"] == "partial" and e["reason"] == "unverified_total" and rows(e) == [["2024", 90.0]]
     lim = e["provenance"]["scope"]["limitations"][0]
     assert lim["requested"] is True and lim["covered"] == [[0, 2]]
     assert "Vârste 0–2 ani" in e["provenance"]["scope"]["description"]
@@ -789,8 +789,9 @@ def test_a_child_without_a_verified_complete_alternative_says_so(env):
 
 def test_unknown_completeness_is_stated_not_failed(env):
     e = q(dataset="AGES", group_by=["TIME_PERIOD"])
-    assert e["status"] == "ok" and rows(e) == [["2024", 100.0]]
+    assert e["status"] == "partial" and rows(e) == [["2024", 100.0]]
     assert e["provenance"]["scope"]["domain_complete"] is None
+    assert e["reason"] == "unverified_total" and "unverified_total" in codes(e)
     assert "unverified" in e["message"] and "Nu se poate verifica" in e["provenance"]["scope"]["description"]
     assert not any(w["code"] == "incomplete_domain" for w in e["warnings"])
 
@@ -1029,7 +1030,8 @@ def test_real_single_age_localitate_child_is_partial_with_a_complete_alternative
     alt = recs(e, "query_data")
     assert alt and alt[0]["arguments"]["dataset"] in ("POP107D", "POP107D_grupe_localitate")
     full = call("query_data", **alt[0]["arguments"])
-    assert full["status"] == "ok" and full["data"]["rows"] == [["2026", 21646220.0]]
+    assert full["status"] == "partial" and full["reason"] == "unverified_total"
+    assert full["data"]["rows"] == [["2026", 21646220.0]]
     assert 21646220.0 - 21179764.0 == 466456.0                  # exactly the aged 85 and over
     # the county-level child of this generation is refused outright
     refused = call("query_data", dataset="POP107D_varste_judet", group_by=["TIME_PERIOD"])

@@ -82,7 +82,7 @@ def period_changes(dataset: str = Query(None, max_length=200),
                    order: str = Query(None, max_length=20),
                    top_k: str = Query(None, max_length=10),
                    lang: str = Query(None, max_length=10)):
-    """The compare_periods envelope (tempo-tools/1) for the current generation:
+    """The compare_periods envelope (tempo-tools/2) for the current generation:
     200 for ok/partial/needs_clarification/unavailable, 400 invalid_input or
     unknown_column, 404 unknown_dataset, 500 execution_failed."""
     from app.services.tools import registry
@@ -183,3 +183,22 @@ def period_changes_evidence(
         raise HTTPException(409, err)
     return Response(data, media_type="application/zip", headers={
         "Content-Disposition": f"attachment; filename={args.dataset}_period_changes_evidence.zip"})
+
+
+@router.get("/entity-rankings")
+def entity_rankings(request: str = Query(..., max_length=16000),
+                    expected_generation: str | None = Query(None, max_length=128)):
+    """Replay a rank_entities selection, optionally bound to its cited generation."""
+    from app.services.tools.registry import call_tool
+    import json
+    try:
+        args = json.loads(request)
+    except (ValueError, TypeError):
+        raise HTTPException(400, "request must be a JSON object") from None
+    before = generation.current()
+    if expected_generation and (before.get("status") != "present" or before.get("id") != expected_generation):
+        raise HTTPException(409, detail={"reason": "generation_changed"})
+    env = call_tool("rank_entities", args)
+    if generation.current() != before or env.get("reason") == "generation_changed":
+        raise HTTPException(409, detail={"reason": "generation_changed"})
+    return JSONResponse(env, status_code=_status(env))

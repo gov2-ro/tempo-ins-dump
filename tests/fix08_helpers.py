@@ -1,6 +1,6 @@
 """Shared helpers for the Ask tests (FIX-08, AT-02). Everything provider-facing is mocked.
 
-The agent dispatches the seven shared tools through ``agent.call_tool``; these helpers
+The agent dispatches the eight shared tools through ``agent.call_tool``; these helpers
 replace it (and the provider call) so the loop's budgets, retries and logging can be tested
 without a corpus. Tests that need real statistics use the synthetic corpora instead.
 """
@@ -50,7 +50,7 @@ def tools_resp(n, name="discover_indicators", text=None, args=None):
 def fake_env(tool="discover_indicators", status="ok", reason=None, message="", data=None,
              selection=None, sources=None, warnings=(), recovery=(), rows=None, aggregation=None,
              generation="gen-test"):
-    """A valid-shaped `tempo-tools/1` envelope (the contract's own builder)."""
+    """A valid-shaped `tempo-tools/2` envelope (the contract's own builder)."""
     ctx = C.ToolContext(conn=None, lang="ro", request_id="t",
                         generation={"id": generation, "status": "present" if generation else "missing",
                                     "built_at": None})

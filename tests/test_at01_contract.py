@@ -1,4 +1,4 @@
-"""AT-00/AT-01: the `tempo-tools/1` contract every tool shares.
+"""AT-00/AT-01: the `tempo-tools/2` contract every tool shares.
 
 Argument validation happens before any database work, every outcome is a valid
 envelope, results fit a UTF-8 byte budget without cutting required provenance,
@@ -47,9 +47,9 @@ def fake(monkeypatch, name, handler, shrink=None):
 
 # ------------------------------------------------------------ schemas
 
-def test_seven_tools_with_closed_valid_schemas():
+def test_eight_tools_with_closed_valid_schemas():
     assert list(R.TOOLS) == ["discover_indicators", "describe_dataset", "find_dimension_values",
-                             "query_data", "compare_periods", "run_recipe", "get_evidence_links"]
+                             "query_data", "compare_periods", "rank_entities", "run_recipe", "get_evidence_links"]
     for name in R.TOOLS:
         s = R.input_schema(name)
         jsonschema.Draft202012Validator.check_schema(s)
@@ -66,6 +66,7 @@ def _args_ok():
         "query_data": {"dataset": "ADDX"},
         "compare_periods": {"dataset": "ADDX", "entity_columns": ["CATEGORY"],
                             "intervals": [{"from": "2022", "to": "2023"}]},
+        "rank_entities": {"dataset": "ADDX", "entity_columns": ["CATEGORY"]},
         "run_recipe": {"recipe": "tourism_intensity"},
         "get_evidence_links": {"selection": sel, "generation_id": "g1"},
     }

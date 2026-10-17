@@ -120,7 +120,7 @@ def test_the_slot_stays_taken_until_work_that_cannot_be_interrupted_really_ends(
             return first, during, listing, still, after
     first, during, listing, still, after = run(go())
     assert E.payload(first)[0]["reason"] == "query_timeout"
-    assert E.payload(during)[0]["reason"] == "busy" and len(listing.tools) == 7
+    assert E.payload(during)[0]["reason"] == "busy" and len(listing.tools) == 8
     assert still == 1 and E.payload(after)[0]["status"] == "ok"
 
 
@@ -333,7 +333,7 @@ def test_the_cache_is_bounded_by_entries_bytes_and_age():
     now = {"t": 0.0}
     clock = lambda: now["t"]                                          # noqa: E731
     env = lambda i, pad=0: {"status": "ok", "tool": "t", "i": i, "pad": "x" * pad}   # noqa: E731
-    key = lambda i, gen="g": ("tempo-tools/1", "b", gen, "t", "ro", str(i), "p")      # noqa: E731
+    key = lambda i, gen="g": ("tempo-tools/2", "b", gen, "t", "ro", str(i), "p")      # noqa: E731
 
     c = P.ResultCache(max_bytes=10_000, max_entries=3, ttl=300, clock=clock)
     for i in range(5):
@@ -371,7 +371,7 @@ def test_the_cache_keeps_only_envelopes_as_text(tmp_path, monkeypatch):
             await s.call_tool("query_data", QUERY)
     run(go())
     (stored, text), = mcp.gate.cache._items.values()
-    assert isinstance(text, str) and json.loads(text)["contract"] == "tempo-tools/1"
+    assert isinstance(text, str) and json.loads(text)["contract"] == "tempo-tools/2"
     assert all(isinstance(part, str) or part is None for part in next(iter(mcp.gate.cache._items)))
 
 
@@ -472,7 +472,7 @@ def test_calls_per_minute_is_an_aggregate_admission_budget(tmp_path, monkeypatch
     out, listing = run(go())
     assert [E.payload(r)[0]["status"] for r in out] == ["ok", "ok", "ok", "unavailable"]
     assert E.payload(out[3])[0]["reason"] == "busy" and E.payload(out[3])[0]["recovery"][0]["kind"] == "retry"
-    assert len(listing.tools) == 7 and mcp.gate.stats["throttled"] == 1
+    assert len(listing.tools) == 8 and mcp.gate.stats["throttled"] == 1
 
 
 def test_initialize_and_list_are_throttled_cheaply_too(tmp_path, monkeypatch):

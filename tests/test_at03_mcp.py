@@ -34,14 +34,14 @@ def run(coro):
 
 # ---------------------------------------------------------------- protocol
 
-def test_real_client_lists_exactly_the_seven_tools_with_schemas(tmp_path, monkeypatch):
+def test_real_client_lists_exactly_the_eight_tools_with_schemas(tmp_path, monkeypatch):
     app, mcp = E.make_app(tmp_path, monkeypatch)
 
     async def go():
         async with E.started(app), E.session(app) as s:
             return await s.list_tools(), s.get_server_capabilities()
     listed, caps = run(go())
-    assert [t.name for t in listed.tools] == R.tool_names() and len(listed.tools) == 7
+    assert [t.name for t in listed.tools] == R.tool_names() and len(listed.tools) == 8
     for t in listed.tools:
         assert t.title and t.description
         a = t.annotations
@@ -177,7 +177,7 @@ def test_the_real_app_ships_with_mcp_off(monkeypatch):
     c = TestClient(real)
     assert c.post("/mcp", json=E.RPC, headers=E.HEADERS).status_code == 404
     assert c.post("/mcp/", json=E.RPC, headers=E.HEADERS).status_code == 404
-    assert c.get("/api/health").json()["mcp"] == {"enabled": False, "contract": "tempo-tools/1",
+    assert c.get("/api/health").json()["mcp"] == {"enabled": False, "contract": "tempo-tools/2",
                                                   "generation": c.get("/api/health").json()["generation"]["status"]}
 
 
@@ -426,7 +426,7 @@ def sealed(monkeypatch):
     monkeypatch.setattr(llm_client, "_openai_responses", no_model)
 
 
-def test_all_seven_tools_work_with_no_model_and_the_server_never_asks_for_one(tmp_path, monkeypatch, sealed):
+def test_all_eight_tools_work_with_no_model_and_the_server_never_asks_for_one(tmp_path, monkeypatch, sealed):
     app, mcp = E.make_app(tmp_path, monkeypatch)
     asked = []
 
@@ -462,7 +462,7 @@ def test_health_reports_the_mcp_capability_without_secrets(tmp_path, monkeypatch
     from app.main import health
     app, mcp = E.make_app(tmp_path, monkeypatch)
     summary = P.health_summary(app)
-    assert summary == {"enabled": True, "contract": "tempo-tools/1", "generation": "present"}
+    assert summary == {"enabled": True, "contract": "tempo-tools/2", "generation": "present"}
     off, _ = E.make_app(tmp_path, monkeypatch, environ={"TEMPO_MCP_ENABLED": "false"}, env=app.state.corpus_env)
     assert P.health_summary(off)["enabled"] is False
     body = health(SimpleNamespace(app=app))

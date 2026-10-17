@@ -43,6 +43,10 @@ const OUTCOME_LABEL = {
     failed: ['Răspunsul nu a putut fi generat', 'No answer could be produced'],
 };
 const REASON_TEXT = {
+    ranking_unverified: ['clasamentul nu a putut fi verificat', 'the ranking could not be verified'],
+    claim_mismatch: ['explicația contrazice unitatea sau perioada datelor', 'the explanation contradicts the data unit or period'],
+    unverified_numbers: ['unele cifre nu au putut fi verificate', 'some figures could not be verified'],
+    unverified_total: ['completitudinea totalului nu este verificată', 'total completeness is unverified'],
     iterations: ['s-a atins limita de pași ai modelului', 'the model-step limit was reached'],
     tools: ['s-a atins limita de apeluri către instrumente', 'the tool-call limit was reached'],
     deadline: ['s-a depășit timpul alocat', 'the time limit was reached'],
@@ -375,7 +379,12 @@ function renderDataTable(data) {
 
     const meta = document.createElement('div');
     meta.className = 'chat-data-meta';
-    meta.textContent = `${data.row_count ?? data.rows.length} ${tr('rânduri', 'rows')}`;
+    meta.textContent = data.ranked
+        ? `${data.rows.length} ${tr('din', 'of')} ${data.eligible_count} ${tr('entități eligibile, în ordine', 'eligible entities, ranked')}`
+        : data.truncated || data.preview
+            ? `${tr('Previzualizare: primele', 'Preview: first')} ${data.rows.length} ${tr('rânduri; nu este un clasament', 'rows; not a ranking')}`
+            : `${data.row_count ?? data.rows.length} ${tr('rânduri', 'rows')}`;
+    if (data.unit) meta.textContent += ` · ${data.unit}`;
     if (data.matrix_code) {
         const link = document.createElement('a');
         link.href = datasetHref(data.matrix_code);
@@ -413,7 +422,14 @@ function renderDataTable(data) {
     const hrow = thead.insertRow();
     data.columns.forEach(col => {
         const th = document.createElement('th');
-        th.textContent = col;
+        const headings = {REF_AREA: tr('Județ / zonă', 'County / area'), REF_AREA_2: tr('Localitate', 'Locality'),
+            TIME_PERIOD: tr('Perioadă', 'Period'), OBS_VALUE: tr('Valoare', 'Value'),
+            RANK: tr('Poziție', 'Rank'), INTERVAL: tr('Interval', 'Interval'),
+            FROM_VALUE: tr('Valoare inițială', 'Starting value'), TO_VALUE: tr('Valoare finală', 'Ending value'),
+            ABSOLUTE: tr('Schimbare', 'Change'), PERCENT: tr('Schimbare (%)', 'Change (%)'),
+            LABEL: tr('Zonă', 'Area'), VALUE: tr('Valoare', 'Value'), AGE: tr('Vârstă', 'Age'), SEX: tr('Sex', 'Sex')};
+        th.textContent = headings[col] || col;
+        th.title = col;
         hrow.appendChild(th);
     });
 
@@ -427,12 +443,13 @@ function renderDataTable(data) {
         });
     });
 
-    if (data.rows.length > 200) {
-        const tr = tbody.insertRow();
-        const td = tr.insertCell();
+    if (data.rows.length > 200 || data.truncated) {
+        const footerRow = tbody.insertRow();
+        const td = footerRow.insertCell();
         td.colSpan = data.columns.length;
         td.className = 'chat-table-truncated';
-        td.textContent = `… ${data.rows.length - 200} more rows not shown`;
+        td.textContent = tr('Previzualizare limitată. Consultați selecția completă din linkurile sursă.',
+                            'Limited preview. Open the complete selection using the source links.');
     }
 
     tableWrap.appendChild(table);

@@ -257,6 +257,19 @@ generation-keyed cache) and Host/Origin/body checks. See
 `mcp.enabled`. Neither package has run against a live provider, a ChatGPT/Claude connector or
 Fly yet (AT-04).
 
+Ask answer quality (2026-10-17, `fix/ask-answer-quality`, not deployed): `tempo-tools/2`
+adds `rank_entities` as the eighth shared tool. One-year rankings use the complete eligible
+selection before top K; city membership uses GOS102A's SIRUTA catalogue, not population-label
+substrings. Discovery keeps the whole question, routes stays-per-resident paraphrases to the
+reviewed recipe, and discloses resident/domicile population defaults. Explicit unavailable
+city resident population, density and city-only changes are not substituted. Explicit unit
+or year contradictions withhold Ask prose; unknown-domain sums are `partial/unverified_total`.
+Ask displays readable headings, recipe units and ranking/preview captions. Ranking evidence
+links replay JSON bound to the cited generation. The existing public MCP scan cap still
+rejects the large national locality population file; native-provider evaluation and production
+sizing remain open. Details and acceptance evidence: [06-answer-quality.md](plans/ask-and-public-mcp/06-answer-quality.md).
+Remaining implementation specs and cheaper-model handoff: [work packages](plans/ask-and-public-mcp/remaining/README.md).
+
 ## Dated inventory, not permanent constants
 
 Local 2026-10-03: 4,274 parquets; 4,102 matrices; 2,183 split-table rows; 3,679

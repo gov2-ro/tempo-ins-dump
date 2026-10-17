@@ -27,8 +27,8 @@ from app.services.tools.contract import dumps, size
 
 FOLLOWUP_MAX_ENTRIES = 4
 FOLLOWUP_MAX_BYTES = 8 * 1024
-DATA_TOOLS = ("query_data", "compare_periods", "run_recipe")
-_KIND_OF_TOOL = {"query_data": "dataset", "compare_periods": "period_changes", "run_recipe": "recipe"}
+DATA_TOOLS = ("rank_entities", "query_data", "compare_periods", "run_recipe")
+_KIND_OF_TOOL = {"rank_entities": "entity_ranking", "query_data": "dataset", "compare_periods": "period_changes", "run_recipe": "recipe"}
 _DEFINITION_CHARS = 160
 _KEPT_ROWS = 5                      # rows a compacted result still shows (the rest are counted)
 
@@ -192,6 +192,11 @@ def _result_summary(tool: str | None, data: dict) -> dict:
              "rows": (iv.get("rows") or [])[:_KEPT_ROWS],
              "rows_omitted": max(0, len(iv.get("rows") or []) - _KEPT_ROWS)}
             for iv in data.get("intervals") or []]}
+    if tool == "rank_entities":
+        rows = data.get("rows") or []
+        return {"year": data.get("year"), "unit": data.get("unit"),
+                "eligible_count": data.get("eligible_count"), "entity_class": data.get("entity_class"),
+                "rows": rows[:_KEPT_ROWS], "rows_omitted": max(0, len(rows) - _KEPT_ROWS)}
     if tool == "run_recipe":
         rows = data.get("rows") or []
         return {"recipe": (data.get("recipe") or {}).get("id"), "year": data.get("year"),

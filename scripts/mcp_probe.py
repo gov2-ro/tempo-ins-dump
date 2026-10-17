@@ -1,7 +1,7 @@
 """Smoke probe for a running public MCP endpoint (AT-03). Standard library only.
 
 Initializes over Streamable HTTP (JSON responses), lists the tools and makes one read-only call,
-checking what a client relies on: exactly the seven tools, a structured result whose text fallback
+checking what a client relies on: exactly the eight tools, a structured result whose text fallback
 is the same envelope. Used by `release-check.py --docker` against the image and by the tests.
 
     python scripts/mcp_probe.py http://127.0.0.1:8080 [DATASET]
@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 
 EXPECTED = ["discover_indicators", "describe_dataset", "find_dimension_values", "query_data",
-            "compare_periods", "run_recipe", "get_evidence_links"]
+            "compare_periods", "rank_entities", "run_recipe", "get_evidence_links"]
 HEADERS = {"content-type": "application/json", "accept": "application/json, text/event-stream"}
 
 

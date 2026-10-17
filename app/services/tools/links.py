@@ -253,6 +253,28 @@ def _recipe(ctx, sel, gid: str):
     return norm, links, specs, warnings
 
 
+def _entity_ranking(ctx, sel, served):
+    _check_dataset(ctx, sel.dataset, filters=sel.filters, entities=sel.entity_columns, needs_time=True)
+    norm = sel.model_dump()
+    args = {k: v for k, v in norm.items() if k != "kind"}
+    args["lang"] = ctx.lang
+    params = {"request": C.dumps(args)}
+    path = "/api/entity-rankings?"
+    links = [
+        {"kind": "dataset", "url": C.dataset_page(sel.dataset, ctx.lang),
+         "description": "Source dataset (not the ranking).", "generation_mode": "live_rerun"},
+        {"kind": "live_selection", "url": C.public_url(path + urlencode(params)),
+         "description": "Re-run this exact ranking, including its scope, class and eligible count.",
+         "generation_mode": "live_rerun"},
+        {"kind": "evidence", "url": C.public_url(path + urlencode({**params, "expected_generation": served})),
+         "description": "Ranking JSON with provenance, refused if the cited generation changed.",
+         "generation_mode": "expected_generation"}]
+    specs = [(None, sel.dataset)]
+    if sel.entity_class == "cities":
+        specs.append(("entity_classification", "GOS102A"))
+    return norm, links, specs, []
+
+
 def get_evidence_links(args, ctx):
     ctx.require_present_generation("get_evidence_links")
     tx = _TX[ctx.lang]
@@ -264,7 +286,7 @@ def get_evidence_links(args, ctx):
             data={"expected_generation": args.generation_id, "served_generation": served},
             recovery=[C.recovery("retry", tx["retry"])])
     sel = args.selection
-    build = {"dataset": _dataset, "period_changes": _period_changes, "recipe": _recipe}[sel.kind]
+    build = {"dataset": _dataset, "period_changes": _period_changes, "recipe": _recipe, "entity_ranking": _entity_ranking}[sel.kind]
     norm, links, specs, warnings = build(ctx, sel, served)
 
     longest = max(len(link["url"].encode("utf-8")) for link in links)

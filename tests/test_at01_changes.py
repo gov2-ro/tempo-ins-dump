@@ -87,7 +87,7 @@ def ents(rows):
 def test_absolute_ascending_both_intervals(env):
     e = cp(intervals=[iv("1992", "2002"), iv("2010", "2020")])
     assert e["status"] == "partial" and e["reason"] is None       # D has no 2002 row
-    assert e["contract"] == "tempo-tools/1"
+    assert e["contract"] == "tempo-tools/2"
     first, second = e["data"]["intervals"]
     assert ents(first["rows"]) == [("B", -50.0), ("A", -20.0), ("C", 0.0)]
     assert [r["rank"] for r in first["rows"]] == [1, 2, 3]
@@ -814,7 +814,7 @@ def test_json_route_filters_and_status_codes(env):
                 {**params(), "intervals": json.dumps([iv("2020", "2010")])}):
         r = env.client.get("/api/period-changes", params=bad)
         assert r.status_code == 400, bad
-        assert r.json()["reason"] == "invalid_input" and r.json()["contract"] == "tempo-tools/1"
+        assert r.json()["reason"] == "invalid_input" and r.json()["contract"] == "tempo-tools/2"
     r = env.client.get("/api/period-changes", params=params(entity_columns=["NOPE"]))
     assert r.status_code == 400 and r.json()["reason"] == "unknown_column"
     r = env.client.get("/api/period-changes", params={**params(), "dataset": "NOPEX"})
