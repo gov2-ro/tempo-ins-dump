@@ -14,7 +14,9 @@ On `fix/ask-answer-quality` (2026-10-17, code-ready, not deployed, not model/cli
 - [ ] **Size public MCP for national locality rankings** (AQ-01B): 01A's harness
   (`scripts/benchmark-mcp.py`) shows the default cap refuses `POP107D_grupe_localitate`
   (3,898,870 rows) with no dispatch; a 5M cap in the child ranks 319 cities identically to
-  the direct tool on macOS. Still needed: `--mode container` on a Linux host with the
+  the direct tool on macOS. **Postponed 2026-10-17 (owner):** where to run the 512 MiB test
+  (local container runtime, a Linux Docker host, or a separate Fly test machine) is undecided.
+  Still needed: `--mode container` on a Linux host with the
   candidate image at 512 MiB, the AT-04 180 s/300 s mixed phases, and worst admitted
   requests of every scan-gated tool. Do not change limits before that.
 - [ ] **Live task evaluation** (AQ-02C): runner `scripts/eval-ask-tasks.py` + `data/eval/ask_tasks.json`
@@ -28,18 +30,27 @@ On `fix/ask-answer-quality` (2026-10-17, code-ready, not deployed, not model/cli
   the cell is real; nothing ties the word "total" to an `incomplete_domain` result. New check.
 - [ ] **Claim checks, follow-ups** (AQ-03): recipe component columns (`stays`, `population`) as
   cells (changes two controls from flagged to withheld), "respectively"/enumeration alignment,
-  number words, and whether `definition_mismatch`/`direction_mismatch` should withhold prose
-  (today only unit/period contradictions do; one line in `answer_check.CONTRADICTIONS`).
+  number words. **Decided 2026-10-17 (owner):** only unit/period contradictions withhold prose;
+  `definition_mismatch`/`direction_mismatch` and the other new reasons keep the claim unverified
+  (turn partial). Revisit only with false-positive evidence from task runs.
 - [ ] **Harmonize partial status for unverified domains**: `compare_periods` returns `ok` where
-  `rank_entities` returns `partial/unverified_total` for the same unverified collapsed domain
-  (pre-existing; changing it alters the default status of `compare_periods`). Owner decision.
-- [ ] **AQ-04A follow-ups** (product decisions): apply a county filter to city rankings
-  (reported, not applied today); a generic population default at national level (kept as before);
+  `rank_entities` returns `partial/unverified_total` for the same unverified collapsed domain.
+  **Decided 2026-10-17 (owner):** `compare_periods` becomes `partial/unverified_total` too,
+  values unchanged. In progress on `aq/changes-unverified-partial`.
+- [ ] **County-scoped city rankings and unemployment default** — **Decided 2026-10-17 (owner):**
+  "a county named in a city ranking narrows it to cities in that county" (exact county label,
+  disclosed); generic unemployment defaults by level: county → registered (ILO has no county
+  series), national → ILO, region/unknown → keep asking; explicit definitions always win.
+  In progress on `aq/discovery-county-unemployment`.
+- [ ] **AQ-04A follow-ups**: a generic population default at national level (kept as before);
   several years in one question pin only the last (`concept_search.parse_query`, raw search).
 - [ ] **Area identity for recipes** (AQ-04B): `run_recipe` matches areas by exact label only;
   "Cluj-Napoca" → "Cluj", English names and cross-dataset labels need a reviewed contract.
-- [ ] **Default tool language** (AQ-04C): prose follows `lang`, default `ro`; MCP clients that omit
-  it get Romanian sentences (codes unchanged). Also: Ask HTTP-error texts are English, Pydantic
+- [x] **Default tool language** (AQ-04C): prose follows `lang`, default `ro`; MCP clients that omit
+  it get Romanian sentences (codes unchanged). **Decided 2026-10-17 (owner):** Romanian stays the
+  default; Ask also uses the site's language switcher (`lens_lang`) when the question's own
+  language is ambiguous (`aq/ask-ui-lang`).
+- [ ] **Ask/tool text gaps** (AQ-04C): Ask HTTP-error texts are English, Pydantic
   validation details are English, the caption says "1 rânduri", `constraint_not_applied` is not
   shown on the page.
 - [ ] **Historical city membership / constant boundaries** (AQ-05A): needs a reviewed source;
