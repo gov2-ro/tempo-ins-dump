@@ -15,6 +15,12 @@ statistic themselves:
     The scope of a candidate comes from `scope.dataset_restrictions`: only a PROVEN
     gap (`domain.complete` false, e.g. single-age children stop at 84) blocks a
     candidate; `null` means "not verified" and is never presented as complete.
+  * the reviewed defaults (resident population for a generic population question, the
+    domicile series for a city ranking, the stays-per-resident recipe) are configuration:
+    `discovery_policy` applies `app/data/discovery_defaults.json` before the shared search
+    runs. A constraint of the question that discovery cannot apply (sex, age, a denominator,
+    a county around a city ranking) is reported in `interpretation.unapplied_constraints`
+    and a `constraint_not_applied` warning, and no data call that ignores it is suggested.
   * describe_dataset reads `dataset_meta` (metadata, structure, measure) and the
     ACTUAL values/period bounds of the data file. Metadata option lists and
     metadata year ranges are reported next to the actual ones, never instead.
@@ -36,6 +42,7 @@ from app.services import concept_search as cs
 from app.services import data_query, dataset_meta, dataset_search, grain_guard, recipes, scope
 from app.services.chart_selector import TOTAL_RE
 from app.services.tools import contract as C
+from app.services.tools import discovery_policy as dpol
 from app.services.tools.contract import ToolFailure
 
 log = logging.getLogger(__name__)
@@ -654,72 +661,111 @@ def _shrink_discover(data: dict) -> bool:
 
 # ------------------------------------------------------------------ discover_indicators
 
+def _locality_card(conn, lang: str, plan, parsed: dict, by_id: dict) -> dict:
+    """The reviewed locality series for a city question, as a concept card. The question
+    never reaches it through search: the configured variants replace the concept's own."""
+    by_id[plan.locality["id"]] = plan.locality
+    raw = cs.concept_card(conn, plan.locality, parsed, lang, plan.locality_alias, False)
+    if raw is None:
+        raise C.ToolFailure("unavailable", "level_unavailable",
+                            "The reviewed city population series is not in this data generation. "
+                            "County data was not substituted.")
+    return raw
+
+
+_CALL_TOOLS = ("query_data", "rank_entities", "run_recipe")
+
+
+def _withhold_calls(cards: list, lang: str):
+    """A constraint discovery cannot apply (sex, age, a denominator, a county around a city
+    ranking) must not hide behind a data call that ignores it: a dataset candidate points at
+    describe_dataset (explicit values can be filtered there), a recipe candidate offers no call."""
+    for card in cards:
+        for cand in card["candidates"]:
+            if (cand.get("next_call") or {}).get("tool") not in _CALL_TOOLS:
+                continue
+            cand["next_call"] = _call("describe_dataset", dataset=cand["dataset"], lang=lang) \
+                if cand.get("dataset") else None
+            cand["notes"].append(_note(
+                "constraint_not_applied",
+                "A constraint of the question is not applied by discovery, so no data call that "
+                "ignores it is suggested here. " + ("Read the dimensions and filter explicit values; "
+                                                    "if this dataset cannot express it, say so."
+                                                    if cand["next_call"] else
+                                                    "This recipe cannot take it; say so.")))
+        pref = next((c for c in card["candidates"] if c.get("preferred")), None)
+        card["next_call"] = pref.get("next_call") if pref else None
+
+
+def _constraint_warnings(unapplied: list) -> list:
+    out = []
+    for kind in dict.fromkeys(c["kind"] for c in unapplied):
+        words = "; ".join(repr(c["text"]) for c in unapplied if c["kind"] == kind)
+        out.append(C.warning(
+            "constraint_not_applied",
+            f"The question asks for {kind} ({words}) but discovery did not apply it; the candidates "
+            "do not answer it as they stand. Filter explicit values after describe_dataset, or tell "
+            "the user it was not applied. Nothing was dropped silently.", kind))
+    return out
+
+
+def _assumed_warning(cdef: dict, cid: str, lang: str, cities: bool) -> dict:
+    label = (cdef.get("name") or {}).get(lang, cid)
+    if cities:      # the locality series is the only city definition: say what it counts
+        note = (cdef.get("note") or {}).get(lang) or ""
+        return C.warning("assumed_definition", f"Definition assumed for cities: {label} ({note}). "
+                         "Resident population is not available for cities in the reviewed series; "
+                         "state the definition explicitly.", cid)
+    return C.warning("assumed_definition", f"Definition assumed: {label}. State it explicitly; "
+                     "alternatives remain available.", cid)
+
+
 def discover_indicators(args, ctx):
     conn, lang = ctx.conn, ctx.lang
     from app.services.tools.intent import interpret
     intent = interpret(args.query)
-    if intent["cities"] and intent["operation"] == "change":
-        raise C.ToolFailure("unavailable", "unsupported_operation",
-                            "City-only change rankings are not yet supported. Specify a county change "
-                            "comparison or a city population ranking for one year.")
-    if intent["unsupported_measure"]:
-        raise C.ToolFailure("unavailable", "unsupported_operation",
-                            "This question needs a different denominator, density or correlation operation. "
-                            "No count or built-up-area ratio was substituted. Ask separately for the "
-                            "population ranking or the reviewed overnight-stays-per-resident recipe.")
     by_id = {c["id"]: c for c in cs.load_concepts()}
-    query, assumed = args.query, None
-    if intent["tourism_ratio"]:
-        query = "innoptari pe locuitor " + query
-    elif intent["population"] and not intent["explicit_population"]:
-        default = "domicile_population" if intent["cities"] else "resident_population"
-        if default in by_id:
-            assumed = default
-            query = ("populatia dupa domiciliu " if intent["cities"] else "populatia rezidenta ") + query
-    res = cs.search(query, conn, lang=lang, limit=args.limit)
+    plan = dpol.plan(intent, args.query, by_id, lang)       # reviewed defaults, routes, refusals
+    res = cs.search(plan.query, conn, lang=lang, limit=args.limit)
     parsed = res["interpretation"]
     parsed["latest"] = parsed.get("latest") or intent["latest"]
-    if intent["cities"]:
+    if plan.locality:
         parsed["level"] = "locality"
-        if not intent["population"] or (intent["explicit_population"] and "domicili" not in cs.fold(query)):
-            raise C.ToolFailure("unavailable", "level_unavailable",
-                                "No reviewed annual resident-population city ranking is available here. "
-                                "The locality series counts legal domicile; explicitly ask for domicile "
-                                "population to use it. County data was not substituted.")
-        definition = by_id.get("domicile_population")
-        if definition:
-            definition = {**definition, "variants": {"locality": "POP107D_grupe_localitate"}}
-            by_id["domicile_population"] = definition
-            raw = cs.concept_card(conn, definition, parsed, lang, "domiciliu", False)
-            res["concepts"] = [raw] if raw else []
-    if intent["tourism_ratio"]:
-        res["concepts"] = [c for c in res["concepts"] if c["id"] == "tourism_intensity"]
+        res["concepts"] = [_locality_card(conn, lang, plan, parsed, by_id)]
+    if plan.recipe:
+        res["concepts"] = [c for c in res["concepts"] if c["id"] == plan.recipe]
         if not res["concepts"]:
             raise C.ToolFailure("unavailable", "recipe_unavailable", "The per-resident recipe is unavailable; no raw count was substituted.")
     places = [dict(p) for p in parsed.get("places") or []]
     cards = [_concept_card(ctx, raw, by_id, parsed, args.query)
              for raw in res["concepts"][:args.limit]]
-    if intent["operation"] == "rank" or intent["cities"]:
-        if intent["top_k"] > 100:
-            raise C.ToolFailure("error", "invalid_input", "At most 100 ranked entities can be returned; ask for a smaller top K.")
+    named = {w for c in cards for w in cs.fold(c.get("matched") or "").split()}
+    # a constraint inside the matched concept's own alias ("population by age") is that concept
+    unapplied = [c for c in plan.unapplied if not set(cs.fold(c["text"]).split()) <= named]
+    if plan.locality and places:       # a named county does not narrow the national city series
+        unapplied.append({"kind": "geography", "text": ", ".join(p["name"] for p in places)})
+    if unapplied:
+        _withhold_calls(cards, lang)
+    elif intent["operation"] == "rank" or intent["cities"]:
         for card in cards:
             for cand in card["candidates"]:
                 if cand.get("kind") != "dataset" or not cand.get("queryable"):
                     continue
                 prev = (cand.get("next_call") or {}).get("arguments") or {}
                 filters = {k: v for k, v in prev.get("filters", {}).items() if k != "TIME_PERIOD"}
-                keys = ["REF_AREA", "REF_AREA_2"] if intent["cities"] else ["REF_AREA"]
-                cand["next_call"] = _call("rank_entities", dataset=cand["dataset"],
-                    entity_columns=keys, year=str(parsed["period"]) if parsed.get("period") else None,
-                    filters=filters, entity_class="cities" if intent["cities"] else "all",
-                    top_k=intent["top_k"], order=intent["order"], lang=lang)
+                cand["next_call"] = _call("rank_entities", dataset=cand["dataset"], **plan.rank,
+                    year=str(parsed["period"]) if parsed.get("period") else None,
+                    filters=filters, top_k=intent["top_k"], order=intent["order"], lang=lang)
             pref = next((c for c in card["candidates"] if c.get("preferred")), None)
             card["next_call"] = pref.get("next_call") if pref else None
 
     ambiguities, warnings = [], _generation_warnings(ctx)
+    # only a default that reached the answer is disclosed: a configured mapping whose source
+    # produced no card must not warn about a definition nobody was shown
+    assumed = plan.assumed if any(c["id"] == plan.assumed for c in cards) else None
     if assumed:
-        label = (by_id.get(assumed, {}).get("name") or {}).get(lang, assumed)
-        warnings.append(C.warning("assumed_definition", f"Definition assumed: {label}. State it explicitly; alternatives remain available.", assumed))
+        warnings.append(_assumed_warning(by_id.get(assumed, {}), assumed, lang, intent["cities"]))
+    warnings += _constraint_warnings(unapplied)
     for card in cards:
         if assumed and card["id"] == assumed:
             card["assumed"] = True
@@ -780,7 +826,8 @@ def discover_indicators(args, ctx):
 
     interp = {"places": places, "level": parsed.get("level"), "period": parsed.get("period"),
               "latest": parsed.get("latest"), "family_query": parsed.get("fts"),
-              "ambiguities": ambiguities, "operation": intent["operation"], "assumed_definition": assumed}
+              "ambiguities": ambiguities, "operation": intent["operation"], "assumed_definition": assumed,
+              "unapplied_constraints": unapplied}
     data = {"interpretation": interp, "concepts": cards, "families": families,
             "families_info": families_info, "choices": choices}
 
@@ -807,7 +854,10 @@ def discover_indicators(args, ctx):
         message = (f"{len(cards)} reviewed concept(s) with candidate datasets and "
                    f"{len(families)} family search hit(s). Candidates carry their grain status and any "
                    "proven scope restriction (domain.complete null = not verified); families "
-                   "are unverified search hits.")
+                   "are unverified search hits."
+                   + (" Not applied from the question: "
+                      + ", ".join(f"{c['kind']} ({c['text']!r})" for c in unapplied)
+                      + "; see warnings." if unapplied else ""))
         recovery = []
 
     def build():
