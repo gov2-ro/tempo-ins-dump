@@ -777,7 +777,7 @@ class _Run:
                 "unverified": sum(c["check"] == "unverified" for c in ver["claims"])}
             if ver["claim_summary"]["unverified"]:
                 ver["status"] = "unverified_numbers"
-            contradictions = [c for c in ver["claims"] if c.get("reason") in ("unit_mismatch", "period_mismatch")]
+            contradictions = [c for c in ver["claims"] if c.get("reason") in answer_check.CONTRADICTIONS]
             if contradictions:
                 ver["status"] = "claim_mismatch"
                 answer = ("Am retras explicația deoarece unitatea sau perioada nu corespund datelor. "
