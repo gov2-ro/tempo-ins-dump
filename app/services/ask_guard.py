@@ -312,10 +312,11 @@ def sanitize_metrics(fields: dict) -> dict:
         out["usage"] = {k: v for k, v in usage.items()
                         if k in ("input_tokens", "output_tokens", "reasoning_tokens", "cached_tokens")
                         and (v is None or isinstance(v, int))}
-    codes = fields.get("refusal_codes")
-    if isinstance(codes, dict):
-        out["refusal_codes"] = {k: v for k, v in codes.items()
-                                if isinstance(k, str) and _CODE_RE.match(k) and isinstance(v, int)}
+    for name in ("refusal_codes", "claim_codes"):
+        codes = fields.get(name)
+        if isinstance(codes, dict) and (codes or name == "refusal_codes"):    # claim_codes only when claims were checked
+            out[name] = {k: v for k, v in codes.items()
+                         if isinstance(k, str) and _CODE_RE.match(k) and isinstance(v, int)}
     return {k: v for k, v in out.items() if v is not None}
 
 

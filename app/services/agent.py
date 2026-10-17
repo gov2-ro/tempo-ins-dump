@@ -27,6 +27,7 @@ import logging
 import os
 import time
 import uuid
+from collections import Counter
 from dataclasses import dataclass, field
 
 from app import config
@@ -173,7 +174,8 @@ class AgentResult:
     stop_reason: str = "end_turn"
     budget: dict = field(default_factory=dict)
     # Deterministic answer check: {status: verified|unverified_numbers|values_withheld|no_values,
-    #  valid_query, uncited_numbers, unavailable, approximations, claims: [...], claim_summary}
+    #  valid_query, uncited_numbers, unavailable, approximations, claims: [...], claim_summary,
+    #  claim_reasons: {stable reason: count}}
     verification: dict = field(default_factory=dict)
     # Terminal state; HTTP 200 and end_turn do not mean a substantive answer.
     outcome: str = "answered"        # answered | clarification | refused | partial | failed
@@ -690,6 +692,8 @@ class _Run:
             "timed_out": self.cancel.timed_out or stop_reason == "deadline",
             "requested_output_tokens": self.requested_tokens,
             "dropped_debug_events": self.dropped_events, "context_entries": len(ctx_entries),
+            "claim_codes": {**{k: n for k, n in (verification.get("claim_summary") or {}).items() if n},
+                            **(verification.get("claim_reasons") or {})},
         }
         self.emit("answer", text_chars=len(answer), outcome=outcome, reason=reason)
         budget = self.budget()
@@ -775,9 +779,14 @@ class _Run:
             ver["claim_summary"] = {
                 "matched": sum(c["check"] == "matched" for c in ver["claims"]),
                 "unverified": sum(c["check"] == "unverified" for c in ver["claims"])}
+            # stable reason -> count, never the claim text (debug event and content-free metrics)
+            ver["claim_reasons"] = dict(sorted(Counter(
+                c["reason"] for c in ver["claims"] if c.get("reason")).items()))
+            self.emit("claims", **ver["claim_summary"], reasons=ver["claim_reasons"],
+                      complete=sum(bool((c.get("anchors") or {}).get("complete")) for c in ver["claims"]))
             if ver["claim_summary"]["unverified"]:
                 ver["status"] = "unverified_numbers"
-            contradictions = [c for c in ver["claims"] if c.get("reason") in ("unit_mismatch", "period_mismatch")]
+            contradictions = [c for c in ver["claims"] if c.get("reason") in answer_check.CONTRADICTIONS]
             if contradictions:
                 ver["status"] = "claim_mismatch"
                 answer = ("Am retras explicația deoarece unitatea sau perioada nu corespund datelor. "
