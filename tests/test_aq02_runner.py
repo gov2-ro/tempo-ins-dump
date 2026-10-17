@@ -322,12 +322,14 @@ def test_a_copied_generation_other_than_the_one_checked_is_a_skip_not_a_pass(tmp
 
 
 def test_a_documented_known_failure_is_listed_apart_and_a_resolved_one_is_noted(world):
-    plain = copy.deepcopy(TASKS["T06"])
-    plain.pop("known_failure")
-    failing = R.run_task(world, plain, "ro", "direct", canaries=[])
-    assert failing["status"] == "fail" and failing["failure_categories"] == ["claim_not_bound"]
-    declared = copy.deepcopy(TASKS["T06"])
-    res = R.run_task(world, declared, "ro", "direct", canaries=[])
+    # T06 no longer fails on its own (AQ-03 bound the ratio), so a wrong scripted answer is the failing case
+    task = copy.deepcopy(TASKS["T06"])
+    failing = R.run_task(world, task, "ro", "direct", canaries=[], answer_override=task["negatives"][0]["answer"]["ro"])
+    assert failing["status"] == "fail" and "forbidden_claim" in failing["failure_categories"]
+    declared = copy.deepcopy(task)
+    declared["known_failure"] = {"package": "AQ-03", "categories": failing["failure_categories"], "surfaces": ["direct"],
+                                 "note": "a documented limitation, declared for this test only"}
+    res = copy.deepcopy(failing)
     R.apply_known_failure(declared, res)
     assert res["status"] == "known_failure" and res["known_failure"]["package"] == "AQ-03"
     stale = copy.deepcopy(TASKS["T01"])
