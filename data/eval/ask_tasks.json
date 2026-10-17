@@ -1,0 +1,2138 @@
+{
+ "schema": "ask-tasks/1",
+ "version": "2026-10-17.1",
+ "about": "AQ-02A task set. Each task is a scripted conversation (tool choice and answer are fixed here) replayed against a synthetic generation through the real tools, Ask loop and public MCP transport. Expected numbers carry the arithmetic that produces them from the fixture's raw cells; tests recompute them without the implementation. Scripted tool choice is not live-model quality. This file is not a baseline: nothing here is rebuilt from a run.",
+ "canaries": ["sk-ant-SENTINEL0123456789abcdef"],
+ "fixtures": {
+  "synthetic-v1": {
+   "kind": "synthetic",
+   "builder": "tests/aq02_env.py:synthetic_env",
+   "generation": "gen-at01-fixture",
+   "datasets": [
+    "ADDX",
+    "AGEP",
+    "AGEP_judete_grupe",
+    "AGEP_judete_varste",
+    "BIGLONG",
+    "BIGSCAN",
+    "BIGX",
+    "BIRTHA",
+    "BIRTHB",
+    "CHILDX",
+    "CITYX",
+    "CONFK_judete",
+    "CONFK_regiuni",
+    "COUNTX",
+    "DUPL",
+    "FAMX",
+    "FAMX_judete",
+    "FAMX_regiuni",
+    "GOS102A",
+    "INCX",
+    "LEGX",
+    "LOCX",
+    "MONK_judete",
+    "MONTHX",
+    "NOTOT",
+    "OLDT",
+    "PARENTX",
+    "POP107D_grupe_localitate",
+    "POPC",
+    "POPD",
+    "POPD_judete",
+    "POPK_judete",
+    "POPK_regiuni",
+    "POPX",
+    "PPOP",
+    "PSTAY",
+    "PUBM",
+    "RATEK_judete",
+    "RATEX",
+    "RESPOP",
+    "STAYK_judete",
+    "STAYS1",
+    "TOTX",
+    "UNEMI",
+    "UNEMR",
+    "WAGEK_judete",
+    "WIDEX"
+   ]
+  },
+  "copied-9b3e065d": {
+   "kind": "copied",
+   "generation_prefix": "9b3e065d",
+   "requires": "TEMPO_DATA_DIR=<read-only copied generation>/data; cases skip individually when it is absent or another generation"
+  }
+ },
+ "tasks": [
+  {
+   "id": "T01",
+   "title": "Resident population of a named county and year",
+   "category": "fact",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Care este populația rezidentă a județului Cluj în 2021?", "en": "What is the resident population of Cluj county in 2021?"},
+   "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
+   "answer": {
+    "ro": "Populația rezidentă a județului Cluj era de 1010 persoane în 2021 (POPC).",
+    "en": "The resident population of Cluj county was 1010 persons in 2021 (POPC)."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "reasons": [null],
+    "verification": ["verified"],
+    "tools": [{"tool": "discover_indicators"}, {"tool": "query_data", "args": {"dataset": "POPC"}}],
+    "calls": [{"call": 0, "status": ["ok"]}, {"call": 1, "status": ["ok"], "reason": [null]}],
+    "numbers": [{"id": "cluj_2021", "call": 1, "path": "/data/rows/0/2", "value": 1010, "derivation": "1010", "entity": "Cluj", "period": "2021", "bind": true}],
+    "evidence": {
+     "call": 1,
+     "datasets": ["POPC"],
+     "unit": "Numar persoane",
+     "periods": ["2021"],
+     "keys": ["REF_AREA", "TIME_PERIOD"],
+     "generation": "gen-at01-fixture",
+     "scope_complete": true
+    },
+    "answer": {"allowed_numbers": [2021]}
+   },
+   "negatives": [
+    {
+     "id": "figure_off_by_ten_percent",
+     "describe": "States 1100 instead of 1010.",
+     "answer": {
+      "ro": "Populația rezidentă a județului Cluj era de 1100 persoane în 2021 (POPC).",
+      "en": "The resident population of Cluj county was 1100 persons in 2021 (POPC)."
+     },
+     "detect": {"app": "flagged", "fails": ["stated.cluj_2021", "answer_numbers"]}
+    },
+    {
+     "id": "figure_off_by_one",
+     "describe": "States 1011 instead of 1010.",
+     "answer": {
+      "ro": "Populația rezidentă a județului Cluj era de 1011 persoane în 2021 (POPC).",
+      "en": "The resident population of Cluj county was 1011 persons in 2021 (POPC)."
+     },
+     "known_limitation": {
+      "package": "AQ-03",
+      "note": "A stated figure within 0.5% of a result value is matched even when it is written as an exact integer, so 1011 is accepted as the cell 1010 (tolerance = max(half unit, 0.005 * value))."
+     },
+     "detect": {"app": "accepted", "fails": ["stated.cluj_2021", "answer_numbers"], "hard": ["numerical_deviation"]}
+    }
+   ]
+  },
+  {
+   "id": "T02",
+   "title": "Generic population question: the reviewed resident default is disclosed with its alternative",
+   "category": "definition",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Care este populația județului Cluj în 2021?", "en": "What is the population of Cluj county in 2021?"},
+   "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
+   "answer": {
+    "ro": "Am presupus implicit populația rezidentă (alternativa este populația după domiciliu): județul Cluj avea 1010 persoane în 2021 (POPC).",
+    "en": "I assumed the default resident population (the alternative is population by domicile): Cluj county had 1010 persons in 2021 (POPC)."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "verification": ["verified"],
+    "calls": [
+     {"call": 0, "status": ["ok"], "warnings": ["assumed_definition"], "equals": {"/data/interpretation/assumed_definition": "resident_population"}},
+     {"call": 1, "status": ["ok"]}
+    ],
+    "numbers": [{"id": "cluj_2021", "call": 1, "path": "/data/rows/0/2", "value": 1010, "derivation": "1010", "entity": "Cluj", "period": "2021", "bind": true}],
+    "evidence": {"call": 1, "datasets": ["POPC"], "unit": "Numar persoane", "periods": ["2021"], "generation": "gen-at01-fixture"},
+    "qualifications": [
+     {
+      "id": "default_disclosed",
+      "answer_any": {"ro": ["am presupus", "implicit"], "en": ["assumed", "default"]},
+      "tool": {"call": 0, "warning": "assumed_definition"}
+     },
+     {"id": "definition_named", "answer_any": {"ro": ["populatia rezidenta"], "en": ["resident population"]}},
+     {"id": "alternative_named", "answer_any": {"ro": ["domiciliu"], "en": ["domicile"]}}
+    ],
+    "forbidden": [{"id": "domicile_figure", "numbers": [1040]}],
+    "answer": {"allowed_numbers": [2021]}
+   }
+  },
+  {
+   "id": "T02B",
+   "title": "Generic unemployment question: ask which official definition; no default is invented",
+   "category": "definition",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Care este rata șomajului în Cluj?", "en": "What is the unemployment rate in Cluj?"},
+   "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}],
+   "answer": {
+    "ro": "Rata șomajului are două definiții oficiale: șomajul înregistrat sau șomajul BIM (ILO). Pe care o doriți?",
+    "en": "The unemployment rate has two official definitions: registered unemployment or ILO unemployment. Which one do you want?"
+   },
+   "review": "The wording of the clarifying question is prose; the checks only require both definitions to be named and no figure.",
+   "expect": {
+    "outcome": ["clarification"],
+    "reasons": ["ambiguous_definition"],
+    "verification": ["no_values"],
+    "calls": [
+     {
+      "call": 0,
+      "status": ["needs_clarification"],
+      "reason": ["ambiguous_definition"],
+      "equals": {"/data/interpretation/assumed_definition": null},
+      "absent": ["/data/concepts/0/next_call"]
+     }
+    ],
+    "qualifications": [
+     {"id": "registered_named", "answer_any": {"ro": ["inregistrat"], "en": ["registered"]}},
+     {"id": "ilo_named", "answer_any": {"ro": ["BIM", "ILO"], "en": ["ILO"]}}
+    ],
+    "forbidden": [{"id": "invented_rate", "numbers": [2.5, 3, 3.5, 4, 4.5, 5, 5.6, 6.1]}],
+    "answer": {"no_numbers": true, "allowed_numbers": []}
+   }
+  },
+  {
+   "id": "T03",
+   "title": "A city named like its county: ask for the county or all counties before any value",
+   "category": "place",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Care este populația rezidentă a Cluj-Napoca în 2021?", "en": "What is the resident population of Cluj-Napoca in 2021?"},
+   "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}],
+   "answer": {
+    "ro": "Seria este publicată pe județe, nu pe orașe: doriți cifra pentru județul Cluj sau pentru toate județele?",
+    "en": "This series is published by county, not by city: do you want the figure for Cluj county or for all counties?"
+   },
+   "review": "Check the place clarification offers the county and all-counties choices in plain language.",
+   "expect": {
+    "outcome": ["clarification"],
+    "reasons": ["ambiguous_place"],
+    "verification": ["no_values"],
+    "calls": [
+     {
+      "call": 0,
+      "status": ["needs_clarification"],
+      "reason": ["ambiguous_place"],
+      "equals": {"/data/interpretation/places/0/note": "city_not_county"},
+      "absent": ["/data/concepts/0/next_call"]
+     }
+    ],
+    "qualifications": [{"id": "county_level_stated", "answer_any": {"ro": ["pe judete", "judetul"], "en": ["by county", "county"]}}],
+    "forbidden": [{"id": "county_figure_as_city", "numbers": [1010]}],
+    "answer": {"no_numbers": true, "allowed_numbers": []}
+   }
+  },
+  {
+   "id": "T04",
+   "title": "A recent month beyond the schema's example values: actual bounds, then the exact period",
+   "category": "period",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Care este indicatorul lunar lung pentru Cluj în septembrie 2024?", "en": "What is the long monthly indicator for Cluj in September 2024?"},
+   "steps": [
+    {"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}},
+    {"tool": "describe_dataset", "arguments": {"dataset": "MONTHX"}},
+    {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}},
+    {
+     "tool": "query_data",
+     "arguments": {"dataset": "MONTHX", "filters": {"REF_AREA": ["Cluj"], "TIME_PERIOD": ["2024-09"]}, "group_by": ["REF_AREA", "TIME_PERIOD"]}
+    }
+   ],
+   "answer": {
+    "ro": "Indicatorul lunar lung pentru Cluj în septembrie 2024 (2024-09) este 121 (MONTHX).",
+    "en": "The long monthly indicator for Cluj in September 2024 (2024-09) was 121 (MONTHX)."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "verification": ["verified"],
+    "tools": [
+     {"tool": "discover_indicators"},
+     {"tool": "describe_dataset", "args": {"dataset": "MONTHX"}},
+     {"tool": "find_dimension_values", "args": {"dataset": "MONTHX", "column": "TIME_PERIOD"}},
+     {"tool": "query_data", "args": {"dataset": "MONTHX"}}
+    ],
+    "calls": [
+     {"call": 0, "status": ["ok"], "warnings": ["period_not_single"]},
+     {"call": 1, "status": ["ok"], "equals": {"/data/time/first": "2023-01", "/data/time/last": "2024-09", "/data/time/frequency": "monthly"}},
+     {"call": 2, "status": ["ok"], "equals": {"/data/values/0/value": "2024-09", "/data/order": "newest first"}},
+     {"call": 3, "status": ["ok"]}
+    ],
+    "numbers": [{"id": "cluj_2024_09", "call": 3, "path": "/data/rows/0/2", "value": 121, "derivation": "100 + 21", "entity": "Cluj", "period": "2024-09"}],
+    "evidence": {"call": 3, "datasets": ["MONTHX"], "unit": "Numar", "periods": ["2024-09"], "generation": "gen-at01-fixture"},
+    "answer": {"allowed_numbers": [2024]}
+   }
+  },
+  {
+   "id": "T05",
+   "title": "A historical year the data does not hold: say so, no latest-year fallback",
+   "category": "period",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Care a fost populația județului Cluj în 2015?", "en": "What was the population of Cluj county in 2015?"},
+   "steps": [
+    {"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}},
+    {
+     "tool": "query_data",
+     "arguments": {"dataset": "POPC", "filters": {"REF_AREA": ["Cluj"], "TIME_PERIOD": ["2015"]}, "group_by": ["REF_AREA", "TIME_PERIOD"]}
+    }
+   ],
+   "answer": {
+    "ro": "Nu există date pentru 2015 în seria populației rezidente (POPC), care acoperă 2020–2021. Nu am folosit alt an; pot oferi 2020 sau 2021.",
+    "en": "There is no data for 2015 in the resident population series (POPC), which covers 2020–2021. I did not use another year; I can give 2020 or 2021."
+   },
+   "expect": {
+    "outcome": ["refused"],
+    "reasons": ["period_unavailable"],
+    "verification": ["no_values"],
+    "calls": [
+     {"call": 0, "status": ["ok"], "warnings": ["period_unavailable"]},
+     {"call": 1, "status": ["unavailable"], "reason": ["period_unavailable"], "absent": ["/data/rows"]}
+    ],
+    "qualifications": [
+     {"id": "available_years_named", "answer_any": {"ro": ["2020"], "en": ["2020"]}},
+     {"id": "no_substitution", "answer_any": {"ro": ["alt an"], "en": ["another year"]}}
+    ],
+    "forbidden": [{"id": "other_year_value", "numbers": [1000, 1010]}],
+    "answer": {"allowed_numbers": [2015, 2020, 2021]}
+   },
+   "negatives": [
+    {
+     "id": "latest_year_substituted",
+     "describe": "States the 2021 value as if it answered 2015.",
+     "answer": {"ro": "Populația județului Cluj în 2015 era de 1010 persoane (POPC).", "en": "The population of Cluj county in 2015 was 1010 persons (POPC)."},
+     "detect": {"app": "withheld", "fails": ["forbidden.other_year_value", "qualification.no_substitution"]}
+    }
+   ]
+  },
+  {
+   "id": "T06",
+   "title": "Overnight stays per resident: the reviewed recipe with aligned year and denominator",
+   "category": "recipe",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Câte înnoptări revin la un locuitor în Alfa, în 2024?", "en": "How many overnight stays per resident were there in Alfa in 2024?"},
+   "steps": [
+    {"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}},
+    {"tool": "run_recipe", "arguments": {"recipe": "tourism_intensity", "year": "2024", "areas": ["Alfa"]}}
+   ],
+   "answer": {
+    "ro": "În Alfa, în 2024, au revenit 2 înnoptări pe locuitor (rețeta tourism_intensity).",
+    "en": "In Alfa in 2024 there were 2 overnight stays per resident (recipe tourism_intensity)."
+   },
+   "known_failure": {
+    "package": "AQ-03",
+    "categories": ["claim_not_bound"],
+    "surfaces": ["direct"],
+    "note": "AQ-03B: a small integer (the ratio 2) gets no claim binding, so the supported answer is 'verified' with zero claims. Resolved when the ratio is bound to its recipe cell."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "verification": ["verified"],
+    "tools": [{"tool": "discover_indicators"}, {"tool": "run_recipe", "args": {"recipe": "tourism_intensity"}}],
+    "calls": [{"call": 1, "tool": "run_recipe", "status": ["ok"], "reason": [null], "equals": {"/data/recipe/value_source": "reconstruction"}}],
+    "numbers": [
+     {
+      "id": "alfa_ratio",
+      "call": 1,
+      "path": "/data/rows/0/value",
+      "value": 2,
+      "derivation": "120 / 60",
+      "entity": "Alfa",
+      "period": "2024",
+      "bind": true
+     },
+     {"id": "alfa_stays", "call": 1, "path": "/data/rows/0/stays", "value": 120, "derivation": "120", "stated": false},
+     {"id": "alfa_population", "call": 1, "path": "/data/rows/0/population", "value": 60, "derivation": "60", "stated": false}
+    ],
+    "evidence": {
+     "call": 1,
+     "datasets": ["STAYS1", "RESPOP"],
+     "unit": {"ro": "înnoptări pe locuitor", "en": "stays per resident"},
+     "periods": ["2024"],
+     "generation": "gen-at01-fixture"
+    },
+    "forbidden": [{"id": "count_as_ratio", "answer_pattern": {"ro": ["\\b120 (inno\\w*) pe locuitor"], "en": ["\\b120 (overnight )?stays per resident"]}}],
+    "answer": {"allowed_numbers": [2024]}
+   },
+   "negatives": [
+    {
+     "id": "count_presented_as_ratio",
+     "describe": "Presents the 120 stays count as the per-resident figure.",
+     "answer": {
+      "ro": "În Alfa, în 2024, au revenit 120 înnoptări pe locuitor (rețeta tourism_intensity).",
+      "en": "In Alfa in 2024 there were 120 overnight stays per resident (recipe tourism_intensity)."
+     },
+     "detect": {"app": "flagged", "fails": ["forbidden.count_as_ratio", "stated.alfa_ratio"]}
+    }
+   ]
+  },
+  {
+   "id": "T07",
+   "title": "A published INS cell is the answer; the reconstruction is only a cross-check",
+   "category": "recipe",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Care este valoarea publicată oficial de INS pentru Alfa în 2024?", "en": "What value does INS officially publish for Alfa in 2024?"},
+   "steps": [{"tool": "run_recipe", "arguments": {"recipe": "fx_published", "year": "2024", "areas": ["Alfa"]}}],
+   "answer": {
+    "ro": "INS publică pentru Alfa, în 2024, valoarea 10 (celula publicată; reconstrucția din surse dă 9,9 și servește doar ca verificare, rețeta fx_published).",
+    "en": "INS publishes the value 10 for Alfa in 2024 (the published cell; the reconstruction from sources gives 9.9 and is only a cross-check, recipe fx_published)."
+   },
+   "known_failure": {
+    "package": "AQ-03",
+    "categories": ["outcome_mismatch"],
+    "surfaces": ["direct"],
+    "note": "The cross-check value 9.9 (rows[].reconstructed) is not a citable numeric leaf, so a correct sentence that states it ends partial/unverified_numbers. Resolved when recipe leaves carry metric semantics (03A)."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "calls": [{"call": 0, "tool": "run_recipe", "status": ["ok"], "equals": {"/data/recipe/value_source": "ins_published", "/data/rows/0/label": "Alfa"}}],
+    "numbers": [
+     {"id": "published_cell", "call": 0, "path": "/data/rows/0/value", "value": 10, "derivation": "10", "entity": "Alfa", "period": "2024"},
+     {
+      "id": "reconstruction",
+      "call": 0,
+      "path": "/data/rows/0/reconstructed",
+      "value": 9.9,
+      "derivation": "99 / 10",
+      "tol": 1e-09,
+      "entity": "Alfa",
+      "period": "2024"
+     }
+    ],
+    "evidence": {"call": 0, "datasets": ["PSTAY", "PPOP"], "periods": ["2024"], "generation": "gen-at01-fixture"},
+    "qualifications": [
+     {"id": "published_named", "answer_any": {"ro": ["publica", "publicata"], "en": ["publishes", "published"]}},
+     {"id": "reconstruction_is_cross_check", "answer_any": {"ro": ["verificare"], "en": ["cross-check"]}}
+    ],
+    "forbidden": [{"id": "reconstruction_as_official", "answer_pattern": {"ro": ["valoarea (publicata )?9,9"], "en": ["the (published )?value 9\\.9"]}}],
+    "answer": {"allowed_numbers": [2024]}
+   },
+   "negatives": [
+    {
+     "id": "reconstruction_as_published",
+     "describe": "Calls the reconstructed 9.9 the published value.",
+     "answer": {
+      "ro": "INS publică pentru Alfa, în 2024, valoarea 9,9 (rețeta fx_published).",
+      "en": "INS publishes the value 9.9 for Alfa in 2024 (recipe fx_published)."
+     },
+     "detect": {"app": "flagged", "fails": ["forbidden.reconstruction_as_official", "stated.published_cell"]}
+    }
+   ]
+  },
+  {
+   "id": "T08",
+   "title": "Population change over two intervals: every eligible entity ranked, the excluded one named",
+   "category": "change",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {
+    "ro": "Care entități au pierdut cel mai mult populație între 1992 și 2002 și între 2010 și 2020?",
+    "en": "Which entities lost the most population between 1992 and 2002 and between 2010 and 2020?"
+   },
+   "steps": [
+    {
+     "tool": "compare_periods",
+     "arguments": {"dataset": "COUNTX", "entity_columns": ["REF_AREA"], "intervals": [{"from": "1992", "to": "2002"}, {"from": "2010", "to": "2020"}]}
+    }
+   ],
+   "answer": {
+    "ro": "1992–2002: B -50 (de la 200 la 150), apoi A -20; D este exclus pentru că nu are valoare în 2002. 2010–2020: D -90, A -30, B -20 (COUNTX).",
+    "en": "1992–2002: B -50 (from 200 to 150), then A -20; D is excluded because it has no value in 2002. 2010–2020: D -90, A -30, B -20 (COUNTX)."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "calls": [
+     {
+      "call": 0,
+      "tool": "compare_periods",
+      "status": ["partial"],
+      "warnings": ["entities_excluded"],
+      "equals": {
+       "/data/intervals/0/eligible_count": 3,
+       "/data/intervals/0/excluded_count": 1,
+       "/data/intervals/0/excluded/0/entity/REF_AREA": "D",
+       "/data/intervals/0/excluded/0/reason": "no_observation",
+       "/data/intervals/1/eligible_count": 4,
+       "/data/intervals/1/excluded_count": 0
+      }
+     }
+    ],
+    "numbers": [
+     {"id": "b_1992_2002", "call": 0, "path": "/data/intervals/0/rows/0/absolute", "value": -50, "derivation": "150 - 200", "entity": "B"},
+     {"id": "b_from", "call": 0, "path": "/data/intervals/0/rows/0/from_value", "value": 200, "derivation": "200", "entity": "B", "period": "1992"},
+     {"id": "b_to", "call": 0, "path": "/data/intervals/0/rows/0/to_value", "value": 150, "derivation": "150", "entity": "B", "period": "2002"},
+     {"id": "a_1992_2002", "call": 0, "path": "/data/intervals/0/rows/1/absolute", "value": -20, "derivation": "80 - 100", "entity": "A"},
+     {"id": "d_2010_2020", "call": 0, "path": "/data/intervals/1/rows/0/absolute", "value": -90, "derivation": "0 - 90", "entity": "D"},
+     {"id": "a_2010_2020", "call": 0, "path": "/data/intervals/1/rows/1/absolute", "value": -30, "derivation": "60 - 90", "entity": "A"},
+     {"id": "b_2010_2020", "call": 0, "path": "/data/intervals/1/rows/2/absolute", "value": -20, "derivation": "100 - 120", "entity": "B"},
+     {"id": "c_2010_2020", "call": 0, "path": "/data/intervals/1/rows/3/absolute", "value": 5, "derivation": "5 - 0", "entity": "C", "stated": false}
+    ],
+    "evidence": {"call": 0, "datasets": ["COUNTX"], "unit": "Numar persoane", "keys": ["REF_AREA"], "generation": "gen-at01-fixture"},
+    "qualifications": [{"id": "excluded_entity_named", "answer_any": {"ro": ["exclus"], "en": ["excluded"]}}],
+    "answer": {"allowed_numbers": [1992, 2002, 2010, 2020]}
+   }
+  },
+  {
+   "id": "T09",
+   "title": "A locality name that exists in two counties: the full key keeps them apart",
+   "category": "identity",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {
+    "ro": "Cum s-a schimbat populația localității LIVEZI între 2020 și 2021?",
+    "en": "How did the population of the locality LIVEZI change between 2020 and 2021?"
+   },
+   "steps": [
+    {"tool": "compare_periods", "arguments": {"dataset": "DUPL", "entity_columns": ["REF_AREA_2"], "intervals": [{"from": "2020", "to": "2021"}]}},
+    {"follow": {"call": 0, "path": "/recovery/0"}}
+   ],
+   "answer": {
+    "ro": "LIVEZI există în două județe și le-am păstrat separate: în Alfa de la 100 la 105 persoane, în Beta de la 300 la 305 (DUPL).",
+    "en": "LIVEZI exists in two counties and I kept them separate: in Alfa from 100 to 105 persons, in Beta from 300 to 305 (DUPL)."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "verification": ["verified"],
+    "calls": [
+     {"call": 0, "status": ["unavailable"], "reason": ["identity_ambiguous"], "absent": ["/data/intervals"]},
+     {"call": 1, "status": ["ok"], "equals": {"/data/key_columns": ["REF_AREA", "REF_AREA_2"]}}
+    ],
+    "numbers": [
+     {
+      "id": "alfa_from",
+      "call": 1,
+      "path": "/data/intervals/0/rows/0/from_value",
+      "value": 100,
+      "derivation": "100",
+      "entity": "Alfa",
+      "period": "2020"
+     },
+     {"id": "alfa_to", "call": 1, "path": "/data/intervals/0/rows/0/to_value", "value": 105, "derivation": "105", "entity": "Alfa", "period": "2021"},
+     {
+      "id": "beta_from",
+      "call": 1,
+      "path": "/data/intervals/0/rows/1/from_value",
+      "value": 300,
+      "derivation": "300",
+      "entity": "Beta",
+      "period": "2020"
+     },
+     {"id": "beta_to", "call": 1, "path": "/data/intervals/0/rows/1/to_value", "value": 305, "derivation": "305", "entity": "Beta", "period": "2021"}
+    ],
+    "evidence": {"call": 1, "datasets": ["DUPL"], "keys": ["REF_AREA", "REF_AREA_2"], "generation": "gen-at01-fixture"},
+    "forbidden": [{"id": "namesakes_merged", "numbers": [400, 410]}],
+    "answer": {"allowed_numbers": [2020, 2021]}
+   },
+   "negatives": [
+    {
+     "id": "namesakes_merged_into_one",
+     "describe": "Adds the two LIVEZI localities into one figure.",
+     "answer": {"ro": "LIVEZI avea 400 de persoane în 2020 și 410 în 2021 (DUPL).", "en": "LIVEZI had 400 persons in 2020 and 410 in 2021 (DUPL)."},
+     "detect": {"app": "flagged", "fails": ["forbidden.namesakes_merged", "stated.alfa_from"]}
+    }
+   ]
+  },
+  {
+   "id": "T10",
+   "title": "Overlapping age levels: refuse the all-ages sum, recover on one verified level",
+   "category": "refusal",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Care este populația totală din POPX în 2025?", "en": "What is the total population in POPX in 2025?"},
+   "steps": [
+    {"tool": "query_data", "arguments": {"dataset": "POPX", "filters": {"TIME_PERIOD": ["2025"]}, "group_by": ["TIME_PERIOD"]}},
+    {"follow": {"call": 0, "path": "/recovery/0"}},
+    {
+     "tool": "query_data",
+     "arguments": {"dataset": "POPX", "filters": {"AGE": ["0 ani", "1 ani", "2 ani", "3 ani", "4 ani"], "TIME_PERIOD": ["2025"]}, "group_by": ["TIME_PERIOD"]}
+    }
+   ],
+   "answer": {
+    "ro": "Nu pot aduna toate vârstele din POPX: anii de vârstă și grupa 0–4 se suprapun. Pe nivelul anilor de vârstă (0–4 ani), populația din 2025 este 110 persoane; totalul întregii populații nu este verificat (POPX).",
+    "en": "I cannot add all ages in POPX: single years and the 0–4 band overlap. On the single-year level (ages 0–4) the 2025 population is 110 persons; the total for the whole population is not verified (POPX)."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "calls": [
+     {"call": 0, "status": ["unavailable"], "reason": ["overlapping_levels"], "absent": ["/data/rows"]},
+     {"call": 1, "tool": "find_dimension_values", "status": ["ok"]},
+     {"call": 2, "status": ["partial"], "reason": ["unverified_total"], "warnings": ["unverified_total"]}
+    ],
+    "numbers": [{"id": "single_year_total_2025", "call": 2, "path": "/data/rows/0/1", "value": 110, "derivation": "5 * 2 * 11", "period": "2025"}],
+    "evidence": {"call": 2, "datasets": ["POPX"], "periods": ["2025"], "generation": "gen-at01-fixture"},
+    "qualifications": [
+     {"id": "overlap_explained", "answer_any": {"ro": ["se suprapun"], "en": ["overlap"]}},
+     {"id": "total_not_verified", "answer_any": {"ro": ["nu este verificat"], "en": ["not verified"]}}
+    ],
+    "forbidden": [{"id": "double_counted_total", "numbers": [220]}],
+    "answer": {"allowed_numbers": [0, 4, 2025]}
+   },
+   "negatives": [
+    {
+     "id": "singles_and_band_added",
+     "describe": "States the double-counted total (single years plus the 0-4 band: 2 * 110 = 220).",
+     "answer": {"ro": "Populația totală din POPX în 2025 este 220 de persoane.", "en": "The total population in POPX in 2025 is 220 persons."},
+     "detect": {"app": "flagged", "fails": ["forbidden.double_counted_total", "qualification.overlap_explained"]}
+    }
+   ]
+  },
+  {
+   "id": "T10B",
+   "title": "A child series whose key repeats with different values: no total, parent offered as a candidate",
+   "category": "refusal",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Care este totalul pe 2024 din subseria CHILDX?", "en": "What is the 2024 total of the CHILDX sub-series?"},
+   "steps": [{"tool": "query_data", "arguments": {"dataset": "CHILDX", "group_by": ["TIME_PERIOD"]}}, {"follow": {"call": 0, "path": "/recovery/0"}}],
+   "answer": {
+    "ro": "CHILDX repetă aceeași cheie de observație cu valori diferite, deci nu are un total. Seria-părinte PARENTX (chei unice) dă 100 pentru 2024; este un candidat, nu un răspuns verificat pentru CHILDX.",
+    "en": "CHILDX repeats the same observation key with different values, so it has no total. Its parent series PARENTX (unique keys) gives 100 for 2024; this is a candidate, not a verified answer for CHILDX."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "calls": [
+     {"call": 0, "status": ["unavailable"], "reason": ["conflicting_grain"], "absent": ["/data/rows"]},
+     {"call": 1, "tool": "query_data", "status": ["partial"], "equals": {"/provenance/selection/dataset": "PARENTX"}}
+    ],
+    "numbers": [{"id": "parent_total_2024", "call": 1, "path": "/data/rows/0/1", "value": 100, "derivation": "10 + 20 + 30 + 40", "period": "2024"}],
+    "evidence": {"call": 1, "datasets": ["PARENTX"], "periods": ["2024"], "generation": "gen-at01-fixture"},
+    "qualifications": [{"id": "candidate_not_verified", "answer_any": {"ro": ["candidat"], "en": ["candidate"]}}],
+    "forbidden": [{"id": "raw_row_sum", "numbers": [111]}],
+    "answer": {"allowed_numbers": [2024]}
+   }
+  },
+  {
+   "id": "T11",
+   "title": "A single-age 0-2 child is not an all-ages population total",
+   "category": "scope",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {
+    "ro": "Care este populația totală a județului Cluj în 2023 din AGEP_judete_varste?",
+    "en": "What is the total population of Cluj county in 2023 from AGEP_judete_varste?"
+   },
+   "steps": [
+    {
+     "tool": "query_data",
+     "arguments": {"dataset": "AGEP_judete_varste", "filters": {"REF_AREA": ["Cluj"], "TIME_PERIOD": ["2023"]}, "group_by": ["TIME_PERIOD"]}
+    },
+    {"follow": {"call": 0, "path": "/recovery/0"}}
+   ],
+   "answer": {
+    "ro": "AGEP_judete_varste acoperă doar vârstele 0–2 ani (33 de persoane în 2023), nu întreaga populație. Seria completă AGEP_judete_grupe dă 35 de persoane pentru județul Cluj în 2023.",
+    "en": "AGEP_judete_varste covers only ages 0–2 (33 persons in 2023), not the whole population. The complete series AGEP_judete_grupe gives 35 persons for Cluj county in 2023."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "calls": [
+     {"call": 0, "status": ["partial"], "reason": ["incomplete_domain"], "warnings": ["incomplete_domain"]},
+     {"call": 1, "status": ["ok"], "equals": {"/provenance/selection/dataset": "AGEP_judete_grupe"}}
+    ],
+    "numbers": [
+     {"id": "ages_0_2", "call": 0, "path": "/data/rows/0/1", "value": 33, "derivation": "10 + 11 + 12", "entity": "Cluj", "period": "2023"},
+     {"id": "all_ages", "call": 1, "path": "/data/rows/0/1", "value": 35, "derivation": "30 + 5", "entity": "Cluj", "period": "2023"}
+    ],
+    "evidence": {"call": 0, "datasets": ["AGEP_judete_varste"], "scope_complete": false, "periods": ["2023"], "generation": "gen-at01-fixture"},
+    "qualifications": [{"id": "age_restriction_stated", "answer_any": {"ro": ["doar varstele 0-2"], "en": ["only ages 0-2"]}}],
+    "forbidden": [{"id": "partial_as_total", "answer_pattern": {"ro": ["populatia totala[^.]{0,60}\\b33\\b"], "en": ["total population[^.]{0,60}\\b33\\b"]}}],
+    "answer": {"allowed_numbers": [0, 2, 2023]}
+   },
+   "negatives": [
+    {
+     "id": "ages_0_2_as_total",
+     "describe": "Presents the 0-2 age slice as the county's total population.",
+     "answer": {
+      "ro": "Populația totală a județului Cluj în 2023 este 33 de persoane, iar AGEP_judete_grupe dă 35 de persoane.",
+      "en": "The total population of Cluj county in 2023 is 33 persons, and AGEP_judete_grupe gives 35 persons."
+     },
+     "detect": {"app": "accepted", "fails": ["forbidden.partial_as_total", "qualification.age_restriction_stated"], "hard": ["unsafe_claim_accepted"]},
+     "known_limitation": {
+      "package": "AQ-03",
+      "note": "The 33 is a real cell of a partial result, so the claim check matches it; no check ties the word 'total' to a result whose scope is incomplete."
+     }
+    }
+   ]
+  },
+  {
+   "id": "T12",
+   "title": "A Total the metadata lists but the data lacks: explain, then use the validated per-category query",
+   "category": "refusal",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Care este totalul categoriilor din NOTOT în 2024?", "en": "What is the total of all categories in NOTOT in 2024?"},
+   "steps": [
+    {
+     "tool": "query_data",
+     "arguments": {"dataset": "NOTOT", "filters": {"CATEGORY": ["Total"], "TIME_PERIOD": ["2024"]}, "group_by": ["TIME_PERIOD"]}
+    },
+    {"follow": {"call": 0, "path": "/recovery/0"}},
+    {"follow": {"call": 1, "path": "/recovery/1"}}
+   ],
+   "answer": {
+    "ro": "NOTOT nu are rândul Total în date, deși metadatele îl listează, iar politica nu poate verifica o sumă a categoriilor, deci nu dau un total. Pe categorii, în 2024: A 60, B 40 (NOTOT).",
+    "en": "NOTOT has no Total row in its data although the metadata lists one, and the policy cannot verify a sum of the categories, so I give no total. By category in 2024: A 60, B 40 (NOTOT)."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "verification": ["verified"],
+    "calls": [
+     {"call": 0, "status": ["unavailable"], "reason": ["slice_value_missing"]},
+     {"call": 1, "status": ["unavailable"], "reason": ["unverified_structure"], "absent": ["/data/rows"]},
+     {"call": 2, "status": ["ok"]}
+    ],
+    "numbers": [
+     {"id": "category_a", "call": 2, "path": "/data/rows/0/2", "value": 60, "derivation": "60", "entity": "A", "period": "2024"},
+     {"id": "category_b", "call": 2, "path": "/data/rows/1/2", "value": 40, "derivation": "40", "entity": "B", "period": "2024"}
+    ],
+    "evidence": {"call": 2, "datasets": ["NOTOT"], "periods": ["2024"], "generation": "gen-at01-fixture"},
+    "qualifications": [{"id": "absence_explained", "answer_any": {"ro": ["nu are randul total"], "en": ["no total row"]}}],
+    "forbidden": [{"id": "guessed_total", "numbers": [100]}],
+    "answer": {"allowed_numbers": [2024]}
+   },
+   "negatives": [
+    {
+     "id": "category_sum_guessed",
+     "describe": "Adds A and B into a total although the policy refused to.",
+     "answer": {
+      "ro": "Totalul categoriilor din NOTOT în 2024 este 100 (A 60 plus B 40).",
+      "en": "The total of the categories in NOTOT in 2024 is 100 (A 60 plus B 40)."
+     },
+     "detect": {"app": "flagged", "fails": ["forbidden.guessed_total", "qualification.absence_explained"]}
+    }
+   ]
+  },
+  {
+   "id": "T13",
+   "title": "An oversized result: a bounded preview, exact links and an intact call/result pairing",
+   "category": "budget",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Listează toate valorile din BIGLONG.", "en": "List every value in BIGLONG."},
+   "steps": [
+    {"tool": "query_data", "arguments": {"dataset": "BIGLONG", "limit": 200}},
+    {"tool": "query_data", "arguments": {"dataset": "BIGLONG", "limit": 199}},
+    {"tool": "query_data", "arguments": {"dataset": "BIGLONG", "limit": 198}},
+    {"tool": "query_data", "arguments": {"dataset": "BIGLONG", "limit": 197}},
+    {"tool": "query_data", "arguments": {"dataset": "BIGLONG", "limit": 196}}
+   ],
+   "answer": {
+    "ro": "Sunt prea multe rânduri pentru a fi listate aici: tabelul este doar o previzualizare, iar datele complete sunt la linkurile de sub tabel (BIGLONG).",
+    "en": "There are too many rows to list here: the table is only a preview, and the complete data is at the links below the table (BIGLONG)."
+   },
+   "review": "Check the preview wording does not present the first rows as the complete list.",
+   "expect": {
+    "outcome": ["answered", "partial"],
+    "limits": {"max_dispatches": 5, "min_executions": 5, "min_compacted_results": 1},
+    "calls": [
+     {
+      "call": 0,
+      "status": ["ok"],
+      "warnings": ["raw_rows", "preview", "preview_shortened"],
+      "equals": {"/limits/preview_truncated": true, "/limits/source_complete": false}
+     },
+     {"call": 4, "status": ["ok"], "warnings": ["raw_rows", "preview", "preview_shortened"], "equals": {"/limits/preview_truncated": true}}
+    ],
+    "table": {"max_rows": 200, "link_kinds_any": ["csv", "evidence", "live_selection"]},
+    "mcp": {"max_wire_bytes": 73728},
+    "answer": {"no_numbers": true, "allowed_numbers": []}
+   },
+   "negatives": [
+    {
+     "id": "preview_called_complete",
+     "describe": "Claims the preview is the complete list and invents a total.",
+     "answer": {
+      "ro": "Lista completă are 2500 de rânduri și este afișată integral în tabel (BIGLONG).",
+      "en": "The complete list has 2500 rows and is shown in full in the table (BIGLONG)."
+     },
+     "detect": {"app": "flagged", "fails": ["answer_numbers"]}
+    }
+   ]
+  },
+  {
+   "id": "T14",
+   "title": "An empty answer cut by the output limit gets one bounded retry",
+   "category": "provider",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct"],
+   "prompt": {"ro": "Ce date oferă acest serviciu?", "en": "What data does this service offer?"},
+   "steps": [{"provider": "length_empty"}],
+   "answer": {
+    "ro": "Serviciul oferă statistici oficiale INS despre populație, economie, muncă, sănătate și alte domenii.",
+    "en": "The service offers official INS statistics on population, the economy, labour, health and other fields."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "reasons": [null],
+    "verification": ["no_values"],
+    "limits": {"retries": 1, "max_model_attempts": 2, "max_dispatches": 0},
+    "answer": {"no_numbers": true, "allowed_numbers": []}
+   }
+  },
+  {
+   "id": "T14B",
+   "title": "Two empty length-limited answers end as an explicit failure, never a false success",
+   "category": "provider",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct"],
+   "prompt": {"ro": "Ce date oferă acest serviciu?", "en": "What data does this service offer?"},
+   "steps": [{"provider": "length_empty"}, {"provider": "length_empty"}],
+   "answer": {"ro": "Nu ar trebui afișat.", "en": "This should not be shown."},
+   "expect": {
+    "outcome": ["failed"],
+    "reasons": ["output_limit"],
+    "limits": {"retries": 1, "max_model_attempts": 2, "max_dispatches": 0},
+    "forbidden": [{"id": "scripted_answer_shown", "on": "visible", "answer_pattern": {"ro": ["nu ar trebui afisat"], "en": ["this should not be shown"]}}],
+    "answer": {"no_numbers": true, "allowed_numbers": []}
+   },
+   "shown": false
+  },
+  {
+   "id": "T14C",
+   "title": "A provider content-filter stop is a stable failure",
+   "category": "provider",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct"],
+   "prompt": {"ro": "Ce date oferă acest serviciu?", "en": "What data does this service offer?"},
+   "steps": [{"provider": "content_filter"}],
+   "answer": {"ro": "Nu ar trebui afișat.", "en": "This should not be shown."},
+   "expect": {
+    "outcome": ["failed"],
+    "reasons": ["content_filter"],
+    "limits": {"max_model_attempts": 1, "max_dispatches": 0},
+    "forbidden": [{"id": "scripted_answer_shown", "on": "visible", "answer_pattern": {"ro": ["nu ar trebui afisat"], "en": ["this should not be shown"]}}],
+    "answer": {"no_numbers": true, "allowed_numbers": []}
+   },
+   "shown": false
+  },
+  {
+   "id": "T15",
+   "title": "The same refused request three times: one scan, bounded dispatches, a clear refusal",
+   "category": "budget",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct"],
+   "prompt": {"ro": "Care este populația totală din POPX în 2025?", "en": "What is the total population in POPX in 2025?"},
+   "steps": [
+    {"tool": "query_data", "arguments": {"dataset": "POPX", "filters": {"TIME_PERIOD": ["2025"]}, "group_by": ["TIME_PERIOD"]}},
+    {"tool": "query_data", "arguments": {"dataset": "POPX", "filters": {"TIME_PERIOD": ["2025"]}, "group_by": ["TIME_PERIOD"]}},
+    {"tool": "query_data", "arguments": {"dataset": "POPX", "filters": {"TIME_PERIOD": ["2025"]}, "group_by": ["TIME_PERIOD"]}}
+   ],
+   "answer": {
+    "ro": "Nu pot da un total sigur pentru POPX în 2025: nivelurile de vârstă se suprapun, iar cererea repetată a primit același refuz.",
+    "en": "I cannot give a reliable total for POPX in 2025: the age levels overlap, and the repeated request got the same refusal."
+   },
+   "expect": {
+    "outcome": ["refused"],
+    "reasons": ["overlapping_levels"],
+    "verification": ["no_values"],
+    "limits": {"max_dispatches": 3, "max_executions": 1, "min_cache_hits": 2},
+    "calls": [
+     {"call": 0, "status": ["unavailable"], "reason": ["overlapping_levels"]},
+     {"call": 2, "status": ["unavailable"], "reason": ["overlapping_levels"], "warnings": ["repeated_request"], "absent": ["/data/rows"]}
+    ],
+    "forbidden": [{"id": "raw_total", "numbers": [220, 200, 110]}],
+    "answer": {"no_numbers": true, "allowed_numbers": [2025]}
+   }
+  },
+  {
+   "id": "T16",
+   "title": "Follow-ups: the same for another county, then another year, each re-run",
+   "category": "followup",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct"],
+   "turns": [
+    {
+     "prompt": {"ro": "Câte persoane are Cluj în 2021 (POPC)?", "en": "How many persons does Cluj have in 2021 (POPC)?"},
+     "steps": [
+      {
+       "tool": "query_data",
+       "arguments": {"dataset": "POPC", "filters": {"REF_AREA": ["Cluj"], "TIME_PERIOD": ["2021"]}, "group_by": ["REF_AREA", "TIME_PERIOD"]}
+      }
+     ],
+     "answer": {"ro": "Cluj avea 1010 persoane în 2021 (POPC).", "en": "Cluj had 1010 persons in 2021 (POPC)."},
+     "expect": {
+      "outcome": ["answered"],
+      "verification": ["verified"],
+      "numbers": [
+       {"id": "cluj_2021", "call": 0, "path": "/data/rows/0/2", "value": 1010, "derivation": "1010", "entity": "Cluj", "period": "2021", "bind": true}
+      ],
+      "context": {"hint": false, "entries": 1},
+      "answer": {"allowed_numbers": [2021]}
+     }
+    },
+    {
+     "prompt": {"ro": "Același lucru pentru Iași.", "en": "The same for Iași."},
+     "steps": [
+      {
+       "tool": "query_data",
+       "arguments": {"dataset": "POPC", "filters": {"REF_AREA": ["Iași"], "TIME_PERIOD": ["2021"]}, "group_by": ["REF_AREA", "TIME_PERIOD"]}
+      }
+     ],
+     "answer": {"ro": "Iași avea 880 de persoane în 2021 (POPC).", "en": "Iași had 880 persons in 2021 (POPC)."},
+     "expect": {
+      "outcome": ["answered"],
+      "verification": ["verified"],
+      "numbers": [{"id": "iasi_2021", "call": 0, "path": "/data/rows/0/2", "value": 880, "derivation": "880", "entity": "Iași", "period": "2021", "bind": true}],
+      "limits": {"min_executions": 1},
+      "evidence": {"call": 0, "datasets": ["POPC"], "periods": ["2021"], "generation": "gen-at01-fixture"},
+      "context": {"hint": true, "entries": 2},
+      "forbidden": [{"id": "previous_turn_value", "numbers": [1010]}],
+      "answer": {"allowed_numbers": [2021]}
+     }
+    },
+    {
+     "prompt": {"ro": "Acum pentru 2020.", "en": "Now for 2020."},
+     "steps": [
+      {
+       "tool": "query_data",
+       "arguments": {"dataset": "POPC", "filters": {"REF_AREA": ["Iași"], "TIME_PERIOD": ["2020"]}, "group_by": ["REF_AREA", "TIME_PERIOD"]}
+      }
+     ],
+     "answer": {"ro": "Iași avea 900 de persoane în 2020 (POPC).", "en": "Iași had 900 persons in 2020 (POPC)."},
+     "expect": {
+      "outcome": ["answered"],
+      "verification": ["verified"],
+      "numbers": [{"id": "iasi_2020", "call": 0, "path": "/data/rows/0/2", "value": 900, "derivation": "900", "entity": "Iași", "period": "2020", "bind": true}],
+      "limits": {"min_executions": 1},
+      "evidence": {"call": 0, "datasets": ["POPC"], "periods": ["2020"], "generation": "gen-at01-fixture"},
+      "context": {"hint": true, "entries": 3},
+      "forbidden": [{"id": "stale_value", "numbers": [880, 1010]}],
+      "answer": {"allowed_numbers": [2020]}
+     }
+    }
+   ]
+  },
+  {
+   "id": "T17",
+   "title": "The generation changes between a result and the follow-up: an explicit conflict",
+   "category": "generation",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct"],
+   "turns": [
+    {
+     "prompt": {"ro": "Câte persoane are Cluj în 2021 (POPC)?", "en": "How many persons does Cluj have in 2021 (POPC)?"},
+     "steps": [
+      {
+       "tool": "query_data",
+       "arguments": {"dataset": "POPC", "filters": {"REF_AREA": ["Cluj"], "TIME_PERIOD": ["2021"]}, "group_by": ["REF_AREA", "TIME_PERIOD"]}
+      }
+     ],
+     "answer": {"ro": "Cluj avea 1010 persoane în 2021 (POPC).", "en": "Cluj had 1010 persons in 2021 (POPC)."},
+     "expect": {
+      "outcome": ["answered"],
+      "verification": ["verified"],
+      "numbers": [{"id": "cluj_2021", "call": 0, "path": "/data/rows/0/2", "value": 1010, "derivation": "1010", "entity": "Cluj", "period": "2021"}],
+      "evidence": {"call": 0, "generation": "gen-at01-fixture"},
+      "context": {"entries": 1},
+      "answer": {"allowed_numbers": [2021]}
+     }
+    },
+    {
+     "prompt": {"ro": "Același lucru pentru Iași.", "en": "The same for Iași."},
+     "before": [{"action": "advance_generation", "generation": "gen-at01-next"}],
+     "steps": [],
+     "answer": {"ro": "Nu ar trebui afișat.", "en": "This should not be shown."},
+     "expect": {"raises": {"http_status": 409, "reason": "generation_changed", "action": "refresh"}},
+     "shown": false
+    }
+   ]
+  },
+  {
+   "id": "T17B",
+   "title": "Evidence requested for a generation that is no longer served is refused, not rebuilt on new data",
+   "category": "generation",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Dă-mi linkurile de dovadă pentru rezultatul anterior din POPC.", "en": "Give me the evidence links for the earlier POPC result."},
+   "steps": [
+    {
+     "tool": "get_evidence_links",
+     "arguments": {"selection": {"kind": "dataset", "dataset": "POPC", "filters": {}, "group_by": [], "approximate": false}, "generation_id": "gen-at01-old"}
+    }
+   ],
+   "answer": {
+    "ro": "Datele s-au actualizat după acel rezultat, iar generația veche nu mai este servită: reluați interogarea pentru versiunea curentă.",
+    "en": "The data was updated after that result and the old generation is no longer served: re-run the query for the current version."
+   },
+   "expect": {
+    "calls": [
+     {
+      "call": 0,
+      "tool": "get_evidence_links",
+      "status": ["unavailable"],
+      "reason": ["generation_changed"],
+      "equals": {"/data/expected_generation": "gen-at01-old", "/data/served_generation": "gen-at01-fixture"},
+      "absent": ["/data/links"]
+     }
+    ],
+    "answer": {"no_numbers": true, "allowed_numbers": []}
+   }
+  },
+  {
+   "id": "T18",
+   "title": "An unweighted mean needs an explicit opt-in and stays labelled as an approximation",
+   "category": "approximation",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct"],
+   "turns": [
+    {
+     "prompt": {"ro": "Care este rata medie din RATEX pe ani?", "en": "What is the average rate in RATEX by year?"},
+     "steps": [{"tool": "query_data", "arguments": {"dataset": "RATEX", "group_by": ["TIME_PERIOD"]}}],
+     "answer": {
+      "ro": "Rata din RATEX nu poate fi mediată sigur fără ponderi; pot calcula doar o aproximare neponderată, dacă o cereți explicit.",
+      "en": "The RATEX rate cannot be averaged reliably without weights; I can only compute an unweighted approximation if you ask for it explicitly."
+     },
+     "expect": {
+      "outcome": ["refused"],
+      "reasons": ["missing_weights"],
+      "verification": ["no_values"],
+      "calls": [{"call": 0, "status": ["unavailable"], "reason": ["missing_weights"], "absent": ["/data/rows"]}],
+      "answer": {"no_numbers": true, "allowed_numbers": []}
+     }
+    },
+    {
+     "prompt": {"ro": "Da, vreau aproximarea neponderată.", "en": "Yes, I want the unweighted approximation."},
+     "steps": [{"tool": "query_data", "arguments": {"dataset": "RATEX", "group_by": ["TIME_PERIOD"], "approximate": true}}],
+     "answer": {
+      "ro": "Aproximare (media neponderată, nu o rată oficială): 2023 → 15, 2024 → 17 (RATEX).",
+      "en": "Approximation (unweighted mean, not an official rate): 2023 → 15, 2024 → 17 (RATEX)."
+     },
+     "expect": {
+      "outcome": ["answered"],
+      "calls": [{"call": 0, "status": ["ok"], "warnings": ["approximation"]}],
+      "numbers": [
+       {"id": "mean_2023", "call": 0, "path": "/data/rows/0/1", "value": 15, "derivation": "(10 + 20) / 2", "period": "2023"},
+       {"id": "mean_2024", "call": 0, "path": "/data/rows/1/1", "value": 17, "derivation": "(12 + 22) / 2", "period": "2024"}
+      ],
+      "qualifications": [
+       {
+        "id": "labelled_approximation",
+        "answer_any": {"ro": ["aproximare"], "en": ["approximation"]},
+        "tool": {"call": 0, "warning": "approximation"}
+       },
+       {"id": "not_official", "answer_any": {"ro": ["nu o rata oficiala"], "en": ["not an official rate"]}}
+      ],
+      "forbidden": [{"id": "official_rate_claim", "answer_pattern": {"ro": ["rata oficiala (este|a fost)"], "en": ["the official rate (is|was)"]}}],
+      "answer": {"allowed_numbers": [2023, 2024]}
+     }
+    }
+   ]
+  },
+  {
+   "id": "T19",
+   "title": "A provider error that echoes an arbitrary-format key leaks it nowhere",
+   "category": "privacy",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct"],
+   "secrets": ["q7Zp-LmNoP.9rStUvWx_1234AbCdEf"],
+   "prompt": {"ro": "Care este populația județului Cluj?", "en": "What is the population of Cluj county?"},
+   "steps": [{"raise": "key_echo"}],
+   "answer": {"ro": "Nu ar trebui afișat.", "en": "This should not be shown."},
+   "expect": {"raises": {"type": "LLMError", "code": "provider_auth", "status": 401}},
+   "shown": false
+  },
+  {
+   "id": "T20",
+   "title": "A disconnect cancels only its own request and frees its slot",
+   "category": "cancellation",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct"],
+   "turns": [
+    {
+     "prompt": {"ro": "Care este populația județului Cluj?", "en": "What is the population of Cluj county?"},
+     "steps": [{"cancel": true}],
+     "answer": {"ro": "Nu ar trebui afișat.", "en": "This should not be shown."},
+     "expect": {
+      "outcome": ["failed"],
+      "reasons": ["cancelled"],
+      "limits": {"max_dispatches": 0},
+      "forbidden": [{"id": "scripted_answer_shown", "on": "visible", "answer_pattern": {"ro": ["nu ar trebui afisat"], "en": ["this should not be shown"]}}]
+     },
+     "shown": false
+    },
+    {
+     "prompt": {"ro": "Câte persoane are Cluj în 2021 (POPC)?", "en": "How many persons does Cluj have in 2021 (POPC)?"},
+     "steps": [
+      {
+       "tool": "query_data",
+       "arguments": {"dataset": "POPC", "filters": {"REF_AREA": ["Cluj"], "TIME_PERIOD": ["2021"]}, "group_by": ["REF_AREA", "TIME_PERIOD"]}
+      }
+     ],
+     "answer": {"ro": "Cluj avea 1010 persoane în 2021 (POPC).", "en": "Cluj had 1010 persons in 2021 (POPC)."},
+     "expect": {
+      "outcome": ["answered"],
+      "verification": ["verified"],
+      "numbers": [{"id": "cluj_2021", "call": 0, "path": "/data/rows/0/2", "value": 1010, "derivation": "1010", "entity": "Cluj", "period": "2021"}],
+      "answer": {"allowed_numbers": [2021]}
+     }
+    }
+   ]
+  },
+  {
+   "id": "T20B",
+   "title": "A provider timeout after a tool ran is a partial result that names the cause",
+   "category": "provider",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct"],
+   "prompt": {"ro": "Câte persoane are Cluj în 2021 (POPC)?", "en": "How many persons does Cluj have in 2021 (POPC)?"},
+   "steps": [
+    {
+     "tool": "query_data",
+     "arguments": {"dataset": "POPC", "filters": {"REF_AREA": ["Cluj"], "TIME_PERIOD": ["2021"]}, "group_by": ["REF_AREA", "TIME_PERIOD"]}
+    },
+    {"raise": "APITimeoutError"},
+    {"raise": "APITimeoutError"}
+   ],
+   "answer": {"ro": "Nu ar trebui afișat.", "en": "This should not be shown."},
+   "expect": {
+    "outcome": ["partial"],
+    "reasons": ["provider"],
+    "limits": {"max_dispatches": 1, "retries": 1},
+    "qualifications": [{"id": "cause_named", "answer_any": {"ro": ["nu a raspuns la timp"], "en": ["did not answer in time"]}}],
+    "forbidden": [
+     {"id": "raw_provider_text", "answer_pattern": {"ro": ["provider said no"], "en": ["provider said no"]}},
+     {"id": "blamed_the_request", "answer_pattern": {"ro": ["limitele cererii"], "en": ["request limits"]}}
+    ]
+   },
+   "shown": false
+  },
+  {
+   "id": "T20C",
+   "title": "A second public MCP call while one runs gets 'busy' at once; the slot is released",
+   "category": "capacity",
+   "fixture": "synthetic-v1",
+   "surfaces": ["mcp"],
+   "prompt": {"ro": "Câte persoane are Cluj în 2021 (POPC)?", "en": "How many persons does Cluj have in 2021 (POPC)?"},
+   "steps": [
+    {
+     "tool": "query_data",
+     "arguments": {"dataset": "POPC", "filters": {"REF_AREA": ["Cluj"], "TIME_PERIOD": ["2021"]}, "group_by": ["REF_AREA", "TIME_PERIOD"]},
+     "hold": true
+    },
+    {
+     "tool": "query_data",
+     "arguments": {"dataset": "POPC", "filters": {"REF_AREA": ["Iași"], "TIME_PERIOD": ["2021"]}, "group_by": ["REF_AREA", "TIME_PERIOD"], "limit": 7}
+    }
+   ],
+   "expect": {
+    "calls": [
+     {"call": 0, "status": ["ok"]},
+     {"call": 1, "status": ["unavailable"], "reason": ["busy"], "equals": {"/recovery/0/kind": "retry"}, "absent": ["/data/rows"]}
+    ],
+    "numbers": [{"id": "held_call_completes", "call": 0, "path": "/data/rows/0/2", "value": 1010, "derivation": "1010"}]
+   }
+  },
+  {
+   "id": "X01",
+   "title": "A full per-resident question goes to the recipe and keeps the ratio unit",
+   "category": "recipe",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Câte înnoptări revin la un locuitor în Beta, în 2024?", "en": "How many overnight stays per resident were there in Beta in 2024?"},
+   "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
+   "answer": {
+    "ro": "În Beta, în 2024, au revenit 0,5 înnoptări pe locuitor (rețeta tourism_intensity); clasamentul acoperă doar zonele eligibile, celelalte sunt excluse.",
+    "en": "In Beta in 2024 there were 0.5 overnight stays per resident (recipe tourism_intensity); the ranking covers only the eligible areas and the others are excluded."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "verification": ["verified"],
+    "tools": [{"tool": "discover_indicators"}, {"tool": "run_recipe", "args": {"recipe": "tourism_intensity"}}],
+    "calls": [
+     {"call": 0, "status": ["ok"], "equals": {"/data/concepts/0/id": "tourism_intensity", "/data/concepts/0/next_call/tool": "run_recipe"}},
+     {"call": 1, "tool": "run_recipe", "status": ["partial"], "reason": ["incomplete_domain"], "equals": {"/data/rows/1/label": "Beta"}}
+    ],
+    "numbers": [
+     {
+      "id": "beta_ratio",
+      "call": 1,
+      "path": "/data/rows/1/value",
+      "value": 0.5,
+      "derivation": "50 / 100",
+      "entity": "Beta",
+      "period": "2024",
+      "bind": true
+     }
+    ],
+    "evidence": {
+     "call": 1,
+     "datasets": ["STAYS1", "RESPOP"],
+     "unit": {"ro": "înnoptări pe locuitor", "en": "stays per resident"},
+     "periods": ["2024"],
+     "scope_complete": false,
+     "generation": "gen-at01-fixture"
+    },
+    "qualifications": [{"id": "excluded_areas_stated", "answer_any": {"ro": ["excluse"], "en": ["excluded"]}}],
+    "forbidden": [{"id": "count_as_ratio", "answer_pattern": {"ro": ["\\b50 (inno\\w*) pe locuitor"], "en": ["\\b50 (overnight )?stays per resident"]}}],
+    "answer": {"allowed_numbers": [2024]}
+   },
+   "negatives": [
+    {
+     "id": "count_presented_as_ratio",
+     "describe": "Presents the 50 stays count for Beta as the per-resident figure.",
+     "answer": {
+      "ro": "În Beta, în 2024, au revenit 50 înnoptări pe locuitor (rețeta tourism_intensity); clasamentul acoperă doar zonele eligibile, celelalte sunt excluse.",
+      "en": "In Beta in 2024 there were 50 overnight stays per resident (recipe tourism_intensity); the ranking covers only the eligible areas and the others are excluded."
+     },
+     "detect": {"app": "flagged", "fails": ["forbidden.count_as_ratio", "stated.beta_ratio"]}
+    }
+   ],
+   "pinned": {
+    "fixture": "copied-9b3e065d",
+    "prompt": {"ro": "Câte înnoptări revin la un locuitor în Brașov, în 2025?", "en": "How many overnight stays per resident were there in Brașov in 2025?"},
+    "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
+    "answer": {
+     "ro": "În Brașov, în 2025, au revenit 4,91 înnoptări pe locuitor (rețeta tourism_intensity).",
+     "en": "In Brașov in 2025 there were 4.91 overnight stays per resident (recipe tourism_intensity)."
+    },
+    "expect": {
+     "outcome": ["answered"],
+     "verification": ["verified"],
+     "tools": [{"tool": "discover_indicators"}, {"tool": "run_recipe", "args": {"recipe": "tourism_intensity", "areas": ["Brasov"], "year": "2025"}}],
+     "calls": [
+      {
+       "call": 1,
+       "tool": "run_recipe",
+       "status": ["ok"],
+       "reason": [null],
+       "equals": {"/data/year": "2025", "/data/recipe/value_source": "reconstruction"}
+      }
+     ],
+     "numbers": [
+      {
+       "id": "brasov_ratio_2025",
+       "call": 1,
+       "path": "/data/rows/0/value",
+       "value": 4.910854809317534,
+       "derivation": "2751439 / 560277",
+       "entity": "Brasov",
+       "period": "2025",
+       "bind": true
+      },
+      {"id": "brasov_stays_2025", "call": 1, "path": "/data/rows/0/stays", "value": 2751439, "derivation": "2751439", "stated": false},
+      {"id": "brasov_population_2025", "call": 1, "path": "/data/rows/0/population", "value": 560277, "derivation": "560277", "stated": false}
+     ],
+     "evidence": {
+      "call": 1,
+      "datasets": ["TUR105D_judete", "POP105A_judete_grupe"],
+      "unit": {"ro": "înnoptări pe locuitor", "en": "overnight stays per resident"},
+      "periods": ["2025"]
+     },
+     "forbidden": [
+      {
+       "id": "count_as_ratio",
+       "answer_pattern": {
+        "ro": ["2751439 (inno\\w*) pe locuitor", "2\\.751\\.439 (inno\\w*) pe locuitor"],
+        "en": ["2751439 (overnight )?stays per resident", "2,751,439 (overnight )?stays per resident"]
+       }
+      }
+     ],
+     "answer": {"allowed_numbers": [2025]}
+    }
+   }
+  },
+  {
+   "id": "X02",
+   "title": "Generic current county population: resident default disclosed, the actual resolved year stated",
+   "category": "definition",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Care este populația curentă a județelor?", "en": "What is the current population of the counties?"},
+   "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
+   "answer": {
+    "ro": "Am presupus implicit populația rezidentă; cel mai recent an disponibil este 2021: Bihor 610, Cluj 1010, Iași 880 de persoane (POPC).",
+    "en": "I assumed the default resident population; the latest available year is 2021: Bihor 610, Cluj 1010, Iași 880 persons (POPC)."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "verification": ["verified"],
+    "calls": [
+     {
+      "call": 0,
+      "status": ["ok"],
+      "warnings": ["assumed_definition"],
+      "equals": {"/data/interpretation/latest": true, "/data/interpretation/assumed_definition": "resident_population"}
+     },
+     {"call": 1, "status": ["ok"], "equals": {"/provenance/selection/filters/TIME_PERIOD": ["2021"]}}
+    ],
+    "numbers": [
+     {"id": "bihor_2021", "call": 1, "path": "/data/rows/0/2", "value": 610, "derivation": "610", "entity": "Bihor", "period": "2021", "bind": true},
+     {"id": "cluj_2021", "call": 1, "path": "/data/rows/1/2", "value": 1010, "derivation": "1010", "entity": "Cluj", "period": "2021", "bind": true},
+     {"id": "iasi_2021", "call": 1, "path": "/data/rows/2/2", "value": 880, "derivation": "880", "entity": "Iași", "period": "2021", "bind": true}
+    ],
+    "evidence": {"call": 1, "datasets": ["POPC"], "periods": ["2021"], "generation": "gen-at01-fixture"},
+    "qualifications": [
+     {
+      "id": "default_disclosed",
+      "answer_any": {"ro": ["am presupus", "implicit"], "en": ["assumed", "default"]},
+      "tool": {"call": 0, "warning": "assumed_definition"}
+     },
+     {"id": "resolved_year_stated", "answer_any": {"ro": ["2021"], "en": ["2021"]}}
+    ],
+    "forbidden": [{"id": "domicile_figures", "numbers": [1040, 920, 620]}],
+    "answer": {"allowed_numbers": [2021]}
+   },
+   "pinned": {
+    "fixture": "copied-9b3e065d",
+    "prompt": {"ro": "Care este populația curentă a județelor?", "en": "What is the current population of the counties?"},
+    "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
+    "answer": {
+     "ro": "Am presupus implicit populația rezidentă; cel mai recent an disponibil este 2026, de exemplu Alba 324901 și Arad 410058 de persoane (POP105A_judete_grupe).",
+     "en": "I assumed the default resident population; the latest available year is 2026, for example Alba 324901 and Arad 410058 persons (POP105A_judete_grupe)."
+    },
+    "expect": {
+     "outcome": ["answered", "partial"],
+     "calls": [
+      {
+       "call": 0,
+       "status": ["ok"],
+       "warnings": ["assumed_definition"],
+       "equals": {"/data/interpretation/latest": true, "/data/interpretation/assumed_definition": "resident_population"}
+      },
+      {"call": 1, "status": ["ok", "partial"], "equals": {"/provenance/selection/filters/TIME_PERIOD": ["2026"]}}
+     ],
+     "numbers": [
+      {"id": "alba_2026", "call": 1, "path": "/data/rows/0/2", "value": 324901, "derivation": "324901", "entity": "Alba", "period": "2026"},
+      {"id": "arad_2026", "call": 1, "path": "/data/rows/1/2", "value": 410058, "derivation": "410058", "entity": "Arad", "period": "2026"}
+     ],
+     "evidence": {"call": 1, "datasets": ["POP105A_judete_grupe"], "periods": ["2026"]},
+     "qualifications": [
+      {
+       "id": "default_disclosed",
+       "answer_any": {"ro": ["am presupus", "implicit"], "en": ["assumed", "default"]},
+       "tool": {"call": 0, "warning": "assumed_definition"}
+      },
+      {"id": "resolved_year_stated", "answer_any": {"ro": ["2026"], "en": ["2026"]}}
+     ],
+     "answer": {"allowed_numbers": [2026]}
+    }
+   }
+  },
+  {
+   "id": "X03",
+   "title": "Current top cities: every eligible city ranked first, domicile labelled, communes excluded",
+   "category": "ranking",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "populația curentă a celor mai populate 30 de orașe", "en": "current population of the top 30 cities"},
+   "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
+   "answer": {
+    "ro": "Cele mai populate 30 de orașe după populația după domiciliu în 2025, clasate din toate orașele eligibile (comunele sunt excluse): CITY229 329, CITY228 328, CITY227 327, ..., locul 30 CITY200 300 de persoane (POP107D_grupe_localitate).",
+    "en": "The 30 most populated cities by domicile population in 2025, ranked among all eligible cities (communes are excluded): CITY229 329, CITY228 328, CITY227 327, ..., rank 30 CITY200 300 persons (POP107D_grupe_localitate)."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "tools": [{"tool": "discover_indicators"}, {"tool": "rank_entities", "args": {"entity_class": "cities", "top_k": 30}}],
+    "calls": [
+     {
+      "call": 0,
+      "status": ["ok"],
+      "warnings": ["assumed_definition"],
+      "equals": {
+       "/data/interpretation/assumed_definition": "domicile_population",
+       "/data/interpretation/latest": true,
+       "/data/interpretation/operation": "rank"
+      }
+     },
+     {
+      "call": 1,
+      "tool": "rank_entities",
+      "status": ["ok", "partial"],
+      "equals": {
+       "/data/year": "2025",
+       "/data/requested_year": null,
+       "/data/eligible_count": 230,
+       "/data/outside_class_count": 1,
+       "/data/entity_class": "cities",
+       "/data/rows/0/entity/REF_AREA_2": "1229 ORAS CITY229",
+       "/data/rows/29/entity/REF_AREA_2": "1200 ORAS CITY200"
+      }
+     }
+    ],
+    "numbers": [
+     {"id": "rank_1", "call": 1, "path": "/data/rows/0/value", "value": 329, "derivation": "229 + 100", "entity": "CITY229", "period": "2025"},
+     {"id": "rank_2", "call": 1, "path": "/data/rows/1/value", "value": 328, "derivation": "228 + 100", "entity": "CITY228", "period": "2025"},
+     {"id": "rank_3", "call": 1, "path": "/data/rows/2/value", "value": 327, "derivation": "227 + 100", "entity": "CITY227", "period": "2025"},
+     {"id": "rank_30", "call": 1, "path": "/data/rows/29/value", "value": 300, "derivation": "200 + 100", "entity": "CITY200", "period": "2025"}
+    ],
+    "evidence": {
+     "call": 1,
+     "datasets": ["POP107D_grupe_localitate", "GOS102A"],
+     "periods": ["2025"],
+     "keys": ["REF_AREA", "REF_AREA_2"],
+     "generation": "gen-at01-fixture"
+    },
+    "qualifications": [
+     {"id": "domicile_label", "answer_any": {"ro": ["domiciliu"], "en": ["domicile"]}},
+     {"id": "communes_excluded", "answer_any": {"ro": ["comunele"], "en": ["communes"]}}
+    ],
+    "forbidden": [
+     {"id": "commune_ranked", "numbers": [999999]},
+     {"id": "relabelled_resident", "answer_pattern": {"ro": ["populatia rezidenta"], "en": ["resident population"]}}
+    ],
+    "answer": {"allowed_numbers": [2025, 30]}
+   },
+   "negatives": [
+    {
+     "id": "domicile_relabelled_resident",
+     "describe": "Calls the domicile series resident population.",
+     "answer": {
+      "ro": "Cele mai populate 30 de orașe după populația rezidentă în 2025, clasate din toate orașele eligibile (comunele sunt excluse): CITY229 329, CITY228 328, CITY227 327, ..., locul 30 CITY200 300 de persoane (POP107D_grupe_localitate).",
+      "en": "The 30 most populated cities by resident population in 2025, ranked among all eligible cities (communes are excluded): CITY229 329, CITY228 328, CITY227 327, ..., rank 30 CITY200 300 persons (POP107D_grupe_localitate)."
+     },
+     "known_limitation": {
+      "package": "AQ-03",
+      "note": "The numbers and entities match, and the checker has no definition check between the word 'resident' and a domicile-series result."
+     },
+     "detect": {"app": "accepted", "fails": ["forbidden.relabelled_resident", "qualification.domicile_label"], "hard": ["unsafe_claim_accepted"]}
+    }
+   ],
+   "pinned": {
+    "fixture": "copied-9b3e065d",
+    "prompt": {"ro": "populația curentă a celor mai populate 30 de orașe", "en": "current population of the top 30 cities"},
+    "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
+    "answer": {
+     "ro": "Cele mai populate 30 de orașe după populația după domiciliu în 2026, clasate din toate orașele eligibile (comunele sunt excluse; totalul domeniului este neverificat): BUCURESTI 2108049, IASI 370437, CLUJ-NAPOCA 324860, ..., locul 30 TULCEA 77647 de persoane (POP107D_grupe_localitate).",
+     "en": "The 30 most populated cities by domicile population in 2026, ranked among all eligible cities (communes are excluded; the domain total is unverified): BUCURESTI 2108049, IASI 370437, CLUJ-NAPOCA 324860, ..., rank 30 TULCEA 77647 persons (POP107D_grupe_localitate)."
+    },
+    "expect": {
+     "outcome": ["answered", "partial"],
+     "calls": [
+      {"call": 0, "status": ["ok"], "equals": {"/data/interpretation/assumed_definition": "domicile_population", "/data/interpretation/latest": true}},
+      {
+       "call": 1,
+       "tool": "rank_entities",
+       "status": ["partial"],
+       "reason": ["unverified_total"],
+       "warnings": ["classification_reference", "unverified_total"],
+       "equals": {
+        "/data/year": "2026",
+        "/data/eligible_count": 319,
+        "/data/outside_class_count": 2862,
+        "/data/entity_class": "cities",
+        "/data/rows/0/entity/REF_AREA_2": "179132 MUNICIPIUL BUCURESTI",
+        "/data/rows/29/entity/REF_AREA_2": "159614 MUNICIPIUL TULCEA"
+       }
+      }
+     ],
+     "numbers": [
+      {"id": "rank_1", "call": 1, "path": "/data/rows/0/value", "value": 2108049, "derivation": "2108049", "entity": "BUCURESTI", "period": "2026"},
+      {"id": "rank_2", "call": 1, "path": "/data/rows/1/value", "value": 370437, "derivation": "370437", "entity": "IASI", "period": "2026"},
+      {"id": "rank_3", "call": 1, "path": "/data/rows/2/value", "value": 324860, "derivation": "324860", "entity": "CLUJ-NAPOCA", "period": "2026"},
+      {"id": "rank_30", "call": 1, "path": "/data/rows/29/value", "value": 77647, "derivation": "77647", "entity": "TULCEA", "period": "2026"}
+     ],
+     "evidence": {"call": 1, "datasets": ["POP107D_grupe_localitate", "GOS102A"], "periods": ["2026"], "keys": ["REF_AREA", "REF_AREA_2"], "scope_complete": null},
+     "qualifications": [
+      {"id": "domicile_label", "answer_any": {"ro": ["domiciliu"], "en": ["domicile"]}},
+      {"id": "communes_excluded", "answer_any": {"ro": ["comunele"], "en": ["communes"]}},
+      {"id": "total_unverified", "answer_any": {"ro": ["neverificat"], "en": ["unverified"]}, "tool": {"call": 1, "warning": "unverified_total"}}
+     ],
+     "forbidden": [{"id": "relabelled_resident", "answer_pattern": {"ro": ["populatia rezidenta"], "en": ["resident population"]}}],
+     "answer": {"allowed_numbers": [2026, 30]}
+    }
+   }
+  },
+  {
+   "id": "X03B",
+   "title": "Explicit-year golden: the 2025 city ranking of the historical experiment, a year and not 'current'",
+   "category": "ranking",
+   "fixture": "copied-9b3e065d",
+   "surfaces": ["direct"],
+   "prompt": {"ro": "populația după domiciliu a celor mai populate 30 de orașe în 2025", "en": "domicile population of the top 30 cities in 2025"},
+   "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
+   "answer": {
+    "ro": "Cele mai populate 30 de orașe după populația după domiciliu în 2025, clasate din toate orașele eligibile (comunele sunt excluse; totalul domeniului este neverificat): BUCURESTI 2124150, IASI 379371, CLUJ-NAPOCA 325408, ..., locul 30 TULCEA 78862 de persoane (POP107D_grupe_localitate).",
+    "en": "The 30 most populated cities by domicile population in 2025, ranked among all eligible cities (communes are excluded; the domain total is unverified): BUCURESTI 2124150, IASI 379371, CLUJ-NAPOCA 325408, ..., rank 30 TULCEA 78862 persons (POP107D_grupe_localitate)."
+   },
+   "expect": {
+    "outcome": ["answered", "partial"],
+    "calls": [
+     {"call": 0, "status": ["ok"], "equals": {"/data/interpretation/period": 2025, "/data/interpretation/assumed_definition": null}},
+     {
+      "call": 1,
+      "tool": "rank_entities",
+      "status": ["partial"],
+      "reason": ["unverified_total"],
+      "warnings": ["classification_reference", "unverified_total"],
+      "equals": {
+       "/data/year": "2025",
+       "/data/requested_year": "2025",
+       "/data/eligible_count": 319,
+       "/data/entity_class": "cities",
+       "/data/rows/0/entity/REF_AREA_2": "179132 MUNICIPIUL BUCURESTI",
+       "/data/rows/29/entity/REF_AREA_2": "159614 MUNICIPIUL TULCEA"
+      }
+     }
+    ],
+    "numbers": [
+     {"id": "rank_1", "call": 1, "path": "/data/rows/0/value", "value": 2124150, "derivation": "2124150", "entity": "BUCURESTI", "period": "2025"},
+     {"id": "rank_2", "call": 1, "path": "/data/rows/1/value", "value": 379371, "derivation": "379371", "entity": "IASI", "period": "2025"},
+     {"id": "rank_3", "call": 1, "path": "/data/rows/2/value", "value": 325408, "derivation": "325408", "entity": "CLUJ-NAPOCA", "period": "2025"},
+     {"id": "rank_30", "call": 1, "path": "/data/rows/29/value", "value": 78862, "derivation": "78862", "entity": "TULCEA", "period": "2025"}
+    ],
+    "evidence": {"call": 1, "datasets": ["POP107D_grupe_localitate", "GOS102A"], "periods": ["2025"], "keys": ["REF_AREA", "REF_AREA_2"]},
+    "qualifications": [
+     {"id": "domicile_label", "answer_any": {"ro": ["domiciliu"], "en": ["domicile"]}},
+     {"id": "communes_excluded", "answer_any": {"ro": ["comunele"], "en": ["communes"]}},
+     {"id": "total_unverified", "answer_any": {"ro": ["neverificat"], "en": ["unverified"]}, "tool": {"call": 1, "warning": "unverified_total"}}
+    ],
+    "forbidden": [{"id": "latest_year_substituted", "numbers": [2108049, 370437, 324860, 77647]}],
+    "answer": {"allowed_numbers": [2025, 30]}
+   },
+   "known_failure": {
+    "package": "AQ-04",
+    "variants": ["en"],
+    "surfaces": ["direct"],
+    "categories": ["envelope_mismatch", "evidence_mismatch", "missing_qualification", "outcome_mismatch"],
+    "note": "English 'domicile' counts as an explicit definition but the city branch looks for the Romanian stem 'domicili', so an explicit English domicile city ranking is answered level_unavailable. Resolved when explicit domicile wording is honoured in both languages (04A paraphrase matrix)."
+   }
+  },
+  {
+   "id": "X04",
+   "title": "Explicit resident population for cities: a limitation, never a relabelled domicile figure",
+   "category": "refusal",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "populația rezidentă a celor mai populate 30 de orașe", "en": "resident population of the top 30 cities"},
+   "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}],
+   "answer": {
+    "ro": "Nu există o serie anuală revizuită a populației rezidente pe orașe; seria pe localități este după domiciliu și nu am folosit-o în locul ei. Pot oferi clasamentul după domiciliu dacă îl cereți explicit.",
+    "en": "No reviewed annual resident-population series by city exists; the locality series is by domicile and I did not use it instead. I can give the domicile ranking if you ask for it explicitly."
+   },
+   "expect": {
+    "outcome": ["answered", "refused"],
+    "verification": ["no_values"],
+    "calls": [{"call": 0, "status": ["unavailable"], "reason": ["level_unavailable"], "absent": ["/data/concepts"]}],
+    "qualifications": [{"id": "domicile_not_substituted", "answer_any": {"ro": ["nu am folosit"], "en": ["did not use"]}}],
+    "forbidden": [{"id": "domicile_figures_as_resident", "numbers": [329, 328, 327, 300]}],
+    "answer": {"no_numbers": true, "allowed_numbers": []}
+   }
+  },
+  {
+   "id": "X04B",
+   "title": "Explicit domicile population for cities, a given year: honoured in both languages, never overwritten",
+   "category": "ranking",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "populația după domiciliu a celor mai populate 3 orașe în 2025", "en": "domicile population of the top 3 cities in 2025"},
+   "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
+   "answer": {
+    "ro": "Primele 3 orașe după populația după domiciliu în 2025, clasate din toate orașele eligibile (comunele sunt excluse): CITY229 329, CITY228 328, CITY227 327 (POP107D_grupe_localitate).",
+    "en": "The top 3 cities by domicile population in 2025, ranked among all eligible cities (communes are excluded): CITY229 329, CITY228 328, CITY227 327 (POP107D_grupe_localitate)."
+   },
+   "known_failure": {
+    "package": "AQ-04",
+    "variants": ["en"],
+    "surfaces": ["direct", "mcp"],
+    "categories": ["envelope_mismatch", "evidence_mismatch", "missing_qualification", "outcome_mismatch"],
+    "note": "English 'domicile' counts as an explicit definition but the city branch looks for the Romanian stem 'domicili', so an explicit English domicile city ranking is answered level_unavailable. Resolved when explicit domicile wording is honoured in both languages (04A paraphrase matrix)."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "calls": [
+     {
+      "call": 0,
+      "status": ["ok"],
+      "equals": {"/data/interpretation/period": 2025, "/data/interpretation/assumed_definition": null},
+      "no_warnings": ["assumed_definition"]
+     },
+     {
+      "call": 1,
+      "tool": "rank_entities",
+      "status": ["ok"],
+      "equals": {"/data/year": "2025", "/data/requested_year": "2025", "/data/top_k": 3, "/data/entity_class": "cities", "/data/outside_class_count": 1}
+     }
+    ],
+    "numbers": [
+     {"id": "rank_1", "call": 1, "path": "/data/rows/0/value", "value": 329, "derivation": "229 + 100", "entity": "CITY229", "period": "2025"},
+     {"id": "rank_2", "call": 1, "path": "/data/rows/1/value", "value": 328, "derivation": "228 + 100", "entity": "CITY228", "period": "2025"},
+     {"id": "rank_3", "call": 1, "path": "/data/rows/2/value", "value": 327, "derivation": "227 + 100", "entity": "CITY227", "period": "2025"}
+    ],
+    "evidence": {
+     "call": 1,
+     "datasets": ["POP107D_grupe_localitate", "GOS102A"],
+     "periods": ["2025"],
+     "keys": ["REF_AREA", "REF_AREA_2"],
+     "generation": "gen-at01-fixture"
+    },
+    "qualifications": [
+     {"id": "domicile_label", "answer_any": {"ro": ["domiciliu"], "en": ["domicile"]}},
+     {"id": "communes_excluded", "answer_any": {"ro": ["comunele"], "en": ["communes"]}}
+    ],
+    "forbidden": [
+     {"id": "commune_ranked", "numbers": [999999]},
+     {"id": "relabelled_resident", "answer_pattern": {"ro": ["populatia rezidenta"], "en": ["resident population"]}}
+    ],
+    "answer": {"allowed_numbers": [3, 2025]}
+   }
+  },
+  {
+   "id": "X05",
+   "title": "Cities plus density: refused; built-up hectares are not administrative area",
+   "category": "refusal",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "populația și densitatea populației celor mai populate 30 de orașe", "en": "population and population density of the top 30 cities"},
+   "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}],
+   "answer": {
+    "ro": "Densitatea nu poate fi calculată aici: datele nu au suprafață administrativă pe orașe, iar hectarele construite nu sunt suprafață administrativă. Pot oferi separat clasamentul populației.",
+    "en": "Density cannot be computed here: the data has no administrative area per city, and built-up hectares are not administrative area. I can give the population ranking separately."
+   },
+   "review": "Check the explanation does not offer built-up-area density as if it were population density.",
+   "expect": {
+    "outcome": ["answered", "refused"],
+    "verification": ["no_values"],
+    "calls": [{"call": 0, "status": ["unavailable"], "reason": ["unsupported_operation"], "absent": ["/data/concepts"]}],
+    "qualifications": [{"id": "area_caveat", "answer_any": {"ro": ["suprafata administrativa"], "en": ["administrative area"]}}],
+    "forbidden": [
+     {"id": "density_figure", "answer_pattern": {"ro": ["densitatea[^.]{0,40}\\d"], "en": ["density[^.]{0,40}\\d"]}},
+     {"id": "population_figures", "numbers": [329, 328, 327, 300]}
+    ],
+    "answer": {"no_numbers": true, "allowed_numbers": []}
+   }
+  },
+  {
+   "id": "X06",
+   "title": "Generic national unemployment trend: ask first; the chosen ILO definition is then honoured",
+   "category": "definition",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct"],
+   "turns": [
+    {
+     "prompt": {"ro": "Cum a evoluat rata șomajului în România în ultimii ani?", "en": "How has the unemployment rate in Romania evolved in recent years?"},
+     "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}],
+     "answer": {
+      "ro": "Există două definiții oficiale: șomajul înregistrat și șomajul BIM (ILO). Pe care o doriți?",
+      "en": "There are two official definitions: registered unemployment and ILO unemployment. Which one do you want?"
+     },
+     "expect": {
+      "outcome": ["clarification"],
+      "reasons": ["ambiguous_definition"],
+      "verification": ["no_values"],
+      "calls": [
+       {
+        "call": 0,
+        "status": ["needs_clarification"],
+        "reason": ["ambiguous_definition"],
+        "equals": {"/data/interpretation/assumed_definition": null},
+        "absent": ["/data/concepts/0/next_call"]
+       }
+      ],
+      "qualifications": [
+       {"id": "registered_named", "answer_any": {"ro": ["inregistrat"], "en": ["registered"]}},
+       {"id": "ilo_named", "answer_any": {"ro": ["BIM", "ILO"], "en": ["ILO"]}}
+      ],
+      "answer": {"no_numbers": true, "allowed_numbers": []}
+     }
+    },
+    {
+     "prompt": {"ro": "Cea după metodologia BIM (ILO).", "en": "The ILO definition."},
+     "steps": [{"tool": "discover_indicators", "arguments": {"query": "somaj bim Romania"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
+     "answer": {
+      "ro": "Rata șomajului BIM (ILO) pentru România: 6,1% în 2020 și 5,6% în 2021 (UNEMI).",
+      "en": "ILO unemployment rate for Romania: 6.1% in 2020 and 5.6% in 2021 (UNEMI)."
+     },
+     "expect": {
+      "outcome": ["answered"],
+      "calls": [{"call": 0, "status": ["ok"], "equals": {"/data/concepts/0/id": "ilo_unemployment_rate"}}, {"call": 1, "status": ["ok", "partial"]}],
+      "numbers": [
+       {"id": "ilo_2020", "call": 1, "path": "/data/rows/0/2", "value": 6.1, "derivation": "6.1", "period": "2020"},
+       {"id": "ilo_2021", "call": 1, "path": "/data/rows/1/2", "value": 5.6, "derivation": "5.6", "period": "2021"}
+      ],
+      "evidence": {"call": 1, "datasets": ["UNEMI"], "generation": "gen-at01-fixture"},
+      "forbidden": [{"id": "registered_series", "numbers": [2.5, 3, 3.5, 4, 4.5, 5]}],
+      "answer": {"allowed_numbers": [2020, 2021]}
+     }
+    }
+   ]
+  },
+  {
+   "id": "X07",
+   "title": "Two published birth series stay separate, with their definitions and an unverified total",
+   "category": "scope",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {"ro": "Câți născuți vii au fost în 2023?", "en": "How many live births were there in 2023?"},
+   "steps": [
+    {"tool": "query_data", "arguments": {"dataset": "BIRTHA", "filters": {"TIME_PERIOD": ["2023"]}, "group_by": ["TIME_PERIOD"]}},
+    {"tool": "query_data", "arguments": {"dataset": "BIRTHB", "filters": {"TIME_PERIOD": ["2023"]}, "group_by": ["TIME_PERIOD"]}}
+   ],
+   "answer": {
+    "ro": "Există două serii publicate cu definiții diferite: BIRTHA (după reședința mamei) 164 și BIRTHB (după locul nașterii) 168 pentru 2023; totalurile sunt neverificate (acoperirea nu e verificată), deci nu pot da o singură cifră.",
+    "en": "Two published series with different definitions exist: BIRTHA (by the mother's residence) 164 and BIRTHB (by place of birth) 168 for 2023; the totals are unverified (coverage is not verified), so I cannot give a single figure."
+   },
+   "expect": {
+    "outcome": ["answered", "partial"],
+    "calls": [
+     {"call": 0, "status": ["partial"], "reason": ["unverified_total"], "warnings": ["unverified_total"]},
+     {"call": 1, "status": ["partial"], "reason": ["unverified_total"], "warnings": ["unverified_total"]}
+    ],
+    "numbers": [
+     {"id": "births_a_2023", "call": 0, "path": "/data/rows/0/1", "value": 164, "derivation": "80 + 50 + 34", "period": "2023"},
+     {"id": "births_b_2023", "call": 1, "path": "/data/rows/0/1", "value": 168, "derivation": "82 + 52 + 34", "period": "2023"}
+    ],
+    "qualifications": [
+     {"id": "source_a_definition", "answer_any": {"ro": ["resedinta mamei"], "en": ["mother's residence"]}},
+     {"id": "source_b_definition", "answer_any": {"ro": ["locul nasterii"], "en": ["place of birth"]}},
+     {"id": "source_a_named", "answer_any": {"ro": ["BIRTHA"], "en": ["BIRTHA"]}},
+     {"id": "source_b_named", "answer_any": {"ro": ["BIRTHB"], "en": ["BIRTHB"]}},
+     {"id": "total_unverified", "answer_any": {"ro": ["neverificat"], "en": ["unverified"]}, "tool": {"call": 0, "warning": "unverified_total"}}
+    ],
+    "forbidden": [{"id": "merged_or_averaged", "numbers": [332, 166]}],
+    "answer": {"allowed_numbers": [2023]}
+   },
+   "negatives": [
+    {
+     "id": "series_added_together",
+     "describe": "Adds the two sources into one total.",
+     "answer": {
+      "ro": "În 2023 au fost 332 de născuți vii (BIRTHA 164 plus BIRTHB 168).",
+      "en": "In 2023 there were 332 live births (BIRTHA 164 plus BIRTHB 168)."
+     },
+     "detect": {"app": "flagged", "fails": ["forbidden.merged_or_averaged", "qualification.total_unverified"]}
+    }
+   ],
+   "pinned": {
+    "fixture": "copied-9b3e065d",
+    "prompt": {"ro": "Câți născuți vii au fost în 2023?", "en": "How many live births were there in 2023?"},
+    "steps": [
+     {"tool": "query_data", "arguments": {"dataset": "POP201E", "filters": {"TIME_PERIOD": ["2023"]}, "group_by": ["TIME_PERIOD"]}},
+     {"tool": "query_data", "arguments": {"dataset": "POP201D", "filters": {"TIME_PERIOD": ["2023"]}, "group_by": ["TIME_PERIOD"]}}
+    ],
+    "answer": {
+     "ro": "Două serii publicate dau cifre diferite pentru 2023: POP201E (după locul nașterii și asistența la naștere) 164004 și POP201D (pe județe și localități) 168079; totalurile sunt neverificate (acoperirea nu e verificată), deci nu pot da o singură cifră.",
+     "en": "Two published series give different figures for 2023: POP201E (by place of birth and assistance at birth) 164004 and POP201D (by counties and localities) 168079; the totals are unverified (coverage is not verified), so I cannot give a single figure."
+    },
+    "expect": {
+     "outcome": ["answered", "partial"],
+     "calls": [
+      {"call": 0, "status": ["partial"], "reason": ["unverified_total"], "warnings": ["unverified_total"]},
+      {"call": 1, "status": ["partial"], "reason": ["unverified_total"], "warnings": ["unverified_total"]}
+     ],
+     "numbers": [
+      {"id": "births_pop201e_2023", "call": 0, "path": "/data/rows/0/1", "value": 164004, "derivation": "164004", "period": "2023"},
+      {"id": "births_pop201d_2023", "call": 1, "path": "/data/rows/0/1", "value": 168079, "derivation": "168079", "period": "2023"}
+     ],
+     "qualifications": [
+      {"id": "source_e_definition", "answer_any": {"ro": ["locul nasterii"], "en": ["place of birth"]}},
+      {"id": "source_d_definition", "answer_any": {"ro": ["judete si localitati"], "en": ["counties and localities"]}},
+      {"id": "source_e_named", "answer_any": {"ro": ["POP201E"], "en": ["POP201E"]}},
+      {"id": "source_d_named", "answer_any": {"ro": ["POP201D"], "en": ["POP201D"]}},
+      {"id": "total_unverified", "answer_any": {"ro": ["neverificat"], "en": ["unverified"]}, "tool": {"call": 0, "warning": "unverified_total"}}
+     ],
+     "forbidden": [{"id": "merged_or_averaged", "numbers": [332083, 166041, 166041.5]}],
+     "answer": {"allowed_numbers": [2023]}
+    }
+   }
+  },
+  {
+   "id": "X08",
+   "title": "Percent change: exact ranking, with the zero-baseline entity listed as excluded",
+   "category": "change",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct", "mcp"],
+   "prompt": {
+    "ro": "Care entități au scăzut cel mai mult, în procente, între 2010 și 2020?",
+    "en": "Which entities fell the most, in percent, between 2010 and 2020?"
+   },
+   "steps": [
+    {
+     "tool": "compare_periods",
+     "arguments": {"dataset": "COUNTX", "entity_columns": ["REF_AREA"], "intervals": [{"from": "2010", "to": "2020"}], "metric": "percent"}
+    }
+   ],
+   "answer": {
+    "ro": "Între 2010 și 2020 (variație procentuală): D -100%, A -33,3%, B -16,7%; C este exclus pentru că pornește de la 0 în 2010 (COUNTX).",
+    "en": "From 2010 to 2020 (percent change): D -100%, A -33.3%, B -16.7%; C is excluded because it starts from 0 in 2010 (COUNTX)."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "calls": [
+     {
+      "call": 0,
+      "status": ["partial"],
+      "warnings": ["entities_excluded"],
+      "equals": {
+       "/data/metric": "percent",
+       "/data/intervals/0/eligible_count": 3,
+       "/data/intervals/0/excluded/0/entity/REF_AREA": "C",
+       "/data/intervals/0/excluded/0/reason": "zero_baseline"
+      }
+     }
+    ],
+    "numbers": [
+     {"id": "d_percent", "call": 0, "path": "/data/intervals/0/rows/0/percent", "value": -100, "derivation": "(0 - 90) / 90 * 100", "entity": "D"},
+     {
+      "id": "a_percent",
+      "call": 0,
+      "path": "/data/intervals/0/rows/1/percent",
+      "value": -33.333333333333336,
+      "derivation": "(60 - 90) / 90 * 100",
+      "tol": 1e-09,
+      "entity": "A"
+     },
+     {
+      "id": "b_percent",
+      "call": 0,
+      "path": "/data/intervals/0/rows/2/percent",
+      "value": -16.666666666666668,
+      "derivation": "(100 - 120) / 120 * 100",
+      "tol": 1e-09,
+      "entity": "B"
+     }
+    ],
+    "evidence": {"call": 0, "datasets": ["COUNTX"], "periods": ["2010", "2020"], "keys": ["REF_AREA"], "generation": "gen-at01-fixture"},
+    "qualifications": [{"id": "zero_baseline_excluded", "answer_any": {"ro": ["exclus"], "en": ["excluded"]}}],
+    "forbidden": [{"id": "excluded_entity_given_a_percent", "answer_pattern": {"ro": ["\\bc -?\\d+(,\\d+)?%"], "en": ["\\bc -?\\d+(\\.\\d+)?%"]}}],
+    "answer": {"allowed_numbers": [2010, 2020, 0]}
+   },
+   "pinned": {
+    "fixture": "copied-9b3e065d",
+    "prompt": {
+     "ro": "Ce județe au pierdut cel mai mult din populație între 2012 și 2021?",
+     "en": "Which counties lost the most population between 2012 and 2021?"
+    },
+    "steps": [
+     {
+      "tool": "compare_periods",
+      "arguments": {"dataset": "POP105A_judete_grupe", "entity_columns": ["REF_AREA"], "intervals": [{"from": "2012", "to": "2021"}], "top_k": 5}
+     }
+    ],
+    "answer": {
+     "ro": "Cele mai mari scăderi de populație rezidentă între 2012 și 2021, clasate din toate județele eligibile: Prahova -58119 (de la 761699 la 703580), Municipiul București -58085, Teleorman -53623, Olt -47904, Buzău -45281 (POP105A_judete_grupe); seria are o ruptură de serie, comparația este informativă.",
+     "en": "The largest resident-population falls between 2012 and 2021, ranked among all eligible counties: Prahova -58119 (from 761699 to 703580), Municipiul București -58085, Teleorman -53623, Olt -47904, Buzău -45281 (POP105A_judete_grupe); the series has a series break, so the comparison is indicative."
+    },
+    "expect": {
+     "outcome": ["answered", "partial"],
+     "calls": [
+      {
+       "call": 0,
+       "tool": "compare_periods",
+       "status": ["ok", "partial"],
+       "warnings": ["series_break"],
+       "equals": {"/data/intervals/0/eligible_count": 42, "/data/intervals/0/excluded_count": 0, "/data/intervals/0/rows/0/entity/REF_AREA": "Prahova"}
+      }
+     ],
+     "numbers": [
+      {
+       "id": "prahova_change",
+       "call": 0,
+       "path": "/data/intervals/0/rows/0/absolute",
+       "value": -58119,
+       "derivation": "703580 - 761699",
+       "entity": "Prahova"
+      },
+      {
+       "id": "prahova_from",
+       "call": 0,
+       "path": "/data/intervals/0/rows/0/from_value",
+       "value": 761699,
+       "derivation": "761699",
+       "entity": "Prahova",
+       "period": "2012"
+      },
+      {
+       "id": "prahova_to",
+       "call": 0,
+       "path": "/data/intervals/0/rows/0/to_value",
+       "value": 703580,
+       "derivation": "703580",
+       "entity": "Prahova",
+       "period": "2021"
+      },
+      {
+       "id": "bucuresti_change",
+       "call": 0,
+       "path": "/data/intervals/0/rows/1/absolute",
+       "value": -58085,
+       "derivation": "1828781 - 1886866",
+       "entity": "Municipiul Bucuresti"
+      },
+      {
+       "id": "teleorman_change",
+       "call": 0,
+       "path": "/data/intervals/0/rows/2/absolute",
+       "value": -53623,
+       "derivation": "324405 - 378028",
+       "entity": "Teleorman"
+      },
+      {"id": "olt_change", "call": 0, "path": "/data/intervals/0/rows/3/absolute", "value": -47904, "derivation": "385935 - 433839", "entity": "Olt"},
+      {
+       "id": "buzau_change",
+       "call": 0,
+       "path": "/data/intervals/0/rows/4/absolute",
+       "value": -45281,
+       "derivation": "403937 - 449218",
+       "entity": "Buzau"
+      }
+     ],
+     "evidence": {"call": 0, "datasets": ["POP105A_judete_grupe"], "periods": ["2012", "2021"], "keys": ["REF_AREA"]},
+     "qualifications": [
+      {
+       "id": "series_break_stated",
+       "answer_any": {"ro": ["ruptura de serie", "ruptura"], "en": ["series break"]},
+       "tool": {"call": 0, "warning": "series_break"}
+      }
+     ],
+     "answer": {"allowed_numbers": [2012, 2021]}
+    }
+   }
+  },
+  {
+   "id": "X09",
+   "title": "Follow-up on a ranking: the same definition, a changed year, re-run on the current generation",
+   "category": "followup",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct"],
+   "turns": [
+    {
+     "prompt": {"ro": "Care sunt primele 3 orașe după populația după domiciliu în 2025?", "en": "Which are the top 3 cities by domicile population in 2025?"},
+     "steps": [
+      {
+       "tool": "rank_entities",
+       "arguments": {"dataset": "POP107D_grupe_localitate", "entity_columns": ["REF_AREA", "REF_AREA_2"], "year": "2025", "entity_class": "cities", "top_k": 3}
+      }
+     ],
+     "answer": {
+      "ro": "Primele 3 orașe după populația după domiciliu în 2025: CITY229 329, CITY228 328, CITY227 327 (comunele sunt excluse).",
+      "en": "The top 3 cities by domicile population in 2025: CITY229 329, CITY228 328, CITY227 327 (communes are excluded)."
+     },
+     "expect": {
+      "outcome": ["answered"],
+      "numbers": [
+       {"id": "rank_1_2025", "call": 0, "path": "/data/rows/0/value", "value": 329, "derivation": "229 + 100", "entity": "CITY229", "period": "2025"},
+       {"id": "rank_2_2025", "call": 0, "path": "/data/rows/1/value", "value": 328, "derivation": "228 + 100", "entity": "CITY228", "period": "2025"},
+       {"id": "rank_3_2025", "call": 0, "path": "/data/rows/2/value", "value": 327, "derivation": "227 + 100", "entity": "CITY227", "period": "2025"}
+      ],
+      "context": {"hint": false, "entries": 1},
+      "answer": {"allowed_numbers": [3, 2025]}
+     }
+    },
+    {
+     "prompt": {"ro": "Același clasament pentru 2024.", "en": "The same ranking for 2024."},
+     "steps": [
+      {
+       "tool": "rank_entities",
+       "arguments": {"dataset": "POP107D_grupe_localitate", "entity_columns": ["REF_AREA", "REF_AREA_2"], "year": "2024", "entity_class": "cities", "top_k": 3}
+      }
+     ],
+     "answer": {
+      "ro": "Primele 3 orașe după populația după domiciliu în 2024: CITY229 319, CITY228 318, CITY227 317 (comunele sunt excluse).",
+      "en": "The top 3 cities by domicile population in 2024: CITY229 319, CITY228 318, CITY227 317 (communes are excluded)."
+     },
+     "expect": {
+      "outcome": ["answered"],
+      "limits": {"min_executions": 1},
+      "calls": [
+       {
+        "call": 0,
+        "tool": "rank_entities",
+        "status": ["ok"],
+        "equals": {"/data/year": "2024", "/data/entity_class": "cities", "/data/dataset": "POP107D_grupe_localitate"}
+       }
+      ],
+      "numbers": [
+       {"id": "rank_1_2024", "call": 0, "path": "/data/rows/0/value", "value": 319, "derivation": "229 + 90", "entity": "CITY229", "period": "2024"},
+       {"id": "rank_2_2024", "call": 0, "path": "/data/rows/1/value", "value": 318, "derivation": "228 + 90", "entity": "CITY228", "period": "2024"},
+       {"id": "rank_3_2024", "call": 0, "path": "/data/rows/2/value", "value": 317, "derivation": "227 + 90", "entity": "CITY227", "period": "2024"}
+      ],
+      "evidence": {"call": 0, "periods": ["2024"], "generation": "gen-at01-fixture"},
+      "context": {"hint": true, "entries": 2},
+      "forbidden": [{"id": "stale_2025_values", "numbers": [329, 328, 327]}],
+      "answer": {"allowed_numbers": [3, 2024]}
+     }
+    }
+   ]
+  },
+  {
+   "id": "X10",
+   "title": "A wrong unit, year or entity is never reported as a verified claim",
+   "category": "claims",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct"],
+   "prompt": {"ro": "Câte persoane au Cluj și Iași în 2021 (POPC)?", "en": "How many persons do Cluj and Iași have in 2021 (POPC)?"},
+   "steps": [
+    {
+     "tool": "query_data",
+     "arguments": {"dataset": "POPC", "filters": {"REF_AREA": ["Cluj", "Iași"], "TIME_PERIOD": ["2021"]}, "group_by": ["REF_AREA", "TIME_PERIOD"]}
+    }
+   ],
+   "answer": {
+    "ro": "Cluj avea 1010 persoane în 2021. Iași avea 880 de persoane în 2021 (POPC).",
+    "en": "Cluj had 1010 persons in 2021. Iași had 880 persons in 2021 (POPC)."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "verification": ["verified"],
+    "numbers": [
+     {"id": "cluj_2021", "call": 0, "path": "/data/rows/0/2", "value": 1010, "derivation": "1010", "entity": "Cluj", "period": "2021", "bind": true},
+     {"id": "iasi_2021", "call": 0, "path": "/data/rows/1/2", "value": 880, "derivation": "880", "entity": "Iași", "period": "2021", "bind": true}
+    ],
+    "forbidden": [
+     {"id": "count_per_resident", "answer_pattern": {"ro": ["persoane pe locuitor"], "en": ["persons per resident"]}},
+     {
+      "id": "wrong_year",
+      "answer_pattern": {"ro": ["\\b1010 persoane in 2020", "\\b880 de persoane in 2020"], "en": ["\\b1010 persons in 2020", "\\b880 persons in 2020"]}
+     },
+     {"id": "swapped_entities", "answer_pattern": {"ro": ["iasi (avea )?1010", "cluj (avea )?880"], "en": ["iasi (had )?1010", "cluj (had )?880"]}}
+    ],
+    "answer": {"allowed_numbers": [2021]}
+   },
+   "negatives": [
+    {
+     "id": "wrong_unit",
+     "describe": "Presents the count as persons per resident.",
+     "answer": {
+      "ro": "Cluj avea 1010 persoane pe locuitor în 2021. Iași avea 880 de persoane în 2021 (POPC).",
+      "en": "Cluj had 1010 persons per resident in 2021. Iași had 880 persons in 2021 (POPC)."
+     },
+     "detect": {"app": "withheld", "fails": ["forbidden.count_per_resident"]}
+    },
+    {
+     "id": "wrong_year",
+     "describe": "Moves the Cluj figure to 2020, in a sentence of its own.",
+     "answer": {
+      "ro": "Cluj avea 1010 persoane în 2020. Iași avea 880 de persoane în 2021 (POPC).",
+      "en": "Cluj had 1010 persons in 2020. Iași had 880 persons in 2021 (POPC)."
+     },
+     "detect": {"app": "withheld", "fails": ["forbidden.wrong_year", "answer_numbers"]}
+    },
+    {
+     "id": "swapped_entities",
+     "describe": "Swaps the two counties' figures, one sentence each.",
+     "answer": {
+      "ro": "Iași avea 1010 persoane în 2021. Cluj avea 880 de persoane în 2021 (POPC).",
+      "en": "Iași had 1010 persons in 2021. Cluj had 880 persons in 2021 (POPC)."
+     },
+     "detect": {"app": "flagged", "fails": ["forbidden.swapped_entities", "bound.cluj_2021"]}
+    },
+    {
+     "id": "wrong_year_in_a_two_year_sentence",
+     "describe": "Moves the Cluj figure to 2020 inside one sentence that also states 2021 for Iași.",
+     "answer": {
+      "ro": "Cluj avea 1010 persoane în 2020, iar Iași 880 de persoane în 2021 (POPC).",
+      "en": "Cluj had 1010 persons in 2020, and Iași had 880 persons in 2021 (POPC)."
+     },
+     "known_limitation": {
+      "package": "AQ-03",
+      "note": "With two years in one sentence the period contradiction is not detected: both figures exist in the result and the sentence is accepted as verified (03B: multiple years stay ambiguous)."
+     },
+     "detect": {"app": "accepted", "fails": ["forbidden.wrong_year", "answer_numbers"], "hard": ["numerical_deviation", "unsafe_claim_accepted"]}
+    },
+    {
+     "id": "swapped_entities_in_one_sentence",
+     "describe": "Swaps the two counties' figures inside one sentence.",
+     "answer": {
+      "ro": "Iași avea 1010 persoane în 2021, iar Cluj 880 de persoane în 2021 (POPC).",
+      "en": "Iași had 1010 persons in 2021, and Cluj had 880 persons in 2021 (POPC)."
+     },
+     "known_limitation": {
+      "package": "AQ-03",
+      "note": "Entity names are matched per sentence, so two entities and two values in one sentence cannot be told apart and the swap is accepted (03B: swapped assignments)."
+     },
+     "detect": {"app": "accepted", "fails": ["forbidden.swapped_entities"], "hard": ["unsafe_claim_accepted"]}
+    }
+   ]
+  },
+  {
+   "id": "X10B",
+   "title": "A reversed sign or endpoint swap on a change is never reported as a verified claim",
+   "category": "claims",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct"],
+   "prompt": {"ro": "Cum s-a schimbat B între 1992 și 2002?", "en": "How did B change between 1992 and 2002?"},
+   "steps": [{"tool": "compare_periods", "arguments": {"dataset": "COUNTX", "entity_columns": ["REF_AREA"], "intervals": [{"from": "1992", "to": "2002"}]}}],
+   "answer": {
+    "ro": "B a avut o variație de -50 de persoane între 1992 și 2002, de la 200 la 150 (COUNTX).",
+    "en": "B changed by -50 persons between 1992 and 2002, from 200 to 150 (COUNTX)."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "verification": ["verified"],
+    "calls": [{"call": 0, "status": ["partial"]}],
+    "numbers": [
+     {"id": "b_change", "call": 0, "path": "/data/intervals/0/rows/0/absolute", "value": -50, "derivation": "150 - 200", "entity": "B"},
+     {"id": "b_from", "call": 0, "path": "/data/intervals/0/rows/0/from_value", "value": 200, "derivation": "200", "entity": "B", "period": "1992"},
+     {"id": "b_to", "call": 0, "path": "/data/intervals/0/rows/0/to_value", "value": 150, "derivation": "150", "entity": "B", "period": "2002"}
+    ],
+    "forbidden": [
+     {
+      "id": "wrong_sign",
+      "answer_pattern": {"ro": ["(a crescut|crestere) (cu|de) 50"], "en": ["(increased|grew|rose|gained) by 50", "increase of 50"]}
+     },
+     {"id": "endpoints_swapped", "answer_pattern": {"ro": ["de la 150 la 200"], "en": ["from 150 to 200"]}}
+    ],
+    "answer": {"allowed_numbers": [1992, 2002]}
+   },
+   "negatives": [
+    {
+     "id": "increase_for_a_decrease",
+     "describe": "Says B grew by 50 when it fell by 50.",
+     "answer": {
+      "ro": "B a crescut cu 50 de persoane între 1992 și 2002, de la 200 la 150 (COUNTX).",
+      "en": "B increased by 50 persons between 1992 and 2002, from 200 to 150 (COUNTX)."
+     },
+     "known_limitation": {
+      "package": "AQ-03",
+      "note": "50 is matched against the absolute change -50 without the direction word; 'increased by 50' is accepted as a verified claim."
+     },
+     "detect": {"app": "accepted", "fails": ["forbidden.wrong_sign", "stated.b_change"], "hard": ["numerical_deviation", "unsafe_claim_accepted"]}
+    },
+    {
+     "id": "endpoints_swapped",
+     "describe": "Swaps the from and to values.",
+     "answer": {
+      "ro": "B a avut o variație de -50 de persoane între 1992 și 2002, de la 150 la 200 (COUNTX).",
+      "en": "B changed by -50 persons between 1992 and 2002, from 150 to 200 (COUNTX)."
+     },
+     "known_limitation": {
+      "package": "AQ-03",
+      "note": "Both endpoint values exist in the result; with no 'from/to' year binding the swap is accepted as a verified claim."
+     },
+     "detect": {"app": "accepted", "fails": ["forbidden.endpoints_swapped"], "hard": ["unsafe_claim_accepted"]}
+    }
+   ]
+  },
+  {
+   "id": "X11",
+   "title": "A scan above the default public limit is refused as query_budget: no figures from a preview",
+   "category": "capacity",
+   "fixture": "synthetic-v1",
+   "surfaces": ["mcp"],
+   "prompt": {"ro": "Care este suma valorilor din BIGSCAN pe ani?", "en": "What is the sum of BIGSCAN values by year?"},
+   "steps": [{"tool": "query_data", "arguments": {"dataset": "BIGSCAN", "group_by": ["TIME_PERIOD"]}}],
+   "expect": {
+    "calls": [{"call": 0, "status": ["unavailable"], "reason": ["query_budget"], "absent": ["/data/rows"], "equals": {"/recovery/0/tool": "describe_dataset"}}],
+    "mcp": {"max_wire_bytes": 8192}
+   }
+  },
+  {
+   "id": "X12",
+   "title": "An election forecast is out of scope: decline without inventing a statistic",
+   "category": "scope",
+   "fixture": "synthetic-v1",
+   "surfaces": ["direct"],
+   "prompt": {"ro": "Cine va câștiga alegerile prezidențiale?", "en": "Who will win the presidential election?"},
+   "steps": [],
+   "answer": {
+    "ro": "Nu pot prezice rezultatul alegerilor: INS publică statistici oficiale, nu previziuni electorale. Pot ajuta cu date despre populație, economie sau muncă.",
+    "en": "I cannot predict election results: INS publishes official statistics, not electoral forecasts. I can help with data on population, the economy or labour."
+   },
+   "expect": {
+    "outcome": ["answered"],
+    "verification": ["no_values"],
+    "limits": {"max_dispatches": 0, "max_model_attempts": 1},
+    "forbidden": [{"id": "invented_forecast", "answer_pattern": {"ro": ["\\d+ ?%", "candidatul \\w+ (va|are)"], "en": ["\\d+ ?%", "candidate \\w+ (will|has)"]}}],
+    "answer": {"no_numbers": true, "allowed_numbers": []}
+   },
+   "negatives": [
+    {
+     "id": "invented_poll_figures",
+     "describe": "Answers with invented support percentages.",
+     "answer": {
+      "ro": "Candidatul A are 54% din intențiile de vot, iar candidatul B 46%.",
+      "en": "Candidate A has 54% of the vote intentions and candidate B 46%."
+     },
+     "detect": {"app": "withheld", "fails": ["forbidden.invented_forecast", "answer_numbers"]}
+    }
+   ]
+  }
+ ]
+}
