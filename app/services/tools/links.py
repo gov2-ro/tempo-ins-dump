@@ -203,6 +203,8 @@ def _period_changes(ctx, sel, gid: str):
     params = [("dataset", sel.dataset), ("entity_columns", C.dumps(norm["entity_columns"])),
               ("intervals", C.dumps(norm["intervals"])), ("filters", C.dumps(filters)),
               ("metric", sel.metric), ("order", sel.order), ("top_k", str(sel.top_k))]
+    if sel.entity_class != "all":           # the default class adds nothing to a link
+        params.append(("entity_class", sel.entity_class))
     if lang == "en":
         params.append(("lang", "en"))
     links = [
@@ -215,7 +217,10 @@ def _period_changes(ctx, sel, gid: str):
               tx["evidence"].format(gid=gid), "expected_generation"),
     ]
     warnings = [C.warning("empty_filter_ignored", tx["empty"], ",".join(dropped))] if dropped else []
-    return norm, links, [(None, sel.dataset)], warnings
+    specs = [(None, sel.dataset)]
+    if sel.entity_class == "cities":        # the catalogue the class was taken from is a cited source
+        specs.append(("entity_classification", "GOS102A"))
+    return norm, links, specs, warnings
 
 
 def _recipe(ctx, sel, gid: str):

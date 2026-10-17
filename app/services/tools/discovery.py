@@ -697,6 +697,25 @@ def _withhold_calls(cards: list, lang: str):
         card["next_call"] = pref.get("next_call") if pref else None
 
 
+# --- AQ-05A: the one supported city change (policy: discovery_policy.city_change) ---------------
+
+def _change_calls(cards: list, plan, intent: dict, lang: str):
+    """A city change question reaches compare_periods with the cities class, the two exact
+    years, the stated direction and top K. Everything else on the card is left as it was."""
+    for card in cards:
+        for cand in card["candidates"]:
+            if cand.get("kind") != "dataset" or not cand.get("queryable"):
+                continue
+            prev = (cand.get("next_call") or {}).get("arguments") or {}
+            filters = {k: v for k, v in prev.get("filters", {}).items() if k != "TIME_PERIOD"}
+            cand["next_call"] = _call("compare_periods", dataset=cand["dataset"], **plan.rank,
+                                      **plan.change, filters=filters, top_k=intent["top_k"], lang=lang)
+        pref = next((c for c in card["candidates"] if c.get("preferred")), None)
+        card["next_call"] = pref.get("next_call") if pref else None
+
+
+# ------------------------------------------------------------------------------------------------
+
 def _constraint_warnings(unapplied: list) -> list:
     out = []
     for kind in dict.fromkeys(c["kind"] for c in unapplied):
@@ -746,6 +765,8 @@ def discover_indicators(args, ctx):
         unapplied.append({"kind": "geography", "text": ", ".join(p["name"] for p in places)})
     if unapplied:
         _withhold_calls(cards, lang)
+    elif plan.change:
+        _change_calls(cards, plan, intent, lang)
     elif intent["operation"] == "rank" or intent["cities"]:
         for card in cards:
             for cand in card["candidates"]:
@@ -766,6 +787,8 @@ def discover_indicators(args, ctx):
     if assumed:
         warnings.append(_assumed_warning(by_id.get(assumed, {}), assumed, lang, intent["cities"]))
     warnings += _constraint_warnings(unapplied)
+    if plan.change and not unapplied:
+        warnings.append(C.warning("classification_reference", dpol.CITY_CHANGE_NOTE))
     for card in cards:
         if assumed and card["id"] == assumed:
             card["assumed"] = True

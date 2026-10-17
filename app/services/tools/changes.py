@@ -13,6 +13,8 @@ from app.services.tools.contract import recovery
 
 MESSAGE_TAIL = ("Rank is the ordinal position under the requested metric and order, "
                 "not a claim of statistical significance.")
+CLASS_TAIL = ("Cities are the catalogue's municipalities and towns (INS GOS102A); membership does "
+              "not prove historical city status or unchanged boundaries.")
 
 
 def _evidence_recovery(selection: dict | None, generation_id: str | None) -> dict | None:
@@ -44,6 +46,9 @@ def compare_periods(args, ctx):
             "key_columns": r["key_columns"], "period_column": r["time_column"],
             "metric": r["metric"], "order": r["order"], "top_k": r["top_k"],
             "unit": r["unit"], "intervals": intervals}
+    cities = r.get("entity_class") == "cities"
+    if cities:       # present only for the class, so the default result keeps its exact shape
+        data.update(entity_class="cities", outside_class_count=r["outside_class_count"])
     limits = {"returned_rows": returned, "total_rows": eligible, "preview_truncated": cut,
               "source_complete": True, "time_windowed": False, "partial_period_dropped": None}
     rec = []
@@ -51,21 +56,32 @@ def compare_periods(args, ctx):
         e = _evidence_recovery(r["selection"], ctx.generation.get("id"))
         if e:
             rec.append(e)
+    who = "entity of the class 'municipalities and towns in the referenced catalogue'" if cities else "entity"
     if r["status"] == "unavailable":
         message = ("No entity has a finite value at both endpoints of any interval, so nothing "
                    "was ranked. The exclusions say why; no gap was filled with zero.")
+        if cities:
+            message = ("No municipality or town in the referenced catalogue has a finite value at "
+                       "both endpoints of any interval, so nothing was ranked "
+                       f"({r['outside_class_count']} source entities are outside that class). "
+                       "No gap was filled with zero.")
     else:
         excluded = sum(iv["excluded_count"] for iv in intervals)
         unit = r["unit"] or "the source unit"
         message = (f"Per-entity change in {unit} for {len(intervals)} interval(s) of "
-                   f"{r['dataset']}: every eligible entity was ranked ({eligible} ranked) and "
+                   f"{r['dataset']}: every eligible {who} was ranked ({eligible} ranked) and "
                    f"{returned} row(s) are shown.")
+        if cities:
+            message += (f" {r['outside_class_count']} source entities outside the catalogue "
+                        "(communes, totals) were not ranked.")
         if excluded:
             message += f" {excluded} entity-interval pair(s) were excluded and are listed."
         scope = r["provenance"].get("scope") or {}
         if scope.get("domain_complete") is False:
             message += f" Restricted domain: {scope.get('description')}."
         message += " " + MESSAGE_TAIL
+    if cities:
+        message += " " + CLASS_TAIL
     return contract.envelope(
         "compare_periods", ctx, status=r["status"], reason=r["reason"], message=message,
         data=data, provenance=r["provenance"], limits=limits, warnings=r["warnings"],

@@ -2,6 +2,8 @@
 
 Top K limits presentation only. City membership uses the SIRUTA option catalogue
 of INS GOS102A, not a substring test on population labels or model arithmetic.
+The catalogue resolver (`city_codes`, `classify_cities`) is shared with the
+period-change tool (AQ-05A): both classify full entity keys the same way.
 """
 from __future__ import annotations
 
@@ -39,6 +41,43 @@ def city_codes(conn) -> dict[str, str]:
 def _siruta(value):
     m = re.match(r"^(\d+)\s+\S", str(value).strip())
     return str(int(m[1])) if m else None
+
+
+def classification_entry() -> dict:
+    """provenance.classification of a city-class result (rankings and period changes)."""
+    return {"dataset": CITY_CATALOGUE, "key": "SIRUTA", "class": "municipalities_and_towns",
+            "temporal_status": "catalogue_not_historical"}
+
+
+def classify_cities(keys, key_cols, catalogue: dict, aggregates=frozenset()) -> dict:
+    """Classify full entity keys against the city catalogue: {key: (SIRUTA or None, class)} with
+    class "member" (a municipality or town of the catalogue), "outside_class" (any other place,
+    e.g. a commune) or "aggregate_row" (a total among its parts). Membership is the exact SIRUTA
+    key of the locality value, never its name. A locality value without one, or one SIRUTA under
+    two entities, refuses with `identity_ambiguous` (the caller attaches provenance)."""
+    out, owner = {}, {}
+    for key in keys:
+        if key in aggregates:
+            out[key] = (None, "aggregate_row")
+            continue
+        siruta = _siruta(dict(zip(key_cols, key))["REF_AREA_2"])
+        if siruta is None:
+            raise C.ToolFailure("unavailable", "identity_ambiguous",
+                                "Locality values must carry exact SIRUTA keys; names are not joined.")
+        if siruta not in catalogue:
+            out[key] = (siruta, "outside_class")
+            continue
+        if siruta in owner:
+            raise C.ToolFailure("unavailable", "identity_ambiguous",
+                                "One city SIRUTA key appears under multiple entities.")
+        owner[siruta] = key
+        out[key] = (siruta, "member")
+    return out
+
+
+def members_of(classes: dict) -> dict:
+    """{key: SIRUTA} of the members in a `classify_cities` result."""
+    return {k: s for k, (s, c) in classes.items() if c == "member"}
 
 
 def rank_entities(args, ctx):
@@ -99,26 +138,22 @@ def rank_entities(args, ctx):
         table[key] = row[cols.index("OBS_VALUE")]
     aggregates = period_changes._aggregate_keys({(k, year): v for k, v in table.items()}, keys, actx)
     catalogue = city_codes(ctx.conn) if args.entity_class == "cities" else None
+    members, outside_class, seen_ids = None, len(aggregates), set()
     if catalogue:
         prov["sources"].append({**C.source_entry(ctx.conn, CITY_CATALOGUE, ctx.lang), "role": "entity_classification"})
-        prov["classification"] = {"dataset": CITY_CATALOGUE, "key": "SIRUTA", "class": "municipalities_and_towns",
-                                  "temporal_status": "catalogue_not_historical"}
-    rows, excluded, outside_class, seen_ids = [], [], 0, set()
+        prov["classification"] = classification_entry()
+        try:
+            classes = classify_cities(table, keys, catalogue, aggregates)
+        except C.ToolFailure as f:
+            f.provenance = prov
+            raise
+        members = members_of(classes)
+        outside_class, seen_ids = len(classes) - len(members), set(members.values())
+    rows, excluded = [], []
     for key, value in table.items():
         entity = dict(zip(keys, key))
-        if key in aggregates:
-            outside_class += 1
-            continue
-        if catalogue:
-            siruta = _siruta(entity["REF_AREA_2"])
-            if siruta is None:
-                _refuse("identity_ambiguous", "Locality values must carry exact SIRUTA keys; names are not joined.", prov)
-            if siruta not in catalogue:
-                outside_class += 1
-                continue
-            if siruta in seen_ids:
-                _refuse("identity_ambiguous", "One city SIRUTA key appears under multiple entities.", prov)
-            seen_ids.add(siruta)
+        if (key in aggregates) if members is None else (key not in members):
+            continue                        # outside the class (counted in outside_class)
         if value is None or not math.isfinite(float(value)):
             excluded.append({"entity": entity, "reason": "value_missing"})
             continue

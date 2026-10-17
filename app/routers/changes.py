@@ -6,8 +6,8 @@
 
 Both take the tool's arguments as query parameters: `dataset`, `entity_columns`
 (JSON array), `intervals` (JSON array of {"from","to"}), `filters` (JSON object),
-`metric`, `order`, `top_k`, `lang`. The evidence route also takes
-`expected_generation`: it is checked before the bundle is built and again
+`metric`, `order`, `top_k`, `lang` and the optional `entity_class` (all | cities). The
+evidence route also takes `expected_generation`: it is checked before the bundle is built and again
 before it is sent (409 `generation_changed`), and a generation that changes while
 the bundle is being built is refused whether or not one was expected.
 """
@@ -33,7 +33,8 @@ class _BadParam(Exception):
     pass
 
 
-def _arguments(dataset, entity_columns, intervals, filters, metric, order, top_k, lang) -> dict:
+def _arguments(dataset, entity_columns, intervals, filters, metric, order, top_k, lang,
+               entity_class=None) -> dict:
     """Tool arguments from the query string. Only decoding happens here; the
     tool's schema validates types, bounds and unknown keys."""
     raw = {"entity_columns": entity_columns, "intervals": intervals, "filters": filters}
@@ -47,7 +48,8 @@ def _arguments(dataset, entity_columns, intervals, filters, metric, order, top_k
             raise _BadParam(str(e))
         if v is not MISSING:
             args[name] = v
-    for name, v in (("metric", metric), ("order", order), ("lang", lang)):
+    for name, v in (("metric", metric), ("order", order), ("lang", lang),
+                    ("entity_class", entity_class)):
         if v is not None:
             args[name] = v
     if top_k is not None:
@@ -81,13 +83,15 @@ def period_changes(dataset: str = Query(None, max_length=200),
                    metric: str = Query(None, max_length=20),
                    order: str = Query(None, max_length=20),
                    top_k: str = Query(None, max_length=10),
-                   lang: str = Query(None, max_length=10)):
+                   lang: str = Query(None, max_length=10),
+                   entity_class: str = Query(None, max_length=10, description="all | cities")):
     """The compare_periods envelope (tempo-tools/2) for the current generation:
     200 for ok/partial/needs_clarification/unavailable, 400 invalid_input or
     unknown_column, 404 unknown_dataset, 500 execution_failed."""
     from app.services.tools import registry
     try:
-        args = _arguments(dataset, entity_columns, intervals, filters, metric, order, top_k, lang)
+        args = _arguments(dataset, entity_columns, intervals, filters, metric, order, top_k, lang,
+                          entity_class)
     except _BadParam as e:
         return _bad_param_envelope(str(e))
     env = registry.call_tool("compare_periods", args)
@@ -125,6 +129,7 @@ def period_changes_evidence(
         order: str = Query(None, max_length=20),
         top_k: str = Query(None, max_length=10),
         lang: str = Query(None, max_length=10),
+        entity_class: str = Query(None, max_length=10),
         expected_generation: str = Query(None, max_length=128, pattern=r"^[A-Za-z0-9._-]*$")):
     """ZIP evidence bundle with the COMPLETE ranking of every interval (not the
     top_k preview). 409 when the generation differs from `expected_generation` or
@@ -134,7 +139,7 @@ def period_changes_evidence(
     from app.services.tools import contract, schemas
     try:
         arguments = _arguments(dataset, entity_columns, intervals, filters, metric, order,
-                               top_k, lang)
+                               top_k, lang, entity_class)
         if len(contract.dumps(arguments).encode("utf-8")) > contract.MAX_ARGUMENT_BYTES:
             raise _BadParam("Invalid arguments: more than 16 KiB")
         args = schemas.ComparePeriodsArgs.model_validate(arguments)

@@ -13,6 +13,7 @@ source query (aggregated by the shared policy), not raw INS observations.
 """
 from __future__ import annotations
 
+import json
 from urllib.parse import quote, urlencode
 
 from app.services import evidence as ev
@@ -32,6 +33,8 @@ def live_link(args: dict, *, evidence: bool = False, expected_generation: str | 
         q["filters"] = contract.dumps(args["filters"])
     q.update(metric=args.get("metric", "absolute"), order=args.get("order", "asc"),
              top_k=str(args.get("top_k", 20)), lang=args.get("lang", "ro"))
+    if args.get("entity_class") not in (None, "all"):       # the default class adds nothing
+        q["entity_class"] = args["entity_class"]
     if expected_generation:
         q["expected_generation"] = expected_generation
     path = "/api/period-changes" + ("/evidence" if evidence else "")
@@ -137,6 +140,48 @@ sys.exit(1 if bad_result or bad_excl else 0)
 '''
 
 
+# The city class (AQ-05A) adds one step to the offline script: classify every entity of
+# inputs/endpoints.csv from the bundled catalogue BEFORE eligibility and ranks, then check
+# classification.csv. The default script above is untouched, so bundles without a class keep
+# their exact recompute.py.
+_CLASS_ANCHOR = "entities = sorted({k for k, _ in table})\n"
+_EXIT_ANCHOR = "sys.exit(1 if bad_result or bad_excl else 0)\n"
+_CLASS_STEP = '''# entity class "cities": membership comes from the bundled GOS102A catalogue, before any
+# eligibility, rank or top_k. A locality value is a member when its leading integer (SIRUTA) is a
+# catalogue key; totals are outside the class; an inexact or shared SIRUTA refuses.
+import re
+catalogue = {}
+with open(os.path.join(here, "inputs", "city_catalogue.csv"), encoding="utf-8", newline="") as f:
+    for r in csv.DictReader(f):
+        catalogue[r["siruta"]] = r["label"]
+loc = cols.index("REF_AREA_2")
+class_rows, entities, owner = [], [], {}
+for key in sorted({k for k, _ in table}):
+    if key in aggregate:
+        class_rows.append([*key, "", "aggregate_row"])
+        continue
+    m = re.match(r"^(\\d+)\\s+\\S", key[loc].strip())
+    if m is None:
+        sys.exit("a locality value has no exact SIRUTA key: the classification is refused")
+    siruta = str(int(m[1]))
+    if siruta not in catalogue:
+        class_rows.append([*key, siruta, "outside_class"])
+        continue
+    if siruta in owner:
+        sys.exit("one SIRUTA key appears under several entities: the classification is refused")
+    owner[siruta] = key
+    entities.append(key)
+    class_rows.append([*key, siruta, "member"])
+'''
+_CLASS_CHECK = '''bad_class = read("classification.csv") != [[*cols, "siruta", "class"]] + class_rows
+print(f"classified {len(class_rows)} entities ({len(entities)} municipalities/towns in the catalogue); "
+      f"classification.csv {'DIFFERS' if bad_class else 'matches'}", file=sys.stderr)
+sys.exit(1 if bad_result or bad_excl or bad_class else 0)
+'''
+assert RECOMPUTE_PY.count(_CLASS_ANCHOR) == 1 and RECOMPUTE_PY.count(_EXIT_ANCHOR) == 1
+RECOMPUTE_CITIES_PY = RECOMPUTE_PY.replace(_CLASS_ANCHOR, _CLASS_STEP).replace(_EXIT_ANCHOR, _CLASS_CHECK)
+
+
 def _result_head(key_cols):
     return ["interval_from", "interval_to", "rank", *key_cols, "from_value", "to_value",
             "absolute", "percent", "percent_note"]
@@ -232,6 +277,59 @@ def bundle(result: dict, link: str | None = None) -> bytes:
         "manifest.json           versions, generation id and sha256 of each file\n\n"
         "Stable labels or codes do not prove unchanged territory; boundary continuity is not\n"
         "verified (see warnings in method.json).\n\n" + ev.README_LIVE)
+    if result.get("entity_class") == "cities":
+        _add_city_class(files, result, key_cols)
     return ev._zip(files, ev._manifest("period_changes", result.get("generation"),
                                        (result["source_response"] or {}).get("contract"),
                                        {"dataset": code}))
+
+
+def _add_city_class(files: dict, result: dict, key_cols) -> None:
+    """The membership input of entity_class "cities": the catalogue, the class of every entity
+    of the endpoint table and the rule, so recompute.py can reproduce the classification."""
+    from app.services.tools import ranking
+    from app.services.period_changes import CLASS_WARNING
+    prov = result["provenance"]
+    cat = result["class_catalogue"]
+    cls = result["classification"]
+    ref = next((s for s in prov["sources"] if s.get("role") == "entity_classification"), {})
+    files["inputs/city_catalogue.csv"] = ev._csv(
+        ["siruta", "label"], [[k, cat[k]] for k in sorted(cat, key=int)])
+    files["classification.csv"] = ev._csv(
+        [*key_cols, "siruta", "class"],
+        [[*k, siruta or "", c] for k, (siruta, c) in sorted(result["key_classes"].items())])
+    method = json.loads(files["method.json"])
+    method["entity_class"] = {
+        "class": "cities", "wording": "municipalities and towns in the referenced catalogue",
+        "reference": {"dataset": ranking.CITY_CATALOGUE, "title": ref.get("metric"),
+                      "source_updated": ref.get("source_updated"), "key": "SIRUTA",
+                      "file": "inputs/city_catalogue.csv", "generation": cls["generation"]},
+        "rule": "SIRUTA = the leading integer of the REF_AREA_2 value; an entity is a city when its "
+                "SIRUTA is a key of the catalogue; total/aggregate rows are outside the class; a "
+                "locality value without an exact SIRUTA, or one SIRUTA under two entities, refuses",
+        "applied": "before eligibility, ranks and top_k: result.csv, exclusions.csv and every count "
+                   "cover catalogue cities only; inputs/endpoints.csv keeps every entity so the "
+                   "classification can be reproduced (classification.csv lists the outcome)",
+        "temporal_status": cls["temporal_status"], "qualification": CLASS_WARNING,
+        "member_count": cls["member_count"], "outside_class_count": cls["outside_class_count"],
+        "catalogue_count": cls["catalogue_count"]}
+    files["method.json"] = ev._json(method)
+    files["recompute.py"] = RECOMPUTE_CITIES_PY
+    files["attribution.json"] = ev._json(ev._attribution([
+        {"dataset": result["dataset"], "title": prov["sources"][0].get("metric"),
+         "source_updated": prov["sources"][0].get("source_updated")},
+        {"dataset": ranking.CITY_CATALOGUE, "title": ref.get("metric"),
+         "source_updated": ref.get("source_updated")}]))
+    files["README.txt"] = files["README.txt"].replace(
+        "recompute.py            python recompute.py  recomputes absolute, percent, eligibility and\n"
+        "                        ranks from inputs/endpoints.csv and checks result.csv (exit 0 = equal)\n",
+        "recompute.py            python recompute.py  classifies the entities with the catalogue, then\n"
+        "                        recomputes absolute, percent, eligibility and ranks from\n"
+        "                        inputs/endpoints.csv and checks result.csv, exclusions.csv and\n"
+        "                        classification.csv (exit 0 = equal)\n"
+        "inputs/city_catalogue.csv  INS GOS102A's municipalities and towns (SIRUTA, label)\n"
+        "classification.csv      the class of every entity of inputs/endpoints.csv\n"
+    ).replace(
+        "Stable labels or codes do not prove unchanged territory;",
+        "Entity class: cities = " + CLASS_WARNING + "\n\n"
+        "Stable labels or codes do not prove unchanged territory;")

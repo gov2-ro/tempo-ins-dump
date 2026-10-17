@@ -14,7 +14,7 @@
    "phrase": "populatia dupa domiciliu",
    "alias": "domiciliu",
    "variants": {"locality": "POP107D_grupe_localitate"},
-   "operations": ["rank"],
+   "operations": ["rank", "change"],
    "entity_columns": ["REF_AREA", "REF_AREA_2"],
    "entity_class": "cities"
   }

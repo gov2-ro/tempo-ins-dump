@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal, Union
 
 from pydantic import (BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt,
-                      StrictStr, field_validator, model_validator)
+                      StrictStr, field_validator, model_serializer, model_validator)
 
 MAX_FILTER_COLUMNS = 16
 MAX_VALUES_PER_COLUMN = 100
@@ -140,6 +140,28 @@ class _PeriodChanges(_Args):
     order: Literal["asc", "desc"] = "asc"
     top_k: StrictInt = Field(20, ge=1, le=100, description="Rows per interval to return; ranking "
                                                           "always uses every eligible entity")
+    entity_class: Literal["all", "cities"] = Field(
+        "all", description="all = every entity of the selection. cities = only municipalities and "
+                           "towns in the referenced catalogue (INS GOS102A SIRUTA keys; needs "
+                           "REF_AREA_2 in entity_columns). Applied before eligibility, ranks and "
+                           "top_k. The catalogue does not prove historical city status or unchanged "
+                           "boundaries.")
+
+    @model_serializer(mode="wrap")
+    def _omit_default_class(self, handler):
+        # The normalized request (citation, link, replay, bundle) of a caller that never chose a
+        # class stays exactly what it was before the field existed; "cities" is always explicit.
+        out = handler(self)
+        if out.get("entity_class") == "all":
+            out.pop("entity_class")
+        return out
+
+    @model_validator(mode="after")
+    def v_class_needs_locality_key(self):
+        if self.entity_class == "cities" and "REF_AREA_2" not in self.entity_columns:
+            raise ValueError("entity_class 'cities' needs REF_AREA_2 among entity_columns "
+                             "(SIRUTA locality keys)")
+        return self
 
     @field_validator("filters")
     @classmethod
@@ -442,6 +464,9 @@ class CompareData(_Open):
     metric: str
     order: str
     intervals: list[IntervalResult]
+    # only present when entity_class="cities": the class and how many source entities it left out
+    entity_class: Literal["cities"] | None = None
+    outside_class_count: int | None = None
 
 
 class RankingData(_Open):

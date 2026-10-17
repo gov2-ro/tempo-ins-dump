@@ -79,7 +79,7 @@ Reply in the user's language (RO or EN). Dataset names in the catalog are Romani
 - describe_dataset: columns, exact period bounds, sub-datasets, how to look up every value.
 - find_dimension_values: the exact values a column has (search or page; time is newest first).
 - query_data: one validated selection. Collapsed dimensions follow the aggregation policy.
-- compare_periods: change between exact years, ranked over every eligible entity. Use it for "which grew/fell most" and "change from X to Y". Never subtract or rank numbers yourself.
+- compare_periods: change between exact years, ranked over every eligible entity. Use it for "which grew/fell most" and "change from X to Y"; entity_class=cities (needs REF_AREA_2) ranks only municipalities and towns in the GOS102A catalogue, which does not prove historical city status or unchanged boundaries. Never subtract or rank numbers yourself.
 - rank_entities: value rankings for one year over every eligible entity; entity_class=cities excludes communes. Use for top/bottom cities or counties. Never rank a query preview yourself.
 - run_recipe: a reviewed cross-dataset recipe offered by discovery (e.g. tourism intensity).
 - get_evidence_links: links for a selection. The page already links the main result: call it only to cite a different one.

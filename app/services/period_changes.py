@@ -17,6 +17,9 @@ Rules (docs/plans/ask-and-public-mcp/01-analytical-tools.md section 5):
   * absolute = to - from; percent = 100 * absolute / from only when from > 0
   * ranks are ordinal over EVERY eligible entity (ties: full key ascending);
     top_k only limits what is returned
+  * entity_class "cities" (AQ-05A) classifies the FULL endpoint table with the shared
+    GOS102A SIRUTA catalogue (`tools.ranking.classify_cities`) before eligibility, ranks
+    and top_k; it is a catalogue class, not historical city status or constant boundaries
 """
 from __future__ import annotations
 
@@ -324,6 +327,11 @@ def _population_note(title: str, definition: str) -> str | None:
     return None
 
 
+CLASS_WARNING = ("Cities are municipalities and towns in the referenced catalogue (INS GOS102A, SIRUTA "
+                 "keys). Membership does not prove historical city status or unchanged boundaries; "
+                 "places outside the catalogue (communes, totals) were not ranked.")
+
+
 def _warnings(notes: list, facts: dict | None, geo: bool, intervals, counts: dict) -> list:
     out = []
     if counts:
@@ -371,6 +379,7 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
     from app.services.concept_search import dataset_facts
     from app.services.data_query import QueryError, run_query
     from app.services.query_builder import resolve_parquet_schema, to_sdmx_name
+    from app.services.tools import ranking          # city catalogue, shared with rank_entities
 
     code = args.dataset
     if ctx is None:
@@ -430,6 +439,9 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
                           {"dataset": code, "column": time_col, "limit": 20})])
 
     key_cols, added = _key_columns(mctx, list(args.entity_columns))
+    cities = args.entity_class == "cities"
+    if cities:
+        catalogue = ranking.city_codes(conn)            # refuses when GOS102A's catalogue is unusable
     filters = {c: list(v) for c, v in args.filters.items()}
     filters[time_col] = [years_actual[y] for y in wanted]
     group_by = key_cols + [time_col]
@@ -545,7 +557,26 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
 
     aggregate_keys = _aggregate_keys(table, key_cols, mctx)
     intervals_in = [(i.from_, i.to) for i in args.intervals]
-    intervals = compute(table, key_cols, intervals_in, args.metric, args.order, aggregate_keys)
+    scored, scored_aggregates, outside = table, aggregate_keys, 0
+    if cities:
+        # membership comes first: eligible counts, ranks and top_k only ever see catalogue cities
+        prov["sources"].append({**contract.source_entry(conn, ranking.CITY_CATALOGUE, ctx.lang),
+                                "role": "entity_classification"})
+        prov["classification"] = {
+            **ranking.classification_entry(), "generation": ctx.generation.get("id"),
+            "applied": "before eligibility, ranks and top_k", "catalogue_count": len(catalogue)}
+        try:
+            classes = ranking.classify_cities(
+                sorted({k for k, _ in table}, key=_skey), key_cols, catalogue, aggregate_keys)
+        except ToolFailure as f:
+            f.provenance = prov
+            raise
+        members = ranking.members_of(classes)
+        outside = len(classes) - len(members)
+        prov["classification"].update(member_count=len(members), outside_class_count=outside)
+        scored = {(k, y): v for (k, y), v in table.items() if k in members}
+        scored_aggregates = frozenset()                 # totals are outside the class, not exclusions
+    intervals = compute(scored, key_cols, intervals_in, args.metric, args.order, scored_aggregates)
 
     src = prov["sources"][0]
     facts = dataset_facts(conn, code, lang)
@@ -561,6 +592,8 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
               for c in key_cols)
     from app.services import dataset_notes
     warnings = _warnings(dataset_notes.for_code(code, lang), facts, geo, intervals, counts)
+    if cities:
+        warnings.append(contract.warning("classification_reference", CLASS_WARNING))
 
     scope = prov["scope"]
     if not any(iv["eligible_count"] for iv in intervals):
@@ -571,7 +604,7 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
     else:
         status, reason = "ok", None
 
-    return {
+    result = {
         "dataset": code, "lang": lang, "args": args.model_dump(by_alias=True),
         "selection": prov["selection"], "time_column": time_col,
         "entity_columns": list(args.entity_columns), "key_columns": key_cols,
@@ -587,3 +620,7 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
         "warnings": warnings, "status": status, "reason": reason,
         "generation": res.get("generation"),
     }
+    if cities:      # additive, and only for the class: the default result keeps its exact shape
+        result.update(entity_class="cities", outside_class_count=outside, key_classes=classes,
+                      class_catalogue=catalogue, classification=prov["classification"])
+    return result
