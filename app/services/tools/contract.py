@@ -135,6 +135,27 @@ def metadata_limits() -> dict:
             "source_complete": None, "time_windowed": False, "partial_period_dropped": None}
 
 
+def series_break_items(breaks: list) -> list:
+    """The machine-readable form of dataset_notes.series_breaks (the note text is the warning's)."""
+    return [{k: v for k, v in b.items() if k != "text"} for b in breaks]
+
+
+def _query_series_breaks(prov: dict, lang: str) -> list:
+    """Known series breaks inside a query_data selection: the pinned periods, else the data the
+    selection reaches. Nothing recorded means unknown continuity, not a stable series."""
+    sel = prov.get("selection") or {}
+    if sel.get("kind") != "dataset" or not sel.get("dataset"):
+        return []
+    from app.services import dataset_notes
+    eff = (prov.get("effective_selection") or {}).get("filters")
+    filters = eff if isinstance(eff, dict) else sel.get("filters") or {}
+    cov = next((s.get("coverage") for s in prov.get("sources") or []
+                if s.get("dataset") == sel["dataset"]), None) or {}
+    span = (cov["first"], cov["last"]) if cov.get("first") and cov.get("last") else None
+    return dataset_notes.series_breaks(sel["dataset"], lang, periods=filters.get("TIME_PERIOD"),
+                                       span=span, areas=filters.get("REF_AREA"))
+
+
 def envelope(tool: str, ctx: ToolContext, *, status: str = "ok", reason: str | None = None,
              message: str = "", data: dict | None = None, provenance: dict | None = None,
              limits: dict | None = None, warnings=(), recovery=()) -> dict:
@@ -142,11 +163,20 @@ def envelope(tool: str, ctx: ToolContext, *, status: str = "ok", reason: str | N
     prov.update(provenance or {})
     lim = metadata_limits()
     lim.update(limits or {})
+    warnings = list(warnings)
+    if tool == "query_data" and status in ("ok", "partial"):
+        # a recorded break inside the selected periods is a warning on this selection, not just a
+        # source note; compare_periods raises its own, the other tools select a single period
+        known = {(w.get("code"), w.get("subject")) for w in warnings}
+        breaks = [b for b in _query_series_breaks(prov, ctx.lang) if ("series_break", b["id"]) not in known]
+        if breaks:
+            prov["series_breaks"] = series_break_items(breaks)
+            warnings += [warning("series_break", b["text"], b["id"]) for b in breaks]
     return json_safe({
         "contract": CONTRACT, "tool": tool, "status": status, "reason": reason,
         "message": message, "data": data or {}, "provenance": prov, "limits": lim,
         # the registry drops invalid suggestions, then keeps the first MAX_RECOVERY
-        "warnings": list(warnings), "recovery": list(recovery)})
+        "warnings": warnings, "recovery": list(recovery)})
 
 
 def failure_envelope(tool: str, ctx: ToolContext, f: ToolFailure) -> dict:

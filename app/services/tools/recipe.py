@@ -13,6 +13,7 @@ eligible areas, and the scope, exclusion counts and a bounded sample say so.
 from __future__ import annotations
 
 import logging
+import re
 from collections import Counter
 
 from app.services import recipes
@@ -43,6 +44,8 @@ _TX = {
         "none_ranked": "Recipe {id}, {year}: no area could be ranked ({k} excluded: "
                        "{reasons}). Nothing was computed for them.",
         "r_all_areas": "Run the recipe for every area to see the names the data uses.",
+        "r_area": "Look up the exact label the source uses for {area!r}; the recipe matches areas "
+                  "by exact label (accents, case and spacing aside), never by a similar name.",
         "scope_ranked": "{n} of {universe} eligible areas ranked for {year}",
         "scope_excluded": "; {k} excluded ({reasons})",
         "scope_all": ". Every area of the recipe's universe was considered.",
@@ -91,6 +94,9 @@ _TX = {
         "none_ranked": "Rețeta {id}, {year}: nicio zonă nu a putut fi clasată ({k} excluse: "
                        "{reasons}). Pentru ele nu s-a calculat nimic.",
         "r_all_areas": "Rulează rețeta pentru toate zonele ca să vezi numele folosite de date.",
+        "r_area": "Caută eticheta exactă pe care o folosește sursa pentru {area!r}; rețeta potrivește "
+                  "zonele după eticheta exactă (fără diferențe de diacritice, majuscule sau spații), "
+                  "niciodată după un nume asemănător.",
         "scope_ranked": "{n} din {universe} zone eligibile clasate pentru {year}",
         "scope_excluded": "; {k} excluse ({reasons})",
         "scope_all": ". Au fost luate în calcul toate zonele din universul rețetei.",
@@ -136,6 +142,52 @@ _TX = {
 
 def _tx(lang: str) -> dict:
     return _TX.get(lang, _TX["ro"])
+
+
+# ------------------------------------------------------------------ area lookup
+
+def area_dataset(recipe_id: str) -> str | None:
+    """The dataset whose REF_AREA labels a recipe's `areas` are matched against: the first
+    source of a published or non-ratio recipe, the denominator of a reconstructed ratio (it
+    defines the universe). Its labels are what find_dimension_values lists exactly."""
+    r = recipes.load_recipes().get(recipe_id)
+    if not r:
+        return None
+    specs = recipes.source_specs(r)
+    ratio = r.get("kind", "ratio") == "ratio" and not r.get("published")
+    return specs[1]["dataset"] if ratio else specs[0]["dataset"]
+
+
+def lookup_query(area: str, labels=None) -> str:
+    """The substring to search the source's REF_AREA labels with for `area`: the whole text, or
+    (given the labels) its longest word that some label contains, so 'Cluj-Napoca' finds 'Cluj'.
+    It only chooses what to search for; the lookup lists labels and never picks one."""
+    text = " ".join(str(area or "").split())
+    if labels:
+        from app.services.concept_search import fold
+        folded = [fold(v) for v in labels]
+        for w in sorted(re.findall(r"\w+", text), key=len, reverse=True):
+            if len(w) > 2 and any(fold(w) in v for v in folded):
+                return w[:200]
+    return text[:200]
+
+
+def _area_labels(conn, recipe_id: str) -> list | None:
+    """Every REF_AREA label of the recipe's area dataset, or None when they cannot be listed."""
+    from app.services import data_query
+    ds = area_dataset(recipe_id)
+    try:
+        res = data_query.dimension_values(conn, ds, "REF_AREA", limit=500) if ds else None
+    except data_query.QueryError:
+        return None
+    return res["values"] if res and res["total"] <= len(res["values"]) else None
+
+
+def area_lookup_recovery(recipe_id: str, area: str, tx: dict, labels=None) -> dict | None:
+    ds = area_dataset(recipe_id)
+    return C.recovery("tool_call", tx["r_area"].format(area=" ".join(str(area).split())[:100]),
+                      "find_dimension_values", {"dataset": ds, "column": "REF_AREA",
+                                                "query": lookup_query(area, labels), "limit": 20}) if ds else None
 
 
 # ------------------------------------------------------------------ refusals
@@ -363,6 +415,10 @@ def run_recipe(args, ctx):
     else:
         status, reason = "ok", None
         message = tx["ok"].format(id=args.recipe, year=year, n=len(all_rows))
+    # an area the source has no label for: how to look up the label it does use (at most two)
+    missing = [e["label"] for e in excluded if e["reason"] == "not_in_data"][:2]
+    labels = _area_labels(ctx.conn, args.recipe) if missing else None
+    recovery += [r for r in (area_lookup_recovery(args.recipe, a, tx, labels) for a in missing) if r]
     return C.envelope(
         "run_recipe", ctx, status=status, reason=reason, message=message, data=data,
         provenance=provenance, warnings=warnings, recovery=recovery,
