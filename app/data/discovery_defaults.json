@@ -1,5 +1,5 @@
 {
- "about": "Reviewed defaults of discover_indicators (AQ-04A), moved out of the discovery code. They apply to tool discovery only: concept_search, the catalogue search and the UI never read this file. Rules name concepts, phrases and datasets that already exist; services/tools/discovery_policy.py validates them when loaded and against concepts.json and recipes.json, and a rule whose concept is absent is inert (it assumes nothing). `phrase` is put in front of the question and must be a specific alias of its concept. `terms` are the words by which a question names a definition itself (a trailing * is any ending); a definition named by one of its specific aliases counts too. A question that names a definition never gets a default.",
+ "about": "Reviewed defaults of discover_indicators (AQ-04A), moved out of the discovery code. They apply to tool discovery only: concept_search, the catalogue search and the UI never read this file. Rules name concepts, phrases and datasets that already exist; services/tools/discovery_policy.py validates them when loaded and against concepts.json and recipes.json, and a rule whose concept is absent is inert (it assumes nothing). `phrase` is put in front of the question and must be a specific alias of its concept. `terms` are the words by which a question names a definition itself (a trailing * is any ending); a definition named by one of its specific aliases counts too. A question that names a definition never gets a default. `population.cities.place_filter` lets one named county narrow a city ranking (REF_AREA = that county's exact label, applied by the shared tool before eligibility and top K); `except` lists county slugs that are never used as a filter because the name is also a city (Municipiul Bucuresti). Remove the key to report a county around a city ranking as not applied. `level_defaults` picks a definition by the level the question points at (county, region, national) when it names none itself; a level without an entry, a level that cannot be told, or `no_level: clarify` leaves the clarification.",
  "version": 1,
  "reviewed": "2026-10-17",
  "population": {
@@ -16,13 +16,22 @@
    "variants": {"locality": "POP107D_grupe_localitate"},
    "operations": ["rank", "change"],
    "entity_columns": ["REF_AREA", "REF_AREA_2"],
-   "entity_class": "cities"
+   "entity_class": "cities",
+   "place_filter": {"level": "county", "column": "REF_AREA", "except": ["municipiul-bucuresti"]}
   }
  },
  "recipe_routes": [
   {"intent": "tourism_ratio", "concept": "tourism_intensity", "phrase": "innoptari pe locuitor"}
  ],
- "clarify_only": [
-  {"topic": "unemployment", "concepts": ["registered_unemployment_rate", "ilo_unemployment_rate"]}
+ "level_defaults": [
+  {
+   "topic": "unemployment",
+   "definitions": {
+    "registered_unemployment_rate": {"terms": ["inregistrat*", "registered", "anofm"], "phrase": "rata somajului inregistrat"},
+    "ilo_unemployment_rate": {"terms": ["bim", "ilo", "amigo", "lfs", "survey"], "phrase": "rata somajului bim"}
+   },
+   "levels": {"county": "registered_unemployment_rate", "national": "ilo_unemployment_rate"},
+   "no_level": "clarify"
+  }
  ]
 }

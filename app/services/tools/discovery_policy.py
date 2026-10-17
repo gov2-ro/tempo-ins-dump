@@ -9,11 +9,21 @@ route from "overnight stays per resident" to the reviewed tourism recipe. They l
   * generic city population rank  -> population by domicile, disclosed
   * explicit resident/July city   -> unavailable, nothing substituted
   * explicit domicile             -> respected
-  * generic unemployment          -> no default (`clarify_only`): the user is asked
+  * generic unemployment          -> by the level the question points at (`level_defaults`): a county
+                                     (named, or "by county") is the registered rate, the nation is the
+                                     ILO rate, each disclosed; a region, a level that cannot be told
+                                     or two levels at once ask the user. A definition the question
+                                     names (registered, ANOFM, ILO, BIM, AMIGO) is never replaced
   * stays per resident            -> the reviewed tourism recipe
   * city change (AQ-05A)          -> compare_periods with entity_class=cities, only for two
                                      exact years and a stated direction; historical membership
                                      or constant boundaries stay unavailable
+  * one county around a city      -> the ranking is narrowed to the cities of that county
+    ranking                          (`population.cities.place_filter`): REF_AREA = the county's exact
+                                     label in the shared tool's own filters, before eligibility and top K.
+                                     Two counties, a name that is also a city (Cluj-Napoca,
+                                     Municipiul Bucuresti), a label the series lacks or a region stay
+                                     reported as not applied
 
 This is configuration for tool discovery only. It is not a query language and not a second
 search: `plan` can put one reviewed phrase in front of the question, swap one concept's
@@ -46,6 +56,7 @@ OPERATIONS = ("lookup", "rank", "change")
 # `_structure` requires of any rule that claims it.
 SERVED = {"locality": {"rank", "change"}, **{lv: set(OPERATIONS) for lv in LEVELS if lv != "locality"}}
 ENTITY_CLASSES = ("all", "cities")
+DEFAULT_LEVELS = ("county", "region", "national")   # what the wording of a question can point at
 ROUTE_INTENTS = ("tourism_ratio",)          # flags of intent.interpret that a route may use
 MAX_TOP_K = 100                             # rank_entities' own limit (schemas.RankEntitiesArgs)
 DEFAULT_RANK = {"entity_columns": ["REF_AREA"], "entity_class": "all"}
@@ -53,6 +64,7 @@ DEFAULT_RANK = {"entity_columns": ["REF_AREA"], "entity_class": "all"}
 _CODE = re.compile(r"[A-Za-z0-9_]+")
 _COLUMN = re.compile(r"[A-Z][A-Z0-9_]*")
 _TERM = re.compile(r"[a-z0-9]+\*?")
+_SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 
 
 class PolicyError(ValueError):
@@ -62,7 +74,8 @@ class PolicyError(ValueError):
 @dataclass(frozen=True)
 class Policy:
     data: dict
-    term_res: dict              # definition concept id -> compiled regex of its terms
+    term_res: dict              # population definition concept id -> compiled regex of its terms
+    level_res: dict = field(default_factory=dict)   # unemployment-style definition id -> regex of its terms
 
 
 @dataclass
@@ -76,6 +89,8 @@ class Plan:
     rank: dict = field(default_factory=lambda: {**DEFAULT_RANK, "entity_columns": list(DEFAULT_RANK["entity_columns"])})
     unapplied: list = field(default_factory=list)   # constraints discovery does not apply
     change: dict | None = None              # the one supported city change: intervals, metric, order
+    place_rule: dict | None = None          # how one named county narrows a city ranking (config), or None
+    assumed_level: dict | None = None       # {"level", "missing"} when a level default produced `assumed`
 
 
 # ------------------------------------------------------------------ validation
@@ -88,6 +103,41 @@ def _specific_alias(concept: dict | None, phrase: str) -> bool:
     """Is `phrase` (folded) one of the concept's own specific aliases, in either language?"""
     f = cs.fold(phrase)
     return any(cs.fold(a) == f for items in ((concept or {}).get("aliases") or {}).values() for a in items)
+
+
+def _level_entry(entry, targets: set, seen: set) -> list:
+    """Problems of one `level_defaults` entry: definitions (terms and a folded phrase each), the
+    levels that default to one of them and what a question without a level does."""
+    if not isinstance(entry, dict) or not _text(entry.get("topic")):
+        return [f"level_defaults entry {entry!r} needs a topic"]
+    topic, bad = entry["topic"], []
+    defs = entry.get("definitions")
+    if not isinstance(defs, dict) or len(defs) < 2:
+        return [f"level_defaults {topic}: definitions must name at least two concepts"]
+    for cid, d in defs.items():
+        terms = d.get("terms") if isinstance(d, dict) else None
+        if not isinstance(terms, list) or not terms or not all(isinstance(t, str) and _TERM.fullmatch(t) for t in terms):
+            bad.append(f"level_defaults {topic}: {cid} terms must be a non-empty list of folded words")
+        phrase = d.get("phrase") if isinstance(d, dict) else None
+        if not _text(phrase) or phrase != cs.fold(phrase):
+            bad.append(f"level_defaults {topic}: {cid} phrase must be a non-empty folded phrase")
+    dup = sorted((set(defs) & seen) | (set(defs) & targets))
+    if dup:
+        bad.append(f"level_defaults {topic}: {dup} also has another default, route or level rule")
+    seen |= set(defs)
+    levels = entry.get("levels")
+    if not isinstance(levels, dict) or not levels:
+        bad.append(f"level_defaults {topic}: levels must map at least one level to a definition")
+        levels = {}
+    for level, cid in levels.items():
+        if level not in DEFAULT_LEVELS:
+            bad.append(f"level_defaults {topic}: unknown level {level!r} (one of {list(DEFAULT_LEVELS)})")
+        if cid not in defs:
+            bad.append(f"level_defaults {topic}: level {level!r} names {cid!r}, which is not a definition")
+    no_level = entry.get("no_level")
+    if no_level != "clarify" and no_level not in levels:
+        bad.append(f"level_defaults {topic}: no_level must be 'clarify' or one of its levels")
+    return bad
 
 
 def _structure(raw: dict) -> list:
@@ -147,6 +197,17 @@ def _structure(raw: dict) -> list:
                    "through entity_class 'cities'")
     if not _text(cities.get("alias")):
         bad.append("population.cities.alias must be a non-empty string")
+    pf = cities.get("place_filter")
+    if pf is not None:
+        except_ = pf.get("except", []) if isinstance(pf, dict) else None
+        if not isinstance(pf, dict) or pf.get("level") != "county":
+            bad.append("population.cities.place_filter.level must be 'county'")
+        elif pf.get("column") not in cols:
+            bad.append("population.cities.place_filter.column must be one of the entity_columns")
+        elif not isinstance(except_, list) or not all(isinstance(x, str) and _SLUG.fullmatch(x) for x in except_):
+            bad.append("population.cities.place_filter.except must be a list of county slugs")
+        if "rank" not in (ops if isinstance(ops, list) else ()) or cities.get("entity_class") != "cities":
+            bad.append("population.cities.place_filter needs the 'rank' operation and entity_class 'cities'")
     routes = raw.get("recipe_routes")
     if not isinstance(routes, list):
         bad.append("recipe_routes must be a list")
@@ -161,19 +222,23 @@ def _structure(raw: dict) -> list:
         seen.add(r["intent"])
         if not _text(r.get("phrase")) or r["phrase"] != cs.fold(r["phrase"]):
             bad.append(f"recipe route {r['intent']}: phrase must be a non-empty folded phrase")
-    clarify = raw.get("clarify_only")
-    if not isinstance(clarify, list):
-        bad.append("clarify_only must be a list")
-        clarify = []
+    levels_cfg = raw.get("level_defaults")
+    if not isinstance(levels_cfg, list):
+        bad.append("level_defaults must be a list")
+        levels_cfg = []
     targets = {pop.get("default", {}).get("concept") if isinstance(pop.get("default"), dict) else None,
                cities.get("concept")} | {r.get("concept") for r in routes if isinstance(r, dict)}
-    for entry in clarify:
-        ids = entry.get("concepts") if isinstance(entry, dict) else None
-        if not isinstance(ids, list) or not ids or not _text(entry.get("topic")):
-            bad.append(f"clarify_only entry {entry!r} needs a topic and concepts")
-        elif set(ids) & targets:
-            bad.append(f"clarify_only {entry['topic']}: {sorted(set(ids) & targets)} also has a default or route")
+    seen_ids = set()
+    for entry in levels_cfg:
+        bad += _level_entry(entry, targets, seen_ids)
     return bad
+
+
+def serves_level(concept: dict | None, level: str) -> bool:
+    """Does the concept have a series for the level a question points at? A region question is
+    served by a region or a macroregion series."""
+    variants = (concept or {}).get("variants") or {}
+    return level in variants or (level == "region" and "macroregion" in variants)
 
 
 def _references(raw: dict, concepts: list, recipe_ids, dataset_columns) -> list:
@@ -215,10 +280,18 @@ def _references(raw: dict, concepts: list, recipe_ids, dataset_columns) -> list:
             bad.append(f"recipe route {r['intent']}: recipe {c['recipe']!r} does not exist")
         if not _specific_alias(c, r["phrase"]):
             bad.append(f"recipe route {r['intent']}: phrase {r['phrase']!r} is not a specific alias of {r['concept']}")
-    for entry in raw["clarify_only"]:
-        for cid in entry["concepts"]:
-            if cid not in by_id:
-                bad.append(f"clarify_only {entry['topic']}: concept {cid!r} is not in the concept catalogue")
+    for entry in raw["level_defaults"]:
+        topic = entry["topic"]
+        for cid, d in entry["definitions"].items():
+            c = by_id.get(cid)
+            if c is None:
+                bad.append(f"level_defaults {topic}: concept {cid!r} is not in the concept catalogue")
+            elif not _specific_alias(c, d["phrase"]):
+                bad.append(f"level_defaults {topic}: phrase {d['phrase']!r} is not a specific alias of {cid}")
+        for level, cid in entry["levels"].items():
+            if cid in by_id and not serves_level(by_id[cid], level):
+                bad.append(f"level_defaults {topic}: {cid} has no {level}-level variant "
+                           f"(it has {sorted(by_id[cid].get('variants') or {})})")
     return bad
 
 
@@ -264,7 +337,9 @@ def load_policy() -> Policy:
             if bad:
                 raise PolicyError(f"{POLICY_PATH.name} is invalid: " + "; ".join(bad))
             _cache.clear()
-            _cache[key] = Policy(raw, {cid: _terms_re(d["terms"]) for cid, d in raw["population"]["definitions"].items()})
+            _cache[key] = Policy(
+                raw, {cid: _terms_re(d["terms"]) for cid, d in raw["population"]["definitions"].items()},
+                {cid: _terms_re(d["terms"]) for e in raw["level_defaults"] for cid, d in e["definitions"].items()})
         return _cache[key]
 
 
@@ -333,6 +408,117 @@ def named_definitions(query: str, lang: str, policy: Policy) -> set:
     return named
 
 
+# --- geography of the question -------------------------------------------------------------------
+# What discovery needs to know about the places and levels a question names, beyond the counties
+# concept_search parses: regions and macroregions (they are not parsed as places, so a region around
+# a city ranking was dropped without a word) and whether the wording points at one level, two, or none.
+
+_REGION_WORD = re.compile(r"\b(?:macro)?regi(?:un\w*|on\w*)\b")      # regiune, regiunea, regiuni, region(s), macroregion(s)
+
+
+@dataclass(frozen=True)
+class Geography:
+    places: tuple = ()                  # counties named (concept_search places: slug, name, ambiguous, note)
+    regions: tuple = ()                 # regions / macroregions named, as the corpus labels them
+    levels: frozenset = frozenset()     # "county" | "region" | "national": what the wording points at
+
+    def level(self) -> str:
+        """county | region | national | ambiguous | unspecified. A named county or region is more
+        specific than the country ("in Cluj, Romania" is county level); two such levels at once are
+        ambiguous, and a question that points at none is unspecified, never assumed national."""
+        sub = self.levels - {"national"}
+        if len(sub) > 1:
+            return "ambiguous"
+        if sub:
+            return next(iter(sub))
+        return "national" if "national" in self.levels else "unspecified"
+
+
+def _region_names(conn) -> list:
+    """[(folded key, label)] of the regions and macroregions the corpus knows, longest key first."""
+    try:
+        rows = conn.execute("SELECT DISTINCT geo_name_clean FROM dimension_options_parsed WHERE dim_type = 'geo' "
+                            "AND geo_level IN ('region', 'macroregion') AND geo_name_clean IS NOT NULL").fetchall()
+    except Exception:
+        log.exception("region names unavailable")
+        return []
+    keys = {}
+    for (name,) in sorted(rows):        # INS spells one region several ways ("Nord -Vest"): one label per key
+        label = re.sub(r"\s*-\s*", "-", " ".join(str(name).split())).title()
+        folded = cs.fold(name)
+        for key in (folded, re.sub(r"^regiunea ", "", folded)):
+            if len(key) >= 4:
+                keys.setdefault(key, label)
+    return sorted(keys.items(), key=lambda kv: (-len(kv[0]), kv[0]))
+
+
+def read_geography(query: str, conn) -> Geography:
+    """The counties, regions and levels a question names. A region name is taken out of the text
+    before counties are read, so "Bucuresti-Ilfov" is one region and not two counties."""
+    text, regions = cs.fold(query), []
+    masked = f" {text} "
+    for key, label in _region_names(conn):
+        if f" {key} " in masked:
+            masked = masked.replace(f" {key} ", " ")
+            if label not in regions:
+                regions.append(label)
+    places = cs.parse_query(masked, conn)["places"]
+    levels = set()
+    if places or any(cs._has(text, w) for w in cs._LEVEL_WORDS["county"]):
+        levels.add("county")
+    if regions or _REGION_WORD.search(text):
+        levels.add("region")
+    if any(cs._has(text, w) for w in cs._LEVEL_WORDS["national"]):
+        levels.add("national")
+    return Geography(tuple(places), tuple(regions), frozenset(levels))
+
+
+def county_filter(places, labels, rule: dict | None) -> dict | None:
+    """The filter that narrows a city ranking to one county, or None (the county is reported as not
+    applied). Only when exactly one county is named, the wording does not make it a city (Cluj-Napoca,
+    "orasul Cluj"), its slug is not excepted (Municipiul Bucuresti is a single municipality and the name
+    of a city) and exactly one REF_AREA label of the series is that county. Never a similar label."""
+    if not rule or len(places) != 1:
+        return None
+    from app.services.place_service import slugify
+    p = places[0]
+    if p.get("ambiguous") or p["slug"] in rule.get("except", ()):
+        return None
+    hits = [v for v in labels if slugify(str(v)) == p["slug"]]
+    return {rule["column"]: [hits[0]]} if len(hits) == 1 else None
+
+
+def _level_default(pol: Policy, query: str, lang: str, by_id: dict, geo: Geography | None, out: "Plan"):
+    """Unemployment-style topics: pick the definition from the level the question points at, or leave
+    the clarification. Never overwrites a definition the question names (by term): that one is
+    routed to, and naming both leaves the question to the user."""
+    t = cs.fold(query)
+    hits = cs.match_concepts(t, lang)
+    for entry in pol.data["level_defaults"]:
+        defs = entry["definitions"]
+        if any(cid not in by_id for cid in defs) or not any(h["concept"]["id"] in defs for h in hits):
+            continue                                     # inert (not in this catalogue) or another topic
+        named = [cid for cid in defs if pol.level_res[cid].search(t)]
+        if len(named) > 1:
+            continue
+        usable = lambda cid: _usable(by_id, {"concept": cid, "phrase": defs[cid]["phrase"]})
+        if named:                                        # an explicit definition: respected, never replaced
+            if not any(not h["generic"] and h["concept"]["id"] == named[0] for h in hits) and usable(named[0]):
+                out.query = defs[named[0]]["phrase"] + " " + out.query      # named by a term only: route to it
+            return
+        level = (geo or Geography()).level()
+        if level == "unspecified" and entry["no_level"] != "clarify":
+            level = entry["no_level"]
+        cid = entry["levels"].get(level)
+        if cid is None or not serves_level(by_id[cid], level) or not usable(cid):
+            log.debug("discovery level default topic=%s level=%s: clarification", entry["topic"], level)
+            return
+        out.query, out.assumed = defs[cid]["phrase"] + " " + out.query, cid
+        out.assumed_level = {"level": level, "missing": [o for o in defs if o != cid and not serves_level(by_id[o], level)]}
+        log.debug("discovery level default topic=%s level=%s -> %s", entry["topic"], level, cid)
+        return
+
+
 def _usable(by_id: dict, rule: dict) -> bool:
     """A rule applies only while its concept and phrase exist in the catalogue in use. An
     absent concept is a normal inert rule; a present concept without the phrase is a
@@ -343,10 +529,11 @@ def _usable(by_id: dict, rule: dict) -> bool:
     return ok
 
 
-def plan(intent: dict, query: str, by_id: dict, lang: str, policy: Policy | None = None) -> Plan:
+def plan(intent: dict, query: str, by_id: dict, lang: str, policy: Policy | None = None,
+         geo: Geography | None = None) -> Plan:
     """Decide the reviewed defaults, routes and refusals for one question. `by_id` is the
-    concept catalogue in use. Raises ToolFailure where the policy refuses; never picks a
-    definition the question names itself."""
+    concept catalogue in use and `geo` the places and levels the question names (`read_geography`).
+    Raises ToolFailure where the policy refuses; never picks a definition the question names itself."""
     pol = policy or load_policy()
     pop = pol.data["population"]
     cities = pop["cities"]
@@ -367,6 +554,7 @@ def plan(intent: dict, query: str, by_id: dict, lang: str, policy: Policy | None
         out.locality = {**by_id[cities["concept"]], "variants": dict(cities["variants"])}
         out.locality_alias = cities["alias"]
         out.rank = {"entity_columns": list(cities["entity_columns"]), "entity_class": cities["entity_class"]}
+        out.place_rule = cities.get("place_filter")
         if change:
             out.change = city_change(query, intent, lang)
     route = next((r for r in pol.data["recipe_routes"] if intent.get(r["intent"])), None)
@@ -382,6 +570,8 @@ def plan(intent: dict, query: str, by_id: dict, lang: str, policy: Policy | None
             out.query = rule["phrase"] + " " + query
         if usable or intent["cities"]:
             out.assumed = rule["concept"]
+    if out.assumed is None and out.recipe is None and not intent["cities"]:      # one assumption per question
+        _level_default(pol, query, lang, by_id, geo, out)
     log.debug("discovery plan assumed=%s locality=%s recipe=%s named=%s constraints=%s", out.assumed,
               bool(out.locality), out.recipe, sorted(named), [c["kind"] for c in out.unapplied])
     if (intent["operation"] == "rank" or intent["cities"]) and not 1 <= intent["top_k"] <= MAX_TOP_K:

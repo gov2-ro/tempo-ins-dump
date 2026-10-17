@@ -126,7 +126,13 @@ def test_other_refusals_of_the_city_policy_still_come_first(env):
     assert (none["status"], none["reason"]) == ("unavailable", "level_unavailable")
 
 
-def test_an_unapplied_constraint_withholds_the_change_call(env):
+def test_an_unapplied_constraint_withholds_the_change_call(env, monkeypatch, tmp_path):
+    # the county case is the rollback of the 2026-10-17 decision (one county now narrows the ranking):
+    # without `place_filter` the geography is reported and the call withheld, as before
+    raw = shipped()
+    del raw["population"]["cities"]["place_filter"]
+    (tmp_path / "no-place-filter.json").write_text(json.dumps(raw), encoding="utf-8")
+    monkeypatch.setattr(dp, "POLICY_PATH", tmp_path / "no-place-filter.json")
     for q, kind in (("female population decline of cities between 2024 and 2025", "sex"),
                     ("population decline of cities in Cluj between 2024 and 2025", "geography")):
         out = disc(q, "en")

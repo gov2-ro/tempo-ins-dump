@@ -819,9 +819,10 @@ def _withhold_calls(cards: list, lang: str):
 
 # --- AQ-05A: the one supported city change (policy: discovery_policy.city_change) ---------------
 
-def _change_calls(cards: list, plan, intent: dict, lang: str):
+def _change_calls(cards: list, plan, intent: dict, lang: str, place: dict | None = None):
     """A city change question reaches compare_periods with the cities class, the two exact
-    years, the stated direction and top K. Everything else on the card is left as it was."""
+    years, the stated direction and top K (and the county that narrows the cities, if one was
+    named). Everything else on the card is left as it was."""
     for card in cards:
         for cand in card["candidates"]:
             if cand.get("kind") != "dataset" or not cand.get("queryable"):
@@ -829,9 +830,42 @@ def _change_calls(cards: list, plan, intent: dict, lang: str):
             prev = (cand.get("next_call") or {}).get("arguments") or {}
             filters = {k: v for k, v in prev.get("filters", {}).items() if k != "TIME_PERIOD"}
             cand["next_call"] = _call("compare_periods", dataset=cand["dataset"], **plan.rank,
-                                      **plan.change, filters=filters, top_k=intent["top_k"], lang=lang)
+                                      **plan.change, filters={**filters, **(place or {})},
+                                      top_k=intent["top_k"], lang=lang)
         pref = next((c for c in card["candidates"] if c.get("preferred")), None)
         card["next_call"] = pref.get("next_call") if pref else None
+
+
+# --- one county narrows a city ranking (discovery_policy.county_filter) -------------------------
+
+def _place_filter(ctx, plan, geo, unapplied: list) -> dict | None:
+    """{REF_AREA: [exact label]} when the policy lets the one county named narrow the city ranking,
+    else None (the geography is reported as not applied). The label is read from the locality series
+    itself; a list that cannot be read in full, or a county the series has no label for, applies nothing."""
+    rule = plan.place_rule
+    if not rule or unapplied or geo.regions or len(geo.places) != 1:
+        return None
+    try:
+        res = data_query.dimension_values(ctx.conn, plan.locality["variants"]["locality"], rule["column"], limit=500)
+    except data_query.QueryError:
+        return None
+    if res["total"] > len(res["values"]):
+        return None
+    return dpol.county_filter(geo.places, res["values"], rule)
+
+
+def _disclose_place_filter(cards: list, place: dict, lang: str) -> dict:
+    """The county filter is the user's own wording, not a default: it is stated in a warning (subject:
+    the exact label) and on each candidate whose call carries it; the card's note that the series has no
+    county level no longer applies."""
+    (column, (label,)), = place.items()
+    text = M.t(lang, "discover.place_filter", county=label)
+    for card in cards:
+        card["notes"] = [n for n in card["notes"] if n["code"] != "place_level_unavailable"]
+        for cand in card["candidates"]:
+            if (cand.get("next_call") or {}).get("arguments", {}).get("filters", {}).get(column) == [label]:
+                cand["notes"].append(_note("place_filter_applied", text))
+    return C.warning("place_filter_applied", text, label)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -843,6 +877,22 @@ def _constraint_warnings(unapplied: list, lang: str) -> list:
         out.append(C.warning("constraint_not_applied", M.t(
             lang, "discover.constraint_warning", kind=M.tx(lang).get(f"discover.kind.{kind}", kind), words=words), kind))
     return out
+
+
+LEVEL_NOUNS = {"county": "discover.level_county", "region": "discover.level_region",
+               "macroregion": "discover.level_macroregion", "national": "discover.level_national"}
+
+
+def _level_warning(cid: str, info: dict, by_id: dict, lang: str) -> dict:
+    """Why a level picked this definition, and which other definition has no series at that level (the
+    levels it covers come from the catalogue, so the sentence cannot go stale)."""
+    noun = lambda level: M.t(lang, LEVEL_NOUNS[level])
+    missing = "".join(M.t(lang, "discover.level_missing", name=(by_id[o].get("name") or {}).get(lang, o),
+                          level=noun(info["level"]), covers=", ".join(noun(v) for v in by_id[o].get("variants") or {}))
+                      for o in info["missing"])
+    return C.warning("assumed_definition", M.t(
+        lang, "discover.assumed_level", label=(by_id[cid].get("name") or {}).get(lang, cid), level=noun(info["level"]),
+        missing=missing), cid)
 
 
 def _assumed_warning(cdef: dict, cid: str, lang: str, cities: bool) -> dict:
@@ -858,7 +908,8 @@ def discover_indicators(args, ctx):
     from app.services.tools.intent import interpret
     intent = interpret(args.query)
     by_id = {c["id"]: c for c in cs.load_concepts()}
-    plan = dpol.plan(intent, args.query, by_id, lang)       # reviewed defaults, routes, refusals
+    geo = dpol.read_geography(args.query, conn)             # counties, regions and levels the question names
+    plan = dpol.plan(intent, args.query, by_id, lang, geo=geo)       # reviewed defaults, routes, refusals
     res = cs.search(plan.query, conn, lang=lang, limit=args.limit)
     parsed = res["interpretation"]
     parsed["latest"] = parsed.get("latest") or intent["latest"]
@@ -875,12 +926,17 @@ def discover_indicators(args, ctx):
     named = {w for c in cards for w in cs.fold(c.get("matched") or "").split()}
     # a constraint inside the matched concept's own alias ("population by age") is that concept
     unapplied = [c for c in plan.unapplied if not set(cs.fold(c["text"]).split()) <= named]
-    if plan.locality and places:       # a named county does not narrow the national city series
-        unapplied.append({"kind": "geography", "text": ", ".join(p["name"] for p in places)})
+    place = None
+    if plan.locality and (geo.places or geo.regions):
+        # one county can narrow the city ranking (policy); anything else the question names around it
+        # (two counties, a city's name, a region) is reported, never dropped
+        place = _place_filter(ctx, plan, geo, unapplied)
+        if place is None:
+            unapplied.append({"kind": "geography", "text": ", ".join([p["name"] for p in geo.places] + list(geo.regions))})
     if unapplied:
         _withhold_calls(cards, lang)
     elif plan.change:
-        _change_calls(cards, plan, intent, lang)
+        _change_calls(cards, plan, intent, lang, place)
     elif intent["operation"] == "rank" or intent["cities"]:
         for card in cards:
             for cand in card["candidates"]:
@@ -890,7 +946,7 @@ def discover_indicators(args, ctx):
                 filters = {k: v for k, v in prev.get("filters", {}).items() if k != "TIME_PERIOD"}
                 cand["next_call"] = _call("rank_entities", dataset=cand["dataset"], **plan.rank,
                     year=str(parsed["period"]) if parsed.get("period") else None,
-                    filters=filters, top_k=intent["top_k"], order=intent["order"], lang=lang)
+                    filters={**filters, **(place or {})}, top_k=intent["top_k"], order=intent["order"], lang=lang)
             pref = next((c for c in card["candidates"] if c.get("preferred")), None)
             card["next_call"] = pref.get("next_call") if pref else None
 
@@ -900,7 +956,10 @@ def discover_indicators(args, ctx):
     # produced no card must not warn about a definition nobody was shown
     assumed = plan.assumed if any(c["id"] == plan.assumed for c in cards) else None
     if assumed:
-        warnings.append(_assumed_warning(by_id.get(assumed, {}), assumed, lang, intent["cities"]))
+        warnings.append(_level_warning(assumed, plan.assumed_level, by_id, lang) if plan.assumed_level
+                        else _assumed_warning(by_id.get(assumed, {}), assumed, lang, intent["cities"]))
+    if place:
+        warnings.append(_disclose_place_filter(cards, place, lang))
     warnings += _constraint_warnings(unapplied, lang)
     if plan.change and not unapplied:
         warnings.append(C.warning("classification_reference", M.t(lang, "policy.city_change_note")))

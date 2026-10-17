@@ -160,11 +160,17 @@ def test_the_reviewed_table_is_pinned_in_the_configuration():
     assert (cities["entity_columns"], cities["entity_class"]) == (["REF_AREA", "REF_AREA_2"], "cities")
     assert p["recipe_routes"] == [{"intent": "tourism_ratio", "concept": "tourism_intensity",
                                    "phrase": "innoptari pe locuitor"}]
-    # unemployment keeps no default: only a clarification (a product decision, not a code default)
-    assert p["clarify_only"] == [{"topic": "unemployment", "concepts": [
-        "registered_unemployment_rate", "ilo_unemployment_rate"]}]
+    # owner decision 2026-10-17: unemployment is no longer clarify-only. It defaults by the level the question
+    # points at; a region, a level that cannot be told and a question with no level still ask.
+    assert "clarify_only" not in p and len(p["level_defaults"]) == 1
+    entry = p["level_defaults"][0]
+    assert entry["topic"] == "unemployment" and entry["no_level"] == "clarify"
+    assert entry["levels"] == {"county": "registered_unemployment_rate", "national": "ilo_unemployment_rate"}
+    assert set(entry["definitions"]) == {"registered_unemployment_rate", "ilo_unemployment_rate"}
+    # owner decision 2026-10-17: one named county narrows a city ranking (Municipiul Bucuresti never does)
+    assert cities["place_filter"] == {"level": "county", "column": "REF_AREA", "except": ["municipiul-bucuresti"]}
     targets = {p["population"]["default"]["concept"], cities["concept"], p["recipe_routes"][0]["concept"]}
-    assert not targets & {"registered_unemployment_rate", "ilo_unemployment_rate"}
+    assert not targets & {"registered_unemployment_rate", "ilo_unemployment_rate"}    # one assumption per concept
 
 
 def test_max_top_k_is_the_ranking_tools_own_limit():
@@ -207,9 +213,12 @@ STRUCTURAL = [
     ("route intent", lambda p: p["recipe_routes"][0].update(intent="density"), "intent must be one of"),
     ("duplicate route", lambda p: p["recipe_routes"].append(dict(p["recipe_routes"][0])), "listed twice"),
     ("route phrase", lambda p: p["recipe_routes"][0].update(phrase="Stays Per Resident"), "folded phrase"),
-    ("clarify_only with a default", lambda p: p["clarify_only"][0]["concepts"].append("resident_population"),
-     "also has a default or route"),
-    ("clarify_only without concepts", lambda p: p["clarify_only"][0].update(concepts=[]), "needs a topic and concepts"),
+    ("level_defaults with a population default",
+     lambda p: p["level_defaults"][0]["definitions"].update(
+         resident_population={"terms": ["rezident"], "phrase": "populatia rezidenta"}),
+     "also has another default, route or level rule"),
+    ("level_defaults without definitions", lambda p: p["level_defaults"][0].update(definitions={}),
+     "definitions must name at least two concepts"),
 ]
 
 
@@ -241,8 +250,9 @@ REFERENCES = [
      lambda cs_: cs_ + [{"id": "wage_like", "aliases": {"ro": ["salariul net"]}, "variants": {"county": "X"}}],
      "is not a recipe concept"),
     ("route to a missing recipe", lambda p: None, None, "does not exist"),
-    ("clarify_only concept unknown", lambda p: p["clarify_only"][0]["concepts"].append("no_such_concept"),
-     None, "no_such_concept"),
+    ("level_defaults concept unknown",
+     lambda p: p["level_defaults"][0]["definitions"].update(
+         no_such_concept={"terms": ["nimic"], "phrase": "nimic de gasit"}), None, "no_such_concept"),
 ]
 
 
@@ -578,7 +588,14 @@ def test_the_same_question_without_the_constraint_still_gets_its_data_call(env):
     assert "constraint_not_applied" not in codes(out)
 
 
-def test_a_county_around_a_city_ranking_is_reported_not_silently_dropped(env):
+def test_without_a_place_filter_a_county_around_a_city_ranking_is_reported_not_silently_dropped(
+        env, monkeypatch, tmp_path):
+    """The AQ-04A behaviour, now the rollback of the 2026-10-17 decision: with `place_filter` removed
+    from the configuration a county around a city ranking is reported and the data call withheld."""
+    raw = shipped()
+    del raw["population"]["cities"]["place_filter"]
+    (tmp_path / "no-place-filter.json").write_text(json.dumps(raw), encoding="utf-8")
+    monkeypatch.setattr(dp, "POLICY_PATH", tmp_path / "no-place-filter.json")
     out = disc("top 10 orase din Cluj dupa populatie")
     assert out["data"]["interpretation"]["unapplied_constraints"] == [{"kind": "geography", "text": "Cluj"}]
     assert out["data"]["interpretation"]["ambiguities"] == []
