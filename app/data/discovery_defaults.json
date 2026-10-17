@@ -1,0 +1,28 @@
+{
+ "about": "Reviewed defaults of discover_indicators (AQ-04A), moved out of the discovery code. They apply to tool discovery only: concept_search, the catalogue search and the UI never read this file. Rules name concepts, phrases and datasets that already exist; services/tools/discovery_policy.py validates them when loaded and against concepts.json and recipes.json, and a rule whose concept is absent is inert (it assumes nothing). `phrase` is put in front of the question and must be a specific alias of its concept. `terms` are the words by which a question names a definition itself (a trailing * is any ending); a definition named by one of its specific aliases counts too. A question that names a definition never gets a default.",
+ "version": 1,
+ "reviewed": "2026-10-17",
+ "population": {
+  "definitions": {
+   "resident_population": {"terms": ["rezident*", "resident"]},
+   "domicile_population": {"terms": ["domiciliu", "domicile"]},
+   "resident_population_july": {"terms": ["iulie", "july"]}
+  },
+  "default": {"concept": "resident_population", "phrase": "populatia rezidenta"},
+  "cities": {
+   "concept": "domicile_population",
+   "phrase": "populatia dupa domiciliu",
+   "alias": "domiciliu",
+   "variants": {"locality": "POP107D_grupe_localitate"},
+   "operations": ["rank"],
+   "entity_columns": ["REF_AREA", "REF_AREA_2"],
+   "entity_class": "cities"
+  }
+ },
+ "recipe_routes": [
+  {"intent": "tourism_ratio", "concept": "tourism_intensity", "phrase": "innoptari pe locuitor"}
+ ],
+ "clarify_only": [
+  {"topic": "unemployment", "concepts": ["registered_unemployment_rate", "ilo_unemployment_rate"]}
+ ]
+}
