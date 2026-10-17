@@ -91,7 +91,7 @@ def test_answer_without_valid_query_cannot_claim_values(env):
     assert res.verification["valid_query"] is False
     assert res.verification["unavailable"][0]["reason"] == "overlapping_levels"
     assert (res.outcome, res.reason) == ("refused", "no_valid_query")
-    assert any("withheld" in w.lower() for w in res.warnings)
+    assert any("reținut" in w.lower() for w in res.warnings)               # a Romanian question: Romanian warnings
     # the model really was told why (structured tool result in its history)
     tool_msgs = [m for m in seen[-1] if isinstance(m.get("content"), list)]
     assert "overlapping_levels" in str(tool_msgs)
@@ -140,7 +140,7 @@ def test_approximation_is_never_relabelled_as_official(env):
     ], question="Care este rata somajului?")
     assert res.verification["approximations"] == ["RATEX"]
     assert "medie neponderată" in res.answer and "aproximare" in res.answer
-    assert any("APPROXIMATION" in w for w in res.warnings)
+    assert any("APROXIMARE" in w for w in res.warnings)
     cite = next(c for c in res.citations if c["matrix_code"] == "RATEX")
     assert cite["queries"][0]["approximation"] is True
     assert cite["queries"][0]["outcome"] == "approximation"

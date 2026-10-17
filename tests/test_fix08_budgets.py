@@ -32,7 +32,7 @@ def test_many_tools_in_one_response_never_exceed_budget(monkeypatch):
     assert len(dispatched) == 5
     assert res.stop_reason == "tools"
     assert res.budget["tools"] == 5 and len(res.tool_trace) == 5
-    assert any("tool-call limit" in w for w in res.warnings)
+    assert any("limita de apeluri către instrumente" in w for w in res.warnings)      # a Romanian question
     assert res.answer  # useful bounded message, not an exception
 
 

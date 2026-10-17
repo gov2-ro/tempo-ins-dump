@@ -12,6 +12,7 @@ import re
 
 from app.services import data_query, dataset_meta, period_changes
 from app.services.tools import contract as C
+from app.services.tools import messages as M
 
 CITY_CATALOGUE = "GOS102A"
 
@@ -20,7 +21,7 @@ def _refuse(reason, message, provenance=None):
     raise C.ToolFailure("unavailable", reason, message, provenance=provenance)
 
 
-def city_codes(conn) -> dict[str, str]:
+def city_codes(conn, lang: str = "ro") -> dict[str, str]:
     rows = conn.execute("""
         SELECT dopt.option_label FROM dimensions d JOIN dimension_options dopt USING (dimension_id)
         WHERE d.matrix_code = ? AND d.dim_column_name = 'REF_AREA_2'
@@ -31,10 +32,10 @@ def city_codes(conn) -> dict[str, str]:
         if m:
             key = str(int(m[1]))
             if key in out and out[key] != label.strip():
-                _refuse("identity_ambiguous", "The city catalogue repeats a SIRUTA key with different labels.")
+                _refuse("identity_ambiguous", M.t(lang, "rank.identity_ambiguous_labels"))
             out[key] = label.strip()
     if not out:
-        _refuse("classification_unavailable", "INS GOS102A's SIRUTA municipality/town catalogue is unavailable.")
+        _refuse("classification_unavailable", M.t(lang, "rank.catalogue_unavailable"))
     return out
 
 
@@ -49,7 +50,7 @@ def classification_entry() -> dict:
             "temporal_status": "catalogue_not_historical"}
 
 
-def classify_cities(keys, key_cols, catalogue: dict, aggregates=frozenset()) -> dict:
+def classify_cities(keys, key_cols, catalogue: dict, aggregates=frozenset(), lang: str = "ro") -> dict:
     """Classify full entity keys against the city catalogue: {key: (SIRUTA or None, class)} with
     class "member" (a municipality or town of the catalogue), "outside_class" (any other place,
     e.g. a commune) or "aggregate_row" (a total among its parts). Membership is the exact SIRUTA
@@ -62,14 +63,12 @@ def classify_cities(keys, key_cols, catalogue: dict, aggregates=frozenset()) -> 
             continue
         siruta = _siruta(dict(zip(key_cols, key))["REF_AREA_2"])
         if siruta is None:
-            raise C.ToolFailure("unavailable", "identity_ambiguous",
-                                "Locality values must carry exact SIRUTA keys; names are not joined.")
+            raise C.ToolFailure("unavailable", "identity_ambiguous", M.t(lang, "rank.siruta_required"))
         if siruta not in catalogue:
             out[key] = (siruta, "outside_class")
             continue
         if siruta in owner:
-            raise C.ToolFailure("unavailable", "identity_ambiguous",
-                                "One city SIRUTA key appears under multiple entities.")
+            raise C.ToolFailure("unavailable", "identity_ambiguous", M.t(lang, "rank.siruta_repeated"))
         owner[siruta] = key
         out[key] = (siruta, "member")
     return out
@@ -85,29 +84,30 @@ def rank_entities(args, ctx):
     from app.services.query_builder import resolve_parquet_schema, to_sdmx_name
 
     ctx.require_present_generation("rank_entities")
+    lang = ctx.lang
     code = args.dataset
     actx = dataset_meta.get_aggregation_context(ctx.conn, code)
     if actx is None:
         raise C.query_failure(data_query.QueryError(404, f"Dataset {code} not found"), ctx, code)
     dims = {d["dim_column_name"]: d for d in actx["dimensions"]}
     if actx.get("measure") != "additive":
-        _refuse("unsupported_measure", "This ranking supports additive measures only; use a reviewed recipe for rates.")
+        _refuse("unsupported_measure", M.t(lang, "rank.additive_only"))
     if "TIME_PERIOD" not in dims or dims["TIME_PERIOD"].get("dim_type") != "time":
-        _refuse("unsupported_frequency", "An annual observation period is required.")
+        _refuse("unsupported_frequency", M.t(lang, "rank.annual_required"))
     schema = resolve_parquet_schema(ctx.conn, code)
     if any(to_sdmx_name(schema, c) == "TIME_PERIOD" for c in args.filters):
-        raise C.ToolFailure("error", "invalid_input", "Use year instead of a time filter.")
+        raise C.ToolFailure("error", "invalid_input", M.t(lang, "rank.use_year"))
     if any(c not in dims or c == "TIME_PERIOD" for c in args.entity_columns):
-        raise C.ToolFailure("error", "invalid_input", "entity_columns must name existing non-time dimensions.")
+        raise C.ToolFailure("error", "invalid_input", M.t(lang, "rank.entity_columns"))
     keys, _ = period_changes._key_columns(actx, args.entity_columns)
     if len(keys) > 8:
-        raise C.ToolFailure("error", "invalid_input", "The full entity key exceeds eight columns.")
+        raise C.ToolFailure("error", "invalid_input", M.t(lang, "rank.key_too_long"))
     if args.entity_class == "cities" and "REF_AREA_2" not in keys:
-        raise C.ToolFailure("error", "invalid_input", "Cities require REF_AREA_2 with SIRUTA locality keys.")
+        raise C.ToolFailure("error", "invalid_input", M.t(lang, "rank.cities_need_locality"))
     periods, _ = period_changes._periods(ctx.conn, code, "TIME_PERIOD", ctx)
     year = args.year or max(periods)
     if year not in periods:
-        _refuse("period_unavailable", f"No observations for {year}; no nearby year was substituted.")
+        _refuse("period_unavailable", M.t(lang, "rank.no_year", year=year))
     filters = {c: list(v) for c, v in args.filters.items() if v}
     filters["TIME_PERIOD"] = [periods[year]]
     query = {"dataset": code, "filters": filters, "group_by": keys + ["TIME_PERIOD"], "approximate": False}
@@ -120,30 +120,30 @@ def rank_entities(args, ctx):
     prov.update(selection=selection, source_query=query)
     agg = res.get("aggregation") or {}
     if res.get("unavailable"):
-        _refuse(agg.get("reason") or "aggregation_unavailable", "The shared query refused the ranking input.", prov)
+        _refuse(agg.get("reason") or "aggregation_unavailable", M.t(lang, "rank.query_refused"), prov)
     if res.get("truncated") or res.get("time_windowed") or res.get("partial_period_dropped") is not None:
-        _refuse("source_incomplete", "No ranking was computed from a capped or windowed input; narrow the selection.", prov)
+        _refuse("source_incomplete", M.t(lang, "rank.source_incomplete"), prov)
     if agg.get("outcome") == "approximation":
-        _refuse("unsupported_measure", "An approximate aggregation is not a ranking input.", prov)
+        _refuse("unsupported_measure", M.t(lang, "rank.approximation"), prov)
     if any(w.get("code") == "mixed_grain_on_axis" for w in agg.get("warnings") or []):
-        _refuse("overlapping_levels", "Choose a single entity level before ranking.", prov)
+        _refuse("overlapping_levels", M.t(lang, "rank.mixed_levels"), prov)
     cols = res["columns"]
     table = {}
     for row in res["rows"]:
         key = tuple(row[cols.index(c)] for c in keys)
         if any(v is None or not str(v).strip() for v in key):
-            _refuse("identity_ambiguous", "An entity has an empty key; no ranking was computed.", prov)
+            _refuse("identity_ambiguous", M.t(lang, "rank.empty_key"), prov)
         if key in table:
-            _refuse("duplicate_keys", "More than one value exists for an entity; no ranking was computed.", prov)
+            _refuse("duplicate_keys", M.t(lang, "rank.duplicate_key"), prov)
         table[key] = row[cols.index("OBS_VALUE")]
     aggregates = period_changes._aggregate_keys({(k, year): v for k, v in table.items()}, keys, actx)
-    catalogue = city_codes(ctx.conn) if args.entity_class == "cities" else None
+    catalogue = city_codes(ctx.conn, lang) if args.entity_class == "cities" else None
     members, outside_class, seen_ids = None, len(aggregates), set()
     if catalogue:
         prov["sources"].append({**C.source_entry(ctx.conn, CITY_CATALOGUE, ctx.lang), "role": "entity_classification"})
         prov["classification"] = classification_entry()
         try:
-            classes = classify_cities(table, keys, catalogue, aggregates)
+            classes = classify_cities(table, keys, catalogue, aggregates, lang)
         except C.ToolFailure as f:
             f.provenance = prov
             raise
@@ -170,12 +170,12 @@ def rank_entities(args, ctx):
     scope = prov["scope"]
     warnings = []
     if catalogue:
-        warnings.append(C.warning("classification_reference", "Cities are municipalities and towns in INS GOS102A's SIRUTA catalogue; historical changes of UAT class are not tracked."))
+        warnings.append(C.warning("classification_reference", M.t(lang, "rank.classification")))
     if excluded:
-        warnings.append(C.warning("entities_excluded", f"{len(excluded)} entities lack a finite observation; they were not assigned zero."))
+        warnings.append(C.warning("entities_excluded", M.t(lang, "rank.entities_excluded", n=len(excluded))))
     if scope.get("domain_complete") is not True:
         warnings.append(C.warning("incomplete_domain" if scope.get("domain_complete") is False else "unverified_total",
-                                  scope.get("description") or "The collapsed domain's completeness is unverified; do not claim an official complete total."))
+                                  scope.get("description") or M.t(lang, "rank.unverified_total")))
     partial = bool(excluded) or scope.get("domain_complete") is not True
     status = "partial" if partial else "ok"
     reason = "incomplete_domain" if scope.get("domain_complete") is False else "unverified_total" if scope.get("domain_complete") is None else None
@@ -187,7 +187,8 @@ def rank_entities(args, ctx):
             "eligible_count": len(rows), "excluded_count": len(excluded), "excluded": excluded[:20],
             "exclusions_truncated": len(excluded) > 20, "outside_class_count": outside_class}
     return C.envelope("rank_entities", ctx, status=status, reason=reason,
-                      message=f"Top {min(args.top_k, len(rows))} of {len(rows)} eligible entities in {year}; ranked before limiting output. {scope.get('description', '')}",
+                      message=M.t(lang, "rank.message", k=min(args.top_k, len(rows)), n=len(rows), year=year,
+                                  scope=scope.get("description", "")),
                       data=data, provenance=prov, warnings=warnings,
                       limits={"returned_rows": len(data["rows"]), "total_rows": len(rows),
                               "source_complete": True, "preview_truncated": False})

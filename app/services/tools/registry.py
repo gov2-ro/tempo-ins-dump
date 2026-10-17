@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel, ValidationError, create_model
 
 from app.services import generation
+from app.services.tools import messages as M
 from app.services.tools import schemas as S
 from app.services.tools.contract import (
     MAX_ARGUMENT_BYTES, MAX_RECOVERY, MAX_RESULT_BYTES, ToolContext, ToolFailure, dumps, envelope,
@@ -45,7 +46,9 @@ TOOLS: dict[str, ToolSpec] = {t.name: t for t in (
              "with their definition, unit, actual period coverage and geographic levels, "
              "candidate datasets and the next call to make. Pass the full question, preserving "
              "denominator, geography, period and ranking. State any assumed definition; "
-             "unresolved ambiguity returns needs_clarification with labelled choices.",
+             "unresolved ambiguity returns needs_clarification with labelled choices; each carries an "
+             "`action` (a validated call: prefer it once `action_status` is ready) to run only after "
+             "the user has picked that choice.",
              S.DiscoverIndicatorsArgs, S.DiscoverData, f"{_PKG}.discovery:discover_indicators"),
     ToolSpec("describe_dataset", "Describe dataset",
              "Compact schema of one dataset: definition, measure, unit, actual first/last "
@@ -147,7 +150,7 @@ def validate_result(name: str, env: dict) -> None:
             TOOLS[r["tool"]].args.model_validate(r["arguments"])
 
 
-def _validation_message(e: ValidationError) -> str:
+def _validation_message(e: ValidationError, lang: str = "ro") -> str:
     seen, parts = set(), []
     for err in e.errors(include_input=False, include_url=False):
         loc = [str(x) for x in err["loc"] if not (isinstance(x, str) and x in (
@@ -156,12 +159,12 @@ def _validation_message(e: ValidationError) -> str:
         if key in seen:
             continue
         seen.add(key)
-        msg = "unknown argument" if err["type"] == "extra_forbidden" else \
+        msg = M.t(lang, "registry.unknown_argument") if err["type"] == "extra_forbidden" else \
             err["msg"].removeprefix("Value error, ")
         parts.append(f"{key}: {msg}")
         if len(parts) == 4:
             break
-    return "Invalid arguments — " + "; ".join(parts) + ". Correct them and call again."
+    return M.t(lang, "registry.invalid", parts="; ".join(parts))
 
 
 def _valid_recovery(env: dict) -> dict:
@@ -181,13 +184,13 @@ def _valid_recovery(env: dict) -> dict:
     return env
 
 
-def _fit(env: dict, spec: ToolSpec | None, args_hash: str, args_bytes: int) -> dict:
+def _fit(env: dict, spec: ToolSpec | None, args_hash: str, args_bytes: int, lang: str = "ro") -> dict:
     if size(env) <= MAX_RESULT_BYTES:
         return env
     shrink = _resolve(spec.shrink) if spec and spec.shrink else shrink_rows
     while size(env) > MAX_RESULT_BYTES:
-        if not shrink(env):
-            return response_budget(env, args_hash, args_bytes)
+        if not shrink(env, lang=lang):
+            return response_budget(env, args_hash, args_bytes, lang)
     return env
 
 
@@ -205,27 +208,28 @@ def precheck(name: str, arguments) -> dict | None:
         return failure_envelope(tool, ctx, ToolFailure(status, reason, message, **kw))
 
     if spec is None:
-        return fail("error", "unknown_tool", f"Unknown tool {tool!r}; available: " + ", ".join(TOOLS) + ".")
+        return fail("error", "unknown_tool", M.t(ctx.lang, "registry.unknown_tool", tool=tool, tools=", ".join(TOOLS)))
     if not isinstance(arguments, dict):
-        return fail("error", "invalid_input", "Arguments must be a JSON object.")
+        return fail("error", "invalid_input", M.t(ctx.lang, "registry.not_object"))
     try:
         raw = dumps(arguments)
     except (TypeError, ValueError):
-        return fail("error", "invalid_input", "Arguments must be plain JSON (no NaN/Infinity).")
+        return fail("error", "invalid_input", M.t(ctx.lang, "registry.not_json"))
     nbytes = len(raw.encode("utf-8"))
     if nbytes > MAX_ARGUMENT_BYTES:
         return fail("error", "invalid_input",
-                    f"Arguments are {nbytes} bytes; the limit is {MAX_ARGUMENT_BYTES}. Ask for fewer values.",
-                    recovery=[recovery("narrow", "Send fewer filter values or areas.")])
+                    M.t(ctx.lang, "registry.too_big", n=nbytes, max=MAX_ARGUMENT_BYTES),
+                    recovery=[recovery("narrow", M.t(ctx.lang, "registry.too_big_narrow"))])
     try:
         spec.args.model_validate(arguments)
     except ValidationError as e:
-        return fail("error", "invalid_input", _validation_message(e))
+        return fail("error", "invalid_input", _validation_message(e, ctx.lang))
     return None
 
 
 def shrinker(name: str):
-    """The tool's hook for shortening an oversized envelope in place (False: nothing left to cut)."""
+    """The tool's hook for shortening an oversized envelope in place (False: nothing left to cut);
+    call it `hook(env, lang=...)`, `lang` being the language of the warning it may add."""
     spec = TOOLS.get(name)
     return _resolve(spec.shrink) if spec and spec.shrink else shrink_rows
 
@@ -245,25 +249,24 @@ def call_tool(name: str, arguments, *, conn=None) -> dict:
         return failure_envelope(tool, ctx, ToolFailure(status, reason, message, **kw))
 
     if spec is None:
-        return fail("error", "unknown_tool", f"Unknown tool {tool!r}; available: "
-                    + ", ".join(TOOLS) + ".")
+        return fail("error", "unknown_tool", M.t(ctx.lang, "registry.unknown_tool", tool=tool,
+                                                 tools=", ".join(TOOLS)))
     if not isinstance(arguments, dict):
-        return fail("error", "invalid_input", "Arguments must be a JSON object.")
+        return fail("error", "invalid_input", M.t(ctx.lang, "registry.not_object"))
     try:
         raw = dumps(arguments)
     except (TypeError, ValueError):
-        return fail("error", "invalid_input", "Arguments must be plain JSON (no NaN/Infinity).")
+        return fail("error", "invalid_input", M.t(ctx.lang, "registry.not_json"))
     args_bytes = len(raw.encode("utf-8"))
     args_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
     if args_bytes > MAX_ARGUMENT_BYTES:
         return fail("error", "invalid_input",
-                    f"Arguments are {args_bytes} bytes; the limit is {MAX_ARGUMENT_BYTES}. "
-                    "Ask for fewer values.",
-                    recovery=[recovery("narrow", "Send fewer filter values or areas.")])
+                    M.t(ctx.lang, "registry.too_big", n=args_bytes, max=MAX_ARGUMENT_BYTES),
+                    recovery=[recovery("narrow", M.t(ctx.lang, "registry.too_big_narrow"))])
     try:
         args = spec.args.model_validate(arguments)
     except ValidationError as e:
-        return fail("error", "invalid_input", _validation_message(e))
+        return fail("error", "invalid_input", _validation_message(e, ctx.lang))
 
     own = conn is None
     try:
@@ -276,8 +279,7 @@ def call_tool(name: str, arguments, *, conn=None) -> dict:
         env = failure_envelope(tool, ctx, f)
     except Exception:
         log.exception("tool failed tool=%s request=%s", tool, request_id)
-        env = fail("error", "execution_failed",
-                   f"The tool failed (reference {request_id}); nothing was computed.")
+        env = fail("error", "execution_failed", M.t(ctx.lang, "registry.failed", ref=request_id))
     finally:
         ctx.conn = None
         if own and conn is not None:
@@ -288,12 +290,9 @@ def call_tool(name: str, arguments, *, conn=None) -> dict:
 
     gen1 = generation.current()
     if (gen1.get("id"), gen1.get("status")) != (gen0.get("id"), gen0.get("status")):
-        return fail("unavailable", "generation_changed",
-                    "The served data generation changed during this call; nothing from it "
-                    "is reported. Run the request again.",
-                    recovery=[recovery("retry", "Run the same request again on the new "
-                                                "generation.")])
-    return _fit(_valid_recovery(env), spec, args_hash, args_bytes)
+        return fail("unavailable", "generation_changed", M.t(ctx.lang, "registry.generation_changed"),
+                    recovery=[recovery("retry", M.t(ctx.lang, "registry.generation_retry"))])
+    return _fit(_valid_recovery(env), spec, args_hash, args_bytes, ctx.lang)
 
 
 def tool_names() -> list[str]:

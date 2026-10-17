@@ -349,7 +349,7 @@ def test_oversized_or_unknown_arguments_never_reach_the_database(tmp_path, monke
             huge = await s.call_tool("query_data", {"dataset": "POPC", "filters": {
                 "REF_AREA": [f"v{i}-" + "x" * 150 for i in range(100)], "TIME_PERIOD": ["y" * 150] * 50}})
             unknown_key = await s.call_tool("query_data", {"dataset": "POPC", "sql": "select 1"})
-            unknown_tool = await s.call_tool("run_sql", {"query": "select 1"})
+            unknown_tool = await s.call_tool("run_sql", {"query": "select 1", "lang": "en"})
             bad_type = await s.call_tool("query_data", {"dataset": 5})
             return huge, unknown_key, unknown_tool, bad_type
     huge, unknown_key, unknown_tool, bad_type = run(go())

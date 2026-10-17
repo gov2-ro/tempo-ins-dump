@@ -38,6 +38,7 @@ from app.services.llm_client import (FINISH_COMPLETE, FINISH_CONTENT_FILTER, FIN
                                      _server_key_env, classify_provider_error, complete_with_tools,
                                      requested_output_tokens)
 from app.services.tools import contract as C
+from app.services.tools import messages as M
 from app.services.tools import registry
 from app.services.tools.registry import call_tool
 
@@ -48,9 +49,7 @@ MIN_CALL_SECONDS = 2.0            # do not start a provider call with less time 
 RETRY_PAUSE_SECONDS = 0.5         # pause before the one provider retry (bounded by the deadline)
 RETRYABLE = ("provider_timeout", "provider_unavailable", "provider_rate_limited")
 FAILURES_BEFORE_SYNTHESIS = 3     # consecutive refusals/errors before the loop stops exploring
-BUDGET_STOPS = ("iterations", "tools", "deadline", "output_budget")
-_BUDGET_NOTE = {"iterations": "Reached the model-call limit", "tools": "Reached the tool-call limit",
-                "deadline": "Reached the time limit", "output_budget": "Reached the output allowance"}
+BUDGET_STOPS = ("iterations", "tools", "deadline", "output_budget")     # notes: messages `agent.limit.<stop>`
 
 # ---------------------------------------------------------------------------
 # Tool definitions (JSON Schema, provider-agnostic): the registry's, inlined
@@ -86,12 +85,13 @@ Reply in the user's language (RO or EN). Dataset names in the catalog are Romani
 - get_evidence_links: links for a selection. The page already links the main result: call it only to cite a different one.
 
 ## Workflow
-1. discover_indicators with the full question, preserving the requested measure, denominator, geography, period and operation, unless the dataset is given or an earlier selection (below) applies. If it returns needs_clarification, ask the user that question with its choices; do not guess a definition, place or period.
+1. discover_indicators with the full question, preserving the requested measure, denominator, geography, period and operation, unless the dataset is given or an earlier selection (below) applies. If it returns needs_clarification, ask the user that question with its choices; do not guess a definition, place or period. Once the user has picked, run that choice's `action` when its `action_status` is `ready` (it is already validated; fall back to `next_call` otherwise), and never run an action before they pick.
 2. describe_dataset before query_data. Use find_dimension_values for exact values (counties, ages, periods). Never guess columns or values.
 3. A `recovery` entry or a candidate's `next_call` is a candidate, not an answer: call it and read its status.
 4. Use group_by for aggregates (trends, comparisons). Do not pull raw rows when a grouped summary suffices.
 5. Never ask "would you like me to fetch X?". Fetch it and caveat in the answer.
 6. Never substitute county for city, counts for per-capita values, or domicile for explicitly requested resident population. If the requested definition/level/operation is unavailable, explain what is missing. Report any default assumption returned by discovery.
+7. Pass `lang` as the user's language (`ro` or `en`) so tool messages and warnings come back in it.
 
 ## Vocabulary
 - șomaj / rata șomajului → unemployment / rate; pe județe → by county (REF_AREA, 42); pe regiuni → by region (8 NUTS-2)
@@ -190,9 +190,9 @@ class AgentResult:
 # ---------------------------------------------------------------------------
 
 
-def _synthetic(tool: str, status: str, reason: str, message: str, recovery=()) -> dict:
-    """An envelope the agent itself produces (a call it did not execute)."""
-    ctx = C.ToolContext(conn=None, lang="ro", generation=generation.current(), request_id="agent")
+def _synthetic(tool: str, status: str, reason: str, message: str, recovery=(), lang: str = "ro") -> dict:
+    """An envelope the agent itself produces (a call it did not execute), in the question's language."""
+    ctx = C.ToolContext(conn=None, lang=lang, generation=generation.current(), request_id="agent")
     return C.envelope(tool[:64], ctx, status=status, reason=reason, message=message,
                       recovery=list(recovery))
 
@@ -242,6 +242,8 @@ class _Stop(Exception):
 
 
 class _Run:
+    _warned: set | None = None            # (code, subject) of the warnings listed so far, made on first use
+
     def __init__(self, question, history, *, provider, model, api_key, on_event, context, cancel,
                  request_id):
         self.question = question
@@ -275,7 +277,7 @@ class _Run:
         self.trace: list[dict] = []           # [{id, tool, input, output, executed, cached}]
         self.retained: list[dict] = []        # tool results still in the model's context
         self.cache: dict[tuple, dict] = {}    # (tool, args, generation) -> {env, executions}
-        self.warnings: list[str] = []
+        self.warnings: list[str] = []         # what the page lists, once per (code, subject)
         self.consecutive_failures = 0
         self.force_final: str | None = None   # why the next model call is the final one
         self.provider_retry_used = False
@@ -292,6 +294,25 @@ class _Run:
 
     def remaining(self) -> float:
         return self.deadline - time.monotonic()
+
+    def _warn(self, text, code: str = "agent", subject=None, *, first: bool = False) -> None:
+        """List one warning for the page, once: a tool's by its stable code and subject (so the same
+        qualification in two calls or two languages shows once), anything else by its text."""
+        key = (code, subject if subject is not None else text)
+        if self._warned is None:
+            self._warned = set()
+        if not text or key in self._warned:
+            return
+        self._warned.add(key)
+        self.warnings.insert(0, text) if first else self.warnings.append(text)
+
+    def _args_for(self, name: str, args: dict) -> dict:
+        """The model's arguments, plus the question's language when it chose none: a tool's messages
+        and warnings follow `lang`, and the page shows them."""
+        spec = registry.TOOLS.get(name)
+        if spec is None or "lang" in args or "lang" not in spec.args.model_fields:
+            return args
+        return {**args, "lang": self.lang}
 
     def emit(self, kind: str, **fields) -> None:
         """A debug step (only when a sink is attached). Credentials and bulk are removed
@@ -432,22 +453,21 @@ class _Run:
         executed, cached = False, False
         skipped = False        # answered for the provider's call/result pairing, never traced
         if self.tools_used >= config.ASK_MAX_TOOL_CALLS:
-            env = _synthetic(name, "unavailable", "tool_budget",
-                             "Not executed: the tool-call limit was reached. Answer from the results you have.")
+            env = _synthetic(name, "unavailable", "tool_budget", M.t(self.lang, "agent.tool_budget"),
+                             lang=self.lang)
             self.force_final, skipped = self.force_final or "tools", True
         elif self.remaining() <= 0 or self.cancel.cancelled:
-            env = _synthetic(name, "unavailable", "deadline",
-                             "Not executed: the time limit was reached. Answer from the results you have.")
+            env = _synthetic(name, "unavailable", "deadline", M.t(self.lang, "agent.deadline"), lang=self.lang)
             self.force_final, skipped = self.force_final or "deadline", True
         else:
             self.tools_used += 1
             if name not in TOOL_NAMES:
                 env = _synthetic(name, "error", "unknown_tool",
-                                 f"Unknown tool {name[:64]!r}; available: {', '.join(sorted(TOOL_NAMES))}.")
+                                 M.t(self.lang, "registry.unknown_tool", tool=name[:64],
+                                     tools=", ".join(sorted(TOOL_NAMES))), lang=self.lang)
             elif tc.get("invalid"):
-                env = _synthetic(name, "error", "invalid_input",
-                                 "The tool arguments were cut off or were not a JSON object; call the tool "
-                                 "again with complete arguments.")
+                env = _synthetic(name, "error", "invalid_input", M.t(self.lang, "agent.invalid_arguments"),
+                                 lang=self.lang)
             else:
                 env, executed, cached = self._run_tool(name, args)
         if skipped:
@@ -464,13 +484,16 @@ class _Run:
                   result_bytes=C.size(env))
         self.trace.append({"id": tc["id"], "tool": name, "input": args, "output": env,
                            "executed": executed or cached, "cached": cached})
-        for w in env.get("warnings") or []:
-            msg = w.get("message") if isinstance(w, dict) else str(w)
-            if msg and msg not in self.warnings and name in DATA_TOOLS:
-                self.warnings.append(msg)
+        if name in DATA_TOOLS:
+            for w in env.get("warnings") or []:
+                if isinstance(w, dict):
+                    self._warn(w.get("message"), w.get("code") or "tool", w.get("subject"))
+                else:
+                    self._warn(str(w), "tool")
         return env
 
     def _run_tool(self, name: str, args: dict):
+        args = self._args_for(name, args)
         key = (name, C.dumps(args), generation.current().get("id"))
         prev = self.cache.get(key)
         if prev:
@@ -480,18 +503,17 @@ class _Run:
                 self.cache_hits += 1
                 if env.get("status") in ("ok", "partial"):
                     return env, False, True
-                return _compact_outcome(env, "This exact request was already made this turn and refused; "
-                                             "its outcome and recovery candidates are repeated, not re-run. "
-                                             "Narrow or change the request."), False, True
+                return _compact_outcome(env, M.t(self.lang, "agent.repeated")), False, True
         try:
             with self.cancel.running(self.conn, deadline_in=max(0.0, self.remaining())):
                 env = call_tool(name, args, conn=self.conn)
         except Cancelled:
-            env = _synthetic(name, "unavailable", "cancelled", "Not executed: the request was stopped.")
+            env = _synthetic(name, "unavailable", "cancelled", M.t(self.lang, "agent.cancelled"), lang=self.lang)
             return env, False, False
         except Exception:  # noqa: BLE001 — the registry does not raise; this is the last resort
             log.exception("tool dispatch failed tool=%s", name)
-            env = _synthetic(name, "error", "execution_failed", "The tool failed; nothing was computed.")
+            env = _synthetic(name, "error", "execution_failed", M.t(self.lang, "agent.tool_failed"),
+                             lang=self.lang)
         self.executions += 1
         slot = self.cache.setdefault(key, {"env": env, "executions": 0})
         slot["env"], slot["executions"] = env, slot["executions"] + 1
@@ -608,7 +630,7 @@ class _Run:
                     "You found relevant datasets but did not query any data. Call describe_dataset on the "
                     "most relevant candidate, then query_data (or compare_periods) to get actual numbers "
                     "before answering.")})
-                self.warnings.append("Guardrail: model skipped data query — injected follow-up turn.")
+                self._warn("Guardrail: model skipped data query — injected follow-up turn.", "guardrail")
                 self.emit("guardrail", note="discovery found candidates but no data was queried; nudging the model")
                 continue
 
@@ -634,8 +656,8 @@ class _Run:
         """The loop cannot make another model call: end with what exists."""
         self.emit("stopped", reason=stop)
         if stop == "provider":
-            self.warnings.append(f"The model provider failed ({self.provider_code or 'provider_error'}) "
-                                 "before a final answer; the result is partial.")
+            self._warn(M.t(self.lang, "agent.provider_failed", code=self.provider_code or "provider_error"),
+                       "provider")
         return self.conclude(None, failed="cancelled" if stop == "cancelled" else None,
                              stopped=None if stop == "cancelled" else stop)
 
@@ -646,10 +668,10 @@ class _Run:
         notices = _NOTICE[self.lang]
         usable = any(ask_present._usable(t) for t in self.trace)
         stop_reason = failed or stopped or forced or ("output_limit" if cut else "end_turn")
-        if (forced or stopped) in _BUDGET_NOTE:
-            self.warnings.append(_BUDGET_NOTE[forced or stopped]
-                                 + (" before a final answer; the result is partial." if stopped
-                                    else " before the exploration finished; the answer is partial."))
+        if (forced or stopped) in BUDGET_STOPS:
+            self._warn(M.t(self.lang, f"agent.limit.{forced or stopped}")
+                       + M.t(self.lang, "agent.limit_stopped" if stopped else "agent.limit_forced"),
+                       "budget", forced or stopped)
 
         if text is None or not str(text).strip():
             key = failed or stopped
@@ -665,7 +687,7 @@ class _Run:
 
         answer, verification = self._check_answer(text)
         outcome, reason = self._outcome(answer, failed, stopped, forced, cut, usable, verification)
-        table = ask_present.display_table(self.trace)
+        table = ask_present.display_table(self.trace, self.lang)
         from app.services.tools.intent import interpret
         if table is not None and interpret(self.question)["operation"] == "rank" and table.get("tool") == "query_data":
             table = None
@@ -674,9 +696,12 @@ class _Run:
                       "Rezultatul disponibil este doar o interogare fără clasare." if self.lang == "ro" else
                       "I could not obtain a verified ranking over the full selection. "
                       "The available result is an unranked query.")
-            self.warnings.append("An unranked query preview was hidden: it does not answer the requested ranking.")
+            self._warn(M.t(self.lang, "agent.ranking_hidden"), "ranking_hidden")
         if table is not None:
             table["links"] = self._links()
+            # what the model's own prose may have left out, from the turn's tool results (not from it)
+            for q in reversed(ask_present.qualifications(self.trace)):
+                self._warn(q["message"], q["code"], q.get("subject"), first=True)
         ctx_entries = ask_context.merge(
             self.prior_context,
             [e for t in self.trace if t.get("executed", True) and
@@ -757,12 +782,12 @@ class _Run:
         ver = {"valid_query": bool(valid), "uncited_numbers": [], "unavailable": unavailable,
                "approximations": approx, "status": "no_values", "claims": [],
                "claim_summary": {"matched": 0, "unverified": 0}}
-        warns: list[str] = []
+        warns: list[tuple[str, str]] = []       # (stable code, text in the question's language)
         if not valid:
             if answer_check.has_value_claims(answer, self.question):
                 ver["status"] = "values_withheld"
                 ver["uncited_numbers"] = [c["raw"] for c in answer_check.find_numbers(answer, self.question)]
-                warns.append("Answer withheld: it stated figures but no data query succeeded.")
+                warns.append(("values_withheld", M.t(lang, "agent.values_withheld")))
                 answer = answer_check.NOTICES[lang]["withheld"]
                 if unavailable:
                     answer += f" ({', '.join(sorted({u['reason'] or '?' for u in unavailable}))})"
@@ -771,8 +796,7 @@ class _Run:
             if unc:
                 ver["status"] = "unverified_numbers"
                 ver["uncited_numbers"] = unc
-                warns.append("Numbers not found in any query result (derived or unverified): "
-                             + ", ".join(unc[:8]))
+                warns.append(("numbers_not_found", M.t(lang, "agent.numbers_not_found", numbers=", ".join(unc[:8]))))
             else:
                 ver["status"] = "verified"
             ver["claims"] = answer_check.bind_claims(answer, self.question, self.trace)
@@ -793,13 +817,12 @@ class _Run:
                           "Consultați tabelul și sursele pentru selecția verificată." if lang == "ro" else
                           "I withheld the explanation because its unit or period contradicts the data. "
                           "See the table and sources for the validated selection.")
-                warns.append("Answer withheld: explicit unit or period contradicts the cited result.")
+                warns.append(("claim_withheld", M.t(lang, "agent.claim_withheld")))
             notes = answer_check.approximation_notes(answer, self.trace, lang)
             if notes:
                 answer = answer.rstrip() + "\n\n" + "\n".join(notes)
-        for w in warns:
-            if w not in self.warnings:
-                self.warnings.append(w)
+        for code, text in warns:
+            self._warn(text, code)
         return answer, ver
 
     # ------------------------------------------------------------ display

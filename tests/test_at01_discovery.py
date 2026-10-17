@@ -481,7 +481,7 @@ def test_generic_word_and_city_clarify_the_definition_first_and_keep_the_city(en
 # ------------------------------------------------------------------ discover: families, edges
 
 def test_families_group_split_children_and_are_not_verified_answers(env):
-    out = disc("locuinte construite")
+    out = disc("locuinte construite", lang="en")
     assert out["status"] == "ok" and out["data"]["concepts"] == []
     fam = out["data"]["families"]
     assert [f["family"] for f in fam] == ["FAMX"]
@@ -587,7 +587,7 @@ def test_actual_period_bounds_beat_metadata(env):
 
 
 def test_total_listed_by_metadata_but_absent_from_data_is_explained(env):
-    d = call("describe_dataset", dataset="TOTX")
+    d = call("describe_dataset", dataset="TOTX", lang="en")
     cat, sex = dim(d, "CATEGORY"), dim(d, "SEX")
     assert cat["total_in_data"] is False and cat["total_metadata_values"] == ["Total"]
     assert "no such value" in cat["total_note"] and "Do not filter" in cat["total_note"]
@@ -597,7 +597,7 @@ def test_total_listed_by_metadata_but_absent_from_data_is_explained(env):
 
 
 def test_examples_are_a_bounded_sample_with_a_working_lookup(env):
-    d = call("describe_dataset", dataset="BIGX")
+    d = call("describe_dataset", dataset="BIGX", lang="en")
     cat = dim(d, "CAT")
     assert len(cat["examples"]) == 5 and cat["values_truncated"] is True and cat["option_count"] == 60
     assert cat["lookup"] == {"tool": "find_dimension_values", "arguments": {"dataset": "BIGX", "column": "CAT"}}
@@ -769,14 +769,14 @@ def test_search_is_accent_and_case_insensitive_and_returns_exact_values(env):
 
 
 def test_a_query_without_a_match_is_an_empty_page_with_a_hint(env):
-    out = call("find_dimension_values", dataset="OLDT", column="TIME_PERIOD", query="1850")
+    out = call("find_dimension_values", dataset="OLDT", column="TIME_PERIOD", query="1850", lang="en")
     assert out["status"] == "ok" and out["reason"] is None
     d = out["data"]
     assert d["values"] == [] and d["total"] == 0 and d["next_offset"] is None
     assert "1850" in d["hint"] and "1960" in d["hint"]
     assert out["recovery"][0]["tool"] == "find_dimension_values"
     assert out["recovery"][0]["arguments"] == {"dataset": "OLDT", "column": "TIME_PERIOD"}
-    past = call("find_dimension_values", dataset="OLDT", column="TIME_PERIOD", offset=500)["data"]
+    past = call("find_dimension_values", dataset="OLDT", column="TIME_PERIOD", offset=500, lang="en")["data"]
     assert past["values"] == [] and past["total"] == 66 and "past the last" in past["hint"]
 
 
@@ -791,7 +791,7 @@ def test_unknown_column_and_unknown_dataset_and_value_column(env):
 
 
 def test_values_of_a_split_parent_point_at_its_sub_datasets(env, tmp_path):
-    out = call("find_dimension_values", dataset="AGEP", column="AGE")
+    out = call("find_dimension_values", dataset="AGEP", column="AGE", lang="en")
     assert out["status"] == "error" and out["reason"] == "unknown_dataset"
     assert "sub-datasets" in out["message"] and out["recovery"][0]["tool"] == "describe_dataset"
     no_internals(out, tmp_path)

@@ -359,7 +359,7 @@ class TestClaimsAndDisplay:
         d = res.data
         assert d["columns"] == ["REF_AREA", "INTERVAL", "FROM_VALUE", "TO_VALUE", "ABSOLUTE", "PERCENT", "RANK"]
         assert d["rows"][0] == ["B", "1992→2002", 200.0, 150.0, -50.0, -25.0, 1]
-        assert d["status"] == "partial" and any("excluded" in w for w in d["warnings"])
+        assert d["status"] == "partial" and any("excluse" in w for w in d["warnings"])      # a Romanian question
         assert res.chart_spec is None
         assert res.verification["status"] == "verified"                        # "50" matches a change of -50
         assert res.verification["claims"][0]["check"] == "matched"

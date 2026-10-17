@@ -141,7 +141,7 @@ def test_overload_answers_busy_at_once_with_a_retry_and_never_queues(tmp_path, m
             while not entered.is_set():
                 await asyncio.sleep(0.01)
             t0 = time.monotonic()
-            busy = await b.call_tool("query_data", {**QUERY, "limit": 7})
+            busy = await b.call_tool("query_data", {**QUERY, "limit": 7, "lang": "en"})
             quick = time.monotonic() - t0
             gate_open.set()
             ok = await first
@@ -191,7 +191,7 @@ def test_a_failing_query_releases_its_slot_and_leaks_nothing(tmp_path, monkeypat
 
     async def go():
         async with E.started(app), E.session(app) as s:
-            bad = [await s.call_tool("query_data", {**QUERY, "limit": n}) for n in (1, 2, 3)]
+            bad = [await s.call_tool("query_data", {**QUERY, "limit": n, "lang": "en"}) for n in (1, 2, 3)]
             monkeypatch.setattr(R, "call_tool", real)
             return bad, await s.call_tool("query_data", QUERY)
     bad, good = run(go())
@@ -400,7 +400,8 @@ def test_a_selection_over_the_scan_limit_is_refused_without_running_or_counting(
 
     async def go():
         async with E.started(app), E.session(app) as s:
-            return await s.call_tool("query_data", QUERY), await s.call_tool("compare_periods", E.CALLS["compare_periods"])
+            return (await s.call_tool("query_data", {**QUERY, "lang": "en"}),
+                    await s.call_tool("compare_periods", {**E.CALLS["compare_periods"], "lang": "en"}))
     qd, cp = run(go())
     for res in (qd, cp):
         env = E.payload(res)[0]
@@ -439,8 +440,8 @@ def test_an_unknown_estimate_is_refused_unless_a_generation_bound_result_is_cach
             warm = await s.call_tool("query_data", QUERY)                       # cached under this generation
             monkeypatch.setattr(mcp.gate.estimator, "estimate", lambda *a: None)
             cached = await s.call_tool("query_data", QUERY)                     # still served: bound to the generation
-            fresh = await s.call_tool("query_data", {"dataset": "POPC", "limit": 11})
-            bad = await s.call_tool("query_data", {"dataset": "BADP"})
+            fresh = await s.call_tool("query_data", {"dataset": "POPC", "limit": 11, "lang": "en"})
+            bad = await s.call_tool("query_data", {"dataset": "BADP", "lang": "en"})
             return warm, cached, fresh, bad
     warm, cached, fresh, bad = run(go())
     assert E.payload(warm)[0] == E.payload(cached)[0] and E.payload(cached)[0]["status"] == "ok"

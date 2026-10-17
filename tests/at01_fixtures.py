@@ -110,6 +110,12 @@ def make_env(tmp_path, monkeypatch, build=None, *, generation_id: str | None = G
     return SimpleNamespace(client=client, corpus=corpus)
 
 
+def said(text: str, lang: str, en: str, ro: str) -> bool:
+    """Does `text` carry the fragment of the language the call was made in? A tool's prose follows
+    its `lang` (AQ-04C): a test that pins wording says it once per language."""
+    return (en if lang == "en" else ro) in text
+
+
 def call(name: str, **arguments) -> dict:
     """Run a tool through the registry and check its envelope against the schemas."""
     from app.services.tools.registry import call_tool, validate_result

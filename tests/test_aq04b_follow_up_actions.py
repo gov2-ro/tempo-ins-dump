@@ -456,7 +456,7 @@ def test_a_place_the_recipe_source_lacks_gets_a_lookup_not_a_doomed_run(env):
     assert c["next_call"] == cd["area_lookup"] == {"tool": "find_dimension_values", "arguments": {
         "dataset": "POPK_judete", "column": "REF_AREA", "limit": 20, "query": "Bihor"}}
     res = run(c["next_call"])
-    assert res["data"]["total"] == 0 and "No value of REF_AREA contains 'Bihor'" in res["message"]
+    assert res["data"]["total"] == 0 and "Nicio valoare din REF_AREA nu conține 'Bihor'" in res["message"]
     # nothing similar was substituted: the recipe itself, asked for Bihor, excludes it with its reason
     ran = call("run_recipe", recipe="tk_intensity", areas=["Bihor"], year="2023")
     assert ran["status"] == "unavailable" and ran["data"]["rows"] == []
@@ -592,7 +592,7 @@ def test_other_tools_keep_their_own_single_period_and_interval_handling(env):
     ranked = call("rank_entities", dataset="SERK_judete", entity_columns=["REF_AREA"], year="2023")
     assert breaks(ranked) == [] and "series_breaks" not in ranked["provenance"]            # one period
     cmp_ = call("compare_periods", dataset="SERK_judete", entity_columns=["REF_AREA"],
-                intervals=[{"from": "2020", "to": "2023"}])
+                intervals=[{"from": "2020", "to": "2023"}], lang="en")
     own = [(w["subject"], w["message"]) for w in cmp_["warnings"] if w["code"] == "series_break"]
     assert [s for s, _ in own].count("SERK-break") == 1                       # raised once, by that tool
     assert own[0][1].startswith("Inside the compared interval 2020→2023") and "series_breaks" not in cmp_["provenance"]

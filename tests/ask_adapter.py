@@ -9,7 +9,7 @@ from app.services.tools.registry import call_tool
 
 
 def ask(code, filters=None, group_by=None, approximate=None):
-    args = {"dataset": code}
+    args = {"dataset": code, "lang": "en"}          # the parity tests pin the English wording of the prose
     if filters is not None:
         args["filters"] = filters
     if group_by is not None:

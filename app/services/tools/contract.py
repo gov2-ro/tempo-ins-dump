@@ -15,12 +15,14 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import math
+import re
 from dataclasses import dataclass, field
 from decimal import Decimal
 from urllib.parse import quote, urlencode
 
 from app import config
 from app.services import generation
+from app.services.tools import messages as M
 
 CONTRACT = "tempo-tools/2"
 MAX_ARGUMENT_BYTES = 16 * 1024      # logical arguments, UTF-8 JSON
@@ -66,9 +68,8 @@ class ToolContext:
         if status != "present" or not self.generation.get("id"):
             raise ToolFailure(
                 "unavailable", "generation_unverified",
-                f"The served data generation is {status}; analytical results cannot be "
-                "certified until the deployment's generation manifest is present.",
-                recovery=[recovery("retry", "Retry after the data generation is refreshed.")],
+                M.t(self.lang, "contract.generation_unverified", status=status),
+                recovery=[recovery("retry", M.t(self.lang, "contract.retry_generation"))],
                 provenance=base_provenance(self))
 
 
@@ -348,33 +349,59 @@ def query_limits(res: dict, returned: int) -> dict:
             "partial_period_dropped": None if dropped is None else str(dropped)}
 
 
-def query_failure(e, ctx: ToolContext, dataset: str) -> ToolFailure:
-    """ToolFailure for a data_query.QueryError (validation, unknown id, budget)."""
-    msg = e.message
+# The few data_query.QueryError texts a tool user meets; any other text is the shared service's own.
+_QUERY_ERRORS = (
+    (re.compile(r"Dataset (?P<code>\w+) not found"), "contract.dataset_not_found"),
+    (re.compile(r"Dataset (?P<code>\w+) has no data file — it may be published as sub-datasets\."),
+     "contract.no_data_file"),
+    (re.compile(r"Dataset has (?P<rows>[\d,]+) rows\. Please apply at least one filter to narrow results "
+                r"\(max (?P<max>[\d,]+) rows returned\)\."), "contract.filter_needed"),
+    (re.compile(r"Invalid column: unknown column (?P<col>.+)"), "contract.unknown_column"),
+)
+
+
+def _query_error_text(text: str, lang: str) -> str:
+    for rx, key in _QUERY_ERRORS:
+        m = rx.fullmatch(text)
+        if m:
+            vals = m.groupdict()
+            if "col" in vals:
+                vals["col"] = vals["col"].strip("'")
+            return M.t(lang, key, **vals)
+    return text
+
+
+def query_failure(e, ctx: ToolContext, dataset: str, message: str | None = None) -> ToolFailure:
+    """ToolFailure for a data_query.QueryError (validation, unknown id, budget). The reason comes
+    from the error; the text is shown in the request's language where it is one of the few known
+    ones (the rest is the shared service's own), or is `message` when the caller has its own."""
+    raw = e.message
+    msg = message or _query_error_text(raw, ctx.lang)
     prov = base_provenance(ctx)
-    describe = recovery("tool_call", "Read the dataset's columns, values and sub-datasets.",
+    describe = recovery("tool_call", M.t(ctx.lang, "contract.read_dataset"),
                         "describe_dataset", {"dataset": dataset, "lang": ctx.lang})
     if e.status == 404:
         return ToolFailure("error", "unknown_dataset", msg, provenance=prov,
-                           recovery=[describe] if "sub-datasets" in msg else [
-                               recovery("tool_call", "Find the dataset code by concept.",
+                           recovery=[describe] if "sub-datasets" in raw else [
+                               recovery("tool_call", M.t(ctx.lang, "contract.find_dataset"),
                                         "discover_indicators", {"query": dataset[:200],
                                                                 "lang": ctx.lang})])
-    if e.status == 400 and "unknown column" in msg:
+    if e.status == 400 and "unknown column" in raw:
         return ToolFailure("error", "unknown_column", msg, provenance=prov, recovery=[describe])
-    if e.status == 400 and "Please apply at least one filter" in msg:
+    if e.status == 400 and "Please apply at least one filter" in raw:
         return ToolFailure("unavailable", "query_budget", msg, provenance=prov, recovery=[
-            recovery("narrow", "Filter at least one dimension (e.g. a period or an area).")])
+            recovery("narrow", M.t(ctx.lang, "contract.filter_one"))])
     if e.status == 400:
         return ToolFailure("error", "invalid_input", msg, provenance=prov, recovery=[describe])
     return ToolFailure("error", "execution_failed",
-                       f"The query failed (reference {ctx.request_id}).", provenance=prov)
+                       M.t(ctx.lang, "contract.query_failed", ref=ctx.request_id), provenance=prov)
 
 
 # ------------------------------------------------------------------ budget
 
-def shrink_rows(env: dict, rows_path: tuple = ("data", "rows")) -> bool:
-    """Halve a model-visible table; False when there is nothing left to cut."""
+def shrink_rows(env: dict, rows_path: tuple = ("data", "rows"), lang: str = "ro") -> bool:
+    """Halve a model-visible table; False when there is nothing left to cut. `lang` is the
+    language of the warning it adds."""
     node = env
     for k in rows_path[:-1]:
         node = node.get(k) or {}
@@ -387,20 +414,16 @@ def shrink_rows(env: dict, rows_path: tuple = ("data", "rows")) -> bool:
         lim["returned_rows"] = len(node[rows_path[-1]])
     lim["preview_truncated"] = True
     if not any(w.get("code") == "preview_shortened" for w in env["warnings"]):
-        env["warnings"].append(warning(
-            "preview_shortened", "The preview was shortened to fit the response budget; "
-            "the canonical selection and evidence links give the complete result."))
+        env["warnings"].append(warning("preview_shortened", M.t(lang, "contract.preview_shortened")))
     return True
 
 
-def response_budget(env: dict, arguments_hash: str, argument_bytes: int) -> dict:
+def response_budget(env: dict, arguments_hash: str, argument_bytes: int, lang: str = "ro") -> dict:
     """Required content cannot fit: no data, no selection, a narrowing hint."""
     prov = {**env["provenance"], "selection": None, "effective_selection": None}
     return {**env, "status": "unavailable", "reason": "response_budget",
-            "message": "The result's required provenance does not fit the response budget; "
-                       "narrow the request (fewer columns, values, areas or periods).",
+            "message": M.t(lang, "contract.response_budget"),
             "data": {"request": {"sha256": arguments_hash, "argument_bytes": argument_bytes}},
             "provenance": prov,
             "limits": {**metadata_limits()},
-            "recovery": [recovery("narrow", "Ask for fewer filter values, grouped columns "
-                                            "or periods.")]}
+            "recovery": [recovery("narrow", M.t(lang, "contract.response_budget_narrow"))]}

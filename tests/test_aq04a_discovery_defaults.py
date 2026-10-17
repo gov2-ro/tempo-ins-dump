@@ -25,7 +25,7 @@ from app.services import dataset_search, recipes
 from app.services.tools import discovery_policy as dp
 from app.services.tools import registry as R
 from app.services.tools import schemas as S
-from at01_fixtures import add_dataset, add_search_columns, call, make_env
+from at01_fixtures import add_dataset, add_search_columns, call, make_env, said
 from test_at01_changes import time_dim, unit_dim
 from test_at01_discovery import real  # noqa: F401 — the pinned-generation probe fixture
 from test_at01_recipes_links import install_recipes, make_recipe
@@ -342,7 +342,8 @@ def test_generic_population_is_resident_and_disclosed_with_alternatives(env, que
     assert out["status"] == "ok" and out["data"]["choices"] == []
     assert out["data"]["interpretation"]["assumed_definition"] == "resident_population"
     warn = next(w for w in out["warnings"] if w["code"] == "assumed_definition")
-    assert warn["subject"] == "resident_population" and "alternatives remain available" in warn["message"]
+    assert warn["subject"] == "resident_population" and said(
+        warn["message"], lang, "alternatives remain available", "alternativele rămân disponibile")
     c = card(out, "resident_population")
     assert c["assumed"] is True and not c["requires_choice"]
     assert {a["id"] for a in c["alternatives"]} >= {"domicile_population"}      # the others stay one call away
@@ -417,7 +418,7 @@ def test_generic_city_population_ranking_uses_domicile_and_says_what_it_counts(e
     assert out["data"]["interpretation"]["level"] == "locality"
     warn = next(w for w in out["warnings"] if w["code"] == "assumed_definition")
     assert warn["subject"] == "domicile_population" and "legal" in warn["message"] \
-        and "not available for cities" in warn["message"]                 # the locality definition, disclosed
+        and said(warn["message"], lang, "not available for cities", "nu este disponibilă pentru orașe")   # the definition, disclosed
     nc = card(out, "domicile_population")["next_call"]
     assert nc == {"tool": "rank_entities", "arguments": {
         "dataset": "POP107D_grupe_localitate", "entity_columns": ["REF_AREA", "REF_AREA_2"], "year": None,
@@ -456,7 +457,8 @@ def test_explicit_domicile_city_population_is_respected(env, question, lang):
 def test_explicit_resident_or_july_city_population_is_unavailable_never_substituted(env, question, lang):
     out = disc(question, lang)
     assert out["status"] == "unavailable" and out["reason"] == "level_unavailable"
-    assert "County data was not substituted" in out["message"] and "domicile" in out["message"]
+    assert said(out["message"], lang, "County data was not substituted", "Datele pe județ nu au fost înlocuite") \
+        and said(out["message"], lang, "domicile", "domiciliu")
     assert out["data"] == {} and not out["warnings"]
 
 
@@ -560,7 +562,7 @@ def test_unsupported_age_sex_and_denominator_are_reported_and_no_call_ignores_th
     assert {c["kind"] for c in out["data"]["interpretation"]["unapplied_constraints"]} == kinds
     subjects = [w["subject"] for w in out["warnings"] if w["code"] == "constraint_not_applied"]
     assert sorted(subjects) == sorted(kinds)                       # one warning per kind
-    assert "Not applied from the question" in out["message"]
+    assert said(out["message"], lang, "Not applied from the question", "Neaplicat din întrebare")
     c = out["data"]["concepts"][0]
     assert c["next_call"]["tool"] == "describe_dataset"                # explicit values are chosen there
     assert all(cd["next_call"] is None or cd["next_call"]["tool"] in ("describe_dataset", "find_dimension_values")

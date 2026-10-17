@@ -48,6 +48,7 @@ from app.services import data_query, dataset_meta, dataset_notes, dataset_search
 from app.services.chart_selector import TOTAL_RE
 from app.services.tools import contract as C
 from app.services.tools import discovery_policy as dpol
+from app.services.tools import messages as M
 from app.services.tools import recipe as recipe_tool
 from app.services.tools import schemas as S
 from app.services.tools.contract import ToolFailure
@@ -91,10 +92,7 @@ def _generation_warnings(ctx) -> list:
     status = ctx.generation.get("status")
     if status == "present":
         return []
-    return [C.warning(
-        "generation_unverified",
-        f"The data generation manifest is {status}: this metadata is read from the served "
-        "files and is not certified to a generation.")]
+    return [C.warning("generation_unverified", M.t(ctx.lang, "discover.generation_manifest", status=status))]
 
 
 def _has_file(code: str) -> bool:
@@ -242,22 +240,14 @@ def _all_counties_query(matched: str | None, year, parse_conn) -> str | None:
 
 # ------------------------------------------------------------------ discover: candidates
 
-_NOTE_TEXT = {
-    "place_not_in_dataset": "A named place was not found among this dataset's REF_AREA values; "
-                            "it was not applied.",
-    "place_level_unavailable": "This indicator has no data at the named place's level (county); "
-                               "the place was not applied.",
-}
-
-
 def _note(code: str, message: str) -> dict:
     return {"code": code, "message": message}
 
 
-def _card_notes(raw: dict) -> list:
+def _card_notes(raw: dict, lang: str) -> list:
     """concept_search's place notes; its period note is re-derived per candidate
     (a monthly dataset has a year without having it as one period)."""
-    return [_note(code, _NOTE_TEXT.get(code, code)) for code in raw.get("notes") or []
+    return [_note(code, M.tx(lang).get(f"discover.note.{code}", code)) for code in raw.get("notes") or []
             if code != "period_unavailable"]
 
 
@@ -270,7 +260,7 @@ def _lookup_periods(code: str, lang: str, year=None) -> dict | None:
     return _call("find_dimension_values", **args)
 
 
-def _period_state(conn, code: str, facts, year) -> tuple:
+def _period_state(conn, code: str, facts, year, lang: str) -> tuple:
     """(exact TIME_PERIOD to pin | None, note | None, lookup query | None) for a
     requested year against the ACTUAL periods of `code`."""
     cov = (facts or {}).get("coverage")
@@ -283,17 +273,15 @@ def _period_state(conn, code: str, facts, year) -> tuple:
     span = f"{cov['first']}–{cov['last']}"
     if not first <= year <= last:
         return None, _note("period_unavailable",
-                           f"{year} is outside the data of {code} ({span}); the year was not "
-                           "applied and nothing was substituted."), None
+                           M.t(lang, "discover.period_outside", year=year, code=code, span=span)), None
     if cov.get("frequency") != "annual":
-        return None, _note("period_not_single",
-                           f"{code} is {cov.get('frequency')}: {year} is not one period. List its "
-                           f"periods (find_dimension_values, query {str(year)!r}) and filter "
-                           "exact values."), str(year)
+        freq = cov.get("frequency")
+        return None, _note("period_not_single", M.t(
+            lang, "discover.period_not_single", code=code, year=year, query=str(year),
+            frequency=M.tx(lang).get(f"discover.freq.{freq}", freq))), str(year)
     if _period_present(conn, code, str(year)) is False:
         return None, _note("period_unavailable",
-                           f"{year} is not an actual period of {code} ({span}, with gaps); the "
-                           "year was not applied and nothing was substituted."), None
+                           M.t(lang, "discover.period_gap", year=year, code=code, span=span)), None
     return str(year), None, None
 
 
@@ -378,27 +366,20 @@ def _candidate(ctx, code: str, level, filters: dict, parsed: dict, relation: str
     notes = list(extra_notes)
     problems = []
     if facts is None:
-        problems.append(_note("no_data_file", f"{code} has no data file of its own; it is "
-                                              "published as sub-datasets."))
+        problems.append(_note("no_data_file", M.t(lang, "discover.no_data_file", code=code)))
     if quality in UNSAFE_GRAIN:
-        problems.append(_note(
-            f"grain_{quality}", f"{code} has rows with the same key"
-            + (" and different values" if quality == "conflicting" else "")
-            + " in the generation audit: grouped totals are refused. Not a query target."))
+        problems.append(_note(f"grain_{quality}", M.t(
+            lang, "discover.grain_conflicting" if quality == "conflicting" else "discover.grain_duplicate_keys",
+            code=code)))
     if domain["complete"] is False:
-        problems.append(_note("domain_incomplete", "Restricted domain: " + domain["description"]
-                              + ". Not an all-population answer."))
+        problems.append(_note("domain_incomplete", M.t(lang, "discover.domain_incomplete", desc=domain["description"])))
     pre = None if problems else _preflight(actx, group_by, filters)
     if pre:
         reason, col = pre
-        problems.append(_note(
-            "aggregation_unavailable",
-            f"The shared aggregation policy refuses to collapse the other dimensions here "
-            f"({reason}{', ' + col if col else ''}): choose explicit values (describe_dataset) "
-            "or use a reviewed recipe."))
+        problems.append(_note("aggregation_unavailable", M.t(
+            lang, "discover.aggregation_unavailable", reason=reason, column=f", {col}" if col else "")))
     if quality == "unverified":
-        notes.append(_note("grain_unverified", "Grain is not certified by the generation "
-                                               "evidence; query_data checks the selected slice."))
+        notes.append(_note("grain_unverified", M.t(lang, "discover.grain_unverified")))
     queryable = not problems
     if not queryable:
         next_call = _call("describe_dataset", dataset=code, lang=lang)
@@ -460,7 +441,7 @@ def _dataset_candidates(ctx, raw: dict, parsed: dict) -> list:
         if idx == 0 and sel.get("REF_AREA"):
             filters["REF_AREA"] = sel["REF_AREA"]
         if year:
-            tv, pnote, lookup_q = _period_state(conn, code, facts, year)
+            tv, pnote, lookup_q = _period_state(conn, code, facts, year, lang)
             if pnote:
                 notes.append(pnote)
                 period_call = _lookup_periods(code, lang, lookup_q)
@@ -469,8 +450,7 @@ def _dataset_candidates(ctx, raw: dict, parsed: dict) -> list:
         elif parsed.get("latest") and facts and (facts.get("coverage") or {}).get("last"):
             tv = str(facts["coverage"]["last"])
             filters["TIME_PERIOD"] = [tv]
-            notes.append(_note("latest_period", f"'Latest' was resolved to the last period with "
-                                                f"data in {code}: {tv}."))
+            notes.append(_note("latest_period", M.t(lang, "discover.latest_period", code=code, period=tv)))
         cand = _candidate(ctx, code, level, filters, parsed,
                           "primary" if idx == 0 else "level_variant", notes, period_call)
         cands.append(cand)
@@ -524,28 +504,21 @@ def _recipe_candidate(ctx, rid: str, parsed: dict, coverage: dict | None, relati
             args["year"] = str(year)
         else:
             span = f" ({cov['first']}–{cov['last']})" if cov.get("first") else ""
-            notes.append(_note("period_unavailable",
-                               f"{year} is outside the years both sources share{span}; the year "
-                               "was not applied and nothing was substituted (a recipe without a "
-                               "year would answer for the latest common year)."))
+            notes.append(_note("period_unavailable", M.t(ctx.lang, "discover.recipe_period", year=year, span=span)))
             period_call = _lookup_periods(sources[0], ctx.lang)
     area_ds, area_call = recipe_tool.area_dataset(rid), None
     areas, absent, labels = _source_areas(ctx.conn, area_ds, parsed.get("places") or [])
     if parsed.get("places"):
         args["areas"] = areas
         if absent:
-            notes.append(_note(
-                "place_not_in_dataset", f"{', '.join(absent)} is not among the REF_AREA labels of "
-                f"{area_ds}, which the recipe matches exactly (accents, case and spacing aside). "
-                "Look the label up (area_lookup) before running it; nothing similar was substituted."))
+            notes.append(_note("place_not_in_dataset", M.t(
+                ctx.lang, "discover.recipe_place", absent=", ".join(absent), dataset=area_ds)))
             if len(absent) == len(args["areas"]):       # nothing left to run
                 area_call = _call("find_dimension_values", dataset=area_ds, column="REF_AREA",
                                   query=recipe_tool.lookup_query(absent[0], labels), limit=20)
     unsafe = quality in UNSAFE_GRAIN
     if unsafe:
-        notes.append(_note(f"grain_{quality}", "A source of this recipe has grain problems in "
-                                               "the generation audit; run_recipe may refuse or "
-                                               "exclude entities."))
+        notes.append(_note(f"grain_{quality}", M.t(ctx.lang, "discover.recipe_grain")))
     next_call = area_call or period_call or _call("run_recipe", **args)
     lookup = None
     if labels is not None:      # the source's labels could be listed, so this lookup will run
@@ -555,24 +528,22 @@ def _recipe_candidate(ctx, rid: str, parsed: dict, coverage: dict | None, relati
     return {"dataset": None, "recipe": rid, "kind": "recipe", "relation": relation, "level": r.get("geo_level", "county"),
             "quality": quality, "sources": sources, "area_lookup": lookup, "series_breaks": [],
             "domain": {"complete": None, "restrictions": [], "missing": [], "checked": [],
-                       "description": "A recipe's eligibility and exclusions are in its run_recipe "
-                                      "result."},
+                       "description": M.t(ctx.lang, "discover.recipe_domain")},
             "title": title, "coverage": dict(cov) if cov else None, "url": None,
             "queryable": not unsafe and next_call is not None, "preferred": False, "notes": notes,
             "next_call": next_call}
 
 
-def _choose(cands: list, wanted_level) -> dict | None:
+def _choose(cands: list, wanted_level, lang: str) -> dict | None:
     ok = [c for c in cands if c["queryable"] and c["next_call"]]
     pick = next((c for c in ok if wanted_level and c["level"] == wanted_level), None) \
         or (ok[0] if ok else None)
     if pick is not None:
         pick["preferred"] = True
         if wanted_level and pick["level"] != wanted_level:
-            pick["notes"].append(_note(
-                "level_differs", f"No queryable source at the requested level ({wanted_level}); "
-                                 f"this is the {pick['level'] or 'parent'} source and cannot "
-                                 "answer a question about a smaller area."))
+            pick["notes"].append(_note("level_differs", M.t(
+                lang, "discover.level_differs", wanted=wanted_level,
+                level=pick["level"] or M.t(lang, "discover.parent_level"))))
     return pick
 
 
@@ -605,7 +576,7 @@ def _concept_card(ctx, raw: dict, by_id: dict, parsed: dict, query: str) -> dict
         "definition_truncated": cut, "unit": raw.get("unit"), "unit_type": raw.get("unit_type"),
         "source_updated": raw.get("source_updated"),
         "coverage": dict(raw["coverage"]) if raw.get("coverage") else None,
-        "recipe": None, "levels": [], "notes": _card_notes(raw),
+        "recipe": None, "levels": [], "notes": _card_notes(raw, ctx.lang),
         "alternatives": [], "candidates": [], "preferred": None, "next_call": None,
         "requires_choice": False}
     if is_recipe:
@@ -624,14 +595,13 @@ def _concept_card(ctx, raw: dict, by_id: dict, parsed: dict, query: str) -> dict
                                    "source_total")
             if rc:
                 rc["title"] = total.get("title")
-                rc["notes"].append(_note("source_total", total.get("status") or "Reviewed route "
-                                         "to the county total."))
+                rc["notes"].append(_note("source_total", total.get("status") or M.t(ctx.lang, "discover.source_total")))
                 cands.append(rc)
     first = cands[0] if cands else None
     if first:           # the requested year, as the card's primary source answers it
         card["notes"] += [n for n in first["notes"] if n["code"] in PERIOD_NOTES]
     wanted = parsed.get("level") or (first["level"] if first else None)
-    _choose(cands, wanted)
+    _choose(cands, wanted, ctx.lang)
     # preferred first, the rest in discovery order
     cands.sort(key=lambda c: not c["preferred"])
     card["candidates"] = cands
@@ -640,10 +610,7 @@ def _concept_card(ctx, raw: dict, by_id: dict, parsed: dict, query: str) -> dict
         card["preferred"] = pref["dataset"] or pref.get("recipe")
         card["next_call"] = pref["next_call"]
     else:
-        card["notes"].append(_note(
-            "no_verified_candidate", "No candidate is a ready data query (see each candidate's "
-                                     "notes); next_call reads the first candidate's dimensions so "
-                                     "explicit values can be chosen."))
+        card["notes"].append(_note("no_verified_candidate", M.t(ctx.lang, "discover.no_verified_candidate")))
         card["next_call"] = next((c["next_call"] for c in cands if c["next_call"]), None)
     base = _base_query(query, raw.get("matched"))
     card["alternatives"] = [_alternative(ctx, a, by_id, base) for a in raw.get("alternatives") or []]
@@ -682,8 +649,7 @@ def _read_choice(ctx, query: str | None, cid: str, recipe=None, dataset=None) ->
     if ctx.notes.get("resolving"):
         return out
     if not query:
-        out["action_notes"] = [_note("no_specific_wording", "No restated question selects this choice on "
-                                     "its own; ask the user to say it in their own words.")]
+        out["action_notes"] = [_note("no_specific_wording", M.t(ctx.lang, "discover.no_specific_wording"))]
         return out
     ctx.notes["resolving"] = True
     try:
@@ -693,8 +659,7 @@ def _read_choice(ctx, query: str | None, cid: str, recipe=None, dataset=None) ->
         return out
     except Exception:
         log.exception("choice resolution failed choice=%s", cid)
-        out["action_notes"] = [_note("resolution_failed", "This choice could not be resolved to a call; "
-                                                          "use its restatement (next_call).")]
+        out["action_notes"] = [_note("resolution_failed", M.t(ctx.lang, "discover.resolution_failed"))]
         return out
     finally:
         ctx.notes.pop("resolving", None)
@@ -704,7 +669,7 @@ def _read_choice(ctx, query: str | None, cid: str, recipe=None, dataset=None) ->
     card = next((c for c in sub["data"]["concepts"] if c["id"] == cid), None)
     if card is None:
         out.update(action_status="unavailable", action_notes=[_note(
-            "no_match", "The restated question no longer reaches this definition.")])
+            "no_match", M.t(ctx.lang, "discover.no_match_choice"))])
         return out
     pref = next((c for c in card["candidates"] if c.get("preferred")), None)
     out["recipe"] = card["recipe"]
@@ -721,7 +686,7 @@ def _read_choice(ctx, query: str | None, cid: str, recipe=None, dataset=None) ->
         return out
     if not nc or nc["tool"] not in ACTION_TOOLS:
         out.update(action_status="unavailable", action_notes=(carried + [_note(
-            "no_call", "No validated data call exists for this definition and question.")])[:MAX_ACTION_NOTES])
+            "no_call", M.t(ctx.lang, "discover.no_call"))])[:MAX_ACTION_NOTES])
         return out
     args = nc["arguments"]
     # the dataset a lookup reads (a recipe's source, a period list) is not the choice's dataset
@@ -759,13 +724,12 @@ def _place_choices(ctx, cards: list, parsed: dict) -> list:
     names = ", ".join(p["name"] for p in places)
     county_q = _county_query(matched, [dict(p) for p in places], year, ctx.conn)
     all_q = _all_counties_query(matched, year, ctx.conn)
-    choices = [{"id": "county", "label": f"County: {names}",
-                "description": "Whole-county figures (the series this indicator has); not the "
-                               "city alone.",
+    choices = [{"id": "county", "label": M.t(ctx.lang, "discover.county_label", names=names),
+                "description": M.t(ctx.lang, "discover.county_description"),
                 "next_call": _call("discover_indicators", query=county_q, lang=ctx.lang)
                 if county_q else None},
-               {"id": "all_counties", "label": "All counties",
-                "description": "One row per county; pick the place afterwards.",
+               {"id": "all_counties", "label": M.t(ctx.lang, "discover.all_counties_label"),
+                "description": M.t(ctx.lang, "discover.all_counties_description"),
                 "next_call": _call("discover_indicators", query=all_q, lang=ctx.lang)
                 if all_q else None}]
     pref = next((c for c in card["candidates"] if c.get("preferred")), None)
@@ -830,9 +794,7 @@ def _locality_card(conn, lang: str, plan, parsed: dict, by_id: dict) -> dict:
     by_id[plan.locality["id"]] = plan.locality
     raw = cs.concept_card(conn, plan.locality, parsed, lang, plan.locality_alias, False)
     if raw is None:
-        raise C.ToolFailure("unavailable", "level_unavailable",
-                            "The reviewed city population series is not in this data generation. "
-                            "County data was not substituted.")
+        raise C.ToolFailure("unavailable", "level_unavailable", M.t(lang, "discover.city_series_missing"))
     return raw
 
 
@@ -849,13 +811,8 @@ def _withhold_calls(cards: list, lang: str):
                 continue
             cand["next_call"] = _call("describe_dataset", dataset=cand["dataset"], lang=lang) \
                 if cand.get("dataset") else None
-            cand["notes"].append(_note(
-                "constraint_not_applied",
-                "A constraint of the question is not applied by discovery, so no data call that "
-                "ignores it is suggested here. " + ("Read the dimensions and filter explicit values; "
-                                                    "if this dataset cannot express it, say so."
-                                                    if cand["next_call"] else
-                                                    "This recipe cannot take it; say so.")))
+            cand["notes"].append(_note("constraint_not_applied", M.t(lang, "discover.constraint_withheld") + " " + M.t(
+                lang, "discover.constraint_filter" if cand["next_call"] else "discover.constraint_recipe")))
         pref = next((c for c in card["candidates"] if c.get("preferred")), None)
         card["next_call"] = pref.get("next_call") if pref else None
 
@@ -879,15 +836,12 @@ def _change_calls(cards: list, plan, intent: dict, lang: str):
 
 # ------------------------------------------------------------------------------------------------
 
-def _constraint_warnings(unapplied: list) -> list:
+def _constraint_warnings(unapplied: list, lang: str) -> list:
     out = []
     for kind in dict.fromkeys(c["kind"] for c in unapplied):
         words = "; ".join(repr(c["text"]) for c in unapplied if c["kind"] == kind)
-        out.append(C.warning(
-            "constraint_not_applied",
-            f"The question asks for {kind} ({words}) but discovery did not apply it; the candidates "
-            "do not answer it as they stand. Filter explicit values after describe_dataset, or tell "
-            "the user it was not applied. Nothing was dropped silently.", kind))
+        out.append(C.warning("constraint_not_applied", M.t(
+            lang, "discover.constraint_warning", kind=M.tx(lang).get(f"discover.kind.{kind}", kind), words=words), kind))
     return out
 
 
@@ -895,11 +849,8 @@ def _assumed_warning(cdef: dict, cid: str, lang: str, cities: bool) -> dict:
     label = (cdef.get("name") or {}).get(lang, cid)
     if cities:      # the locality series is the only city definition: say what it counts
         note = (cdef.get("note") or {}).get(lang) or ""
-        return C.warning("assumed_definition", f"Definition assumed for cities: {label} ({note}). "
-                         "Resident population is not available for cities in the reviewed series; "
-                         "state the definition explicitly.", cid)
-    return C.warning("assumed_definition", f"Definition assumed: {label}. State it explicitly; "
-                     "alternatives remain available.", cid)
+        return C.warning("assumed_definition", M.t(lang, "discover.assumed_cities", label=label, note=note), cid)
+    return C.warning("assumed_definition", M.t(lang, "discover.assumed", label=label), cid)
 
 
 def discover_indicators(args, ctx):
@@ -917,7 +868,7 @@ def discover_indicators(args, ctx):
     if plan.recipe:
         res["concepts"] = [c for c in res["concepts"] if c["id"] == plan.recipe]
         if not res["concepts"]:
-            raise C.ToolFailure("unavailable", "recipe_unavailable", "The per-resident recipe is unavailable; no raw count was substituted.")
+            raise C.ToolFailure("unavailable", "recipe_unavailable", M.t(lang, "discover.recipe_unavailable"))
     places = [dict(p) for p in parsed.get("places") or []]
     cards = [_concept_card(ctx, raw, by_id, parsed, args.query)
              for raw in res["concepts"][:args.limit]]
@@ -950,9 +901,9 @@ def discover_indicators(args, ctx):
     assumed = plan.assumed if any(c["id"] == plan.assumed for c in cards) else None
     if assumed:
         warnings.append(_assumed_warning(by_id.get(assumed, {}), assumed, lang, intent["cities"]))
-    warnings += _constraint_warnings(unapplied)
+    warnings += _constraint_warnings(unapplied, lang)
     if plan.change and not unapplied:
-        warnings.append(C.warning("classification_reference", dpol.CITY_CHANGE_NOTE))
+        warnings.append(C.warning("classification_reference", M.t(lang, "policy.city_change_note")))
     for card in cards:
         if assumed and card["id"] == assumed:
             card["assumed"] = True
@@ -961,11 +912,11 @@ def discover_indicators(args, ctx):
             ambiguities.append({
                 "kind": "definition", "concept": c["id"], "matched": c["matched"],
                 "alternatives": [a["id"] for a in c["alternatives"]],
-                "message": f"'{c['matched']}' is a generic word: it can mean "
-                           + "; ".join([c["name"]] + [a["name"] for a in c["alternatives"]]) + "."})
+                "message": M.t(lang, "discover.generic_word", matched=c["matched"], names="; ".join(
+                    [c["name"]] + [a["name"] for a in c["alternatives"]]))})
         elif c["generic_match"]:
-            warnings.append(C.warning("generic_match", f"'{c['matched']}' is a generic word; "
-                                      "only one reviewed definition exists for it.", c["id"]))
+            warnings.append(C.warning("generic_match", M.t(lang, "discover.generic_single", matched=c["matched"]),
+                                      c["id"]))
         for n in c["notes"]:
             if n["code"] in PERIOD_NOTES:
                 ambiguities.append({"kind": "period", "concept": c["id"], "reason": n["code"],
@@ -976,8 +927,7 @@ def discover_indicators(args, ctx):
     for p in city:
         ambiguities.append({
             "kind": "place", "place": p["name"], "slug": p["slug"], "reason": "city_not_county",
-            "message": f"The question names a city in county {p['name']}; TEMPO publishes this "
-                       "indicator by county. County figures are not the city's."})
+            "message": M.t(lang, "discover.city_not_county", name=p["name"])})
     county_based = [c for c in cards if c["kind"] == "recipe"
                     or any(lv["level"] == "county" for lv in c["levels"])]
 
@@ -1013,12 +963,9 @@ def discover_indicators(args, ctx):
     families_info = {
         "total": fam["total"], "returned": len(families), "matching_datasets": fam["matching_datasets"],
         "truncated": fam["truncated"], "search_mode": fam["search_mode"], "verified": False,
-        "note": "Full-text search hits grouped by indicator family: candidates to read with "
-                "describe_dataset, not verified answers. time_range is the dataset profile's, "
-                "not checked against the data."}
+        "note": M.t(lang, "discover.families_note")}
     if fam["search_mode"] != "fts" and dataset_search.search_status()["mode"] == "fallback":
-        warnings.append(C.warning("search_degraded", "Full-text search is unavailable; families "
-                                  "are matched on dataset names only."))
+        warnings.append(C.warning("search_degraded", M.t(lang, "discover.search_degraded")))
 
     interp = {"places": places, "level": parsed.get("level"), "period": parsed.get("period"),
               "latest": parsed.get("latest"), "family_query": parsed.get("fts"),
@@ -1030,31 +977,21 @@ def discover_indicators(args, ctx):
     if status == "needs_clarification":
         if reason == "ambiguous_definition":
             names = [ch["label"] for ch in choices]
-            message = (f"The wording is ambiguous between {len(names)} official definitions: "
-                       + "; ".join(names) + ". No figure or dataset was chosen: ask the user to pick "
-                       "one. Only after they have picked, run that choice's action (status ready); "
-                       "its next_call restates the question with that definition.")
+            message = M.t(lang, "discover.msg_definition", n=len(names), names="; ".join(names))
         else:
-            message = (f"{places[0]['name'] if places else 'The place'} reads as a city, but this "
-                       "indicator is published by county. Choose the county series or all "
-                       "counties; city-level figures are not resolved by this tool.")
-        recovery = [C.recovery("tool_call", f"Use: {ch['label']}", "discover_indicators",
-                               ch["next_call"]["arguments"])
+            message = M.t(lang, "discover.msg_place",
+                          place=places[0]["name"] if places else M.t(lang, "discover.the_place"))
+        recovery = [C.recovery("tool_call", M.t(lang, "discover.use_choice", label=ch["label"]),
+                               "discover_indicators", ch["next_call"]["arguments"])
                     for ch in choices if ch["next_call"]][:3]
     elif not cards and not families:
-        warnings.append(C.warning("no_match", "No reviewed concept or dataset matched the query."))
-        message = "No reviewed concept or dataset matched the query."
-        recovery = [C.recovery(
-            "clarify", "Rephrase with the indicator's name and, optionally, a level (e.g. 'pe "
-                       "județe') or a county and year. Nothing was substituted.")]
+        warnings.append(C.warning("no_match", M.t(lang, "discover.no_match")))
+        message = M.t(lang, "discover.no_match")
+        recovery = [C.recovery("clarify", M.t(lang, "discover.rephrase"))]
     else:
-        message = (f"{len(cards)} reviewed concept(s) with candidate datasets and "
-                   f"{len(families)} family search hit(s). Candidates carry their grain status and any "
-                   "proven scope restriction (domain.complete null = not verified); families "
-                   "are unverified search hits."
-                   + (" Not applied from the question: "
-                      + ", ".join(f"{c['kind']} ({c['text']!r})" for c in unapplied)
-                      + "; see warnings." if unapplied else ""))
+        message = M.t(lang, "discover.msg_ok", n=len(cards), m=len(families)) + (
+            M.t(lang, "discover.msg_unapplied",
+                items=", ".join(f"{c['kind']} ({c['text']!r})" for c in unapplied)) if unapplied else "")
         recovery = []
 
     def build():
@@ -1067,8 +1004,7 @@ def discover_indicators(args, ctx):
         shrunk = True
         env = build()
     if shrunk:
-        warnings.append(C.warning("response_shortened", "Optional detail was cut to fit the "
-                                  "response budget; call describe_dataset for the rest."))
+        warnings.append(C.warning("response_shortened", M.t(lang, "discover.response_shortened")))
         env = build()
     return env
 
@@ -1081,7 +1017,7 @@ def _ordered_examples(values, is_time: bool) -> list:
     return heapq.nsmallest(MAX_EXAMPLES, values, key=lambda v: (cs.fold(v), v))
 
 
-def _total_info(d: dict, values: dict | None, struct_col: dict | None) -> dict:
+def _total_info(d: dict, values: dict | None, struct_col: dict | None, lang: str) -> dict:
     """Does the data really have the Total-like row metadata lists?"""
     out = {"total_in_data": None}
     if d.get("dim_type") in ("time", "unit"):
@@ -1098,11 +1034,8 @@ def _total_info(d: dict, values: dict | None, struct_col: dict | None) -> dict:
         out.update(total_in_data=True, total_values=data_totals[:3])
     elif meta_totals:
         out.update(total_in_data=False, total_metadata_values=meta_totals[:3],
-                   total_note=(f"The metadata lists {', '.join(repr(t) for t in meta_totals[:2])} "
-                               f"for {d['dim_column_name']}, but the data has no such value (INS's "
-                               "own total was not downloaded). Do not filter this dimension to "
-                               "Total; a sum over its values is only valid where the aggregation "
-                               "policy allows it."))
+                   total_note=M.t(lang, "describe.total_note", names=", ".join(repr(t) for t in meta_totals[:2]),
+                                  col=d["dim_column_name"]))
     return out
 
 
@@ -1125,7 +1058,7 @@ def _structure_info(struct_col: dict | None) -> dict:
     return out
 
 
-def _dimension_info(code: str, d: dict, values: dict | None, struct_col: dict | None) -> dict:
+def _dimension_info(code: str, d: dict, values: dict | None, struct_col: dict | None, lang: str) -> dict:
     col = d["dim_column_name"]
     is_time = d.get("dim_type") == "time"
     meta_n = d.get("option_count")
@@ -1136,10 +1069,10 @@ def _dimension_info(code: str, d: dict, values: dict | None, struct_col: dict | 
             "metadata_option_count": meta_n,
             "examples": [] if values is None else _ordered_examples(list(values), is_time),
             "values_truncated": bool(values) and len(values) > MAX_EXAMPLES,
-            **_total_info(d, values, struct_col), **_structure_info(struct_col),
+            **_total_info(d, values, struct_col, lang), **_structure_info(struct_col),
             "lookup": _call("find_dimension_values", dataset=code, column=col)}
     if values is None:
-        info["values_note"] = "No actual values are available (no data file or unreadable column)."
+        info["values_note"] = M.t(lang, "describe.no_values")
     return info
 
 
@@ -1183,23 +1116,21 @@ def _time_block(ctx, code: str, time_dim: dict | None, has_file: bool) -> tuple[
     if not col:
         return t, notes
     if not has_file:
-        notes.append(_note("no_period_data", "No data file: the actual period range is unknown."))
+        notes.append(_note("no_period_data", M.t(ctx.lang, "describe.no_period_file")))
         return t, notes
     try:
         res = data_query.dimension_values(ctx.conn, code, col, limit=1)
     except data_query.QueryError:
-        notes.append(_note("no_period_data", "The period column could not be read."))
+        notes.append(_note("no_period_data", M.t(ctx.lang, "describe.period_unreadable")))
         return t, notes
     pb = res.get("period_bounds") or {}
     t.update(first=pb.get("first"), last=pb.get("last"), periods_with_data=pb.get("periods_with_data"),
              frequency=_frequency(pb.get("last")))
     mr = t["metadata_range"]
     if mr and (mr["first"], mr["last"]) != (t["first"], t["last"]):
-        notes.append(_note(
-            "metadata_period_range_differs",
-            f"Metadata lists {mr['first']}–{mr['last']} ({mr['options']} periods); the data has "
-            f"{t['first']}–{t['last']} ({t['periods_with_data']} periods with observations). "
-            "The data bounds are authoritative."))
+        notes.append(_note("metadata_period_range_differs", M.t(
+            ctx.lang, "describe.metadata_range", mfirst=mr["first"], mlast=mr["last"], options=mr["options"],
+            first=t["first"], last=t["last"], periods=t["periods_with_data"])))
     return t, notes
 
 
@@ -1237,13 +1168,12 @@ def describe_dataset(args, ctx):
     meta = dataset_meta.get_dataset_meta(code, lang, conn=conn)
     if meta is None:
         raise ToolFailure(
-            "error", "unknown_dataset", f"Unknown dataset {code!r}.",
+            "error", "unknown_dataset", M.t(lang, "describe.unknown", code=code),
             provenance=C.base_provenance(ctx),
-            recovery=[C.recovery("tool_call", "Find the dataset code by concept or topic.",
+            recovery=[C.recovery("tool_call", M.t(lang, "describe.find"),
                                  "discover_indicators",
                                  {"query": _ws(code.replace("_", " "))[:200], "lang": lang}),
-                      C.recovery("clarify", "Dataset codes look like POP105A_judete_grupe; copy "
-                                            "one from discover_indicators or describe_dataset.")])
+                      C.recovery("clarify", M.t(lang, "describe.code_shape"))])
     has_file = _has_file(code)
     actx = _actx(conn, code) if has_file else None
     actual = (actx or {}).get("actual_values") or {}
@@ -1258,14 +1188,13 @@ def describe_dataset(args, ctx):
     time, time_notes = _time_block(ctx, code, time_dim, has_file)
     notes += [{"id": n["code"], "kind": "interpretation", "text": n["message"]} for n in time_notes]
     dim_infos = [_dimension_info(code, d, actual.get(d["dim_column_name"]) if has_file else None,
-                                 struct.get(d["dim_column_name"])) for d in dims]
+                                 struct.get(d["dim_column_name"]), lang) for d in dims]
     splits, n_splits = _split_items(ctx, meta)
     parent = meta.get("parent")
     if not has_file:
         notes.append({"id": "no_data_file", "kind": "interpretation", "text":
-                      "This dataset has no data file of its own"
-                      + (": it is published as the sub-datasets in `splits`; describe or query "
-                         "one of them." if n_splits else ".")})
+                      M.t(lang, "describe.no_data_file")
+                      + (M.t(lang, "describe.no_data_file_splits") if n_splits else ".")})
 
     grain = grain_guard.file_status(code)
     domain = _domain(actx, lang)
@@ -1290,9 +1219,7 @@ def describe_dataset(args, ctx):
                    if parent else None),
         "splits": splits, "splits_total": n_splits, "grain": grain, "domain": domain,
         "notes": notes,
-        "examples_note": "Examples are a sample of actual values, not an exhaustive allowlist: "
-                         "use each dimension's `lookup` (find_dimension_values) to search or page "
-                         "all of them, and use the exact value in filters."}
+        "examples_note": M.t(lang, "describe.examples_note")}
 
     warnings = _generation_warnings(ctx)
     # recorded breaks inside the data the dataset holds (all of it when the period is unknown)
@@ -1301,13 +1228,11 @@ def describe_dataset(args, ctx):
     data["series_breaks"] = C.series_break_items(breaks)
     warnings += [C.warning("series_break", b["text"], b["id"]) for b in breaks]
     if grain["status"] in UNSAFE_GRAIN:
-        warnings.append(C.warning(f"grain_{grain['status']}", "The generation audit found rows with "
-                                  "the same key"
-                                  + (" and different values" if grain["status"] == "conflicting" else "")
-                                  + ": grouped totals of this dataset are refused.", code))
+        warnings.append(C.warning(f"grain_{grain['status']}", M.t(
+            lang, f"describe.grain_{'conflicting' if grain['status'] == 'conflicting' else 'duplicate_keys'}"), code))
     if domain["complete"] is False:
-        warnings.append(C.warning("domain_incomplete", "Restricted domain: " + domain["description"]
-                                  + ". Not an all-population answer.", code))
+        warnings.append(C.warning("domain_incomplete", M.t(lang, "discover.domain_incomplete",
+                                                           desc=domain["description"]), code))
 
     prov = {"sources": [C.source_entry(conn, code, lang)], "scope": _scope_provenance(domain, lang)}
 
@@ -1315,10 +1240,12 @@ def describe_dataset(args, ctx):
         return C.envelope("describe_dataset", ctx, message=message, data=data, provenance=prov,
                           warnings=warnings)
 
-    span = f"{time['first']}–{time['last']}" if time["first"] else "no period data"
-    message = f"{code}: {len(dim_infos)} dimension(s), {span}" \
-              + (f" ({time['frequency']})" if time["frequency"] else "") \
-              + (f", {n_splits} sub-dataset(s)" if n_splits else "") + "."
+    span = f"{time['first']}–{time['last']}" if time["first"] else M.t(lang, "describe.no_period_data")
+    message = M.t(lang, "describe.message", code=code, n=len(dim_infos), span=span) \
+        + (M.t(lang, "describe.message_frequency", frequency=M.tx(lang).get(f"discover.freq.{time['frequency']}",
+                                                                          time["frequency"]))
+           if time["frequency"] else "") \
+        + (M.t(lang, "describe.message_splits", n=n_splits) if n_splits else "") + "."
     env = build()
     while C.size(env) > FIT_BYTES and _shrink_describe(data):
         env = build()
@@ -1367,26 +1294,25 @@ def find_dimension_values(args, ctx):
     warnings = _generation_warnings(ctx)
     recovery = []
     if res["total"] == 0 and args.query:
-        hint = (f"No value of {column} contains {args.query!r} (accent- and case-insensitive "
-                "substring match). Try fewer letters, or list the values without a query.")
-        recovery = [C.recovery("tool_call", "List the values without a query.",
+        hint = M.t(lang, "values.no_match", col=column, query=args.query)
+        recovery = [C.recovery("tool_call", M.t(lang, "values.list_all"),
                                "find_dimension_values", {"dataset": code, "column": column})]
     elif res["total"] == 0:
-        hint = f"{column} has no values in the data."
+        hint = M.t(lang, "values.none", col=column)
     elif not items:
-        hint = f"offset {args.offset} is past the last of {res['total']} matching values."
+        hint = M.t(lang, "values.past_end", offset=args.offset, total=res["total"])
     if pb and pb.get("first") and args.query and res["total"] == 0:
-        hint += f" Periods with data: {pb['first']}–{pb['last']}."
+        hint += M.t(lang, "values.periods_with_data", first=pb["first"], last=pb["last"])
     data = {"dataset": code, "column": column, "query": args.query or None, "values": items,
             "offset": res["offset"], "limit": res["limit"], "next_offset": res["next_offset"],
             "total": res["total"], "values_truncated": res["truncated"], "period_bounds": pb,
             "order": "newest first" if pb is not None else "alphabetical (accent-insensitive)",
             "hint": hint}
     if items:
-        message = (f"{res['total']} matching value(s) of {column}; showing "
-                   f"{res['offset'] + 1}–{res['offset'] + len(items)}"
-                   + (f"; next_offset={res['next_offset']}" if res["next_offset"] is not None else "")
-                   + ". Use the exact `value` in filters.")
+        message = (M.t(lang, "values.message", total=res["total"], col=column, first=res["offset"] + 1,
+                       last=res["offset"] + len(items))
+                   + (M.t(lang, "values.next_offset", n=res["next_offset"]) if res["next_offset"] is not None else "")
+                   + M.t(lang, "values.use_exact"))
     else:
         message = hint
     prov = {"sources": [C.source_entry(conn, code, lang)]}
@@ -1396,14 +1322,13 @@ def find_dimension_values(args, ctx):
 
 def _unknown_column(ctx, code: str, column: str) -> ToolFailure:
     prov = C.base_provenance(ctx)
-    describe = C.recovery("tool_call", "Read the dataset's columns, values and sub-datasets.",
+    describe = C.recovery("tool_call", M.t(ctx.lang, "contract.read_dataset"),
                           "describe_dataset", {"dataset": code, "lang": ctx.lang})
     if column == "OBS_VALUE":
-        return ToolFailure("error", "unknown_column", "OBS_VALUE is the observation value, not a "
-                           "dimension: it has no selectable values.", provenance=prov,
+        return ToolFailure("error", "unknown_column", M.t(ctx.lang, "values.obs_value"), provenance=prov,
                            recovery=[describe])
     actx = _actx(ctx.conn, code)
     cols = [d["dim_column_name"] for d in (actx or {}).get("dimensions") or []][:20]
-    listing = f" Its dimension columns are: {', '.join(cols)}." if cols else ""
-    return ToolFailure("error", "unknown_column", f"{code} has no dimension column {column!r}."
+    listing = M.t(ctx.lang, "values.its_columns", cols=", ".join(cols)) if cols else ""
+    return ToolFailure("error", "unknown_column", M.t(ctx.lang, "values.unknown_column", code=code, col=column)
                        + listing, provenance=prov, recovery=[describe])

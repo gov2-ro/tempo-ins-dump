@@ -18,6 +18,7 @@ from collections import Counter
 
 from app.services import recipes
 from app.services.tools import contract as C
+from app.services.tools import messages as M
 
 log = logging.getLogger(__name__)
 
@@ -30,11 +31,6 @@ ROW_KEYS = ("rank", "geo_id", "label", "value", "stays", "population", "intensit
             "weight_total", "cells", "count_total", "base_total", "reconstructed")
 RECIPE_KEYS = ("id", "version", "kind", "name", "definition", "formula", "value_source", "unit",
                "status", "missing_policy", "display_decimals", "reconstruction_formula")
-
-# Warning texts are English in every tool (contract.shrink_rows does the same).
-PREVIEW_SHORTENED = ("The preview was shortened to fit the response budget (exclusion sample, "
-                     "aggregate cells or ranking rows); the exclusion counts and the canonical "
-                     "selection give the complete result.")
 
 _TX = {
     "en": {
@@ -397,7 +393,7 @@ def run_recipe(args, ctx):
         # the reconstruction could not be built for this year (e.g. a source starts later)
         warnings.append(C.warning("check_unavailable", tx["no_check"].format(year=year), args.recipe))
     if len(all_rows) > len(rows):
-        warnings.append(C.warning("preview_shortened", PREVIEW_SHORTENED))
+        warnings.append(C.warning("preview_shortened", M.t(ctx.lang, "recipe.preview_shortened")))
 
     recovery = []
     if not all_rows:
@@ -429,12 +425,12 @@ def run_recipe(args, ctx):
 
 # ------------------------------------------------------------------ budget
 
-def _shortened(env: dict) -> None:
+def _shortened(env: dict, lang: str) -> None:
     if not any(w.get("code") == "preview_shortened" for w in env["warnings"]):
-        env["warnings"].append(C.warning("preview_shortened", PREVIEW_SHORTENED))
+        env["warnings"].append(C.warning("preview_shortened", M.t(lang, "recipe.preview_shortened")))
 
 
-def shrink(env: dict) -> bool:
+def shrink(env: dict, lang: str = "ro") -> bool:
     """Fit the 32 KiB budget: cut the exclusion sample, then the published
     aggregate cells, then halve the ranking rows. Counts, flags, provenance and
     the canonical selection are never cut. False when nothing is left to cut."""
@@ -442,14 +438,14 @@ def shrink(env: dict) -> bool:
     if d.get("excluded"):
         d["excluded"] = []
         d["exclusions_truncated"] = True       # the counts still cover every exclusion
-        _shortened(env)
+        _shortened(env, lang)
         return True
     if d.get("aggregates"):
         d["aggregates"] = []
         d["aggregates_truncated"] = True
-        _shortened(env)
+        _shortened(env, lang)
         return True
     if not d.get("rows"):
         return False
-    _shortened(env)
-    return C.shrink_rows(env)
+    _shortened(env, lang)
+    return C.shrink_rows(env, lang=lang)
