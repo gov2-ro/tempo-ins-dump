@@ -45,25 +45,35 @@ _SCALE = {'milioane': 1e6, 'milion': 1e6, 'million': 1e6, 'mil': 1e6, 'mil.': 1e
           'mii': 1e3, 'thousand': 1e3}
 _APPROX_WORDS = re.compile(r'aproxim|approximat|neponderat|unweighted|estimat', re.I)
 
-_RO_HINTS = {'ce', 'cat', 'cate', 'cati', 'care', 'în', 'in', 'este', 'sunt', 'pe', 'din',
-             'populatia', 'populația', 'rata', 'județe', 'judete', 'anul', 'cum', 'unde'}
+# hint words, folded (no diacritics); 'in' belongs to both
+_RO_HINTS = {'ce', 'cat', 'cate', 'cati', 'care', 'in', 'este', 'sunt', 'pe', 'din', 'populatia',
+             'populatiei', 'rata', 'judete', 'judetul', 'judetului', 'anul', 'cum', 'unde', 'locuitori',
+             'orase', 'orasele', 'oras', 'cele', 'mai', 'si', 'au', 'fost', 'numarul', 'somajului',
+             'pentru', 'acum', 'acelasi', 'aceeasi'}
 _EN_HINTS = {'what', 'how', 'many', 'much', 'the', 'is', 'are', 'of', 'in', 'by', 'for',
-             'population', 'rate', 'which', 'where'}
+             'population', 'rate', 'which', 'where', 'people', 'live', 'number', 'cities', 'city',
+             'county', 'counties', 'year', 'total', 'average', 'highest', 'lowest', 'largest',
+             'do', 'does', 'was', 'were', 'and', 'list', 'show', 'every', 'all', 'value', 'values'}
 
 
 _LANG_LETTERS = 'ăâîșțşţ'
+_FOLD = str.maketrans('ăâîșțşţ', 'aaistst')
 
 
 def lang_signal(text: str) -> str | None:
-    """The language a question itself shows: 'ro' on a Romanian letter or more Romanian than
-    English hint words, 'en' on more English ones, None on a tie (no hint words at all included:
-    "PIB Cluj 2023" says nothing)."""
-    t = (text or '').lower()
-    if re.search(f'[{_LANG_LETTERS}]', t):
-        return 'ro'
-    toks = re.findall(f'[a-z{_LANG_LETTERS}]+', t)
-    ro = sum(w in _RO_HINTS for w in toks)
-    en = sum(w in _EN_HINTS for w in toks)
+    """The language a question itself shows, by votes: each hint word counts one, each word written
+    with a Romanian letter counts two for Romanian, except a capitalized name ("How many people live
+    in Iași?" is English: a place name says nothing about the question's language). None on a tie
+    (no hint words at all included: "PIB Cluj 2023" says nothing)."""
+    ro = en = 0
+    for w in re.findall(f'[A-Za-z{_LANG_LETTERS}{_LANG_LETTERS.upper()}]+', text or ''):
+        low = w.lower()
+        name = w[0].isupper() and not w.isupper()       # Iași, Câți; an all-caps word still counts
+        if not name and re.search(f'[{_LANG_LETTERS}]', low):
+            ro += 2
+        f = low.translate(_FOLD)
+        ro += f in _RO_HINTS
+        en += f in _EN_HINTS
     return 'ro' if ro > en else 'en' if en > ro else None
 
 

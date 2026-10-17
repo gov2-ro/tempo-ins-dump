@@ -149,3 +149,15 @@ to `v=7` makes them fetch the old one.
 ## Proposed activity-history entry
 
 See the task report; the orchestrator owns `docs/activity-history.md`.
+
+## Follow-up — 2026-10-18: place names no longer decide the language
+
+Owner: "How many people live in Iași?" is obviously English. `answer_check.lang_signal` now votes
+instead of letting any Romanian letter win: each hint word counts one, each word written with a
+Romanian letter counts two for Romanian, except a capitalized name (`Iași`, `Brașov`; an all-caps
+word still counts). Hint lists are folded and slightly larger (EN: people, live, number, county,
+list, every, values…; RO: locuitori, pentru, acum, orașe…). A name alone ("Iași 2023") is a tie,
+so the site decides. Every AQ-02 task prompt (72, RO and EN) now resolves to its own language
+without the site (`test_every_task_prompt_shows_its_own_language`); the pinned limitation test
+became a table of place-name cases. AQ-02 runner on the copy: 142/142, controls 30/2/0.
+Remaining limitation: a lower-case place name ("live in iași") still votes Romanian.

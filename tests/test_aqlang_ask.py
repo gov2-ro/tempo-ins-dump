@@ -3,7 +3,7 @@
 Owner decision 2026-10-17: tool prose stays Romanian by default; in addition the Ask page sends the
 site's language, and the server uses it only when the question has no language of its own.
 
-  question shows a language (diacritics, or more Romanian than English hint words, or the reverse) -> that
+  question shows a language (votes: hint words, and words with Romanian letters except capitalized names) -> that
   ambiguous question (a tie: "PIB Cluj 2023")                                                         -> the request's `lang`
   neither                                                                                             -> 'ro'
 
@@ -75,11 +75,24 @@ def test_guess_lang_answers_as_it_always_did_unless_a_default_is_passed():
     assert answer_check.lang_signal(AMBIGUOUS) is None and answer_check.lang_signal(None) is None
 
 
-def test_an_english_question_that_names_a_place_with_diacritics_reads_as_romanian():
-    """Known limitation, pinned so that a change is deliberate: the Romanian letters are checked first
-    (the hint lists are too crude to outvote them: 'are' is an English hint and the commonest Romanian
-    verb). The site language does not rescue it, because the question 'shows' a language."""
-    assert answer_check.resolve_lang("How many people live in Iași?", "en") == ("ro", "question")
+PLACE_NAMES = [
+    # (question, site, language, source) -- owner decision 2026-10-18: a place name with Romanian
+    # letters does not make an English question Romanian
+    ("How many people live in Iași?", "ro", "en", "question"),
+    ("How many people live in Iași?", None, "en", "question"),
+    ("What is the unemployment rate in Brașov and Timiș?", "ro", "en", "question"),
+    ("The same for Constanța.", "ro", "en", "question"),
+    ("Câți locuitori are Iași?", "en", "ro", "question"),         # 'are' is English, but câți + locuitori win
+    ("Câte înnoptări au fost în Brașov în 2025?", "en", "ro", "question"),
+    ("Populația Iașului", "en", "ro", "question"),                 # a hint word, not the name, decides
+    ("Iași 2023", "en", "en", "site"),                             # a name alone says nothing
+    ("Iași 2023", None, "ro", "default"),
+]
+
+
+@pytest.mark.parametrize("question, site, lang, source", PLACE_NAMES)
+def test_a_place_name_with_romanian_letters_does_not_decide_the_language(question, site, lang, source):
+    assert answer_check.resolve_lang(question, site) == (lang, source)
 
 
 # ====================================================================== the request field
@@ -284,8 +297,9 @@ def _runner():
 
 
 def test_the_runner_sends_each_variants_language_as_the_site_language(monkeypatch):
-    """T13 en ('List every value in BIGLONG.') and T16 ro ('Acum pentru 2020.') show no language of their
-    own: the (simulated) user's site decides them, as it would in a browser."""
+    """The runner sends each variant's language as the (simulated) user's site language, as a browser
+    would. Since 2026-10-18 both prompts below also show their own language (hint words), so the site
+    is only the fallback here."""
     R = _runner()
     from aq02_tasks import load_taskset
     tasks = {t["id"]: t for t in load_taskset()["tasks"]}
@@ -299,5 +313,20 @@ def test_the_runner_sends_each_variants_language_as_the_site_language(monkeypatc
     assert seen and all(site in ("ro", "en") for _, site in seen)
     by_prompt = {(p, s) for p, s in seen}
     assert ("List every value in BIGLONG.", "en") in by_prompt and ("Acum pentru 2020.", "ro") in by_prompt
-    assert answer_check.resolve_lang("List every value in BIGLONG.", "en") == ("en", "site")
-    assert answer_check.resolve_lang("Acum pentru 2020.", "ro") == ("ro", "site")
+    assert answer_check.resolve_lang("List every value in BIGLONG.", "ro") == ("en", "question")
+    assert answer_check.resolve_lang("Acum pentru 2020.", "en") == ("ro", "question")
+
+
+def test_every_task_prompt_shows_its_own_language():
+    """The AQ-02 task set as a paraphrase corpus: each RO/EN prompt resolves to its own language
+    without help from the site (place names such as Iași or Brașov included)."""
+    tasks = json.loads((Path(__file__).resolve().parents[1] / "data" / "eval" / "ask_tasks.json").read_text())
+    tasks = tasks["tasks"] if isinstance(tasks, dict) else tasks
+    seen, wrong = 0, []
+    for task in tasks:
+        for lang, prompt in (task.get("prompt") or {}).items():
+            text = prompt if isinstance(prompt, str) else " ".join(prompt)
+            seen += 1
+            if answer_check.resolve_lang(text, None)[0] != lang:
+                wrong.append((task["id"], lang, text))
+    assert seen >= 70 and wrong == []
