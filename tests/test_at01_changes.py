@@ -1083,7 +1083,12 @@ def test_real_counties_bundle_recomputes_offline(real, tmp_path):
          "intervals": json.dumps([iv("2012", "2021")]), "top_k": "3"}
     t = TestClient(app).get("/api/period-changes", params=p).json()
     i = t["data"]["intervals"][0]
-    assert t["status"] == "ok" and i["eligible_count"] == 42 and i["excluded_count"] == 0
+    # POP105A collapses SEX and RESIDENCE over partitions only the metadata vouches for (AGE is a verified
+    # level): the domain is unverified, so the status is partial/unverified_total. It was `ok` before the
+    # 2026-10-17 decision that compare_periods mirrors rank_entities; the numbers below did not change.
+    assert (t["status"], t["reason"]) == ("partial", "unverified_total")
+    assert any(w["code"] == "unverified_total" for w in t["warnings"])
+    assert i["eligible_count"] == 42 and i["excluded_count"] == 0
     top = i["rows"][0]
     assert (top["entity"], top["from_value"], top["to_value"], top["absolute"]) == (
         {"REF_AREA": "Prahova"}, 761699.0, 703580.0, -58119.0)

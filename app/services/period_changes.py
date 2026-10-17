@@ -17,6 +17,10 @@ Rules (docs/plans/ask-and-public-mcp/01-analytical-tools.md section 5):
   * absolute = to - from; percent = 100 * absolute / from only when from > 0
   * ranks are ordinal over EVERY eligible entity (ties: full key ascending);
     top_k only limits what is returned
+  * status mirrors `rank_entities`: `ok` only when the selection's `scope.domain_complete` is
+    true and nothing was excluded; `partial` with reason `incomplete_domain` (false) or
+    `unverified_total` (null, with an `unverified_total` warning), else `partial` for exclusions
+    alone. The values, ranks and counts do not depend on it.
   * entity_class "cities" (AQ-05A) classifies the FULL endpoint table with the shared
     GOS102A SIRUTA catalogue (`tools.ranking.classify_cities`) before eligibility, ranks
     and top_k; it is a catalogue class, not historical city status or constant boundaries
@@ -540,11 +544,18 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
         warnings.append(contract.warning("classification_reference", M.t(lang, "period.class_warning")))
 
     scope = prov["scope"]
+    complete = scope.get("domain_complete")
+    if complete is None:        # the same disclosure as rank_entities: the total is not verified
+        warnings.append(contract.warning("unverified_total", M.t(lang, "changes.unverified_total")))
+    # reason precedence is rank_entities': a domain reason wins over bare exclusions
     if not any(iv["eligible_count"] for iv in intervals):
         status, reason = "unavailable", "no_eligible_entities"
-    elif counts or scope.get("domain_complete") is False:
-        status = "partial"
-        reason = "incomplete_domain" if scope.get("domain_complete") is False else None
+    elif complete is False:
+        status, reason = "partial", "incomplete_domain"
+    elif complete is None:
+        status, reason = "partial", "unverified_total"
+    elif counts:
+        status, reason = "partial", None
     else:
         status, reason = "ok", None
 

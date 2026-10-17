@@ -69,6 +69,8 @@ def compare_periods(args, ctx):
         scope = r["provenance"].get("scope") or {}
         if scope.get("domain_complete") is False:
             message += M.t(lang, "changes.restricted", desc=scope.get("description"))
+        elif scope.get("domain_complete") is None:
+            message += M.t(lang, "changes.unverified")
         message += " " + M.t(lang, "changes.tail")
     if cities:
         message += " " + M.t(lang, "changes.class_tail")

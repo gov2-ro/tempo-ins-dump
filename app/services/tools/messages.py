@@ -524,6 +524,12 @@ TEXT = {
         "changes.pairs_excluded": " {excluded} entity-interval pair(s) were excluded and are "
                                   "listed.",
         "changes.restricted": " Restricted domain: {desc}.",
+        "changes.unverified": " Domain completeness is unverified, so these are not changes of an "
+                              "official complete total.",
+        "changes.unverified_total": "The completeness of the collapsed domain behind these "
+                                    "endpoint values is unverified; the changes are exact for the "
+                                    "stated selection, but do not claim they describe an official "
+                                    "complete total.",
         "changes.preview_shortened": "The preview was shortened to fit the response budget; the "
                                      "evidence bundle has the complete ranking and exclusion list.",
         "period.duplicate_keys": "More than one value for the same entity and year came back from "
@@ -1205,6 +1211,12 @@ TEXT = {
         "changes.pairs_excluded": " {excluded} perechi entitate–interval au fost excluse și sunt "
                                   "listate.",
         "changes.restricted": " Domeniu restrâns: {desc}.",
+        "changes.unverified": " Completitudinea domeniului nu este verificată, deci acestea nu sunt "
+                              "schimbări ale unui total oficial complet.",
+        "changes.unverified_total": "Completitudinea domeniului colapsat din spatele valorilor de "
+                                    "la capete nu este verificată; schimbările sunt exacte pentru "
+                                    "selecția indicată, dar nu pretinde că descriu un total "
+                                    "oficial complet.",
         "changes.preview_shortened": "Previzualizarea a fost scurtată ca să încapă în bugetul "
                                      "răspunsului; pachetul de dovezi are clasamentul complet și "
                                      "lista excluderilor.",
