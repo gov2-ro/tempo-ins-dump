@@ -21,6 +21,11 @@ statistic themselves:
     runs. A constraint of the question that discovery cannot apply (sex, age, a denominator,
     a county around a city ranking) is reported in `interpretation.unapplied_constraints`
     and a `constraint_not_applied` warning, and no data call that ignores it is suggested.
+  * once a definition (or a county) is chosen, the follow-up is the validated call of the card
+    that choice leads to: every choice carries `action` (query_data, rank_entities, run_recipe,
+    describe_dataset or a find_dimension_values lookup) when its coordinates are known, and keeps
+    the discover_indicators restatement (`next_call`) only for what still needs interpreting.
+    Known series breaks (dataset_notes) inside a candidate's selection are warnings on it.
   * describe_dataset reads `dataset_meta` (metadata, structure, measure) and the
     ACTUAL values/period bounds of the data file. Metadata option lists and
     metadata year ranges are reported next to the actual ones, never instead.
@@ -39,10 +44,12 @@ from collections import Counter
 from pydantic import ValidationError
 
 from app.services import concept_search as cs
-from app.services import data_query, dataset_meta, dataset_search, grain_guard, recipes, scope
+from app.services import data_query, dataset_meta, dataset_notes, dataset_search, grain_guard, recipes, scope
 from app.services.chart_selector import TOTAL_RE
 from app.services.tools import contract as C
 from app.services.tools import discovery_policy as dpol
+from app.services.tools import recipe as recipe_tool
+from app.services.tools import schemas as S
 from app.services.tools.contract import ToolFailure
 
 log = logging.getLogger(__name__)
@@ -55,6 +62,11 @@ FIT_BYTES = 30 * 1024       # keep clear of the 32 KiB envelope budget
 UNSAFE_GRAIN = ("conflicting", "duplicate_keys")
 PERIOD_NOTES = ("period_unavailable", "period_not_single")
 GEO_LEVELS = ("county", "region", "macroregion", "national")
+ACTION_TOOLS = ("query_data", "rank_entities", "run_recipe", "describe_dataset", "find_dimension_values")
+PLACE_NOTES = ("place_not_in_dataset", "place_level_unavailable", "level_differs")
+CARRIED_WARNINGS = ("series_break", "constraint_not_applied", "period_unavailable", "period_not_single")
+MAX_ACTION_NOTES = 4        # qualifications travelling with a choice's action
+ACTION_NOTE_CHARS = 240
 
 
 # ------------------------------------------------------------------ helpers
@@ -326,6 +338,31 @@ def _preflight(actx, group_by: list, filters: dict):
     return None if d.available else (d.reason, d.blocking_dimension)
 
 
+def _candidate_breaks(ctx, code: str, next_call: dict | None, facts) -> list:
+    """Recorded series breaks inside the selection the candidate's data call makes (its pinned
+    periods, else all the data it reaches). A lookup or describe call selects nothing yet."""
+    if (next_call or {}).get("tool") != "query_data":
+        return []
+    flt = next_call["arguments"].get("filters") or {}
+    cov = (facts or {}).get("coverage") or {}
+    span = (cov["first"], cov["last"]) if cov.get("first") and cov.get("last") else None
+    return dataset_notes.series_breaks(code, ctx.lang, periods=flt.get("TIME_PERIOD"), span=span,
+                                       areas=flt.get("REF_AREA"))
+
+
+def _attach_breaks(ctx, cards: list):
+    """Series breaks of each dataset candidate's FINAL data call (after the ranking and
+    unapplied-constraint rewrites): a note and a machine-readable list on the candidate."""
+    for card in cards:
+        for cand in card["candidates"]:
+            if cand.get("kind") != "dataset":
+                continue
+            breaks = _candidate_breaks(ctx, cand["dataset"], cand.get("next_call"),
+                                       cs.dataset_facts(ctx.conn, cand["dataset"], ctx.lang))
+            cand["series_breaks"] = C.series_break_items(breaks)
+            cand["notes"] += [{**_note("series_break", b["text"]), "subject": b["id"]} for b in breaks]
+
+
 def _candidate(ctx, code: str, level, filters: dict, parsed: dict, relation: str,
                extra_notes=(), period_call: dict | None = None) -> dict:
     """One candidate dataset with its grain quality, domain and the next call.
@@ -374,7 +411,7 @@ def _candidate(ctx, code: str, level, filters: dict, parsed: dict, relation: str
             "quality": quality, "domain": domain, "title": facts["title"] if facts else None,
             "coverage": dict(facts["coverage"]) if facts and facts.get("coverage") else None,
             "url": C.dataset_page(code, lang, filters or None), "queryable": queryable,
-            "preferred": False, "notes": problems + notes, "next_call": next_call}
+            "preferred": False, "notes": problems + notes, "series_breaks": [], "next_call": next_call}
 
 
 def _complete_siblings(ctx, code: str, domain: dict) -> list:
@@ -450,6 +487,23 @@ def _dataset_candidates(ctx, raw: dict, parsed: dict) -> list:
     return cands
 
 
+def _source_areas(conn, area_ds: str | None, places: list) -> tuple:
+    """(areas for run_recipe, named places the source lacks, the source's labels or None). A place
+    is passed as the exact REF_AREA label the recipe will match it to (recipes.geo_id: accents,
+    case, spacing); a place with no such label keeps its own name and is reported, never replaced
+    by a similar one. Without a complete label list (None) nothing is claimed."""
+    names = [p["name"] for p in places]
+    try:
+        res = data_query.dimension_values(conn, area_ds, "REF_AREA", limit=500) if area_ds else None
+    except data_query.QueryError:
+        res = None
+    if res is None or res["total"] > len(res["values"]):
+        return names, [], None
+    labels = {recipes.geo_id(v): v for v in res["values"]}
+    return ([labels.get(recipes.geo_id(n), n) for n in names],
+            [n for n in names if recipes.geo_id(n) not in labels], res["values"])
+
+
 def _recipe_candidate(ctx, rid: str, parsed: dict, coverage: dict | None, relation: str,
                       notes=(), title: str | None = None) -> dict | None:
     r = recipes.load_recipes().get(rid)
@@ -475,16 +529,31 @@ def _recipe_candidate(ctx, rid: str, parsed: dict, coverage: dict | None, relati
                                "was not applied and nothing was substituted (a recipe without a "
                                "year would answer for the latest common year)."))
             period_call = _lookup_periods(sources[0], ctx.lang)
+    area_ds, area_call = recipe_tool.area_dataset(rid), None
+    areas, absent, labels = _source_areas(ctx.conn, area_ds, parsed.get("places") or [])
     if parsed.get("places"):
-        args["areas"] = [p["name"] for p in parsed["places"]]
+        args["areas"] = areas
+        if absent:
+            notes.append(_note(
+                "place_not_in_dataset", f"{', '.join(absent)} is not among the REF_AREA labels of "
+                f"{area_ds}, which the recipe matches exactly (accents, case and spacing aside). "
+                "Look the label up (area_lookup) before running it; nothing similar was substituted."))
+            if len(absent) == len(args["areas"]):       # nothing left to run
+                area_call = _call("find_dimension_values", dataset=area_ds, column="REF_AREA",
+                                  query=recipe_tool.lookup_query(absent[0], labels), limit=20)
     unsafe = quality in UNSAFE_GRAIN
     if unsafe:
         notes.append(_note(f"grain_{quality}", "A source of this recipe has grain problems in "
                                                "the generation audit; run_recipe may refuse or "
                                                "exclude entities."))
-    next_call = period_call or _call("run_recipe", **args)
+    next_call = area_call or period_call or _call("run_recipe", **args)
+    lookup = None
+    if labels is not None:      # the source's labels could be listed, so this lookup will run
+        named = (absent or [p["name"] for p in parsed.get("places") or []])[:1]
+        lookup = _call("find_dimension_values", dataset=area_ds, column="REF_AREA", limit=20,
+                       **({"query": recipe_tool.lookup_query(named[0], labels)} if named else {}))
     return {"dataset": None, "recipe": rid, "kind": "recipe", "relation": relation, "level": r.get("geo_level", "county"),
-            "quality": quality, "sources": sources,
+            "quality": quality, "sources": sources, "area_lookup": lookup, "series_breaks": [],
             "domain": {"complete": None, "restrictions": [], "missing": [], "checked": [],
                        "description": "A recipe's eligibility and exclusions are in its run_recipe "
                                       "result."},
@@ -509,11 +578,16 @@ def _choose(cands: list, wanted_level) -> dict | None:
 
 # ------------------------------------------------------------------ discover: cards
 
+def _concept_recipe(cdef: dict) -> str | None:
+    """The recipe a concept's card routes to: its own, else its reviewed total route."""
+    return cdef.get("recipe") or cdef.get("total_recipe")
+
+
 def _alternative(ctx, alt: dict, by_id: dict, base_query: str) -> dict:
     cdef = by_id.get(alt["id"], {})
     q = _specific_query(alt["id"], by_id, base_query, ctx.lang)
     out = {"id": alt["id"], "name": alt["name"], "difference": alt.get("note"),
-           "recipe": cdef.get("recipe"),
+           "recipe": _concept_recipe(cdef),
            "dataset": None if cdef.get("recipe") else alt.get("code"),
            "title": alt.get("title"), "coverage": alt.get("coverage"),
            "next_call": _call("discover_indicators", query=q, lang=ctx.lang) if q else None}
@@ -577,6 +651,86 @@ def _concept_card(ctx, raw: dict, by_id: dict, parsed: dict, query: str) -> dict
     return card
 
 
+def _trim(text, n: int = ACTION_NOTE_CHARS) -> str:
+    t = _ws(text)
+    return t if len(t) <= n else t[:n].rsplit(" ", 1)[0] + " …"
+
+
+def _resolve_choice(ctx, query: str | None, cid: str, recipe=None, dataset=None) -> dict:
+    out = _read_choice(ctx, query, cid, recipe, dataset)
+    log.debug("choice resolved choice=%s status=%s action=%s recipe=%s notes=%s", cid, out["action_status"],
+              (out["action"] or {}).get("tool"), out["recipe"], [n["code"] for n in out["action_notes"]])
+    return out
+
+
+def _read_choice(ctx, query: str | None, cid: str, recipe=None, dataset=None) -> dict:
+    """What picking a choice leads to, as the call to make once the user has picked it.
+
+    `query` restates the question with the choice (a plain discover call). The card that call
+    returns for `cid` is read back, so the advertised `action` IS that card's own next call
+    (query_data, rank_entities, run_recipe, describe_dataset or a period/area lookup) and
+    `recipe` is that card's recipe, never a second opinion. `action_status`:
+      ready               `action` is validated and complete; run it after the user picks
+      needs_clarification more interpretation is needed (another ambiguity, or the named place
+                          cannot be applied at the picked definition's levels): only the
+                          restatement (`next_call`) is offered, nothing is chosen here
+      unavailable         the picked definition cannot answer; `action_notes` says why
+    `action_notes` carries the qualifications of the action (a period that is not there, a
+    series break, a constraint that was not applied). Choices do not resolve recursively."""
+    out = {"recipe": recipe, "dataset": dataset, "action": None, "action_status": "needs_clarification",
+           "action_notes": []}
+    if ctx.notes.get("resolving"):
+        return out
+    if not query:
+        out["action_notes"] = [_note("no_specific_wording", "No restated question selects this choice on "
+                                     "its own; ask the user to say it in their own words.")]
+        return out
+    ctx.notes["resolving"] = True
+    try:
+        sub = discover_indicators(S.DiscoverIndicatorsArgs(query=query, lang=ctx.lang, limit=1), ctx)
+    except ToolFailure as f:
+        out.update(action_status="unavailable", action_notes=[_note(f.reason, _trim(f.message))])
+        return out
+    except Exception:
+        log.exception("choice resolution failed choice=%s", cid)
+        out["action_notes"] = [_note("resolution_failed", "This choice could not be resolved to a call; "
+                                                          "use its restatement (next_call).")]
+        return out
+    finally:
+        ctx.notes.pop("resolving", None)
+    if sub["status"] != "ok":
+        out["action_notes"] = [_note(sub["reason"] or sub["status"], _trim(sub["message"]))]
+        return out
+    card = next((c for c in sub["data"]["concepts"] if c["id"] == cid), None)
+    if card is None:
+        out.update(action_status="unavailable", action_notes=[_note(
+            "no_match", "The restated question no longer reaches this definition.")])
+        return out
+    pref = next((c for c in card["candidates"] if c.get("preferred")), None)
+    out["recipe"] = card["recipe"]
+    carried = [{**_note(w["code"], _trim(w["message"])), **({"subject": w["subject"]} if w.get("subject") else {})}
+               for w in sub["warnings"] if w["code"] in CARRIED_WARNINGS]
+    place = [_note(n["code"], _trim(n["message"])) for n in card["notes"] + (pref["notes"] if pref else [])
+             if n["code"] in PLACE_NOTES]
+    # a card with no headline (an unapplied constraint, nothing queryable) still points its first
+    # candidate at describe_dataset, where explicit values can be read and filtered
+    nc = card["next_call"] or next((c["next_call"] for c in card["candidates"]
+                                    if (c.get("next_call") or {}).get("tool") == "describe_dataset"), None)
+    if place:           # the named place cannot be applied here: a call would silently widen it
+        out["action_notes"] = (place + carried)[:MAX_ACTION_NOTES]
+        return out
+    if not nc or nc["tool"] not in ACTION_TOOLS:
+        out.update(action_status="unavailable", action_notes=(carried + [_note(
+            "no_call", "No validated data call exists for this definition and question.")])[:MAX_ACTION_NOTES])
+        return out
+    args = nc["arguments"]
+    # the dataset a lookup reads (a recipe's source, a period list) is not the choice's dataset
+    out.update(action=nc, action_status="ready", action_notes=carried[:MAX_ACTION_NOTES],
+               dataset=args["dataset"] if nc["tool"] in ("query_data", "rank_entities", "describe_dataset") else dataset,
+               recipe=args["recipe"] if nc["tool"] == "run_recipe" else out["recipe"])
+    return out
+
+
 def _definition_choices(ctx, cards: list, by_id: dict) -> list:
     top = next(c for c in cards if c["generic_match"] and c["alternatives"])
     query = top["base_query"]
@@ -590,8 +744,9 @@ def _definition_choices(ctx, cards: list, by_id: dict) -> list:
     choices = []
     for it in items[:MAX_CHOICES]:
         q = _specific_query(it["id"], by_id, query, ctx.lang)
-        it["recipe"] = by_id.get(it["id"], {}).get("recipe")
+        it["recipe"] = _concept_recipe(by_id.get(it["id"], {}))
         it["next_call"] = _call("discover_indicators", query=q, lang=ctx.lang) if q else None
+        it.update(_resolve_choice(ctx, q, it["id"], it["recipe"], it["dataset"]))
         choices.append(it)
     return choices
 
@@ -613,6 +768,9 @@ def _place_choices(ctx, cards: list, parsed: dict) -> list:
                 "description": "One row per county; pick the place afterwards.",
                 "next_call": _call("discover_indicators", query=all_q, lang=ctx.lang)
                 if all_q else None}]
+    pref = next((c for c in card["candidates"] if c.get("preferred")), None)
+    for ch, q in zip(choices, (county_q, all_q)):
+        ch.update(_resolve_choice(ctx, q, card["id"], card["recipe"], pref.get("dataset") if pref else None))
     return choices
 
 
@@ -634,6 +792,11 @@ def _family_item(ctx, it: dict) -> dict:
 
 def _shrink_discover(data: dict) -> bool:
     """Cut optional detail in our own fresh objects; False when nothing is left."""
+    notes = [n for ch in data["choices"] for n in ch.get("action_notes") or () if len(n["message"]) > 90]
+    if notes:           # a choice keeps its codes; only the prose of its qualifications is cut
+        for n in notes:
+            n["message"] = n["message"][:80].rsplit(" ", 1)[0] + " …"
+        return True
     fams = data["families"]
     if any(len(f["members"]) > 3 for f in fams):
         for f in fams:
@@ -780,6 +943,7 @@ def discover_indicators(args, ctx):
             pref = next((c for c in card["candidates"] if c.get("preferred")), None)
             card["next_call"] = pref.get("next_call") if pref else None
 
+    _attach_breaks(ctx, cards)
     ambiguities, warnings = [], _generation_warnings(ctx)
     # only a default that reached the answer is disclosed: a configured mapping whose source
     # produced no card must not warn about a definition nobody was shown
@@ -834,6 +998,15 @@ def discover_indicators(args, ctx):
                 cand["preferred"] = False
                 cand["next_call"] = None
 
+    if status == "ok":          # a recorded break inside what the headline call selects
+        have = {(w["code"], w.get("subject")) for w in warnings}
+        for card in cards:
+            pref = next((c for c in card["candidates"] if c.get("preferred")), None)
+            for n in (pref or {}).get("notes", ()):
+                if n["code"] == "series_break" and ("series_break", n["subject"]) not in have:
+                    have.add(("series_break", n["subject"]))
+                    warnings.append(C.warning("series_break", n["message"], n["subject"]))
+
     fam = res["families"]
     cap = max(0, args.limit - len(cards))
     families = [_family_item(ctx, it) for it in fam["items"][:cap]]
@@ -858,8 +1031,9 @@ def discover_indicators(args, ctx):
         if reason == "ambiguous_definition":
             names = [ch["label"] for ch in choices]
             message = (f"The wording is ambiguous between {len(names)} official definitions: "
-                       + "; ".join(names) + ". No figure or dataset was chosen: pick one choice "
-                       "(its next_call restates the question with that definition).")
+                       + "; ".join(names) + ". No figure or dataset was chosen: ask the user to pick "
+                       "one. Only after they have picked, run that choice's action (status ready); "
+                       "its next_call restates the question with that definition.")
         else:
             message = (f"{places[0]['name'] if places else 'The place'} reads as a city, but this "
                        "indicator is published by county. Choose the county series or all "
@@ -1121,6 +1295,11 @@ def describe_dataset(args, ctx):
                          "all of them, and use the exact value in filters."}
 
     warnings = _generation_warnings(ctx)
+    # recorded breaks inside the data the dataset holds (all of it when the period is unknown)
+    breaks = dataset_notes.series_breaks(code, lang, span=(time["first"], time["last"])
+                                         if time["first"] and time["last"] else None)
+    data["series_breaks"] = C.series_break_items(breaks)
+    warnings += [C.warning("series_break", b["text"], b["id"]) for b in breaks]
     if grain["status"] in UNSAFE_GRAIN:
         warnings.append(C.warning(f"grain_{grain['status']}", "The generation audit found rows with "
                                   "the same key"

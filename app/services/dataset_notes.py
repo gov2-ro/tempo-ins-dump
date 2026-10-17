@@ -17,7 +17,9 @@ evidence, and ins {raise, question} for points to take up with INS.
 from __future__ import annotations
 
 import json
+import re
 import threading
+import unicodedata
 from pathlib import Path
 
 NOTES_PATH = Path(__file__).resolve().parent.parent / "data" / "dataset_notes.json"
@@ -57,6 +59,51 @@ def for_code(code: str, lang: str = "ro", *, public_only: bool = True,
         text = n["text"].get(lang) or n["text"]["ro"]
         out.append({"id": n["id"], "kind": n["kind"], "text": text,
                     **({"data": n["data"]} if n.get("data") else {})})
+    return out
+
+
+_YEAR = re.compile(r"\d{4}")
+
+
+def _years(periods) -> list[int]:
+    return [int(m.group()) for p in periods or () if (m := _YEAR.search(str(p)))]
+
+
+def _plain(label) -> str:
+    s = unicodedata.normalize("NFKD", str(label or ""))
+    return re.sub(r"[^a-z0-9]+", " ", "".join(c for c in s if not unicodedata.combining(c)).lower()).strip()
+
+
+def series_breaks(code: str, lang: str = "ro", *, periods=None, span=None, areas=None,
+                  notes: list[dict] | None = None) -> list[dict]:
+    """The KNOWN series breaks of one dataset that lie inside a selection.
+
+    A curated `series_break` note names the boundary in `data.between` (last year of the old
+    basis, first year of the new). It affects a selection that has data on both sides: the
+    pinned `periods` (any period text with a year), else the `span` (first, last) of the data
+    the selection can reach. With neither, the selection is unknown and the break cannot be
+    ruled out, so it is returned. A note that names `data.areas` only affects a selection of
+    those areas (`areas` = the selected area values; None = every area).
+
+    Only recorded breaks are reported. A dataset with no note has an UNKNOWN boundary
+    continuity: an empty result is "none recorded", never a certificate that the series is
+    stable. Each item is {id, dataset, between, text, + the note's other data keys}."""
+    wanted = _years(periods) or _years(span)
+    chosen = {_plain(a) for a in areas or ()}
+    out = []
+    for n in notes if notes is not None else load():
+        if n.get("kind") != "series_break" or not n.get("public") or not _applies(n, code):
+            continue
+        data = n.get("data") or {}
+        edges = _years(data.get("between"))
+        if wanted and len(edges) == 2 and not (min(wanted) <= edges[0] and max(wanted) >= edges[1]):
+            continue
+        named = {_plain(a) for a in data.get("areas") or ()}
+        if named and chosen and not named & chosen:
+            continue
+        text = n["text"].get(lang) or n["text"]["ro"]
+        out.append({"id": n["id"], "dataset": code, "between": list(data["between"]) if data.get("between") else None,
+                    "text": text, **{k: v for k, v in data.items() if k != "between"}})
     return out
 
 
