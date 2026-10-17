@@ -352,6 +352,19 @@ TEXT = {
                                    "series; state the definition explicitly.",
         "discover.assumed": "Definition assumed: {label}. State it explicitly; alternatives "
                             "remain available.",
+        # ---- discovery: one county narrows a city ranking; a level picks a definition
+        "discover.place_filter": "Cities in {county} only: every eligible city of that county is "
+                                 "ranked before the top K is cut, and the eligible and "
+                                 "outside-class counts are for that county alone.",
+        "discover.assumed_level": "Definition assumed: {label}, taking the question at the "
+                                  "{level} level. {missing}State the definition explicitly to use "
+                                  "another; alternatives remain available.",
+        "discover.level_missing": "{name} has no {level}-level series in the reviewed catalogue "
+                                  "(it covers: {covers}). ",
+        "discover.level_county": "county",
+        "discover.level_region": "region",
+        "discover.level_macroregion": "macroregion",
+        "discover.level_national": "national",
         "discover.generic_word": "'{matched}' is a generic word: it can mean {names}.",
         "discover.generic_single": "'{matched}' is a generic word; only one reviewed definition "
                                    "exists for it.",
@@ -1023,6 +1036,20 @@ TEXT = {
                                    "revizuită; precizează explicit definiția.",
         "discover.assumed": "Definiție presupusă: {label}. Precizeaz-o explicit; alternativele "
                             "rămân disponibile.",
+        # ---- discovery: one county narrows a city ranking; a level picks a definition
+        "discover.place_filter": "Doar orașele din {county}: toate orașele eligibile din acel "
+                                 "județ sunt clasate înainte de tăierea top K, iar numerele de "
+                                 "entități eligibile și din afara clasei sunt doar pentru acel "
+                                 "județ.",
+        "discover.assumed_level": "Definiție presupusă: {label}, luând întrebarea la nivel de "
+                                  "{level}. {missing}Precizează explicit definiția ca s-o "
+                                  "schimbi; alternativele rămân disponibile.",
+        "discover.level_missing": "{name} nu are serie la nivel de {level} în catalogul revizuit "
+                                  "(acoperă: {covers}). ",
+        "discover.level_county": "județ",
+        "discover.level_region": "regiune",
+        "discover.level_macroregion": "macroregiune",
+        "discover.level_national": "țară",
         "discover.generic_word": "„{matched}” este un cuvânt generic: poate însemna {names}.",
         "discover.generic_single": "„{matched}” este un cuvânt generic; există o singură "
                                    "definiție revizuită pentru el.",

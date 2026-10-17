@@ -157,6 +157,8 @@ def oracle(corpus):
     popc = lambda county, y: c("POPC", REF_AREA=county, TIME_PERIOD=y)                                            # noqa: E731
     return {
         ("T01", "cluj_2021"): popc("Cluj", "2021"), ("T02", "cluj_2021"): popc("Cluj", "2021"),
+        ("T02B", "cluj_2020"): c("UNEMR", REF_AREA="Cluj", TIME_PERIOD="2020"),
+        ("T02B", "cluj_2021"): c("UNEMR", REF_AREA="Cluj", TIME_PERIOD="2021"),
         ("T04", "cluj_2024_09"): c("MONTHX", REF_AREA="Cluj", TIME_PERIOD="2024-09"),
         ("T06", "alfa_ratio"): ratio("Alfa", "2024"),
         ("T06", "alfa_stays"): c("STAYS1", REF_AREA="Alfa", TIME_PERIOD="2024"),
@@ -184,6 +186,7 @@ def oracle(corpus):
         ("X03", "rank_30"): top["2025"][29],
         ("X04B", "rank_1"): top["2025"][0], ("X04B", "rank_2"): top["2025"][1], ("X04B", "rank_3"): top["2025"][2],
         ("X06", "ilo_2020"): c("UNEMI", TIME_PERIOD="2020"), ("X06", "ilo_2021"): c("UNEMI", TIME_PERIOD="2021"),
+        ("X06B", "ilo_2020"): c("UNEMI", TIME_PERIOD="2020"), ("X06B", "ilo_2021"): c("UNEMI", TIME_PERIOD="2021"),
         ("X07", "births_a_2023"): c("BIRTHA", TIME_PERIOD="2023"), ("X07", "births_b_2023"): c("BIRTHB", TIME_PERIOD="2023"),
         ("X08", "d_percent"): pct("D", "2010", "2020"), ("X08", "a_percent"): pct("A", "2010", "2020"), ("X08", "b_percent"): pct("B", "2010", "2020"),
         ("X09", "rank_1_2025"): top["2025"][0], ("X09", "rank_2_2025"): top["2025"][1], ("X09", "rank_3_2025"): top["2025"][2],

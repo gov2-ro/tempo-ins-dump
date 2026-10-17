@@ -670,13 +670,21 @@ PINNED = "9b3e065d"
 
 
 @pytest.mark.corpus
-def test_corpus_choices_agree_with_their_cards_and_the_census_break_is_flagged(real):
+def test_corpus_choices_agree_with_their_cards_and_the_census_break_is_flagged(real, monkeypatch, tmp_path):
     out = disc("salariu mediu Cluj 2023")
     net = choice(out, "net_earnings")
     assert net["recipe"] == "net_earnings_county" and net["action"] == {"tool": "run_recipe", "arguments": {
         "recipe": "net_earnings_county", "lang": "ro", "year": "2023", "areas": ["Cluj"]}}
     assert choice(out, "gross_earnings")["recipe"] is None
     assert card(run(net["next_call"]), "net_earnings")["next_call"] == net["action"]
+    # 2026-10-17: "somaj Cluj 2019" no longer clarifies (a named county defaults to the registered rate), so the
+    # choices of an unemployment clarification with a county are read under the rollback configuration
+    # (no level_defaults), which is the AQ-04A behaviour these assertions were written for
+    from app.services.tools import discovery_policy as dpol
+    raw = json.loads(dpol.POLICY_PATH.read_text(encoding="utf-8"))
+    raw["level_defaults"] = []
+    (tmp_path / "no-level-defaults.json").write_text(json.dumps(raw), encoding="utf-8")
+    monkeypatch.setattr(dpol, "POLICY_PATH", tmp_path / "no-level-defaults.json")
     ilo = choice(disc("somaj Cluj 2019"), "ilo_unemployment_rate")
     assert ilo["action"] is None and ilo["action_notes"][0]["code"] == "place_level_unavailable"
     reg = choice(disc("somaj Cluj 2019"), "registered_unemployment_rate")

@@ -272,6 +272,10 @@ def test_discovery_has_the_same_structure_in_both_languages_and_localized_prose(
     "numarul de locuitori in 2023", "somaj", "Cate innoptari revin la un locuitor in Cluj in 2023",
     "top 10 cities by population decline between 2015 and 2020", "orasele care au pierdut populatie",
     "resident population of the cities", "top 0 cities by population", "density of cities",
+    # 2026-10-17: a county narrows a city ranking, unemployment defaults by level
+    "top 3 cities in Cluj by population", "top 3 cities in Cluj and Iasi by population",
+    "top 3 cities in Bucharest by population", "top 3 cities in the Nord-Vest region by population",
+    "unemployment rate in Cluj", "unemployment rate in Romania", "unemployment rate by region",
 ])
 def test_the_reviewed_defaults_and_refusals_read_the_same_in_both_languages(e04a, question):
     ro, en = both("discover_indicators", query=question)
