@@ -33,6 +33,7 @@ from pathlib import Path
 
 from app.services import concept_search as cs
 from app.services.tools import contract as C
+from app.services.tools import messages as M
 
 log = logging.getLogger(__name__)
 
@@ -292,9 +293,7 @@ _HISTORICAL = re.compile(
     r"\bat\s+the\s+time\b|\bla\s+acea\s+data\b")
 
 
-CITY_CHANGE_NOTE = ("A city change ranking covers the municipalities and towns in the referenced catalogue "
-                    "(INS GOS102A, SIRUTA keys), not communes. Membership does not prove historical city "
-                    "status or unchanged boundaries.")
+CITY_CHANGE_NOTE = M.t("en", "policy.city_change_note")        # the English wording; discovery warns in `lang`
 
 
 def asks_city_change(intent: dict, query: str) -> bool:
@@ -305,31 +304,21 @@ def asks_city_change(intent: dict, query: str) -> bool:
     return intent["operation"] == "change" or bool(_DECLINE.search(t) or _GROWTH.search(t))
 
 
-def city_change(query: str, intent: dict) -> dict:
+def city_change(query: str, intent: dict, lang: str = "ro") -> dict:
     """The one supported city change meaning, parsed from the folded question: two exact years,
     a stated direction (decline: most negative first; growth: largest first) and absolute change,
     or percent change when the question says so. Raises the refusal otherwise."""
     t = cs.fold(query)
     if _HISTORICAL.search(t):
-        _refuse("unavailable", "unsupported_operation",
-                "City change rankings use the current catalogue of municipalities and towns "
-                "(INS GOS102A): a question that needs historical city status or constant "
-                "boundaries cannot be answered, because no reviewed source records them.")
+        _refuse("unavailable", "unsupported_operation", M.t(lang, "policy.city_change_historical"))
     years = sorted(set(_YEAR.findall(t)))
     if len(years) != 2:
-        _refuse("unavailable", "unsupported_operation",
-                "City change rankings need exactly two exact years (for example between 2015 and "
-                "2020); no latest, nearby or default year is assumed.")
+        _refuse("unavailable", "unsupported_operation", M.t(lang, "policy.city_change_years"))
     down, up = bool(_DECLINE.search(t)), bool(_GROWTH.search(t))
     if down == up:
-        _refuse("unavailable", "unsupported_operation",
-                "City change rankings need a stated direction: growth or decline. Absolute change "
-                "or both directions in one question are not ranked.")
+        _refuse("unavailable", "unsupported_operation", M.t(lang, "policy.city_change_direction"))
     if intent["order"] == "asc" or _LEAST.search(t):    # "smallest decline" is not "decline"
-        _refuse("unavailable", "unsupported_operation",
-                "City change rankings follow the stated direction (growth: largest first; decline: "
-                "most negative first); 'bottom', 'smallest' or 'lowest' wording is ambiguous for "
-                "changes and is not interpreted.")
+        _refuse("unavailable", "unsupported_operation", M.t(lang, "policy.city_change_least"))
     return {"intervals": [{"from": years[0], "to": years[1]}],
             "metric": "percent" if _PERCENT.search(t) else "absolute", "order": "asc" if down else "desc"}
 
@@ -364,39 +353,26 @@ def plan(intent: dict, query: str, by_id: dict, lang: str, policy: Policy | None
     out = Plan(query=query, unapplied=list(intent["constraints"]))
     change = asks_city_change(intent, query)
     if intent["cities"] and ("change" if change else intent["operation"] or "rank") not in cities["operations"]:
-        _refuse("unavailable", "unsupported_operation",
-                "City-only change rankings are not yet supported. Specify a county change "
-                "comparison or a city population ranking for one year.")
+        _refuse("unavailable", "unsupported_operation", M.t(lang, "policy.city_change_unsupported"))
     if intent["unsupported_measure"]:
-        _refuse("unavailable", "unsupported_operation",
-                "This question needs a different denominator, density or correlation operation. "
-                "No count or built-up-area ratio was substituted. Ask separately for the "
-                "population ranking or the reviewed overnight-stays-per-resident recipe.")
+        _refuse("unavailable", "unsupported_operation", M.t(lang, "policy.unsupported_measure"))
     named = named_definitions(query, lang, pol)
     if intent["cities"]:
         if not intent["population"]:
-            _refuse("unavailable", "level_unavailable",
-                    "No reviewed city-level series answers this question: the only one is the annual "
-                    "population by legal domicile, as a ranking. County data was not substituted.")
+            _refuse("unavailable", "level_unavailable", M.t(lang, "policy.city_not_population"))
         if named - {cities["concept"]}:
-            _refuse("unavailable", "level_unavailable",
-                    "No reviewed annual resident-population city ranking is available here. "
-                    "The locality series counts legal domicile; explicitly ask for domicile "
-                    "population to use it. County data was not substituted.")
+            _refuse("unavailable", "level_unavailable", M.t(lang, "policy.city_resident"))
         if cities["concept"] not in by_id:
-            _refuse("unavailable", "level_unavailable",
-                    "No reviewed city population series is configured here. "
-                    "County data was not substituted.")
+            _refuse("unavailable", "level_unavailable", M.t(lang, "policy.city_not_configured"))
         out.locality = {**by_id[cities["concept"]], "variants": dict(cities["variants"])}
         out.locality_alias = cities["alias"]
         out.rank = {"entity_columns": list(cities["entity_columns"]), "entity_class": cities["entity_class"]}
         if change:
-            out.change = city_change(query, intent)
+            out.change = city_change(query, intent, lang)
     route = next((r for r in pol.data["recipe_routes"] if intent.get(r["intent"])), None)
     if route:
         if not _usable(by_id, route):
-            _refuse("unavailable", "recipe_unavailable",
-                    "The per-resident recipe is unavailable; no raw count was substituted.")
+            _refuse("unavailable", "recipe_unavailable", M.t(lang, "policy.recipe_unavailable"))
         out.query, out.recipe = route["phrase"] + " " + query, route["concept"]
     elif intent["population"] and not named:
         # the city series is injected whatever the phrase does, so it is a disclosed default either way
@@ -409,7 +385,6 @@ def plan(intent: dict, query: str, by_id: dict, lang: str, policy: Policy | None
     log.debug("discovery plan assumed=%s locality=%s recipe=%s named=%s constraints=%s", out.assumed,
               bool(out.locality), out.recipe, sorted(named), [c["kind"] for c in out.unapplied])
     if (intent["operation"] == "rank" or intent["cities"]) and not 1 <= intent["top_k"] <= MAX_TOP_K:
-        _refuse("error", "invalid_input",
-                f"At most {MAX_TOP_K} ranked entities can be returned; ask for a smaller top K."
-                if intent["top_k"] > MAX_TOP_K else "A ranking needs a top K of at least 1.")
+        _refuse("error", "invalid_input", M.t(lang, "policy.top_k_max", max=MAX_TOP_K)
+                if intent["top_k"] > MAX_TOP_K else M.t(lang, "policy.top_k_min"))
     return out

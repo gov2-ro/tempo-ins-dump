@@ -793,11 +793,11 @@ def test_unknown_dataset_column_and_recipe_are_errors(links_env):
     assert out["status"] == "error" and out["reason"] == "unknown_dataset"
     assert out["recovery"][0]["tool"] == "discover_indicators" and out["data"] == {}
     # a split parent: row but no data file
-    out = call("get_evidence_links", selection={"kind": "dataset", "dataset": "PUBM"}, generation_id=GEN)
+    out = call("get_evidence_links", selection={"kind": "dataset", "dataset": "PUBM"}, generation_id=GEN, lang="en")
     assert out["reason"] == "unknown_dataset" and "sub-datasets" in out["message"]
     assert out["recovery"][0] == {
         "kind": "tool_call", "message": "Read the dataset's columns, values and sub-datasets.",
-        "tool": "describe_dataset", "arguments": {"dataset": "PUBM", "lang": "ro"}}
+        "tool": "describe_dataset", "arguments": {"dataset": "PUBM", "lang": "en"}}
     for sel in (dataset_selection(filters={"NOCOL": ["x"]}),
                 dataset_selection(group_by=["NOCOL"]),
                 {"kind": "period_changes", "dataset": "ADDX", "entity_columns": ["NOCOL"],

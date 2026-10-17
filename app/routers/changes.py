@@ -147,7 +147,8 @@ def period_changes_evidence(
         raise HTTPException(400, {"reason": "invalid_input", "message": str(e)})
     except ValidationError as e:
         from app.services.tools.registry import _validation_message
-        raise HTTPException(400, {"reason": "invalid_input", "message": _validation_message(e)})
+        raise HTTPException(400, {"reason": "invalid_input",
+                                  "message": _validation_message(e, lang if lang in ("ro", "en") else "ro")})
     err = generation.precondition(expected_generation)
     if err:
         raise HTTPException(409, err)

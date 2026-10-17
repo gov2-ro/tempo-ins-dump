@@ -48,6 +48,7 @@ from starlette.routing import Route
 from app import config
 from app.services import ask_guard, generation, recipes
 from app.services.tools import contract as C
+from app.services.tools import messages as M
 from app.services.tools import registry
 
 log = logging.getLogger("app.mcp")
@@ -68,6 +69,7 @@ INSTRUCTIONS = (
     "compare_periods (changes between exact years), rank_entities (one-year value rankings) or run_recipe. Every result states "
     "its source, definition, unit, period, scope and data generation. A refusal means no safe value "
     "exists for that request: follow its recovery suggestion; do not total or rank raw rows yourself. "
+    "Messages and warnings follow each call's `lang` (ro default, or en): pass the user's language. "
     "The server never calls a model.")
 
 
@@ -296,16 +298,20 @@ class ScanEstimator:
 
 # ---------------------------------------------------------------- envelopes the gate itself produces
 
-def _gate_envelope(name: str, arguments, status: str, reason: str, message: str, recovery=()) -> dict:
+def _lang(arguments) -> str:
     lang = arguments.get("lang") if isinstance(arguments, dict) else None
-    ctx = C.ToolContext(conn=None, lang=lang if lang in ("ro", "en") else "ro",
+    return lang if lang in ("ro", "en") else "ro"
+
+
+def _gate_envelope(name: str, arguments, status: str, reason: str, message: str, recovery=()) -> dict:
+    ctx = C.ToolContext(conn=None, lang=_lang(arguments),
                         generation=generation.current(), request_id=uuid.uuid4().hex[:12])
     return C.failure_envelope(str(name)[:64], ctx, C.ToolFailure(status, reason, message,
                                                                  recovery=list(recovery)))
 
 
-def _retry(seconds: float) -> dict:
-    return C.recovery("retry", f"Retry in about {max(1, round(seconds))} second(s).")
+def _retry(seconds: float, arguments) -> dict:
+    return C.recovery("retry", M.t(_lang(arguments), "gate.retry_in", s=max(1, round(seconds))))
 
 
 # ---------------------------------------------------------------- the gate
@@ -357,8 +363,7 @@ class Gate:
         if not ok:
             self.stats["throttled"] += 1
             return _gate_envelope(name, arguments, "unavailable", "busy",
-                                  "The server is handling many requests; retry shortly.",
-                                  [_retry(wait)]), False
+                                  M.t(_lang(arguments), "gate.busy_rate"), [_retry(wait, arguments)]), False
         if key is not None:
             hit = self.cache.get(key)
             if hit is not None:
@@ -368,19 +373,18 @@ class Gate:
             est = self.estimator.estimate(name, arguments)
             if est is None or est > self.s.max_scan_rows:
                 self.stats["scan_refused"] += 1
-                what = ("could not be bounded" if est is None
-                        else f"may read up to {est:,} rows (the public limit is {self.s.max_scan_rows:,})")
+                lang = _lang(arguments)
+                what = (M.t(lang, "gate.scan_unbounded") if est is None
+                        else M.t(lang, "gate.scan_over", est=f"{est:,}", limit=f"{self.s.max_scan_rows:,}"))
                 return _gate_envelope(
-                    name, arguments, "unavailable", "query_budget",
-                    f"This selection {what}. Choose a narrower dataset (describe_dataset lists "
-                    "sub-datasets, e.g. one county) or a reviewed recipe.",
-                    [C.recovery("tool_call", "See the dataset's sub-datasets and columns.",
+                    name, arguments, "unavailable", "query_budget", M.t(lang, "gate.query_budget", what=what),
+                    [C.recovery("tool_call", M.t(lang, "gate.query_budget_describe"),
                                 "describe_dataset", {"dataset": arguments["dataset"], "lang": arguments.get("lang", "ro")})
-                     if "dataset" in arguments else C.recovery("narrow", "Choose a narrower selection.")]), False
+                     if "dataset" in arguments else C.recovery("narrow", M.t(lang, "gate.query_budget_narrow"))]), False
         if not self.slots.acquire(blocking=False):
             self.stats["busy"] += 1
             return _gate_envelope(name, arguments, "unavailable", "busy",
-                                  "Another analysis is running; retry shortly.", [_retry(2.0)]), False
+                                  M.t(_lang(arguments), "gate.busy_slot"), [_retry(2.0, arguments)]), False
         with self._lock:
             self.active += 1
         token = ask_guard.CancelToken()
@@ -406,7 +410,7 @@ class Gate:
             ref = uuid.uuid4().hex[:12]
             log.exception("MCP tool failed tool=%s ref=%s", str(name)[:40], ref)
             return _gate_envelope(name, arguments, "error", "execution_failed",
-                                  f"The tool failed (reference {ref}); nothing was computed."), False
+                                  M.t(_lang(arguments), "registry.failed", ref=ref)), False
         if env is None:
             return self._timeout(name, arguments), False
         if token.timed_out and env["status"] not in ("ok", "partial", "needs_clarification"):
@@ -417,11 +421,11 @@ class Gate:
         return env, False
 
     def _timeout(self, name, arguments) -> dict:
+        lang = _lang(arguments)
         return _gate_envelope(
             name, arguments, "unavailable", "query_timeout",
-            f"The analysis did not finish within {self.s.max_seconds:g} seconds and was stopped. "
-            "Narrow the selection (fewer areas, one period) or choose a smaller dataset.",
-            [C.recovery("narrow", "Filter an area or period, or pick a sub-dataset.")])
+            M.t(lang, "gate.timeout", s=f"{self.s.max_seconds:g}"),
+            [C.recovery("narrow", M.t(lang, "gate.timeout_narrow"))])
 
     @staticmethod
     def _cacheable(env: dict) -> bool:
@@ -476,9 +480,10 @@ def build_result(name: str, env: dict, arguments):
 
     result = make(env)
     shrink = registry.shrinker(name)
+    lang = _lang(arguments)
     while wire_bytes(result) > MAX_WIRE_BYTES:
-        if not shrink(env):
-            env = C.response_budget(env, args_hash, args_bytes)
+        if not shrink(env, lang=lang):
+            env = C.response_budget(env, args_hash, args_bytes, lang)
             result = make(env)
             if wire_bytes(result) > MAX_WIRE_BYTES:      # even the refusal carries too much: bare minimum
                 bare = _gate_envelope(name, arguments, "unavailable", "response_budget",

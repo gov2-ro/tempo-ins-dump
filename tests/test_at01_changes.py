@@ -111,7 +111,7 @@ def test_values_are_the_endpoint_values_unrounded(env):
 
 
 def test_ok_when_nothing_is_excluded(env):
-    e = cp(intervals=[iv("2010", "2020")])
+    e = cp(intervals=[iv("2010", "2020")], lang="en")
     assert e["status"] == "ok" and e["reason"] is None
     assert not any(w["code"] == "entities_excluded" for w in e["warnings"])
     assert "not a claim of statistical significance" in e["message"]
@@ -444,7 +444,7 @@ def test_a_repeated_endpoint_key_is_refused_even_when_values_agree():
 # ------------------------------------------------------------ missing, suppressed, negative
 
 def test_a_missing_endpoint_year_is_not_replaced(env):
-    e = cp(intervals=[iv("1992", "2005")])
+    e = cp(intervals=[iv("1992", "2005")], lang="en")
     assert (e["status"], e["reason"]) == ("unavailable", "period_unavailable")
     assert "2005" in e["message"] and "1992 to 2020" in e["message"]
     assert e["data"] == {} and e["recovery"][0]["tool"] == "find_dimension_values"
@@ -554,7 +554,7 @@ def test_a_split_parent_without_a_data_file_points_at_its_children(tmp_path, mon
                     [], file=False)
     make_env(tmp_path, monkeypatch, build=build)
     e = call("compare_periods", dataset="PARENTX", entity_columns=["REF_AREA"],
-             intervals=[iv("2000", "2010")])
+             intervals=[iv("2000", "2010")], lang="en")
     assert (e["status"], e["reason"]) == ("error", "unknown_dataset")
     assert "sub-datasets" in e["message"] and e["recovery"][0]["tool"] == "describe_dataset"
     assert "/" not in e["message"].replace("sub-datasets", "")          # no filesystem path
@@ -622,7 +622,7 @@ def test_series_breaks_and_definition_notes_are_warnings(tmp_path, monkeypatch):
                     [("A", "2019", UNIT, 5.0), ("A", "2022", UNIT, 9.0)])
     make_env(tmp_path, monkeypatch, build=build)
     e = call("compare_periods", dataset="TUR105D", entity_columns=["REF_AREA"],
-             intervals=[iv("2019", "2022")])
+             intervals=[iv("2019", "2022")], lang="en")
     w = {x["code"]: x for x in e["warnings"]}
     assert "Inside the compared interval 2019→2022" in w["series_break"]["message"]
     assert w["series_break"]["subject"] == "TUR105D-rented-rooms"
@@ -647,7 +647,7 @@ def test_population_definition_is_stated_not_guessed(tmp_path, monkeypatch, name
                     definition=definition, name=name)
     make_env(tmp_path, monkeypatch, build=build)
     e = call("compare_periods", dataset="POPZ", entity_columns=["REF_AREA"],
-             intervals=[iv("2000", "2010")])
+             intervals=[iv("2000", "2010")], lang="en")
     w = next(x for x in e["warnings"] if x["code"] == "boundary_continuity_unverified")
     assert "unchanged territory" in w["message"]
     if expect:
@@ -770,7 +770,7 @@ def test_shrink_cuts_exclusion_samples_first_then_rows_then_reports_nothing_left
 
 def test_a_selection_that_cannot_fit_gets_response_budget(many, monkeypatch):
     from app.services.tools import changes
-    monkeypatch.setattr(changes, "shrink", lambda env: False)
+    monkeypatch.setattr(changes, "shrink", lambda env, **kw: False)
     e = call("compare_periods", dataset="MANYX", entity_columns=["REF_AREA"],
              intervals=[iv("2000", "2010"), iv("2000", "2020")], top_k=100)
     assert (e["status"], e["reason"]) == ("unavailable", "response_budget")
@@ -1103,7 +1103,7 @@ def test_real_refusals(real):
     def run(code, **kw):
         kw.setdefault("entity_columns", ["REF_AREA"])
         kw.setdefault("intervals", [iv("2015", "2020")])
-        return call("compare_periods", dataset=code, **kw)
+        return call("compare_periods", dataset=code, lang="en", **kw)
     e = run("POP107A")                                            # AGE spans singles and bands
     assert (e["reason"], e["provenance"]["aggregation"]["blocking_dimension"]) == (
         "overlapping_levels", "AGE")
@@ -1117,7 +1117,7 @@ def test_real_refusals(real):
 @pytest.mark.corpus
 def test_real_localities_keep_county_and_locality(real):
     e = call("compare_periods", dataset="POP107D", entity_columns=["REF_AREA_2"],
-             intervals=[iv("2012", "2021")], top_k=1)
+             intervals=[iv("2012", "2021")], top_k=1, lang="en")
     i = e["data"]["intervals"][0]
     assert e["data"]["key_columns"] == ["REF_AREA", "REF_AREA_2"]
     assert i["eligible_count"] == 3181 and i["rows"][0]["entity"] == {

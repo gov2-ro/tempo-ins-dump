@@ -152,8 +152,10 @@ def test_non_object_and_unknown_tool(no_db):
 def test_messages_name_the_argument_not_its_value(no_db):
     env = R.call_tool("query_data", {"dataset": "ADDX", "filters": {"CATEGORY": "secret-ish"}})
     assert "filters.CATEGORY" in env["message"] and "secret-ish" not in env["message"]
-    env = R.call_tool("describe_dataset", {"dataset": "ADDX", "nope": 1})
+    env = R.call_tool("describe_dataset", {"dataset": "ADDX", "nope": 1, "lang": "en"})
     assert "nope: unknown argument" in env["message"]
+    env = R.call_tool("describe_dataset", {"dataset": "ADDX", "nope": 1})
+    assert "nope: argument necunoscut" in env["message"]            # Romanian by default
 
 
 # ------------------------------------------------------------ envelope, errors
@@ -162,7 +164,7 @@ def test_execution_failure_reveals_no_internals(env, monkeypatch, caplog):
     def handler(args, ctx):
         raise RuntimeError("SELECT * FROM read_parquet('/srv/data/corpus/x.parquet') key=sk-abc")
     fake(monkeypatch, "query_data", handler)
-    out = R.call_tool("query_data", {"dataset": "ADDX"})
+    out = R.call_tool("query_data", {"dataset": "ADDX", "lang": "en"})
     R.validate_result("query_data", out)
     assert out["status"] == "error" and out["reason"] == "execution_failed"
     text = json.dumps(out)

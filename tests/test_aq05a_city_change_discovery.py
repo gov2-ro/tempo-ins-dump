@@ -15,6 +15,7 @@ import json
 import pytest
 
 from app.services.tools import discovery_policy as dp
+from at01_fixtures import said
 from test_aq04a_discovery_defaults import (  # noqa: F401 — fixtures of the AQ-04A corpus
     build_env, card, codes, disc, env, run, shipped)
 
@@ -49,7 +50,9 @@ def test_a_city_change_with_two_years_and_a_direction_reaches_compare_periods(en
         "intervals": [{"from": "2024", "to": "2025"}], "metric": "absolute", "order": order,
         "filters": {}, "top_k": top_k, "lang": lang}}
     w = {x["code"]: x for x in out["warnings"]}
-    assert "does not prove historical city status or unchanged boundaries" in w["classification_reference"]["message"]
+    assert said(w["classification_reference"]["message"], lang,
+                "does not prove historical city status or unchanged boundaries",
+                "nu dovedește statutul istoric de oraș sau limite neschimbate")
     assert "assumed_definition" in w                                   # domicile is still disclosed
     res = run(nc)
     assert res["status"] == "partial" or res["status"] == "ok"
@@ -108,7 +111,8 @@ def test_bottom_or_smallest_wording_is_not_reinterpreted_as_a_direction(env, que
 def test_historical_membership_or_constant_boundaries_stay_unavailable(env, question, lang):
     out = disc(question, lang)
     assert (out["status"], out["reason"]) == ("unavailable", "unsupported_operation")
-    assert "historical city status or constant boundaries" in out["message"] and out["data"] == {}
+    assert said(out["message"], lang, "historical city status or constant boundaries",
+                "statutul istoric de oraș sau limite constante") and out["data"] == {}
 
 
 def test_other_refusals_of_the_city_policy_still_come_first(env):

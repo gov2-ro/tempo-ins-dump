@@ -79,6 +79,7 @@ def env(tmp_path, monkeypatch):
 
 
 def cc(**kw):
+    kw.setdefault("lang", "en")             # these tests pin the English wording (AQ-04C localized the prose)
     kw.setdefault("dataset", "CHG")
     kw.setdefault("entity_columns", ["REF_AREA", "REF_AREA_2"])
     kw.setdefault("intervals", [iv("2015", "2020")])
@@ -367,7 +368,7 @@ def test_series_break_notes_and_mixed_units_keep_their_existing_policy_inside_th
                     [("Alba", n, y, u, 1.0) for n in names for y in ("2000", "2010") for u in (UNIT, "Mii persoane")])
     make_env(tmp_path, monkeypatch, build=build)
     e = call("compare_periods", dataset="TUR105D", entity_columns=["REF_AREA", "REF_AREA_2"],
-             intervals=[iv("2019", "2022")], entity_class="cities")
+             intervals=[iv("2019", "2022")], entity_class="cities", lang="en")
     w = {x["code"]: x for x in e["warnings"]}
     assert "Inside the compared interval 2019→2022" in w["series_break"]["message"]
     assert "coverage_note" in w and "classification_reference" in w
@@ -396,7 +397,7 @@ def test_class_period_and_generation_survive_the_json_replay(env):
     first = cities(top_k=3, intervals=[iv("2010", "2015"), iv("2015", "2020")])
     sel, gid = first["provenance"]["selection"], first["provenance"]["generation"]["id"]
     assert sel["entity_class"] == "cities" and sel["intervals"] == [iv("2010", "2015"), iv("2015", "2020")]
-    links = call("get_evidence_links", selection=sel, generation_id=gid)
+    links = call("get_evidence_links", selection=sel, generation_id=gid, lang="en")     # the link carries the language
     assert links["status"] == "ok" and links["data"]["selection"]["entity_class"] == "cities"
     assert sorted(s["dataset"] for s in links["provenance"]["sources"]) == ["CHG", "GOS102A"]
     live = _link(links, "live_selection")

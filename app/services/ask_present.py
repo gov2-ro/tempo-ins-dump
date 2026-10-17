@@ -9,14 +9,23 @@ one into the other and nothing else:
   bounded table of its own rows; no chart role is invented for it and two geographic series
   are never merged (the page draws a chart only from a query_data table with a chart spec).
 * ``citations`` — datasets the turn used, each with what its queries were allowed to claim.
+* ``qualifications`` — the discovery warnings that change what the displayed numbers mean and that
+  the data results do not repeat (the definition a default assumed), so the page can list them
+  whatever the model's own prose says.
 
-Both are pure: the numbers shown are the tool's, byte for byte.
+All are pure: the numbers shown are the tool's, byte for byte.
 """
 from __future__ import annotations
 
 import re
 
+from app.services.tools import messages as M
+
 DATA_TOOLS = ("rank_entities", "query_data", "compare_periods", "run_recipe")
+# Discovery warnings that stay on the page: the definition discovery put in place of the user's
+# unnamed one. (A constraint it could not apply is a note to the model: the page cannot tell
+# whether the model then applied it, so it is not asserted here.)
+QUALIFYING_DISCOVERY = ("assumed_definition",)
 
 
 def _usable(entry: dict) -> bool:
@@ -41,8 +50,9 @@ def _warning_texts(env: dict) -> list[str]:
     return [w.get("message", "") for w in env.get("warnings") or [] if w.get("message")]
 
 
-def display_table(trace: list[dict]) -> dict | None:
-    """The page's `data` for the last result that returned values, or None."""
+def display_table(trace: list[dict], lang: str = "ro") -> dict | None:
+    """The page's `data` for the last result that returned values, or None. `lang` is the language
+    of the texts this module adds (the tools' own follow the language they were called with)."""
     e = last_data_entry(trace)
     if e is None:
         return None
@@ -69,7 +79,9 @@ def display_table(trace: list[dict]) -> dict | None:
                 "columns": ["RANK", *keys, "TIME_PERIOD", "OBS_VALUE"],
                 "rows": [[r["rank"], *[r["entity"].get(k) for k in keys], data["year"], r["value"]]
                          for r in data["rows"]], "row_count": len(data["rows"]),
-                "eligible_count": data["eligible_count"], "unit": data["unit"], "ranked": True}
+                "eligible_count": data["eligible_count"], "unit": data["unit"], "ranked": True,
+                "excluded_count": data.get("excluded_count"),
+                "outside_class_count": data.get("outside_class_count") if data.get("entity_class") == "cities" else None}
     if tool == "compare_periods":
         ent_cols = list(data.get("entity_columns") or [])
         cols = [*ent_cols, "INTERVAL", "FROM_VALUE", "TO_VALUE", "ABSOLUTE", "PERCENT", "RANK"]
@@ -81,15 +93,56 @@ def display_table(trace: list[dict]) -> dict | None:
                              r.get("absolute"), r.get("percent"), r.get("rank")])
         excluded = sum(iv.get("excluded_count") or 0 for iv in data.get("intervals") or [])
         if excluded:
-            common["warnings"] = [*common["warnings"], f"{excluded} entity-interval pair(s) were excluded "
-                                  "from the ranking (see the evidence link for the list)."]
+            common["warnings"] = [*common["warnings"], M.t(lang, "present.pairs_excluded", n=excluded)]
+        # ranked over every eligible entity of each interval before top K: a cut list is still the ranking
         return {**common, "matrix_code": data.get("dataset"), "columns": cols, "rows": rows,
-                "row_count": len(rows), "metric": data.get("metric"), "unit": data.get("unit")}
+                "row_count": len(rows), "metric": data.get("metric"), "unit": data.get("unit"),
+                "ranked": True, "eligible_count": sum(iv.get("eligible_count") or 0 for iv in data.get("intervals") or []),
+                "interval_count": len(data.get("intervals") or []), "excluded_count": excluded,
+                "outside_class_count": data.get("outside_class_count")}
     rec = data.get("recipe") or {}
     rows = [[r.get("label") or r.get("area"), r.get("value")] for r in data.get("rows") or []]
     return {**common, "matrix_code": None, "columns": ["LABEL", "VALUE"], "rows": rows,
             "row_count": len(rows), "recipe": rec.get("id"), "year": data.get("year"),
             "unit": rec.get("unit") or data.get("unit")}
+
+
+def _datasets_of(env: dict) -> set:
+    """The datasets a data result stands on: its selection and every source it cites."""
+    prov = env.get("provenance") or {}
+    out = {s.get("dataset") for s in prov.get("sources") or []}
+    out.add((prov.get("selection") or {}).get("dataset"))
+    return out - {None}
+
+
+def _card_datasets(card: dict) -> set:
+    out = set()
+    for cand in card.get("candidates") or []:
+        out.add(cand.get("dataset"))
+        out.update(cand.get("sources") or [])
+    return out - {None}
+
+
+def qualifications(trace: list[dict]) -> list[dict]:
+    """[{code, subject, message}] of the discovery warnings in `QUALIFYING_DISCOVERY` that bear on the
+    displayed result: the warned concept's card offered a dataset the result stands on. Taken from the
+    tool results of the turn, never from the model's text; none when nothing is displayed."""
+    shown = last_data_entry(trace)
+    if shown is None:
+        return []
+    stands_on = _datasets_of(shown["output"])
+    out = []
+    for t in trace:
+        env = t.get("output")
+        if t.get("tool") != "discover_indicators" or not t.get("executed", True) \
+                or not isinstance(env, dict) or env.get("status") != "ok":
+            continue
+        cards = {c.get("id"): c for c in (env.get("data") or {}).get("concepts") or []}
+        for w in env.get("warnings") or []:
+            card = cards.get(w.get("subject"))
+            if w.get("code") in QUALIFYING_DISCOVERY and card and stands_on & _card_datasets(card):
+                out.append({"code": w["code"], "subject": w.get("subject"), "message": w.get("message")})
+    return out
 
 
 def chart_dataset(trace: list[dict]) -> str | None:

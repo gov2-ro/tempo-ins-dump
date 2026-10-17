@@ -109,7 +109,7 @@ def validate(raw, current: dict | None = None) -> list[dict]:
                 "message": "The data was updated since this conversation's earlier answers; "
                            "start a new conversation or ask again."})
         clean.append({"tool": tool, "generation": gen_id,
-                      "selection": args.selection.model_dump(mode="json", exclude_none=False)})
+                      "selection": args.selection.model_dump(mode="json", by_alias=True, exclude_none=False)})
     return clean
 
 

@@ -23,7 +23,9 @@ MAX_GROUP_COLUMNS = 8
 MAX_AREAS = 60
 VALUE_COLUMN = "OBS_VALUE"
 
-Lang = Literal["ro", "en"]
+Lang = Annotated[Literal["ro", "en"], Field(
+    description="Language of the messages, warnings and labels (ro or en): the user's language. "
+                "Codes, ids, filters and values do not change with it.")]
 DatasetCode = Annotated[StrictStr, Field(
     min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_]+$",
     description="Exact dataset code from discover_indicators or describe_dataset, "
@@ -94,6 +96,7 @@ class FindDimensionValuesArgs(_Args):
                              description="Accent- and case-insensitive substring; empty lists all")
     limit: StrictInt = Field(20, ge=1, le=100)
     offset: StrictInt = Field(0, ge=0, le=1_000_000)
+    lang: Lang = "ro"
 
 
 class QueryDataArgs(_Args):

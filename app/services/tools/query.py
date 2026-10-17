@@ -32,6 +32,7 @@ from app.services.chart_selector import TOTAL_RE
 from app.services.dataset_meta import decide_grouped, get_aggregation_context, source_total_gate
 from app.services.query_builder import resolve_parquet_schema, to_sdmx_name
 from app.services.tools import contract as C
+from app.services.tools import messages as M
 from app.services.tools import schemas as S
 
 log = logging.getLogger(__name__)
@@ -51,16 +52,14 @@ def query_data(args, ctx):
     warnings = []
     if ignored:
         warnings.append(C.warning(
-            "empty_filter_ignored",
-            "Empty value lists impose no constraint and were ignored: " + ", ".join(ignored) + ".",
+            "empty_filter_ignored", M.t(ctx.lang, "query.empty_filter", cols=", ".join(ignored)),
             subject=",".join(ignored)))
     if request["group_by"]:
         ctx.require_present_generation("query_data")       # aggregated results are certified
     elif ctx.generation.get("status") != "present" or not ctx.generation.get("id"):
         warnings.append(C.warning(
             "generation_unverified",
-            f"The served data generation is {ctx.generation.get('status')}; these raw "
-            "observations are not certified against a generation manifest.",
+            M.t(ctx.lang, "query.raw_uncertified", status=ctx.generation.get("status")),
             subject=str(ctx.generation.get("status"))))
     try:
         res = dq.run_query(ctx.conn, code, filters, request["group_by"], limit=args.limit,
@@ -92,9 +91,9 @@ def _labels(res: dict) -> dict:
     return out
 
 
-def _short(values, n: int = 3) -> str:
+def _short(values, lang: str, n: int = 3) -> str:
     vs = [str(v) for v in values]
-    return ", ".join(vs[:n]) + (f", … ({len(vs)} values)" if len(vs) > n else "")
+    return ", ".join(vs[:n]) + (M.t(lang, "query.more_values", n=len(vs)) if len(vs) > n else "")
 
 
 def _total_like(v) -> bool:
@@ -105,6 +104,7 @@ def _total_like(v) -> bool:
 
 def _answer(aid: "_Aid", warnings: list) -> dict:
     ctx, res, request = aid.ctx, aid.res, aid.request
+    lang = ctx.lang
     rows, columns = res["rows"], res["columns"]
     grouped = bool(request["group_by"])
     prov = C.query_provenance(ctx, aid.code, request, res)
@@ -113,19 +113,17 @@ def _answer(aid: "_Aid", warnings: list) -> dict:
     recs = []
     status, reason = "ok", None
     n = len(rows)
-    noun = "raw observation row" if not grouped else "row"
-    message = f"{n} {noun}{'' if n == 1 else 's'} returned."
+    kind = "rows" if grouped else "raw_rows"
+    message = M.t(lang, f"query.{kind}_{'one' if n == 1 else 'many'}", n=n)
     if not grouped:
-        message += " Raw observations are not a verified total."
+        message += M.t(lang, "query.raw_not_total")
     elif (res.get("aggregation") or {}).get("outcome") == "approximation":
-        message += " APPROXIMATION: unweighted mean of non-additive values, not an official rate."
+        message += M.t(lang, "query.approximation_tail")
     if limits["preview_truncated"]:
-        message += " This is a preview: more rows exist."
+        message += M.t(lang, "query.preview_tail")
     if not rows:
-        message = "The selection returned no rows; this is not a zero."
-        warnings.append(C.warning(
-            "no_rows", "The data has no observations for this selection. Absence of a row "
-                       "is not the value zero."))
+        message = M.t(lang, "query.no_rows")
+        warnings.append(C.warning("no_rows", M.t(lang, "query.no_rows_warning")))
 
     native_scope = res.get("scope") or {}
     if grouped and native_scope.get("domain_complete") is False:
@@ -134,31 +132,24 @@ def _answer(aid: "_Aid", warnings: list) -> dict:
         cols = sorted({r["column"] for r in restr if r.get("column")})
         desc = prov["scope"]["description"]
         warnings.append(C.warning(
-            "incomplete_domain",
-            f"This total covers only part of the domain ({desc}); it is not an all-ages / "
-            "all-population total. Do not present it as one.", subject=",".join(cols) or None))
+            "incomplete_domain", M.t(lang, "query.incomplete_domain", desc=desc),
+            subject=",".join(cols) or None))
         try:
             alts = aid.complete_alternatives(cols, limit=1) if cols else []
         except Exception:
             log.exception("complete-domain alternative lookup failed code=%s", aid.code)
             alts = []
-        message = (f"Valid only for the covered part of the domain: {desc}. "
-                   f"{message} It is not a complete-domain total.")
+        message = M.t(lang, "query.partial_message", desc=desc, message=message)
         if alts:
             recs.append(aid.query_rec(
-                f"{alts[0]} covers the whole domain of {', '.join(cols)} with the same "
-                "columns: run the same selection there. This is a candidate, not a verified "
-                "answer; its values and labels may differ.", alts[0]))
+                M.t(lang, "query.complete_alternative", alt=alts[0], cols=", ".join(cols)), alts[0]))
         else:
-            recs.append(C.recovery(
-                "narrow", "No related dataset with a verified complete domain was found. "
-                          "Quote the figure only for the covered range above, or choose "
-                          "another dataset with discover_indicators."))
+            recs.append(C.recovery("narrow", M.t(lang, "query.no_complete_alternative")))
     elif grouped and native_scope.get("domain_complete") is None:
-        message += " Whether it covers the whole domain is unverified (provenance.scope)."
+        message += M.t(lang, "query.unverified_domain")
         if (res.get("aggregation") or {}).get("method") == "sum_partition":
             status, reason = "partial", "unverified_total"
-            warnings.append(C.warning("unverified_total", "This sum has unverified domain completeness. It is not a verified official total; preserve the source definition and scope."))
+            warnings.append(C.warning("unverified_total", M.t(lang, "query.unverified_total")))
     if limits["preview_truncated"] or limits["time_windowed"]:
         recs.append(aid.narrowing_rec())
     data = {"columns": columns, "rows": rows, "column_labels": _labels(res),
@@ -169,67 +160,46 @@ def _answer(aid: "_Aid", warnings: list) -> dict:
 
 def _result_warnings(aid: "_Aid", rows: list, columns: list, grouped: bool) -> list:
     res, request = aid.res, aid.request
+    lang = aid.lang
     agg = res.get("aggregation") or {}
     out = []
     pins = {c: v for c, v in (agg.get("filters") or {}).items() if c not in request["filters"]}
     if pins:
         levels = agg.get("levels") or {}
-        parts = [f"{c}={_short(vs)}" + (f" (level {levels[c]})" if levels.get(c) else "")
+        parts = [f"{c}={_short(vs, lang)}" + (M.t(lang, "query.level_suffix", level=levels[c]) if levels.get(c) else "")
                  for c, vs in pins.items()]
-        out.append(C.warning(
-            "auto_pinned", "Pins applied automatically to avoid double-counting: "
-            + "; ".join(parts) + ". The full list is in provenance.effective_selection.",
-            subject=",".join(pins)))
+        out.append(C.warning("auto_pinned", M.t(lang, "query.auto_pinned", parts="; ".join(parts)),
+                             subject=",".join(pins)))
     if agg.get("outcome") == "approximation" and request["approximate"]:
-        out.append(C.warning(
-            "approximation", "APPROXIMATION: unweighted mean of non-additive values "
-            "(rate, index or average) because no aligned weights exist. It is not the official "
-            "or national rate; say so when quoting it."))
+        out.append(C.warning("approximation", M.t(lang, "query.approximation")))
     for w in agg.get("warnings") or []:
         if w.get("code") == "time_collapsed":
-            out.append(C.warning(
-                "time_collapsed", f"Values are aggregated across all periods of {w.get('column')}; "
-                "filter or group by time for a single-period figure.", subject=w.get("column")))
+            out.append(C.warning("time_collapsed", M.t(lang, "query.time_collapsed", col=w.get("column")),
+                                 subject=w.get("column")))
         elif w.get("code") == "mixed_grain_on_axis":
-            out.append(C.warning(
-                "mixed_grain_on_axis", f"{w.get('column')} spans several grains (levels) on this "
-                "axis; do not compare or add values across levels.", subject=w.get("column")))
+            out.append(C.warning("mixed_grain_on_axis", M.t(lang, "query.mixed_grain", col=w.get("column")),
+                                 subject=w.get("column")))
     grain = ((res.get("quality") or {}).get("grain") or {}).get("status")
     if grain in ("conflicting", "duplicate_keys"):
-        if grouped:
-            out.append(C.warning(
-                "data_quality", f"This file has repeated observation keys ({grain}) elsewhere; "
-                "the requested slice was checked and has none.", subject=grain))
-        else:
-            out.append(C.warning(
-                "data_quality", f"DATA QUALITY: this dataset has repeated observation keys "
-                f"({grain}); raw rows may disagree with each other. Do not total or rank them.",
-                subject=grain))
+        out.append(C.warning(
+            "data_quality", M.t(lang, "query.quality_grouped" if grouped else "query.quality_raw", grain=grain),
+            subject=grain))
     if not grouped:
-        out.append(C.warning(
-            "raw_rows", "Raw observations, not a verified total. Do not add them up by hand; "
-            "request a grouped selection (group_by) to get a policy-checked total."))
+        out.append(C.warning("raw_rows", M.t(lang, "query.raw_rows")))
     if res.get("time_windowed"):
-        out.append(C.warning(
-            "time_windowed", "Only the most recent periods were returned (row cap); filter "
-            "TIME_PERIOD to reach earlier periods."))
+        out.append(C.warning("time_windowed", M.t(lang, "query.time_windowed")))
     if res.get("partial_period_dropped"):
         out.append(C.warning(
-            "partial_period_dropped", f"Period {res['partial_period_dropped']} was incomplete "
-            "under the row cap and was dropped.", subject=str(res["partial_period_dropped"])))
+            "partial_period_dropped", M.t(lang, "query.partial_period", period=res["partial_period_dropped"]),
+            subject=str(res["partial_period_dropped"])))
     if res.get("truncated"):
-        out.append(C.warning(
-            "preview", "More rows exist than were returned (the result was capped). Use filters "
-            "or the evidence links for the rest; a preview never establishes a total or an "
-            "exhaustive ranking."))
+        out.append(C.warning("preview", M.t(lang, "query.preview")))
     vi = columns.index("OBS_VALUE") if "OBS_VALUE" in columns else len(columns) - 1
     nulls = sum(1 for r in rows if r[vi] is None
                 or (isinstance(r[vi], float) and not math.isfinite(r[vi])))
     if nulls:
-        out.append(C.warning(
-            "null_values", f"{nulls} of {len(rows)} row(s) have no value (null: suppressed or "
-            "unavailable at the source). Null is not zero; do not include it in sums.",
-            subject=str(nulls)))
+        out.append(C.warning("null_values", M.t(lang, "query.null_values", nulls=nulls, n=len(rows)),
+                             subject=str(nulls)))
     if rows and not res.get("truncated") and not res.get("time_windowed"):
         for col, vals in request["filters"].items():
             name = aid.canon(col)
@@ -240,8 +210,8 @@ def _result_warnings(aid: "_Aid", rows: list, columns: list, grouped: bool) -> l
             absent = [str(v) for v in vals if isinstance(v, (str, int)) and str(v) not in present]
             if absent:
                 out.append(C.warning(
-                    "no_rows_for_value", f"No rows for {name} = {_short(absent)} in this "
-                    "selection (no observation exists; that is not a zero).", subject=name))
+                    "no_rows_for_value", M.t(lang, "query.no_rows_for_value", col=name, absent=_short(absent, lang)),
+                    subject=name))
     return out
 
 
@@ -258,8 +228,7 @@ def _empty_selection(aid: "_Aid", warnings: list) -> dict:
     except Exception:
         log.exception("recovery planning failed code=%s", aid.code)
         reason = "period_unavailable" if "TIME_PERIOD" in missing else "slice_value_missing"
-        message = ("No rows match the requested values; nothing was substituted: no other "
-                   "period, area or category stands in for the requested one.")
+        message = aid.t("query.empty_fallback")
         recs, bounds = [aid.describe_rec()], None
     data = {"columns": res["columns"], "rows": [], "column_labels": {}, "selection": sel}
     if bounds is not None:
@@ -277,11 +246,11 @@ def _plan_empty(aid: "_Aid", missing: dict):
     bounds = None
     if periods:
         bounds = aid.period_bounds(tcol)
-        text = f"{tcol} {_short(periods)} has no observations"
+        text = aid.t("query.no_period_obs", col=tcol, periods=_short(periods, aid.lang))
         if bounds and bounds.get("first") is not None:
-            text += f" (the data covers {bounds['first']} to {bounds['last']})"
+            text += aid.t("query.data_covers", first=bounds["first"], last=bounds["last"])
         parts.append(text)
-        recs.append(aid.find_values_rec(tcol, "", "List the periods the data actually has."))
+        recs.append(aid.find_values_rec(tcol, "", aid.t("query.list_periods")))
     for col, vals in others.items():
         totals = [v for v in vals if aid.is_total_value(col, v)]
         if totals:
@@ -289,17 +258,12 @@ def _plan_empty(aid: "_Aid", missing: dict):
             parts.append(msg)
             recs.extend(more)
         else:
-            parts.append(f"{col} {_short(vals)} does not exist in the data")
-            recs.append(aid.find_values_rec(col, str(vals[0])[:200],
-                                            f"Look up the exact {col} values the data has."))
+            parts.append(aid.t("query.value_missing", col=col, values=_short(vals, aid.lang)))
+            recs.append(aid.find_values_rec(col, str(vals[0])[:200], aid.t("query.lookup_values", col=col)))
     if not missing:
-        parts.append("each requested value exists, but no observation matches all of them "
-                     "together")
-        recs += [C.recovery("narrow", "Check one filter at a time (find_dimension_values lists "
-                                      "the values); nothing was widened for you."),
-                 aid.describe_rec()]
-    message = ("No rows match: " + "; ".join(parts) + ". Nothing was substituted: no other "
-               "period, area or category stands in for the requested one.")
+        parts.append(aid.t("query.each_exists"))
+        recs += [C.recovery("narrow", aid.t("query.check_one_filter")), aid.describe_rec()]
+    message = aid.t("query.no_rows_match", parts="; ".join(parts))
     return ("period_unavailable" if periods else "slice_value_missing"), message, recs, bounds
 
 
@@ -329,37 +293,29 @@ def _refused(aid: "_Aid", warnings: list) -> dict:
 
 
 def _plan_generic(aid, reason, col, simple: bool = False):
-    where = f" (dimension {col})" if col else ""
-    msg = (f"The shared aggregation policy refused this selection ({reason}{where}); no value "
-           "was computed. Do not state a figure for it.")
+    where = aid.t("query.dimension_suffix", col=col) if col else ""
+    msg = aid.t("query.refused", reason=reason, where=where)
     recs = [aid.describe_rec()]
     if not simple:
-        recs.append(C.recovery("narrow", "Pin the other dimensions to explicit values or group "
-                                         "by them so nothing has to be combined."))
+        recs.append(C.recovery("narrow", aid.t("query.pin_others")))
     return msg, recs, []
 
 
 def _missing_total(aid: "_Aid", col: str, totals: list):
     """Message part and recoveries for a requested Total the data does not have."""
     meta = aid.metadata_lists_total(col)
-    shown = _short(totals)
-    msg = (f"{col} = {shown} does not exist in the data of {aid.code}: the source export has no "
-           "such Total row" + (" although INS's metadata lists a Total option" if meta else ""))
+    shown = _short(totals, aid.lang)
+    msg = aid.t("query.missing_total", col=col, shown=shown, code=aid.code) \
+        + (aid.t("query.missing_total_meta") if meta else "")
     recs = []
     rid = aid.total_recipe()
     if rid:
-        recs.append(C.recovery(
-            "tool_call", f"INS's own total is served by the reviewed recipe '{rid}' (published "
-                         "values, with a reconstruction only as a cross-check).",
-            "run_recipe", aid.recipe_args(rid)))
+        recs.append(C.recovery("tool_call", aid.t("query.total_recipe_cross_check", rid=rid),
+                               "run_recipe", aid.recipe_args(rid)))
     q = aid.query_without_pin(col, totals)
     if q:
-        recs.append(C.recovery(
-            "tool_call", f"Ask the policy for the same selection without the {col} pin: it "
-                         f"combines the remaining {col} values only if it can verify they are "
-                         "a complete, non-overlapping partition. Candidate only: the sum may "
-                         "still be refused and is not promised to be safe.", "query_data", q))
-    recs.append(aid.find_values_rec(col, "", f"List the exact {col} values the data has."))
+        recs.append(C.recovery("tool_call", aid.t("query.without_pin", col=col), "query_data", q))
+    recs.append(aid.find_values_rec(col, "", aid.t("query.list_exact", col=col)))
     return msg, recs
 
 
@@ -368,39 +324,24 @@ def _plan_slice_value_missing(aid, reason, col):
     totals = [v for v in wanted if aid.is_total_value(col, v, meta=True)]
     if totals:
         msg, recs = _missing_total(aid, col, totals)
-        return (msg + ". Nothing was computed, and no other value was substituted.", recs, [])
-    msg = (f"None of the requested {col} values ({_short(wanted)}) exists in the data of "
-           f"{aid.code}; nothing was computed and no other value was substituted.")
+        return (msg + aid.t("query.nothing_substituted"), recs, [])
+    msg = aid.t("query.none_exist", col=col, wanted=_short(wanted, aid.lang), code=aid.code)
     return msg, [aid.find_values_rec(col, str(wanted[0])[:200] if wanted else "",
-                                     f"Look up the exact {col} values the data has."),
+                                     aid.t("query.lookup_values", col=col)),
                  aid.describe_rec()], []
 
 
 def _plan_grain(aid, reason, col):
-    what = {
-        "conflicting_grain": f"This slice of {aid.code} repeats the same observation key with "
-                             "different values (conflicting grain), so no single total or "
-                             "breakdown exists.",
-        "duplicate_keys": f"This slice of {aid.code} repeats the same observation key "
-                          "(duplicate keys), so a total would count it twice.",
-        "grain_unverified": f"This slice of {aid.code} is too large to verify as free of "
-                            "repeated observation keys, so no total was computed.",
-    }[reason]
+    what = aid.t({"conflicting_grain": "query.grain_conflicting", "duplicate_keys": "query.grain_duplicate",
+                  "grain_unverified": "query.grain_unverified"}[reason], code=aid.code)
     alts = aid.verified_alternatives(limit=MAX_ALTERNATIVES)
-    recs = [aid.query_rec(
-        f"{a} has certified unique keys and the requested columns and values: run the same "
-        "selection there. This is a candidate, not a verified answer; check its definition "
-        "and scope.", a) for a in alts]
+    recs = [aid.query_rec(aid.t("query.grain_alternative", alt=a), a) for a in alts]
     if alts:
-        msg = f"{what} Nothing was summed. A related dataset can express the selection: " \
-              f"{', '.join(alts)} (a candidate, not a verified answer)."
+        msg = aid.t("query.grain_with_alt", what=what, alts=", ".join(alts))
     else:
-        msg = (f"{what} Nothing was summed, and no related dataset with certified unique keys "
-               "and the requested columns was found. The rows of this dataset must not be "
-               "totalled or ranked by hand; choose another dataset for this indicator.")
+        msg = aid.t("query.grain_no_alt", what=what)
     if reason == "grain_unverified":
-        recs.append(C.recovery("narrow", "Filter the selection to one area or one period so the "
-                                         "slice can be checked, then ask again."))
+        recs.append(C.recovery("narrow", aid.t("query.grain_narrow")))
     if len(recs) < 3 and not alts:
         recs.append(aid.discover_rec())
     if len(recs) < 3:
@@ -409,9 +350,7 @@ def _plan_grain(aid, reason, col):
 
 
 def _plan_overlap(aid, reason, col):
-    msg = (f"The options of {col} overlap (several levels or grains, e.g. single years and "
-           f"age bands), so adding them would count the same units more than once. Nothing was "
-           f"summed; restrict {col} to one verified level.")
+    msg = aid.t("query.overlap", col=col)
     recs = []
     actx = aid.agg_ctx()
     if actx and col:
@@ -423,37 +362,31 @@ def _plan_overlap(aid, reason, col):
                 members = [m for m in members if m in present]
             if not members:
                 continue
-            label = f"the verified level '{ch['name']}' ({len(members)} value{'s' if len(members) != 1 else ''})"
+            label = aid.t("query.level_one" if len(members) == 1 else "query.level_many",
+                          name=ch["name"], n=len(members))
             if len(members) <= S.MAX_VALUES_PER_COLUMN:
                 q = aid.query_args(filters={**aid.canon_filters(), col: members})
-                text = f"Restrict {col} to {label}. Candidate: the policy still decides."
+                text = aid.t("query.restrict_level", col=col, label=label)
             else:
                 gb = aid.canon_group_by()
                 q = aid.query_args(filters={k: v for k, v in aid.canon_filters().items()
                                             if k != col},
                                    group_by=gb if col in gb else gb + [col])
-                text = (f"Group by {col}: the axis is limited to one verified level (the "
-                        f"default, not all {len(members)}-value levels combined). Candidate.")
+                text = aid.t("query.group_by_level", col=col, n=len(members))
             if q:
                 recs.append(C.recovery("tool_call", text, "query_data", q))
         if len(recs) < 3:
             for child in aid.complete_children(col, limit=1):
-                recs.append(aid.query_rec(
-                    f"{child} is a related dataset whose {col} domain is complete and "
-                    "non-overlapping: run the same selection there. Candidate, not a "
-                    "verified answer.", child))
+                recs.append(aid.query_rec(aid.t("query.complete_child", child=child, col=col), child))
     if len(recs) < 3:
-        recs.append(aid.find_values_rec(col, "", f"List the exact {col} values and choose ONE "
-                                                 "level (never all levels together)."))
+        recs.append(aid.find_values_rec(col, "", aid.t("query.choose_one_level", col=col)))
     if len(recs) < 3:
         recs.append(aid.describe_rec())
     return msg, recs, []
 
 
 def _plan_weights(aid, reason, col):
-    msg = ("This measure is a rate, index or average: values of different categories cannot be "
-           "added, and no aligned weights exist for a weighted mean. Nothing was combined. "
-           "A labelled unweighted mean is available only if the user accepts it explicitly.")
+    msg = aid.t("query.weights")
     recs = []
     agg = aid.res.get("aggregation") or {}
     collapsed = [d["column"] for d in agg.get("dimensions") or []
@@ -463,77 +396,49 @@ def _plan_weights(aid, reason, col):
     if collapsed and len(keep) <= S.MAX_GROUP_COLUMNS:
         q = aid.query_args(group_by=keep)
         if q:
-            recs.append(C.recovery(
-                "tool_call", f"Keep {', '.join(collapsed)} on the axis instead of combining it "
-                             "(one value per category; nothing is averaged).", "query_data", q))
-    recs.append(C.recovery(
-        "narrow", "Pin every other dimension to one explicit value (find_dimension_values lists "
-                  "them) or add it to group_by."))
-    recs.append(C.recovery(
-        "clarify", "Ask the user whether an UNWEIGHTED mean of these values is acceptable: it "
-                   "is a labelled approximation, not the official or national rate. Only if "
-                   "they agree, repeat this call with approximate=true."))
+            recs.append(C.recovery("tool_call", aid.t("query.keep_on_axis", cols=", ".join(collapsed)),
+                                   "query_data", q))
+    recs.append(C.recovery("narrow", aid.t("query.pin_every_other")))
+    recs.append(C.recovery("clarify", aid.t("query.ask_unweighted")))
     return msg, recs, []
 
 
 def _plan_mixed_units(aid, reason, col):
-    msg = (f"{col} holds several measurement units and the selection does not pin one, so values "
-           "were not combined across units. Nothing was computed.")
-    return msg, [aid.find_values_rec(col, "", f"List the units in {col}, then pin exactly one."),
-                 C.recovery("narrow", f"Filter {col} to exactly one unit and ask again.")], []
+    msg = aid.t("query.mixed_units", col=col)
+    return msg, [aid.find_values_rec(col, "", aid.t("query.list_units", col=col)),
+                 C.recovery("narrow", aid.t("query.filter_one_unit", col=col))], []
 
 
 def _plan_source_total(aid, reason, col):
-    which = {
-        "source_total_mismatch": "INS's own published figures disagree: the parts of "
-                                 f"{col or 'this dimension'} do not add up to INS's Total, so no "
-                                 "summed value is reported.",
-        "no_source_total": "The source has no Total row to check this summed series against, and "
-                           "the grouping is not verified, so the sum was withheld.",
-        "source_total_unchecked": "This summed series has not been checked against INS's own Total "
-                                  "(no check on record) and the grouping is not verified, so the "
-                                  "sum was withheld.",
-    }[reason]
+    which = aid.t({"source_total_mismatch": "query.total_mismatch", "no_source_total": "query.no_source_total",
+                   "source_total_unchecked": "query.total_unchecked"}[reason],
+                  col=col or aid.t("query.this_dimension"))
     recs = []
     rid = aid.total_recipe()
     if rid:
-        recs.append(C.recovery(
-            "tool_call", f"INS's own published total is served by the reviewed recipe '{rid}'.",
-            "run_recipe", aid.recipe_args(rid)))
+        recs.append(C.recovery("tool_call", aid.t("query.total_recipe", rid=rid), "run_recipe",
+                               aid.recipe_args(rid)))
     alts = aid.verified_alternatives(limit=1)       # related dataset whose own checks pass
-    recs += [aid.query_rec(
-        f"{a} has certified unique keys, the requested columns and values, and the policy and "
-        "INS-total checks do not withhold the same selection there: run it. This is a "
-        "candidate, not a verified answer.", a) for a in alts]
-    recs.append(C.recovery(
-        "narrow", "Ask for an explicit slice (pin the dimensions to single values or group by "
-                  "them) instead of a combined total."))
+    recs += [aid.query_rec(aid.t("query.total_alternative", alt=a), a) for a in alts]
+    recs.append(C.recovery("narrow", aid.t("query.explicit_slice")))
     recs.append(aid.describe_rec())
-    return f"{which} Nothing was summed.", recs, []
+    return aid.t("query.nothing_summed", which=which), recs, []
 
 
 def _plan_unusable(aid, reason, col):
-    msg = {
-        "schema_mismatch": f"A dimension recorded for {aid.code}"
-                           + (f" ({col})" if col else "") + " is not a column of its data file, "
-                           "so no selection can be aggregated safely.",
-        "no_aggregation_context": f"The metadata of {aid.code} is not usable for a safe "
-                                  "aggregation, so no total can be computed here.",
-    }[reason]
-    return msg + " Nothing was computed.", [aid.describe_rec()], []
+    what = aid.t("query.schema_mismatch", code=aid.code, col=aid.t("query.col_suffix", col=col) if col else "") \
+        if reason == "schema_mismatch" else aid.t("query.no_context", code=aid.code)
+    return aid.t("query.nothing_computed", what=what), [aid.describe_rec()], []
 
 
 def _plan_unverified(aid, reason, col):
-    msg = (f"The options of {col} have no verified structure (they may nest or include totals), "
-           "so combining them was refused. Nothing was summed.")
-    recs = [aid.find_values_rec(col, "", f"List the exact {col} values and pin ONE of them (or its "
-                                         "Total).")]
+    msg = aid.t("query.unverified_structure", col=col)
+    recs = [aid.find_values_rec(col, "", aid.t("query.pin_one", col=col))]
     gb = aid.canon_group_by()
     if col and col not in gb and len(gb) < S.MAX_GROUP_COLUMNS:
         q = aid.query_args(group_by=gb + [col])
         if q:
-            recs.append(C.recovery("tool_call", f"Keep {col} on the axis instead of combining "
-                                                "it. Candidate.", "query_data", q))
+            recs.append(C.recovery("tool_call", aid.t("query.keep_col", col=col), "query_data", q))
     recs.append(aid.describe_rec())
     return msg, recs, []
 
@@ -542,21 +447,18 @@ def _plan_contains_aggregate(aid, reason, col):
     wanted = aid.canon_filters().get(col) or []
     totals = [v for v in wanted if _total_like(v)]
     parts = [v for v in wanted if not _total_like(v)]
-    msg = (f"The selected {col} values mix a Total with its own parts, which would count the "
-           "same units twice. Nothing was summed; choose the Total alone or the parts alone.")
+    msg = aid.t("query.contains_aggregate", col=col)
     recs = []
     if totals:
         q = aid.query_args(filters={**aid.canon_filters(), col: totals})
         if q:
-            recs.append(C.recovery("tool_call", f"Use the Total alone ({_short(totals)}).",
+            recs.append(C.recovery("tool_call", aid.t("query.use_total", totals=_short(totals, aid.lang)),
                                    "query_data", q))
     if parts:
         q = aid.query_args(filters={**aid.canon_filters(), col: parts})
         if q:
-            recs.append(C.recovery("tool_call", "Use the parts alone; the policy still decides "
-                                                "whether they can be combined. Candidate.",
-                                   "query_data", q))
-    recs.append(aid.find_values_rec(col, "", f"List the exact {col} values."))
+            recs.append(C.recovery("tool_call", aid.t("query.use_parts"), "query_data", q))
+    recs.append(aid.find_values_rec(col, "", aid.t("query.list_values", col=col)))
     return msg, recs, []
 
 
@@ -586,6 +488,9 @@ class _Aid:
         self._schema = None
         self._actx = _UNSET
         self._peers = None
+
+    def t(self, key: str, **values) -> str:
+        return M.t(self.lang, key, **values)
 
     # -- names
     def schema(self) -> dict:
@@ -659,8 +564,7 @@ class _Aid:
 
     # -- recoveries
     def describe_rec(self) -> dict:
-        return C.recovery("tool_call", "Read the dataset's columns, values, sub-datasets and "
-                                       "notes.", "describe_dataset",
+        return C.recovery("tool_call", self.t("query.describe_rec"), "describe_dataset",
                           {"dataset": self.code, "lang": self.lang})
 
     def find_values_rec(self, col: str | None, query: str, message: str) -> dict:
@@ -676,13 +580,11 @@ class _Aid:
         except Exception:
             facts = {}
         text = (facts.get("title") or self.code).strip()[:200] or self.code
-        return C.recovery("tool_call", "Find another dataset for this indicator.",
+        return C.recovery("tool_call", self.t("query.find_another"),
                           "discover_indicators", {"query": text, "lang": self.lang})
 
     def narrowing_rec(self) -> dict:
-        return C.recovery(
-            "narrow", "Narrow the selection (filter a period or an area, or group by fewer "
-                      "columns) to see the remaining rows; a preview is not the whole result.")
+        return C.recovery("narrow", self.t("query.narrowing"))
 
     def query_args(self, *, dataset: str | None = None, filters: dict | None = None,
                    group_by: list | None = None) -> dict | None:
@@ -703,7 +605,7 @@ class _Aid:
     def query_rec(self, message: str, dataset: str) -> dict:
         args = self.query_args(dataset=dataset)
         if args is None:
-            return C.recovery("narrow", f"Try {dataset} with a narrower selection.")
+            return C.recovery("narrow", self.t("query.try_narrower", dataset=dataset))
         return C.recovery("tool_call", message, "query_data", args)
 
     def query_without_pin(self, col: str, drop: list) -> dict | None:
@@ -896,7 +798,7 @@ def _columns_of(schema: dict) -> set:
 
 # ================================================================== budget hook
 
-def shrink(env: dict) -> bool:
+def shrink(env: dict, lang: str = "ro") -> bool:
     """Cut an oversized envelope one step; False when nothing is left to cut.
 
     Order: display labels (largest column first); then rows (halved, flagged
@@ -909,18 +811,17 @@ def shrink(env: dict) -> bool:
     if labels:
         col = max(labels, key=lambda c: C.size(labels[c]))
         del labels[col]
-        _flag(env, "labels_omitted", col, "Display labels were omitted to fit the response "
-              "budget for column(s): {subjects}. The values are the exact stored values.")
+        _flag(env, "labels_omitted", col, "query.labels_omitted", lang)
         return True
     rows = data.get("rows")
     long_lists = _long_filter_lists(env)
     if rows and long_lists:
         if C.size({**env, "data": {**data, "rows": []}}) > C.MAX_RESULT_BYTES:
-            return _summarize(env, long_lists)       # no amount of row cutting would fit
+            return _summarize(env, long_lists, lang)       # no amount of row cutting would fit
     if rows:
-        return C.shrink_rows(env)
+        return C.shrink_rows(env, lang=lang)
     if long_lists:
-        return _summarize(env, long_lists)
+        return _summarize(env, long_lists, lang)
     return False
 
 
@@ -929,20 +830,18 @@ def _long_filter_lists(env: dict) -> list:
     return [c for c, v in eff.items() if isinstance(v, list) and len(v) > SUMMARIZE_OVER]
 
 
-def _summarize(env: dict, cols: list) -> bool:
+def _summarize(env: dict, cols: list, lang: str) -> bool:
     eff = env["provenance"]["effective_selection"]["filters"]
     for c in cols:
         vals = eff[c]
         eff[c] = {"values_count": len(vals), "first": vals[:10],
                   "sha256": hashlib.sha256(C.dumps(vals).encode("utf-8")).hexdigest()}
     for c in cols:
-        _flag(env, "effective_filters_summarized", c, "Long effective filter lists were "
-              "summarized to fit the response budget for: {subjects}; the full lists are "
-              "reproduced by repeating the canonical selection.")
+        _flag(env, "effective_filters_summarized", c, "query.filters_summarized", lang)
     return True
 
 
-def _flag(env: dict, code: str, subject: str, template: str):
+def _flag(env: dict, code: str, subject: str, key: str, lang: str):
     """Add (or extend) one warning naming the affected columns."""
     for w in env["warnings"]:
         if w.get("code") == code:
@@ -950,6 +849,6 @@ def _flag(env: dict, code: str, subject: str, template: str):
             if subject not in subjects:
                 subjects.append(subject)
             w["subject"] = ",".join(subjects)
-            w["message"] = template.format(subjects=", ".join(subjects))
+            w["message"] = M.t(lang, key, subjects=", ".join(subjects))
             return
-    env["warnings"].append(C.warning(code, template.format(subjects=subject), subject=subject))
+    env["warnings"].append(C.warning(code, M.t(lang, key, subjects=subject), subject=subject))

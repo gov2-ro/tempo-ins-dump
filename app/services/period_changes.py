@@ -29,6 +29,7 @@ import uuid
 
 from app.services import generation
 from app.services.tools import contract
+from app.services.tools import messages as M
 from app.services.tools.contract import ToolContext, ToolFailure, recovery
 
 MAX_PERIODS = 500           # distinct period labels an annual series may have
@@ -50,7 +51,7 @@ def _skey(key: tuple) -> tuple:
     return tuple("" if v is None else str(v) for v in key)
 
 
-def build_endpoint_table(rows) -> dict:
+def build_endpoint_table(rows, lang: str = "ro") -> dict:
     """{(key, year): value} from (key, year, value) rows. A repeated (key, year)
     is refused even when the values agree: two rows would double a sum."""
     table: dict = {}
@@ -58,11 +59,8 @@ def build_endpoint_table(rows) -> dict:
         k = (tuple(key), str(year))
         if k in table:
             raise ToolFailure(
-                "unavailable", "duplicate_keys",
-                "More than one value for the same entity and year came back from the source "
-                "query, so no single endpoint value exists. No change was computed.",
-                recovery=[recovery("narrow", "Pin the dimension that repeats the key with "
-                                             "filters, or compare a different dataset.")])
+                "unavailable", "duplicate_keys", M.t(lang, "period.duplicate_keys"),
+                recovery=[recovery("narrow", M.t(lang, "period.duplicate_keys_narrow"))])
         table[k] = value
     return table
 
@@ -169,13 +167,12 @@ def _periods(conn, code: str, time_col: str, ctx: ToolContext) -> tuple[dict, tu
         out = dimension_values(conn, code, time_col, limit=MAX_PERIODS)
     except QueryError as e:
         raise contract.query_failure(e, ctx, code)
-    describe = recovery("tool_call", "Read the dataset's periods and frequency.",
-                        "describe_dataset", {"dataset": code, "lang": ctx.lang})
+    lang = ctx.lang
+    describe = recovery("tool_call", M.t(lang, "period.read_periods"),
+                        "describe_dataset", {"dataset": code, "lang": lang})
     if out["total"] > MAX_PERIODS:
-        raise _unavailable(
-            "unsupported_frequency",
-            f"{code} has more than {MAX_PERIODS} distinct period labels; only exact annual "
-            "periods are supported.", rec=[describe])
+        raise _unavailable("unsupported_frequency",
+                           M.t(lang, "period.too_many_periods", code=code, max=MAX_PERIODS), rec=[describe])
     by_year: dict = {}
     other = []
     for v in out["values"]:
@@ -186,18 +183,15 @@ def _periods(conn, code: str, time_col: str, ctx: ToolContext) -> tuple[dict, tu
             by_year.setdefault(y, []).append(v)
     if other:
         e = ", ".join(repr(x) for x in other[:3])
-        raise _unavailable(
-            "unsupported_frequency",
-            f"{code} has non-annual period values (e.g. {e}); compare_periods supports exact "
-            "annual periods only, not monthly, quarterly or mixed series.", rec=[describe])
+        raise _unavailable("unsupported_frequency",
+                           M.t(lang, "period.non_annual", code=code, examples=e), rec=[describe])
     multi = [y for y, vs in by_year.items() if len(vs) > 1]
     if multi:
-        raise _unavailable(
-            "unsupported_frequency",
-            f"{code} labels the year {multi[0]} in more than one way ({by_year[multi[0]]}); "
-            "the periods cannot be matched exactly.", rec=[describe])
+        raise _unavailable("unsupported_frequency",
+                           M.t(lang, "period.year_two_ways", code=code, year=multi[0], labels=by_year[multi[0]]),
+                           rec=[describe])
     if not by_year:
-        raise _unavailable("period_unavailable", f"{code} has no period values.", rec=[describe])
+        raise _unavailable("period_unavailable", M.t(lang, "period.no_periods", code=code), rec=[describe])
     years = sorted(by_year)
     return {y: vs[0] for y, vs in by_year.items()}, (years[0], years[-1])
 
@@ -254,28 +248,10 @@ def _aggregate_keys(table: dict, key_cols, mctx: dict) -> frozenset:
     return frozenset(flagged) if flagged and len(flagged) < len(keys) else frozenset()
 
 
-_NATIVE_TEXT = {
-    "overlapping_levels": "{col} mixes levels that overlap (for example counties with regions, "
-                          "or single years with age bands); no single total or ranking exists "
-                          "until one level is chosen.",
-    "unverified_structure": "The structure of {col} is not verified, so the source cannot say how "
-                            "its options combine.",
-    "contains_aggregate": "{col} contains a total next to its parts; combining them would "
-                          "double count.",
-    "label_hierarchy": "{col} encodes a hierarchy in its labels; summing it would double count.",
-    "declared_partition_invalid": "{col} is not a valid disjoint partition.",
-    "source_total_mismatch": "INS's own options of {col} do not add up to INS's total, so the "
-                             "dimension is not summed.",
-    "mixed_units": "{col} has several units; values in different units are never combined.",
-    "slice_value_missing": "A requested value of {col} is not in the data.",
-    "conflicting_grain": "The selected rows repeat a full key with different values, so no "
-                         "single value exists.",
-    "duplicate_keys": "The selected rows repeat a full key, so a sum would count it twice.",
-    "grain_unverified": "The grain of the selected rows could not be verified.",
-    "schema_mismatch": "The dataset's recorded dimension {col} is not in its data file.",
-    "missing_weights": "The measure cannot be combined without weights.",
-    "no_aggregation_context": "The dataset's aggregation rules are unavailable.",
-}
+_NATIVE_REASONS = ("overlapping_levels", "unverified_structure", "contains_aggregate", "label_hierarchy",
+                   "declared_partition_invalid", "source_total_mismatch", "mixed_units", "slice_value_missing",
+                   "conflicting_grain", "duplicate_keys", "grain_unverified", "schema_mismatch",
+                   "missing_weights", "no_aggregation_context")      # texts: messages `period.native.<reason>`
 _PIN = frozenset({"overlapping_levels", "unverified_structure", "contains_aggregate",
                   "label_hierarchy", "declared_partition_invalid", "source_total_mismatch",
                   "mixed_units", "slice_value_missing"})
@@ -285,16 +261,15 @@ def _native_refusal(res: dict, code: str, lang: str, prov, limits) -> ToolFailur
     agg = res.get("aggregation") or {}
     reason = agg.get("reason") or "aggregation_unavailable"
     col = agg.get("blocking_dimension")
-    text = _NATIVE_TEXT.get(reason, "The shared aggregation policy refused this selection "
-                                    f"({reason}).").format(col=col or "a dimension")
+    text = M.t(lang, f"period.native.{reason}" if reason in _NATIVE_REASONS else "period.native.default",
+               col=col or M.t(lang, "period.a_dimension"), reason=reason)
     rec = []
     if reason in _PIN and col:
-        rec.append(recovery("tool_call", f"List the actual values of {col}, then pin it to one "
-                                         "value or one level with filters.",
+        rec.append(recovery("tool_call", M.t(lang, "period.list_pin", col=col),
                             "find_dimension_values", {"dataset": code, "column": col, "limit": 20}))
-    rec.append(recovery("tool_call", "Read the dataset's dimensions, levels and grain status.",
+    rec.append(recovery("tool_call", M.t(lang, "period.read_dims_grain"),
                         "describe_dataset", {"dataset": code, "lang": lang}))
-    return _unavailable(reason, f"No change was computed: {text}", rec=rec, provenance=prov,
+    return _unavailable(reason, M.t(lang, "period.no_change", text=text), rec=rec, provenance=prov,
                         limits=limits)
 
 
@@ -304,7 +279,7 @@ _RESIDENT_RE = re.compile(r"\b(?:populati\w*\s+(?:rezident\w*|stabil\w*)|resedin
                           r"resident population|usual residence)\b")
 
 
-def _population_note(title: str, definition: str) -> str | None:
+def _population_note(title: str, definition: str, lang: str) -> str | None:
     """What the source says its population counts: domicile or usual residence.
     Judged on the title, else the opening of the definition (a definition that
     leads with one concept may mention the other in passing: "usual residence may
@@ -314,38 +289,29 @@ def _population_note(title: str, definition: str) -> str | None:
     for text in (fold(title), fold(definition)[:240]):
         dom, res = bool(_DOMICILE_RE.search(text)), bool(_RESIDENT_RE.search(text))
         if dom and not res:
-            return ("The source defines this as the domicile (domiciliu) population, which is "
-                    "not a count of residents.")
+            return M.t(lang, "period.pop_domicile")
         if res and not dom:
-            return "The source defines this as the resident (usual residence) population."
+            return M.t(lang, "period.pop_resident")
         if dom and res:
-            return ("The source text names both domicile and usual residence; check which one "
-                    "this series counts.")
+            return M.t(lang, "period.pop_both")
     if "populati" in fold(f"{title} {definition[:240]}") or "population" in fold(title):
-        return ("The source definition does not say whether it counts domicile or usual "
-                "residence; do not read it as a resident count.")
+        return M.t(lang, "period.pop_unsaid")
     return None
 
 
-CLASS_WARNING = ("Cities are municipalities and towns in the referenced catalogue (INS GOS102A, SIRUTA "
-                 "keys). Membership does not prove historical city status or unchanged boundaries; "
-                 "places outside the catalogue (communes, totals) were not ranked.")
+CLASS_WARNING = M.t("en", "period.class_warning")      # the evidence bundle is English whatever the request's lang
 
 
-def _warnings(notes: list, facts: dict | None, geo: bool, intervals, counts: dict) -> list:
+def _warnings(notes: list, facts: dict | None, geo: bool, intervals, counts: dict, lang: str = "ro") -> list:
     out = []
     if counts:
         total = sum(counts.values())
         reasons = ", ".join(f"{r} {n}" for r, n in sorted(counts.items()))
-        out.append(contract.warning(
-            "entities_excluded",
-            f"{total} entity-interval pair(s) were not ranked ({reasons}); they are listed "
-            "per interval, never filled with zero."))
+        out.append(contract.warning("entities_excluded", M.t(lang, "period.pairs_not_ranked",
+                                                             total=total, reasons=reasons)))
     if geo:
-        text = ("Stable labels or codes do not prove unchanged territory: boundary changes, mergers "
-                "and splits between the endpoint years are not tracked, so a change can reflect "
-                "territory as well as real change.")
-        pop = _population_note((facts or {}).get("title") or "", (facts or {}).get("definition") or "")
+        text = M.t(lang, "period.boundary")
+        pop = _population_note((facts or {}).get("title") or "", (facts or {}).get("definition") or "", lang)
         out.append(contract.warning("boundary_continuity_unverified",
                                     f"{text} {pop}" if pop else text))
     spans = [(iv["from"], iv["to"]) for iv in intervals]
@@ -360,7 +326,7 @@ def _warnings(notes: list, facts: dict | None, geo: bool, intervals, counts: dic
             hit = [f"{a}→{b}" for a, b in spans
                    if between and len(between) == 2 and a <= str(between[0]) and str(between[1]) <= b]
             if hit:
-                text = f"Inside the compared interval {', '.join(hit)}: {text}"
+                text = M.t(lang, "period.inside_interval", hit=", ".join(hit), text=text)
         out.append(contract.warning(code, text, n.get("id")))
     return out
 
@@ -386,6 +352,7 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
         ctx = ToolContext(conn=conn, lang=lang, generation=generation.current(),
                           request_id=uuid.uuid4().hex[:12])
     ctx.require_present_generation("compare_periods")
+    lang = ctx.lang
     mctx = dataset_meta.get_aggregation_context(conn, code)
     if mctx is None:
         raise contract.query_failure(QueryError(404, f"Dataset {code} not found"), ctx, code)
@@ -396,35 +363,30 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
         title = (dataset_facts(conn, code, lang) or {}).get("title") or code
         raise _unavailable(
             "unsupported_measure",
-            f"{code} is classified as a {measure or 'non-additive'} measure (unit type "
-            f"{mctx.get('unit_type') or 'unknown'}): rates, means, indices and unknown units "
-            "are not compared here, because the change of such a value has no single "
-            "definition. A reviewed recipe may exist.",
-            rec=[recovery("tool_call", "Look for a reviewed recipe or indicator for this measure.",
+            M.t(lang, "period.unsupported_measure", code=code, measure=measure or M.t(lang, "period.non_additive"),
+                unit_type=mctx.get("unit_type") or M.t(lang, "period.unknown_unit_type")),
+            rec=[recovery("tool_call", M.t(lang, "period.find_recipe"),
                           "discover_indicators", {"query": str(title)[:200], "lang": lang})])
 
     dims = {d["dim_column_name"]: d for d in mctx["dimensions"]}
     time_cols = [c for c, d in dims.items() if d.get("dim_type") == "time"]
     if not time_cols:
-        raise _unavailable("unsupported_frequency",
-                           f"{code} has no time dimension, so there are no annual endpoints.",
-                           rec=[recovery("tool_call", "Read the dataset's dimensions.",
+        raise _unavailable("unsupported_frequency", M.t(lang, "period.no_time", code=code),
+                           rec=[recovery("tool_call", M.t(lang, "period.read_dims"),
                                          "describe_dataset", {"dataset": code, "lang": lang})])
     time_col = "TIME_PERIOD" if "TIME_PERIOD" in time_cols else time_cols[0]
 
     schema = resolve_parquet_schema(conn, code)
     for c in args.filters:
         if to_sdmx_name(schema, c) == time_col or c == time_col:
-            raise ToolFailure("error", "invalid_input",
-                              f"Invalid filters: {c} is the period column; periods come from "
-                              "the intervals.")
+            raise ToolFailure("error", "invalid_input", M.t(lang, "period.filter_is_period", col=c))
     for c in args.entity_columns:
         if c == time_col or (c in dims and dims[c].get("dim_type") == "time"):
-            raise ToolFailure("error", "invalid_input",
-                              f"Invalid entity_columns: {c} is the period column, not an entity.")
+            raise ToolFailure("error", "invalid_input", M.t(lang, "period.entity_is_period", col=c))
         if c not in dims:
             raise contract.query_failure(
-                QueryError(400, f"Invalid entity_columns: unknown column {c!r}"), ctx, code)
+                QueryError(400, f"Invalid entity_columns: unknown column {c!r}"), ctx, code,
+                message=M.t(lang, "period.unknown_entity_column", col=c))
 
     years_actual, (first, last) = _periods(conn, code, time_col, ctx)
     wanted = sorted({y for i in args.intervals for y in (i.from_, i.to)})
@@ -432,16 +394,15 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
     if absent:
         raise _unavailable(
             "period_unavailable",
-            f"Year {', '.join(absent)} has no observations in {code}; the data covers {first} to "
-            f"{last}. No nearby year was substituted.",
-            rec=[recovery("tool_call", f"List the actual values of {time_col}.",
+            M.t(lang, "period.year_absent", years=", ".join(absent), code=code, first=first, last=last),
+            rec=[recovery("tool_call", M.t(lang, "period.list_values", col=time_col),
                           "find_dimension_values",
                           {"dataset": code, "column": time_col, "limit": 20})])
 
     key_cols, added = _key_columns(mctx, list(args.entity_columns))
     cities = args.entity_class == "cities"
     if cities:
-        catalogue = ranking.city_codes(conn)            # refuses when GOS102A's catalogue is unusable
+        catalogue = ranking.city_codes(conn, lang)      # refuses when GOS102A's catalogue is unusable
     filters = {c: list(v) for c, v in args.filters.items()}
     filters[time_col] = [years_actual[y] for y in wanted]
     group_by = key_cols + [time_col]
@@ -462,29 +423,21 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
     if res.get("truncated") or res.get("time_windowed") or res.get("partial_period_dropped") \
             is not None:
         raise _unavailable(
-            "source_incomplete",
-            f"The source query for the endpoint years is larger than the {MAX_DATA_ROWS:,}-row "
-            "cap (or was windowed), so the entity set is incomplete. No ranking was computed "
-            "from a capped input.",
-            rec=[recovery("narrow", "Filter an entity column (for example one county) or pin "
-                                    "other dimensions so the endpoint table fits the cap.")],
+            "source_incomplete", M.t(lang, "period.source_capped", cap=f"{MAX_DATA_ROWS:,}"),
+            rec=[recovery("narrow", M.t(lang, "period.source_capped_narrow"))],
             provenance=prov, limits=contract.query_limits(res, 0))
     if agg.get("outcome") == "approximation":
-        raise _unavailable("unsupported_measure",
-                           "An approximate (unweighted) aggregation is not used for period "
-                           "changes.", provenance=prov, limits=contract.query_limits(res, 0))
+        raise _unavailable("unsupported_measure", M.t(lang, "period.approximation"),
+                           provenance=prov, limits=contract.query_limits(res, 0))
     mixed = [w.get("column") for w in agg.get("warnings") or []
              if w.get("code") == "mixed_grain_on_axis" and w.get("column") in key_cols]
     if mixed:
         col = mixed[0]
         raise _unavailable(
-            "overlapping_levels",
-            f"{col} mixes levels that overlap (for example counties with regions), so ranking "
-            "its values would compare an area with its own parts. Choose one level.",
-            rec=[recovery("tool_call", f"List the actual values of {col}, then filter to one "
-                                       "level's values.",
+            "overlapping_levels", M.t(lang, "period.mixed_levels", col=col),
+            rec=[recovery("tool_call", M.t(lang, "period.list_one_level", col=col),
                           "find_dimension_values", {"dataset": code, "column": col, "limit": 20}),
-                 recovery("tool_call", "Read the dataset's dimensions and levels.",
+                 recovery("tool_call", M.t(lang, "period.read_levels"),
                           "describe_dataset", {"dataset": code, "lang": lang})],
             provenance=prov, limits=contract.query_limits(res, 0))
     if not res["rows"]:
@@ -493,14 +446,12 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
             col, vals = next(iter(missing.items()))
             raise _unavailable(
                 "slice_value_missing",
-                f"Requested value(s) of {col} are not in the data: "
-                f"{', '.join(repr(v) for v in vals[:5])}.",
-                rec=[recovery("tool_call", f"List the actual values of {col}.",
+                M.t(lang, "period.values_missing", col=col, values=", ".join(repr(v) for v in vals[:5])),
+                rec=[recovery("tool_call", M.t(lang, "period.list_values", col=col),
                               "find_dimension_values",
                               {"dataset": code, "column": col, "limit": 20})],
                 provenance=prov, limits=contract.query_limits(res, 0))
-        raise _unavailable("no_eligible_entities",
-                           "The selection has no observations at the endpoint years.",
+        raise _unavailable("no_eligible_entities", M.t(lang, "period.no_observations"),
                            provenance=prov, limits=contract.query_limits(res, 0))
 
     cols = res["columns"]
@@ -508,26 +459,19 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
         ki = [cols.index(c) for c in key_cols]
         ti = cols.index(time_col)
     except ValueError:
-        raise ToolFailure("error", "execution_failed",
-                          f"The source query returned an unexpected shape (reference "
-                          f"{ctx.request_id}); nothing was computed.")
+        raise ToolFailure("error", "execution_failed", M.t(lang, "period.unexpected_shape", ref=ctx.request_id))
     year_of = {v: y for y, v in years_actual.items()}
     rows = []
     for r in res["rows"]:
         key = tuple(r[i] for i in ki)
         if any(v is None or str(v).strip() == "" for v in key):
-            raise _unavailable(
-                "identity_ambiguous",
-                "Some rows have an empty component in the entity key, so those entities "
-                "cannot be identified.", provenance=prov)
+            raise _unavailable("identity_ambiguous", M.t(lang, "period.empty_key"), provenance=prov)
         year = year_of.get(str(r[ti]))
         if year is None:
-            raise ToolFailure("error", "execution_failed",
-                              f"The source query returned an unexpected period (reference "
-                              f"{ctx.request_id}); nothing was computed.")
+            raise ToolFailure("error", "execution_failed", M.t(lang, "period.unexpected_period", ref=ctx.request_id))
         rows.append((tuple(str(v) for v in key), year, r[-1]))
     try:
-        table = build_endpoint_table(rows)
+        table = build_endpoint_table(rows, lang)
     except ToolFailure as f:
         f.provenance = prov
         raise
@@ -545,14 +489,12 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
             if len(cols_fixed) <= 8:
                 a = args.model_dump(by_alias=True)
                 a["entity_columns"] = cols_fixed
-                fix = recovery("tool_call", f"Compare with the full key ({', '.join(cols_fixed)}) "
-                                            "so same-named places stay separate.",
+                fix = recovery("tool_call", M.t(lang, "period.full_key", cols=", ".join(cols_fixed)),
                                "compare_periods", a)
             raise _unavailable(
                 "identity_ambiguous",
-                f"{len(clash)} requested {'/'.join(args.entity_columns)} value(s), e.g. "
-                f"{'/'.join(k)!r}, occur under several {', '.join(added)} values ({ex}); a name "
-                f"alone does not identify a place. Include {', '.join(added)} in entity_columns.",
+                M.t(lang, "period.identity_ambiguous", n=len(clash), requested="/".join(args.entity_columns),
+                    example="/".join(k), added=", ".join(added), parents=ex),
                 rec=[fix] if fix else [], provenance=prov)
 
     aggregate_keys = _aggregate_keys(table, key_cols, mctx)
@@ -567,7 +509,7 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
             "applied": "before eligibility, ranks and top_k", "catalogue_count": len(catalogue)}
         try:
             classes = ranking.classify_cities(
-                sorted({k for k, _ in table}, key=_skey), key_cols, catalogue, aggregate_keys)
+                sorted({k for k, _ in table}, key=_skey), key_cols, catalogue, aggregate_keys, lang)
         except ToolFailure as f:
             f.provenance = prov
             raise
@@ -579,7 +521,9 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
     intervals = compute(scored, key_cols, intervals_in, args.metric, args.order, scored_aggregates)
 
     src = prov["sources"][0]
-    facts = dataset_facts(conn, code, lang)
+    # what the source says its population counts is judged on its own (Romanian) words in either language:
+    # INS's English titles are translations ("LEGALLY RESIDENT POPULATION" for a domicile series)
+    facts = dataset_facts(conn, code, "ro")
     unit = src.get("unit")
     pinned = filters.get("UNIT_MEASURE")
     if unit is None and pinned and len(pinned) == 1:
@@ -591,9 +535,9 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
     geo = any((dims.get(c) or {}).get("dim_type") == "geo" or c.startswith("REF_AREA")
               for c in key_cols)
     from app.services import dataset_notes
-    warnings = _warnings(dataset_notes.for_code(code, lang), facts, geo, intervals, counts)
+    warnings = _warnings(dataset_notes.for_code(code, lang), facts, geo, intervals, counts, lang)
     if cities:
-        warnings.append(contract.warning("classification_reference", CLASS_WARNING))
+        warnings.append(contract.warning("classification_reference", M.t(lang, "period.class_warning")))
 
     scope = prov["scope"]
     if not any(iv["eligible_count"] for iv in intervals):

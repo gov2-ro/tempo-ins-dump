@@ -379,12 +379,22 @@ function renderDataTable(data) {
 
     const meta = document.createElement('div');
     meta.className = 'chat-data-meta';
+    // A ranking was computed over every eligible entity before its top K was cut; only an unranked
+    // result (a query preview) is captioned as a preview.
     meta.textContent = data.ranked
-        ? `${data.rows.length} ${tr('din', 'of')} ${data.eligible_count} ${tr('entități eligibile, în ordine', 'eligible entities, ranked')}`
+        ? `${data.rows.length} ${tr('din', 'of')} ${data.eligible_count} ${(data.interval_count || 1) > 1
+            ? tr('perechi entitate–interval eligibile, clasate pe interval', 'eligible entity–interval pairs, ranked within each interval')
+            : tr('entități eligibile, în ordine', 'eligible entities, ranked')}`
         : data.truncated || data.preview
             ? `${tr('Previzualizare: primele', 'Preview: first')} ${data.rows.length} ${tr('rânduri; nu este un clasament', 'rows; not a ranking')}`
             : `${data.row_count ?? data.rows.length} ${tr('rânduri', 'rows')}`;
     if (data.unit) meta.textContent += ` · ${data.unit}`;
+    if (data.ranked && data.excluded_count) {
+        meta.textContent += ` · ${data.excluded_count} ${tr('excluse', 'excluded')}`;
+    }
+    if (data.ranked && data.outside_class_count) {
+        meta.textContent += ` · ${data.outside_class_count} ${tr('din afara clasei (comune, totaluri), neclasate', 'outside the class (communes, totals), not ranked')}`;
+    }
     if (data.matrix_code) {
         const link = document.createElement('a');
         link.href = datasetHref(data.matrix_code);
@@ -448,8 +458,11 @@ function renderDataTable(data) {
         const td = footerRow.insertCell();
         td.colSpan = data.columns.length;
         td.className = 'chat-table-truncated';
-        td.textContent = tr('Previzualizare limitată. Consultați selecția completă din linkurile sursă.',
-                            'Limited preview. Open the complete selection using the source links.');
+        td.textContent = data.ranked
+            ? tr('Lista este limitată; clasamentul complet și excluderile sunt în linkurile sursă.',
+                 'This list is limited; the complete ranking and exclusions are in the source links.')
+            : tr('Previzualizare limitată. Consultați selecția completă din linkurile sursă.',
+                 'Limited preview. Open the complete selection using the source links.');
     }
 
     tableWrap.appendChild(table);

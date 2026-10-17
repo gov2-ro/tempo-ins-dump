@@ -140,7 +140,7 @@ def _check_dataset(ctx, code: str, *, filters: dict, group_by=(), entities=(),
         raise C.query_failure(dq.QueryError(404, f"Dataset {code} not found"), ctx, code)
     if not (dq.PARQUET_DIR / f"{code}.parquet").exists():
         raise C.query_failure(dq.QueryError(
-            404, f"Dataset {code} has no data file; it may be published as sub-datasets."),
+            404, f"Dataset {code} has no data file — it may be published as sub-datasets."),
             ctx, code)
     dims = [{"dim_column_name": r[0]} for r in conn.execute(
         "SELECT dim_column_name FROM dimensions WHERE matrix_code = ? ORDER BY dim_code",

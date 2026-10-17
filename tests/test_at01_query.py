@@ -245,6 +245,7 @@ def genv(base_corpus, tmp_path, monkeypatch):
 
 
 def q(**kw):
+    kw.setdefault("lang", "en")             # these tests pin the English wording of the prose (AQ-04C)
     return call("query_data", **kw)
 
 
@@ -563,7 +564,7 @@ def test_missing_total_offers_a_reviewed_recipe_when_the_concept_has_one(env, tm
           group_by=["TIME_PERIOD"])
     first = e["recovery"][0]
     assert first["tool"] == "run_recipe"
-    assert first["arguments"] == {"recipe": "net_earnings_county", "lang": "ro", "year": "2024"}
+    assert first["arguments"] == {"recipe": "net_earnings_county", "lang": "en", "year": "2024"}
     assert [r["tool"] for r in e["recovery"]] == ["run_recipe", "query_data", "find_dimension_values"]
     # an unknown recipe id is never offered
     _concepts(tmp_path, monkeypatch, recipe="no_such_recipe")
@@ -749,7 +750,7 @@ def test_single_age_child_is_partial_and_names_the_complete_sibling(env):
     assert rows(e) == [["2024", 90.0]]                         # kept, never promoted to 100
     sc = e["provenance"]["scope"]
     assert sc["domain_complete"] is False
-    assert sc["description"] == "Vârste 0–2 ani (fără 3 ani și peste)"
+    assert sc["description"] == "Ages 0–2 (3 and over not included)"
     assert sc["limitations"][0]["requested"] is False and sc["limitations"][0]["missing"] == [[3, None]]
     assert sc["description"] in e["message"] and "not a complete-domain total" in e["message"]
     w = [w for w in e["warnings"] if w["code"] == "incomplete_domain"]
@@ -764,13 +765,15 @@ def test_single_age_child_is_partial_and_names_the_complete_sibling(env):
 
 
 def test_scope_text_follows_the_language(env):
-    e = q(dataset="AGEC", group_by=["TIME_PERIOD"], lang="en")
-    assert e["provenance"]["scope"]["description"] == "Ages 0–2 (3 and over not included)"
+    e = q(dataset="AGEC", group_by=["TIME_PERIOD"], lang="ro")
+    assert e["provenance"]["scope"]["description"] == "Vârste 0–2 ani (fără 3 ani și peste)"
+    assert q(dataset="AGEC", group_by=["TIME_PERIOD"])["provenance"]["scope"]["description"] == \
+        "Ages 0–2 (3 and over not included)"
 
 
 def test_explicit_range_is_preserved_but_other_domain_coverage_is_unverified(env):
     ages = ["0 ani", "1 ani", "2 ani"]
-    e = q(dataset="AGEC", group_by=["TIME_PERIOD"], filters={"AGE": ages})
+    e = q(dataset="AGEC", group_by=["TIME_PERIOD"], filters={"AGE": ages}, lang="ro")
     assert e["status"] == "partial" and e["reason"] == "unverified_total" and rows(e) == [["2024", 90.0]]
     lim = e["provenance"]["scope"]["limitations"][0]
     assert lim["requested"] is True and lim["covered"] == [[0, 2]]
@@ -792,7 +795,7 @@ def test_unknown_completeness_is_stated_not_failed(env):
     assert e["status"] == "partial" and rows(e) == [["2024", 100.0]]
     assert e["provenance"]["scope"]["domain_complete"] is None
     assert e["reason"] == "unverified_total" and "unverified_total" in codes(e)
-    assert "unverified" in e["message"] and "Nu se poate verifica" in e["provenance"]["scope"]["description"]
+    assert "unverified" in e["message"] and "cannot be verified" in e["provenance"]["scope"]["description"]
     assert not any(w["code"] == "incomplete_domain" for w in e["warnings"])
 
 
