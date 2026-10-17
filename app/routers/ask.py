@@ -40,6 +40,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
@@ -95,6 +96,9 @@ class AskRequest(BaseModel):
     model: str | None = Field(default=None, max_length=100)
     api_key: str | None = Field(default=None, max_length=400)
     debug: bool = False   # honoured only when the server runs with TEMPO_ASK_DEBUG
+    # The language the site is shown in. It decides only a question that shows no language of its
+    # own (answer_check.resolve_lang); with neither, tool prose stays Romanian. Anything but ro/en is a 422.
+    lang: Literal["ro", "en"] | None = None
 
 
 @router.get("/ask/config")
@@ -238,7 +242,7 @@ def _answer(req: AskRequest, on_event=None, cancel: ask_guard.CancelToken | None
     request_id = uuid.uuid4().hex[:12]
     base = {"request_id": request_id, "ts": ts, "provider": provider, "model": model, "byok": byok,
             "question_chars": len(req.question), "history_turns": len(history),
-            "context_entries": len(context)}
+            "context_entries": len(context), "site_lang": req.lang}
 
     # 4. Concurrency bound (raises 503 + Retry-After; the slot is released only when the work ends).
     try:
@@ -251,7 +255,7 @@ def _answer(req: AskRequest, on_event=None, cancel: ask_guard.CancelToken | None
         try:
             result = run_agent(req.question, history, provider=provider, model=model,
                                api_key=req.api_key, on_event=on_event, context=context,
-                               cancel=cancel, request_id=request_id)
+                               cancel=cancel, request_id=request_id, site_lang=req.lang)
         except LLMError as e:
             _log_metrics(**base, status=e.status, reason=e.code,
                          duration_ms=int((time.monotonic() - t0) * 1000))
@@ -283,6 +287,7 @@ def _answer(req: AskRequest, on_event=None, cancel: ask_guard.CancelToken | None
         "reason": result.reason,
         "context": result.context,
         "budget": result.budget,
+        "lang": result.lang,
     }
 
     _log_metrics(**{**base, **result.metrics, "status": 200,

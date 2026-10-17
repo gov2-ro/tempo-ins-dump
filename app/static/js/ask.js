@@ -29,9 +29,21 @@ function debugOn() {
     try { return localStorage.getItem('ask_debug') === '1'; } catch { return false; }
 }
 
-function isRo() {
-    try { return (localStorage.getItem('lens_lang') || 'ro') !== 'en'; } catch { return true; }
+/** The site's language: ?lang= first, then the switcher's lens_lang, default ro (utils.currentLang's
+ *  rule, which ui-preferences.js and site-chrome.js share). It is also the language signal sent
+ *  with every question; the server uses it only when the question shows none of its own. */
+function siteLang() {
+    let l = null;
+    try { l = new URLSearchParams(location.search).get('lang'); } catch { /* no URL */ }
+    if (!l) { try { l = localStorage.getItem('lens_lang'); } catch { /* storage blocked */ } }
+    return l === 'en' ? 'en' : 'ro';
 }
+
+/** Language of the answer being rendered (the response's `lang`: what the server wrote its warnings,
+ *  scope and table prose in). Its captions follow it; the page's own chrome and errors follow the site. */
+let turnLang = null;
+
+function isRo() { return (turnLang || siteLang()) !== 'en'; }
 const tr = (ro, en) => (isRo() ? ro : en);
 
 /** Terminal outcome of a turn (AT-02). HTTP 200 and a text answer are not enough to call it a
@@ -115,8 +127,7 @@ async function initServerNotices() {
  *  the manual routes, and disable input instead of leaving a dead page. */
 function showAskUnavailable() {
     ASK_UNAVAILABLE = true;
-    let ro = true;
-    try { ro = (localStorage.getItem('lens_lang') || 'ro') !== 'en'; } catch { /* default ro */ }
+    const ro = siteLang() !== 'en';
     const box = document.getElementById('ask-unavailable');
     box.innerHTML = ro
         ? 'Întrebările în limbaj natural nu sunt disponibile pe acest server. '
@@ -495,9 +506,7 @@ function renderDataTable(data) {
 
 /** The dataset page a citation or table opens (the canonical v2 route). */
 function datasetHref(code) {
-    let en = false;
-    try { en = (localStorage.getItem('lens_lang') || 'ro') === 'en'; } catch { /* storage blocked */ }
-    return `/dataset-v2.html?code=${encodeURIComponent(code)}${en ? '&lang=en' : ''}`;
+    return `/dataset-v2.html?code=${encodeURIComponent(code)}${siteLang() === 'en' ? '&lang=en' : ''}`;
 }
 
 /** Chart series from a query result (PA-01c, audit A03). Every column other
@@ -619,6 +628,11 @@ function appendMessage(role, text) {
 }
 
 function appendAssistantResponse(result) {
+    turnLang = result.lang === 'en' || result.lang === 'ro' ? result.lang : null;
+    try { buildAssistantResponse(result); } finally { turnLang = null; }
+}
+
+function buildAssistantResponse(result) {
     const list = document.getElementById('chat-messages');
     const div = document.createElement('div');
     div.className = 'chat-msg chat-msg--assistant';
@@ -769,7 +783,8 @@ function fmtEvent(ev) {
     const secs = ms => `${(ms / 1000).toFixed(1)}s`;
     switch (ev.event) {
         case 'start': return `${t}  start · ${ev.provider} / ${ev.model} · ${ev.history_turns} earlier turns`
-            + (ev.context_entries ? ` · ${ev.context_entries} earlier selections` : '');
+            + (ev.context_entries ? ` · ${ev.context_entries} earlier selections` : '')
+            + (ev.lang ? ` · ${ev.lang} (${ev.lang_source})` : '');
         case 'model_call': return `${t}  → model call #${ev.iteration} (${ev.messages} messages`
             + `${ev.max_tokens ? `, ≤${ev.max_tokens} tokens` : ''})${ev.final ? ' · final answer, tools off' : ''}`;
         case 'model_done': return `${t}  ← model #${ev.iteration} in ${secs(ev.took_ms)}: ${ev.finish || ev.stop_reason}`
@@ -908,7 +923,8 @@ async function sendMessage() {
     const loadingEl = appendLoadingIndicator();
 
     // server caps history; send only the most recent turns (see /api/ask/config limits)
-    const body = { question, history: history.slice(-MAX_HISTORY_TURNS),
+    // `lang` is the site's language, on every turn: the server uses it for a question that shows none.
+    const body = { question, lang: siteLang(), history: history.slice(-MAX_HISTORY_TURNS),
                    ...(askContext.length ? { context: askContext } : {}), ...byokPayload() };
     // Never wait forever: the server stops at MAX_SECONDS; allow a margin for the last call.
     // Aborting also tells the server to stop the work (it sees the disconnect).
