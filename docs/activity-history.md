@@ -1,6 +1,14 @@
 # Activity History
 
 
+## 2026-10-18 — National unemployment keeps the clarification
+
+Owner decision: a generic national unemployment question still asks registered vs ILO, because
+neither gives one national figure today (ILO national has no all-ages total cell; the national
+registered rate is only a published reference cell). County questions still default to the
+registered rate. Config `levels` = county only; task X06 back to ask-then-honour; 144/144.
+
+
 ## 2026-10-18 — Owner decisions: language, unverified status, county-scoped cities, unemployment
 
 Implemented the owner's 2026-10-17 decisions with Sonnet sub-agents (branches merged `--no-ff`

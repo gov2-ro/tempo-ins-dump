@@ -273,3 +273,12 @@ file is read per request (cached by mtime).
 - The registered national rate (published cell `TOTAL`, 2.9 in 2023) is in the corpus but not served: the owner may want a recipe for it, after which the national default should be reconsidered.
 - English "recent"/"current" are read as the latest period by `concept_search`; a "trend in recent years" question gets one year. Raw search is out of scope here.
 - Live-provider Ask run with these paraphrases: `not_run`.
+
+## Follow-up — 2026-10-18: national level keeps the clarification (owner)
+
+The national ILO default gave no single figure (AMG157A_anual has age bands by sex, no all-ages
+total) and the national registered rate is only a `published_totals` cell. `level_defaults`
+now maps `county` only; national, region and unknown levels ask. The national mechanism stays
+tested under a policy that restores it (`with_national`). AQ-02 X06 is back to its two-turn
+flow (ask, then the chosen ILO definition is honoured); X06B keeps the no-level case. Runner on
+the copy: 144/144, controls 30/2/0. Rollback: add `"national": "ilo_unemployment_rate"` back.

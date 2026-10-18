@@ -40,15 +40,17 @@ On `fix/ask-answer-quality` (2026-10-17, code-ready, not deployed, not model/cli
 - [x] **County-scoped city rankings and unemployment default** — **Decided 2026-10-17 (owner):**
   "a county named in a city ranking narrows it to cities in that county" (exact county label,
   disclosed); generic unemployment defaults by level: county → registered (ILO has no county
-  series), national → ILO, region/unknown → keep asking; explicit definitions always win.
+  series), national/region/unknown → keep asking (national revised 2026-10-18); explicit
+  definitions always win.
   Done (merged 2026-10-18; config in `discovery_defaults.json`, `place_filter` / `level_defaults`).
   București is never a county filter (city and county-level unit at once). A region around a
   city ranking is reported, not applied.
 - [ ] **National unemployment default needs a figure**: the national ILO default leads to
   `describe_dataset AMG157A_anual` (age bands by sex, no total cell), so it gives no single rate;
   meanwhile INS's national *registered* rate exists only as a `published_totals` cell (SOM103A
-  `TOTAL`, 2.9 in 2023) that no tool serves. Owner to choose: keep asking at national level
-  (`levels` without `national`), or serve one of these as a reviewed national figure first.
+  `TOTAL`, 2.9 in 2023) that no tool serves. **Decided 2026-10-18 (owner):** keep asking at
+  national level for now (`levels` has county only). Revisit once a reviewed national figure is
+  served (the registered published cell through a recipe, or an ILO all-ages total).
 - [ ] **Unknown place names in a city ranking vanish silently** (e.g. "orașe din Turda"):
   neither county nor region, so not reported. Report as not applied.
 - [ ] **AQ-04A follow-ups**: a generic population default at national level (kept as before);

@@ -165,7 +165,7 @@ def test_the_reviewed_table_is_pinned_in_the_configuration():
     assert "clarify_only" not in p and len(p["level_defaults"]) == 1
     entry = p["level_defaults"][0]
     assert entry["topic"] == "unemployment" and entry["no_level"] == "clarify"
-    assert entry["levels"] == {"county": "registered_unemployment_rate", "national": "ilo_unemployment_rate"}
+    assert entry["levels"] == {"county": "registered_unemployment_rate"}      # national asks (owner, 2026-10-18)
     assert set(entry["definitions"]) == {"registered_unemployment_rate", "ilo_unemployment_rate"}
     # owner decision 2026-10-17: one named county narrows a city ranking (Municipiul Bucuresti never does)
     assert cities["place_filter"] == {"level": "county", "column": "REF_AREA", "except": ["municipiul-bucuresti"]}

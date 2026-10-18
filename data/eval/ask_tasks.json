@@ -1584,42 +1584,59 @@
   },
   {
    "id": "X06",
-   "title": "Generic national unemployment trend: the ILO rate is the disclosed default; the registered rate has no national series",
+   "title": "Generic national unemployment trend: ask first; the chosen ILO definition is then honoured",
    "category": "definition",
    "fixture": "synthetic-v1",
    "surfaces": ["direct"],
-   "prompt": {"ro": "Cum a evoluat rata șomajului în România în ultimii ani?", "en": "How has the unemployment rate in Romania evolved over the last few years?"},
-   "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
-   "answer": {
-    "ro": "Am presupus implicit rata șomajului BIM (ILO), pentru că rata înregistrată nu are serie națională în catalogul revizuit: pentru România a fost 6,1% în 2020 și 5,6% în 2021 (UNEMI).",
-    "en": "I assumed the default ILO unemployment rate, because the registered rate has no national series in the reviewed catalogue: for Romania it was 6.1% in 2020 and 5.6% in 2021 (UNEMI)."
-   },
-   "review": "Owner decision 2026-10-17: a national question defaults to the ILO rate, disclosed with an assumed_definition warning that says the registered rate has no national series. Before it, this question asked which definition was meant (that flow is kept in X06B). The English prompt no longer says 'recent years': discovery reads 'recent' as the latest period and would return one year, which is a separate matter from the definition.",
-   "expect": {
-    "outcome": ["answered"],
-    "verification": ["verified"],
-    "calls": [
-     {"call": 0, "status": ["ok"], "warnings": ["assumed_definition"],
-      "equals": {"/data/interpretation/assumed_definition": "ilo_unemployment_rate", "/data/concepts/0/id": "ilo_unemployment_rate"}},
-     {"call": 1, "status": ["ok", "partial"]}
-    ],
-    "numbers": [
-     {"id": "ilo_2020", "call": 1, "path": "/data/rows/0/2", "value": 6.1, "derivation": "6.1", "period": "2020"},
-     {"id": "ilo_2021", "call": 1, "path": "/data/rows/1/2", "value": 5.6, "derivation": "5.6", "period": "2021"}
-    ],
-    "evidence": {"call": 1, "datasets": ["UNEMI"], "generation": "gen-at01-fixture"},
-    "qualifications": [
-     {
-      "id": "default_disclosed",
-      "answer_any": {"ro": ["am presupus", "implicit"], "en": ["assumed", "default"]},
-      "tool": {"call": 0, "warning": "assumed_definition"}
+   "review": "Owner decision 2026-10-18: the national level keeps the clarification for now. The ILO national series has no all-ages total cell and the national registered rate is only a published reference cell, so a national default would give no single figure. A county still defaults to the registered rate (T02B).",
+   "turns": [
+    {
+     "prompt": {"ro": "Cum a evoluat rata șomajului în România în ultimii ani?", "en": "How has the unemployment rate in Romania evolved in recent years?"},
+     "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}],
+     "answer": {
+      "ro": "Există două definiții oficiale: șomajul înregistrat și șomajul BIM (ILO). Pe care o doriți?",
+      "en": "There are two official definitions: registered unemployment and ILO unemployment. Which one do you want?"
      },
-     {"id": "definition_named", "answer_any": {"ro": ["BIM", "ILO"], "en": ["ILO"]}},
-     {"id": "alternative_named", "answer_any": {"ro": ["inregistrata"], "en": ["registered"]}}
-    ],
-    "forbidden": [{"id": "registered_series", "numbers": [2.5, 3, 3.5, 4, 4.5, 5]}],
-    "answer": {"allowed_numbers": [2020, 2021]}
-   }
+     "expect": {
+      "outcome": ["clarification"],
+      "reasons": ["ambiguous_definition"],
+      "verification": ["no_values"],
+      "calls": [
+       {
+        "call": 0,
+        "status": ["needs_clarification"],
+        "reason": ["ambiguous_definition"],
+        "equals": {"/data/interpretation/assumed_definition": null},
+        "absent": ["/data/concepts/0/next_call"]
+       }
+      ],
+      "qualifications": [
+       {"id": "registered_named", "answer_any": {"ro": ["inregistrat"], "en": ["registered"]}},
+       {"id": "ilo_named", "answer_any": {"ro": ["BIM", "ILO"], "en": ["ILO"]}}
+      ],
+      "answer": {"no_numbers": true, "allowed_numbers": []}
+     }
+    },
+    {
+     "prompt": {"ro": "Cea după metodologia BIM (ILO).", "en": "The ILO definition."},
+     "steps": [{"tool": "discover_indicators", "arguments": {"query": "somaj bim Romania"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
+     "answer": {
+      "ro": "Rata șomajului BIM (ILO) pentru România: 6,1% în 2020 și 5,6% în 2021 (UNEMI).",
+      "en": "ILO unemployment rate for Romania: 6.1% in 2020 and 5.6% in 2021 (UNEMI)."
+     },
+     "expect": {
+      "outcome": ["answered"],
+      "calls": [{"call": 0, "status": ["ok"], "equals": {"/data/concepts/0/id": "ilo_unemployment_rate"}}, {"call": 1, "status": ["ok", "partial"]}],
+      "numbers": [
+       {"id": "ilo_2020", "call": 1, "path": "/data/rows/0/2", "value": 6.1, "derivation": "6.1", "period": "2020"},
+       {"id": "ilo_2021", "call": 1, "path": "/data/rows/1/2", "value": 5.6, "derivation": "5.6", "period": "2021"}
+      ],
+      "evidence": {"call": 1, "datasets": ["UNEMI"], "generation": "gen-at01-fixture"},
+      "forbidden": [{"id": "registered_series", "numbers": [2.5, 3, 3.5, 4, 4.5, 5]}],
+      "answer": {"allowed_numbers": [2020, 2021]}
+     }
+    }
+   ]
   },
   {
    "id": "X06B",

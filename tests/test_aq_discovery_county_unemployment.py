@@ -410,6 +410,11 @@ def test_the_county_default_answers_with_the_registered_figure_of_the_named_coun
     assert run(nc)["data"]["rows"] == [["Cluj", "2023", 13.0]]       # 3.0 in 2022, +10 a year
 
 
+def with_national(monkeypatch, tmp_path):
+    """The national ILO default is not shipped (owner, 2026-10-18), but the mechanism stays tested."""
+    use_policy(monkeypatch, tmp_path, lambda p: _entry(p)["levels"].update(national=ILO))
+
+
 NATIONAL_LEVEL = [
     ("rata somajului in Romania 2023", "ro"), ("unemployment rate in Romania 2023", "en"),
     ("rata somajului la nivel national", "ro"), ("national unemployment rate", "en"), ("unemployment rate nationwide", "en"),
@@ -418,7 +423,14 @@ NATIONAL_LEVEL = [
 
 
 @pytest.mark.parametrize("question,lang", NATIONAL_LEVEL)
-def test_a_national_question_defaults_to_the_ilo_rate_and_says_registered_has_no_national_series(env, question, lang):
+def test_the_shipped_policy_still_asks_at_national_level(env, question, lang):
+    asked(disc(question, lang))
+
+
+@pytest.mark.parametrize("question,lang", NATIONAL_LEVEL)
+def test_a_national_rule_would_default_to_the_ilo_rate_and_say_registered_has_no_national_series(
+        env, monkeypatch, tmp_path, question, lang):
+    with_national(monkeypatch, tmp_path)
     out = disc(question, lang)
     msg, c = defaulted(out, ILO, lang)
     assert said(msg, lang, "ILO unemployment rate (survey), taking the question at the national level",
@@ -431,7 +443,8 @@ def test_a_national_question_defaults_to_the_ilo_rate_and_says_registered_has_no
     assert out["data"]["interpretation"]["level"] == "national"
 
 
-def test_the_national_default_answers_with_the_ilo_figure(env):
+def test_a_national_default_would_answer_with_the_ilo_figure(env, monkeypatch, tmp_path):
+    with_national(monkeypatch, tmp_path)
     out = disc("unemployment rate in Romania 2023", "en")
     assert run(card(out, ILO)["next_call"])["data"]["rows"] == [["Romania", "2023", 5.5]]
 
@@ -542,7 +555,7 @@ def test_the_level_rule_is_configuration_and_its_removal_restores_the_clarificat
 
 
 def test_a_rule_that_covers_a_single_level_defaults_only_that_level(env, monkeypatch, tmp_path):
-    use_policy(monkeypatch, tmp_path, lambda p: p["level_defaults"][0]["levels"].pop("national"))
+    assert "national" not in shipped()["level_defaults"][0]["levels"]       # shipped: county only
     asked(disc("rata somajului in Romania 2023"))
     defaulted(disc("rata somajului in Cluj 2023"), REGISTERED, "ro")
 
@@ -551,7 +564,8 @@ def test_no_level_can_be_configured_as_national(env, monkeypatch, tmp_path):
     """Whether a question with no place and no level word is the nation is a product reading the owner can
     flip: `no_level` names the level it is taken at. Shipped as `clarify`."""
     assert shipped()["level_defaults"][0]["no_level"] == "clarify"
-    use_policy(monkeypatch, tmp_path, lambda p: p["level_defaults"][0].update(no_level="national"))
+    use_policy(monkeypatch, tmp_path, lambda p: (p["level_defaults"][0].update(no_level="national"),
+                                                 p["level_defaults"][0]["levels"].update(national=ILO)))
     for q, lang in (("rata somajului", "ro"), ("unemployment rate", "en"), ("somaj 2023", "ro")):
         defaulted(disc(q, lang), ILO, lang)
     asked(disc("unemployment rate by region", "en"))                       # a region still asks
@@ -575,7 +589,8 @@ def test_a_default_whose_phrase_is_not_an_alias_of_the_catalogue_in_use_is_inert
     (tmp_path / "concepts.json").write_text(json.dumps(raw), encoding="utf-8")
     monkeypatch.setattr(cs, "CONCEPTS_PATH", tmp_path / "concepts.json")
     asked(disc("rata somajului in Cluj 2023"))              # the county default cannot be put in front: the question is asked
-    defaulted(disc("rata somajului in Romania 2023"), ILO, "ro")     # the national one still applies
+    with_national(monkeypatch, tmp_path)
+    defaulted(disc("rata somajului in Romania 2023"), ILO, "ro")     # a national one would still apply
 
 
 def test_a_default_whose_concept_is_absent_is_inert(env, tmp_path, monkeypatch):
@@ -647,7 +662,8 @@ def test_the_level_rule_is_checked_against_the_catalogue():
 
 def test_the_shipped_level_rule_is_pinned():
     entry = _entry(shipped())
-    assert entry["levels"] == {"county": REGISTERED, "national": ILO} and entry["no_level"] == "clarify"
+    # national is deliberately absent (owner, 2026-10-18): neither definition gives one national figure
+    assert entry["levels"] == {"county": REGISTERED} and entry["no_level"] == "clarify"
     assert entry["definitions"][REGISTERED]["phrase"] == "rata somajului inregistrat"
     assert entry["definitions"][ILO]["phrase"] == "rata somajului bim"
     # region is deliberately absent: both definitions have a regional series, so the user is asked
@@ -713,8 +729,6 @@ def test_corpus_unemployment_defaults_by_level(real):
     assert nc == {"tool": "run_recipe", "arguments": {"recipe": "registered_unemployment_county", "lang": "ro",
                                                       "year": "2023", "areas": ["Cluj"]}}
     assert run(nc)["data"]["rows"][0]["label"] == "Cluj"
-    national = disc("rata somajului in Romania 2023")
-    assert national["data"]["interpretation"]["assumed_definition"] == ILO
-    assert card(national, ILO)["candidates"][0]["dataset"] == "AMG157A_anual"
+    asked(disc("rata somajului in Romania 2023"))                           # national: still asked (2026-10-18)
     asked(disc("unemployment rate Nord-Vest 2023", "en"))
     asked(disc("rata somajului"))
