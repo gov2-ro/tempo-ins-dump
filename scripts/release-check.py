@@ -394,6 +394,16 @@ def check_static(site: Path, rep: Report, source: Path | None = None, cases: Pat
     cfg = (site / "js" / "config.js").read_text() if (site / "js" / "config.js").exists() else ""
     (rep.ok if '"mode": "static"' in cfg and (not gid or gid in cfg) else rep.fail)(
         "js/config.js switches the pages to static mode for this generation")
+    try:
+        api = json.loads(cfg.split("window.TEMPO_CONFIG = ", 1)[1].rstrip().rstrip(";")).get("api_origin")
+    except (IndexError, ValueError):
+        api = None
+    # what the Ask page will do: name the API it sends questions to, or say it has none (AQ-06A)
+    if api and not (api.startswith("https://") and api.count("/") == 2):
+        rep.fail(f"js/config.js api_origin {api!r} is not a bare https origin")
+    else:
+        rep.ok(f"Ask: questions go to {api} (it must list this site in TEMPO_CORS_ORIGINS)" if api
+               else "Ask: none (no --api-origin; the Ask page says it is unavailable)")
     mp = site / "static-manifest.json"
     if not mp.exists():
         rep.fail("static-manifest.json missing"); return
