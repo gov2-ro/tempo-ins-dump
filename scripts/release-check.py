@@ -6,6 +6,7 @@ One documented entry point (see readme.md "Release flow"):
     bash scripts/prepare-deploy-data.sh            # stage (atomic, with manifest)
     python scripts/release-check.py                # validate stage + run tests
     python scripts/release-check.py --docker       # + image build & smoke (needs docker)
+    python scripts/release-check.py --local --stage DIR  # + the same smoke on this checkout, no image
     python scripts/release-check.py --docker --deploy   # + `fly deploy` (explicit only)
     python scripts/release-check.py --rollback     # swap deploy-data <-> deploy-data.prev
 
@@ -393,6 +394,16 @@ def check_static(site: Path, rep: Report, source: Path | None = None, cases: Pat
     cfg = (site / "js" / "config.js").read_text() if (site / "js" / "config.js").exists() else ""
     (rep.ok if '"mode": "static"' in cfg and (not gid or gid in cfg) else rep.fail)(
         "js/config.js switches the pages to static mode for this generation")
+    try:
+        api = json.loads(cfg.split("window.TEMPO_CONFIG = ", 1)[1].rstrip().rstrip(";")).get("api_origin")
+    except (IndexError, ValueError):
+        api = None
+    # what the Ask page will do: name the API it sends questions to, or say it has none (AQ-06A)
+    if api and not (api.startswith("https://") and api.count("/") == 2):
+        rep.fail(f"js/config.js api_origin {api!r} is not a bare https origin")
+    else:
+        rep.ok(f"Ask: questions go to {api} (it must list this site in TEMPO_CORS_ORIGINS)" if api
+               else "Ask: none (no --api-origin; the Ask page says it is unavailable)")
     mp = site / "static-manifest.json"
     if not mp.exists():
         rep.fail("static-manifest.json missing"); return
@@ -455,10 +466,25 @@ def run_tests(rep: Report):
         rep.ok("pytest passed (skips are NOT passes; see summary above)")
 
 
-# ------------------------------------------------------------------ docker smoke
-def _wait_health(base: str, tries: int = 40):
+# ------------------------------------------------------------------ candidate smoke (image or local)
+# The site origin the separate-origin checks stand in for (the static site; AQ-06A)
+SITE_ORIGIN = "https://site.example"
+FOREIGN_ORIGIN = "https://foreign.example"
+
+
+def mcp_run_env(port: int) -> dict:
+    """Switches of the second smoke run: the public MCP on (local-test origin) and the
+    production shape of a separately served site (page links and CORS on SITE_ORIGIN)."""
+    return {"TEMPO_MCP_ENABLED": "true", "TEMPO_MCP_LOCAL_TEST": "true",
+            "TEMPO_PUBLIC_BASE_URL": f"http://127.0.0.1:{port}",
+            "TEMPO_PUBLIC_SITE_URL": SITE_ORIGIN, "TEMPO_CORS_ORIGINS": SITE_ORIGIN}
+
+
+def _wait_health(base: str, tries: int = 40, proc=None):
     import urllib.request
     for _ in range(tries):
+        if proc is not None and proc.poll() is not None:
+            return None
         try:
             return json.load(urllib.request.urlopen(base + "/api/health", timeout=3))
         except Exception:
@@ -466,39 +492,196 @@ def _wait_health(base: str, tries: int = 40):
     return None
 
 
-def _mcp_smoke(rep: Report, tag: str, port: int, code: str):
-    """The same image with the public MCP switched on (local-test origin): initialize, list the
-    eight tools and make one read-only call, checking structuredContent == the text fallback."""
+def _http(url: str, method: str = "GET", data: bytes | None = None, headers: dict | None = None,
+          timeout: float = 60):
+    """(status, headers, body) without raising on an HTTP error status."""
+    import urllib.error
+    import urllib.request
+    req = urllib.request.Request(url, data=data, method=method, headers=headers or {})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, r.headers, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.headers, e.read()
+
+
+def web_checks(rep: Report, base: str, stage: Path, where: str):
+    """The candidate with its default switches: FTS, the staged generation, the public MCP
+    and Ask both off, a search and a data call. Returns a dataset code for the MCP run."""
+    health = _wait_health(base, tries=1)
+    if health["search"]["mode"] != "fts":
+        rep.fail(f"{where} runs without FTS: {health['search']}")
+    else:
+        rep.ok(f"{where}: LOAD fts works offline, search mode fts")
+    want = json.loads((stage / MANIFEST_NAME).read_text())["generation"]["id"]
+    served = (health.get("generation") or {}).get("id")
+    (rep.ok if served == want else rep.fail)(
+        f"{where} serves the staged generation ({str(served)[:12]}, stage {want[:12]})")
+    if (health.get("mcp") or {}).get("enabled") is not False:
+        rep.fail(f"the public MCP must ship disabled by default: {health.get('mcp')}")
+    st, _, _ = _http(base + "/mcp", "POST", b"{}", {"content-type": "application/json"})
+    (rep.ok if st == 404 else rep.fail)(f"disabled /mcp answers {st} (expected 404)")
+    st, _, body = _http(base + "/api/ask/config")
+    cfg = json.loads(body) if st == 200 else {}
+    (rep.ok if st == 200 and cfg.get("available") is False else rep.fail)(
+        f"Ask ships off: /api/ask/config {st}, available={cfg.get('available')}")
+    st, _, body = _http(base + "/api/datasets?q=population&limit=1")
+    res = json.loads(body) if st == 200 else {}
+    if res.get("search_mode") != "fts" or not res.get("datasets"):
+        rep.fail(f"FTS query via {where} returned nothing/non-fts: {res.get('search_mode')}")
+        return None
+    code = res["datasets"][0]["matrix_code"]
+    st, _, body = _http(f"{base}/api/datasets/{code}/data?limit=5")
+    (rep.ok if st == 200 else rep.fail)(
+        f"{where} serves FTS query and data endpoint ({code}, keys {sorted(json.loads(body))[:4] if st == 200 else st})")
+    return code
+
+
+def _sdk_session(base: str, steps):
+    """Run `steps(session)` in the official MCP Python SDK client over Streamable HTTP."""
+    import asyncio
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamable_http_client
+
+    async def go():
+        async with streamable_http_client(base + "/mcp") as (r, w, _):
+            async with ClientSession(r, w) as s:
+                await s.initialize()
+                return await steps(s)
+    return asyncio.run(go())
+
+
+def mcp_checks(rep: Report, base: str, code: str, where: str):
+    """The public MCP on: the stdlib probe, the official SDK client, every reviewed recipe,
+    generation-bound evidence, link origins and the separate-origin CORS policy."""
     sys.path.insert(0, str(ROOT / "scripts"))
     import mcp_probe
-    cid = subprocess.run(
-        ["docker", "run", "-d", "--rm", "-p", f"{port}:8080",
-         "-e", "TEMPO_MCP_ENABLED=true", "-e", "TEMPO_MCP_LOCAL_TEST=true",
-         "-e", f"TEMPO_PUBLIC_BASE_URL=http://127.0.0.1:{port}", tag],
-        capture_output=True, text=True).stdout.strip()
+    health = _wait_health(base, tries=1)
+    if not (health or {}).get("mcp", {}).get("enabled"):
+        rep.fail(f"{where} did not start with the MCP endpoint enabled: {health and health.get('mcp')}")
+        return
     try:
-        base = f"http://127.0.0.1:{port}"
-        health = _wait_health(base)
-        if not health or not health.get("mcp", {}).get("enabled"):
-            rep.fail(f"MCP image did not start with the endpoint enabled: {health and health.get('mcp')}")
-            return
         out = mcp_probe.probe(base, dataset=code)
-        rep.ok(f"image serves the public MCP: {len(out['tools'])} tools, {code} describe -> "
+        rep.ok(f"{where} serves the public MCP: {len(out['tools'])} tools, {code} describe -> "
                f"{out['call_status']}, structured == text fallback")
     except mcp_probe.ProbeError as e:
         rep.fail(f"MCP smoke failed: {e}")
-    finally:
-        subprocess.run(["docker", "stop", cid], capture_output=True)
+        return
+    st, _, body = _http(base + "/api/recipes")
+    recipes = [r["id"] for r in json.loads(body)["recipes"]] if st == 200 else []
+
+    async def steps(s):
+        tools = [t.name for t in (await s.list_tools()).tools]
+        runs = {rid: (await s.call_tool("run_recipe", {"recipe": rid})).structuredContent for rid in recipes}
+        ok = [rid for rid, sc in runs.items() if sc["status"] == "ok"]
+        ev = stale = None
+        if ok:
+            sc = runs[ok[0]]
+            sel = {"kind": "recipe", "recipe": ok[0], "year": str(sc["data"]["year"])}
+            gid = sc["provenance"]["generation"]["id"]
+            ev = (await s.call_tool("get_evidence_links", {"selection": sel, "generation_id": gid})).structuredContent
+            stale = (await s.call_tool("get_evidence_links", {"selection": sel, "generation_id": "0" * 12})).structuredContent
+        return tools, runs, ok, ev, stale
+
+    try:
+        tools, runs, ok, ev, stale = _sdk_session(base, steps)
+    except Exception as e:
+        rep.fail(f"official MCP SDK client failed: {type(e).__name__}: {e}")
+        return
+    (rep.ok if tools == mcp_probe.EXPECTED else rep.fail)(f"official SDK client lists the {len(tools)} tools")
+    for rid, sc in runs.items():
+        if sc["status"] == "ok":
+            rep.ok(f"MCP run_recipe {rid}: ok, year {sc['data']['year']}")
+        else:   # a reviewed recipe the public profile refuses is a release limitation, not a crash
+            rep.warn(f"MCP run_recipe {rid}: {sc['status']}/{sc.get('reason')} under the public profile")
+    if not ok:
+        rep.fail("no reviewed recipe runs through the public MCP")
+        return
+    links = {l["kind"]: l["url"] for l in (ev or {}).get("data", {}).get("links", [])}
+    if ev is None or ev["status"] != "ok" or "evidence" not in links:
+        rep.fail(f"get_evidence_links for {ok[0]}: {ev and (ev['status'], ev.get('reason'))}")
+        return
+    pages_on_site = links.get("dataset", "").startswith(SITE_ORIGIN + "/")
+    api_on_base = all(links[k].startswith(base + "/api/") for k in ("live_selection", "evidence") if k in links)
+    (rep.ok if pages_on_site and api_on_base else rep.fail)(
+        f"evidence links: page on the site origin, API on the API origin ({links})")
+    st, hdr, body = _http(links["evidence"], timeout=120)
+    (rep.ok if st == 200 and "zip" in (hdr.get("content-type") or "") else rep.fail)(
+        f"evidence bundle for {ok[0]} at the cited generation: {st}, {len(body)} bytes")
+    gid = links["evidence"].rsplit("expected_generation=", 1)[1]
+    st, _, _ = _http(links["evidence"].replace(gid, "0" * 12))
+    (rep.ok if st == 409 else rep.fail)(f"evidence for another generation is refused: {st} (expected 409)")
+    (rep.ok if stale and stale.get("reason") == "generation_changed" else rep.fail)(
+        f"links for another generation: {stale and (stale['status'], stale.get('reason'))}")
+    pre = {"access-control-request-method": "POST", "access-control-request-headers": "content-type"}
+    st, hdr, _ = _http(base + "/api/ask", "OPTIONS", headers={"origin": SITE_ORIGIN, **pre})
+    (rep.ok if st == 200 and hdr.get("access-control-allow-origin") == SITE_ORIGIN else rep.fail)(
+        f"CORS: the listed site may call Ask ({st})")
+    st, hdr, _ = _http(base + "/api/ask", "OPTIONS", headers={"origin": FOREIGN_ORIGIN, **pre})
+    (rep.ok if "access-control-allow-origin" not in hdr else rep.fail)(f"CORS: another site is refused ({st})")
+    st, hdr, _ = _http(base + "/mcp", "OPTIONS", headers={"origin": SITE_ORIGIN, **pre})
+    (rep.ok if "access-control-allow-origin" not in hdr else rep.fail)(f"CORS never applies to /mcp ({st})")
+    st, _, body = _http(base + "/api/ask/config")
+    (rep.ok if st == 200 and json.loads(body).get("available") is False else rep.fail)(
+        "Ask stays off while the MCP is on (no operator model calls)")
+
+
+def fly_env() -> dict:
+    """fly.toml [env]: the production switches the image runs with."""
+    import tomllib
+    return {k: str(v) for k, v in tomllib.loads((ROOT / "fly.toml").read_text()).get("env", {}).items()}
+
+
+def _local_server(stage: Path, port: int, extra: dict, log: Path):
+    """This checkout served like the image: the Dockerfile's uvicorn command (one worker) and
+    fly.toml's [env], with the stage as the data dir. The caller's TEMPO_* switches and every
+    *_API_KEY are dropped, so no model provider can be reached."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("TEMPO_") and not k.endswith("_API_KEY")}
+    env.update(fly_env())
+    env.update(TEMPO_DATA_DIR=str(stage.resolve()), **extra)
+    return subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(port),
+         "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"],
+        cwd=ROOT, env=env, stdout=open(log, "w"), stderr=subprocess.STDOUT)
+
+
+def local_smoke(rep: Report, stage: Path, port: int):
+    """The candidate checkout against the stage, without Docker: default switches, then the
+    MCP run. Not an image, Linux or memory-limit result."""
+    import tempfile
+    print("== local candidate smoke (no image)")
+    logs = Path(tempfile.mkdtemp(prefix="release-check-"))
+    code = None
+    for i, (extra, checks) in enumerate((({}, "default"), (mcp_run_env(port + 1), "mcp"))):
+        p = port + i
+        proc = _local_server(stage, p, extra, logs / f"{checks}.log")
+        try:
+            base = f"http://127.0.0.1:{p}"
+            if not _wait_health(base, proc=proc):
+                rep.fail(f"local candidate ({checks}) did not become healthy; log {logs / f'{checks}.log'}")
+                return
+            if checks == "default":
+                code = web_checks(rep, base, stage, "local candidate")
+                if not code:
+                    return
+            else:
+                mcp_checks(rep, base, code, "local candidate")
+        finally:
+            proc.terminate()
+            proc.wait(10)
+    print(f"   server logs: {logs}")
 
 
 def docker_smoke(rep: Report, stage: Path, port: int):
     print("== docker build + smoke")
+    if stage.resolve() != (ROOT / "deploy-data").resolve():
+        rep.fail(f"--docker builds the image from {ROOT / 'deploy-data'} (Dockerfile COPY), not {stage}: "
+                 "stage the candidate there, or use --local")
+        return
     if not shutil.which("docker") or subprocess.run(
             ["docker", "info"], capture_output=True).returncode != 0:
         rep.fail("docker unavailable (use CI/another host, or omit --docker)")
         return
-    import urllib.error
-    import urllib.request
     m = json.loads((stage / MANIFEST_NAME).read_text())
     tag = "tempo-release-check:" + m["generation"]["id"]
     if subprocess.run(["docker", "build", "-t", tag, "."], cwd=ROOT).returncode:
@@ -508,32 +691,25 @@ def docker_smoke(rep: Report, stage: Path, port: int):
                          capture_output=True, text=True).stdout.strip()
     try:
         base = f"http://127.0.0.1:{port}"
-        health = _wait_health(base)
-        if not health:
+        if not _wait_health(base):
             rep.fail("container did not become healthy")
             return
-        if health["search"]["mode"] != "fts":
-            rep.fail(f"image runs without FTS: {health['search']}")
-        else:
-            rep.ok("image: LOAD fts works offline, search mode fts")
-        if (health.get("mcp") or {}).get("enabled") is not False:
-            rep.fail(f"the public MCP must ship disabled by default: {health.get('mcp')}")
-        try:
-            urllib.request.urlopen(urllib.request.Request(base + "/mcp", data=b"{}", method="POST",
-                                                          headers={"content-type": "application/json"}))
-            rep.fail("/mcp answered although TEMPO_MCP_ENABLED is off")
-        except urllib.error.HTTPError as e:
-            (rep.ok if e.code == 404 else rep.fail)(f"disabled /mcp answers {e.code} (expected 404)")
-        res = json.load(urllib.request.urlopen(base + "/api/datasets?q=population&limit=1"))
-        if res.get("search_mode") != "fts" or not res["datasets"]:
-            rep.fail(f"FTS query via image returned nothing/non-fts: {res.get('search_mode')}")
-            return
-        code = res["datasets"][0]["matrix_code"]
-        d = json.load(urllib.request.urlopen(f"{base}/api/datasets/{code}/data?limit=5"))
-        rep.ok(f"image serves FTS query and data endpoint ({code}, keys {sorted(d)[:4]})")
+        code = web_checks(rep, base, stage, "image")
     finally:
         subprocess.run(["docker", "stop", cid], capture_output=True)
-    _mcp_smoke(rep, tag, port + 1, code)
+    if not code:
+        return tag
+    env = [x for k, v in mcp_run_env(port + 1).items() for x in ("-e", f"{k}={v}")]
+    cid = subprocess.run(["docker", "run", "-d", "--rm", "-p", f"{port + 1}:8080", *env, tag],
+                         capture_output=True, text=True).stdout.strip()
+    try:
+        base = f"http://127.0.0.1:{port + 1}"
+        if not _wait_health(base):
+            rep.fail("MCP container did not become healthy")
+        else:
+            mcp_checks(rep, base, code, "image")
+    finally:
+        subprocess.run(["docker", "stop", cid], capture_output=True)
     return tag
 
 
@@ -573,6 +749,9 @@ def main():
                     help="treat an audit violation as an accepted, app-enforced restriction "
                          f"(supported: {', '.join(ENFORCED_RESTRICTIONS)}); listed in the result")
     ap.add_argument("--docker", action="store_true", help="build image and smoke it")
+    ap.add_argument("--local", action="store_true",
+                    help="smoke this checkout against --stage with the image's command and fly.toml "
+                         "env, without Docker (not an image or memory-limit result)")
     ap.add_argument("--port", type=int, default=8095)
     ap.add_argument("--deploy", action="store_true",
                     help="run `fly deploy` after ALL gates pass (never implicit)")
@@ -613,6 +792,8 @@ def main():
                 a.allow_missing_generation, a.require_clean_audit, a.accept_restriction)
     if not a.skip_tests:
         run_tests(rep)
+    if a.local and not rep.failures:
+        local_smoke(rep, stage, a.port)
     if a.docker and not rep.failures:
         docker_smoke(rep, stage, a.port)
     print("\n== result")

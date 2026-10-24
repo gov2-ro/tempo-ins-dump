@@ -1,5 +1,26 @@
 # Activity History
 
+## 2026-10-25 — AQ-06B: local release candidate
+
+Ran the release gates on a scratch stage of generation `9b3e065d` with candidate `a6f41a1`.
+The repository's `deploy-data/` was not touched. There is no container runtime on this Mac,
+so `release-check.py --local` now runs the image's smoke without Docker: the checkout is served
+like the image (Dockerfile command, `fly.toml` env, no inherited switches or API keys). It
+checks that MCP and Ask are off by default. With the MCP on it runs the stdlib probe, the
+official SDK client, every reviewed recipe, generation-bound evidence (200 at the cited
+generation, 409 otherwise), link origins and separate-origin CORS. The Docker path shares
+those checks, and `--docker` now refuses a scratch `--stage`, because the Dockerfile copies
+only `deploy-data/`.
+
+Results: the strict stage gate passed (pytest 2079 passed, corpus tests on the stage 88
+passed). The task replay matches the baseline (144/144, the 2 known T11 controls). The
+static build (with `--api-origin`) passed its gate with API parity 1017/1017 and a clean
+browser smoke. Stage rollback and roll-forward were exercised. Finding: the public MCP
+refuses `registered_unemployment_county` (scan estimate 1.37M rows > 1M), which is the
+reviewed route for a county unemployment question (backlog P1). Image, Linux 512 MiB,
+hosted clients and live models were not run.
+Record: `docs/plans/ask-and-public-mcp/remaining/aq-06b-record.md`.
+
 ## 2026-10-25 — AQ-06A: Ask on a separate origin
 
 The static site (DreamHost) has no API, so its Ask page now talks to the API host
