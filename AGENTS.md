@@ -266,7 +266,8 @@ Fly.io app `tempo-ins-explorer` (shared-cpu-1x, 512MB, Amsterdam, 1 worker):
 `Dockerfile` + `fly.toml` bake a `deploy-data/` snapshot from
 `scripts/prepare-deploy-data.sh` (atomic staging incl. `search.duckdb` +
 `MANIFEST.json`, previous kept as `deploy-data.prev`). Gate with
-`python scripts/release-check.py [--docker] [--rollback]` (strict: `--require-clean-audit
+`python scripts/release-check.py [--docker] [--rollback]` (`--local --stage DIR`: the same
+smoke on this checkout without Docker, incl. MCP, SDK client, recipes, evidence and CORS; strict: `--require-clean-audit
 --accept-restriction conflicting_grain`; load: `scripts/alpha-workload.py`, never against production); it deploys only with an
 explicit `--deploy`. The image won't build without a staged manifest and search
 index. Only `.github/workflows/ci.yml` is tracked (synthetic tests).

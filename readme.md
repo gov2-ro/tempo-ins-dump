@@ -180,7 +180,7 @@ deterministic corpus audit (categories, schema, NULL dims, time validity, grain,
 | `detect-totals.py` | Detects "Total" rows for stripping |
 | `normalize-labels.py` | Normalizes dimension option labels |
 | `prepare-deploy-data.sh` | Atomically stages corpus + DuckDB + `search.duckdb` + view-profiles + `MANIFEST.json` into `deploy-data/` |
-| `release-check.py` | Validates staged data (manifest/hashes, FTS, index generation, parquet coverage), runs tests, optional docker smoke, `--deploy` only on request, `--rollback` |
+| `release-check.py` | Validates staged data (manifest/hashes, FTS, index generation, parquet coverage), runs tests, optional docker smoke (`--local`: the same smoke without Docker), `--deploy` only on request, `--rollback` |
 | `profile-values.py` | Computes per-dataset value profiles → `dataset_value_profiles` |
 | `strip-totals-from-parquet.py` | Strips precomputed "Total" rows from canonical parquets |
 
@@ -227,6 +227,7 @@ source ~/devbox/envs/240826/bin/activate
 python scripts/build-search-index.py                 # if metadata changed (index must cover all canonical matrices)
 bash scripts/prepare-deploy-data.sh                  # builds in deploy-data.tmp.*, validates, swaps atomically; previous kept as deploy-data.prev
 python scripts/release-check.py --docker             # manifest/hashes, FTS, tests, image build + smoke on :8095
+python scripts/release-check.py --local --stage DIR  # same smoke on this checkout without Docker (not an image/memory result)
 python scripts/release-check.py --docker --deploy    # same gates, then `fly deploy`
 python scripts/release-check.py --rollback           # swap deploy-data <-> deploy-data.prev (then rebuild/redeploy the image)
 ```

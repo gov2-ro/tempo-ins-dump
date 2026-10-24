@@ -6,6 +6,15 @@ see also [charting-ideas.md](charting-ideas.md)
 
 ## Ask/MCP answer quality follow-up — 2026-10-17
 
+- [ ] **P1 — The county unemployment recipe is refused on the public MCP.** AQ-06B local
+  candidate (2026-10-25, generation `9b3e065d`): `run_recipe registered_unemployment_county`
+  returns `unavailable/query_budget` (estimate 1,369,357 rows > the public 1,000,000), even
+  with `year` and one area. Discovery's reviewed default for a county unemployment question
+  routes to this recipe, so MCP clients get a refusal where Ask (no scan cap) answers 1.2 for
+  Cluj 2023. Options: a scan estimate that counts the recipe's own filters, a reviewed
+  admission exception for recipes, or a raised cap backed by the AQ-01B Linux run. Don't
+  change the cap without that run. `release-check.py --local` reports it as a warning.
+
 Implementation status: [AT-05](plans/ask-and-public-mcp/06-answer-quality.md).
 Remaining work is split into [small implementation packages](plans/ask-and-public-mcp/remaining/README.md).
 On `fix/ask-answer-quality` (2026-10-17, code-ready, not deployed, not model/client-validated):
