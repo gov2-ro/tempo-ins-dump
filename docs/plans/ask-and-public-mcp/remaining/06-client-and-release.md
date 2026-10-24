@@ -1,7 +1,8 @@
 # AQ-06 — Client integration and release evidence
 
-**Status: planned. Local engineering is ready to assign; external tests and
-production exposure remain separate gates.** This decomposes the existing
+**Status: 06A code-ready on `aq/06a-separate-origin` (2026-10-25,
+[record](aq-06a-record.md)); 06B/06C not started. External tests and production
+exposure remain separate gates.** This decomposes the existing
 [AT-04](../04-evaluation-and-release.md) and
 [hosting runbook](../05-hosting-and-cutover.md), rather than replacing them.
 

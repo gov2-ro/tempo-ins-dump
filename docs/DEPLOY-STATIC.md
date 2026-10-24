@@ -88,7 +88,9 @@ switched atomically. Point the document root (or the subdomain) at
 
 - **No REST/SDMX query API.** Machines read the data files listed in
   `/llms.txt`.
-- **No Ask.** Its links are hidden.
+- **No Ask of its own.** Built with `--api-origin https://api-ins.gov2.ro`, the
+  Ask page sends its questions to that API, which must list the site in
+  `TEMPO_CORS_ORIGINS`. Without it, the page says Ask is not available here.
 - **No server logs or rate limits.**
 - **A browser byte budget.** A query whose files exceed 12 MB is refused with
   reason `browser_budget` (`build.json` `max_query_bytes`), never cut. This

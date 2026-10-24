@@ -188,11 +188,16 @@ def failure_envelope(tool: str, ctx: ToolContext, f: ToolFailure) -> dict:
 
 # ------------------------------------------------------------------ links
 
+API_PREFIXES = ("/api/", "/sdmx/", "/mcp")
+
+
 def public_url(path: str) -> str:
-    """Absolute URL on the configured trusted origin (TEMPO_PUBLIC_BASE_URL);
-    a root-relative path when none is configured. Never derived from a
-    request's Host or forwarded headers."""
-    base = (config.PUBLIC_BASE_URL or "").rstrip("/")
+    """Absolute URL on the configured trusted origin: API paths (/api, /sdmx, /mcp) on
+    TEMPO_PUBLIC_BASE_URL, site pages on TEMPO_PUBLIC_SITE_URL when the pages are served
+    elsewhere (else TEMPO_PUBLIC_BASE_URL); a root-relative path when none is configured.
+    Never derived from a request's Host or forwarded headers."""
+    site = not path.startswith(API_PREFIXES)
+    base = ((site and config.PUBLIC_SITE_URL) or config.PUBLIC_BASE_URL or "").rstrip("/")
     return f"{base}{path}" if base else path
 
 

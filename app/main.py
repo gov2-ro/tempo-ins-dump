@@ -9,7 +9,7 @@ import logging
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 
-from app.config import CORPUS_DIR
+from app.config import CORPUS_DIR, CORS_ORIGINS
 from app.routers import categories, datasets, dataset_data, sdmx, ask, places, pages, recipes
 from app.routers import changes
 from app.services import public_mcp
@@ -35,8 +35,8 @@ async def _unhandled(request, exc):
 
 
 class _CorsExceptMcp:
-    """The broad development CORS for the web app, never for /mcp: that endpoint has its own
-    Host/Origin policy (public_mcp), and CORS is not authentication."""
+    """CORS for the web app's API (Ask on a separate site origin), never for /mcp: that
+    endpoint has its own Host/Origin policy (public_mcp), and CORS is not authentication."""
 
     def __init__(self, app, **cors):
         self.plain, self.cors = app, CORSMiddleware(app, **cors)
@@ -46,13 +46,20 @@ class _CorsExceptMcp:
         await (self.plain if mcp else self.cors)(scope, receive, send)
 
 
-# CORS for development
-app.add_middleware(
-    _CorsExceptMcp,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Local development origins, allowed only while TEMPO_CORS_ORIGINS lists none
+LOCAL_DEV_ORIGINS = r"https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?"
+
+
+def cors_options(origins: list[str]) -> dict:
+    """CORSMiddleware options: the listed origins (else local development only), the methods
+    and request header the pages use, no cookies, and the response headers Ask reads."""
+    return {"allow_origins": origins, "allow_origin_regex": None if origins else LOCAL_DEV_ORIGINS,
+            "allow_methods": ["GET", "HEAD", "POST", "OPTIONS"], "allow_headers": ["Content-Type"],
+            "allow_credentials": False, "expose_headers": ["Retry-After", "Content-Disposition"],
+            "max_age": 600}
+
+
+app.add_middleware(_CorsExceptMcp, **cors_options(CORS_ORIGINS))
 
 # API routers
 app.include_router(categories.router, prefix="/api", tags=["categories"])

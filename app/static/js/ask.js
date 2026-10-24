@@ -85,26 +85,70 @@ const LINK_LABEL = {
     share: ['Link de partajare', 'Share link'],
 };
 
-/** Only same-site paths and http(s) URLs become links (never javascript: and the like). */
+/** Origin of the Ask API: js/config.js `api_origin` when the pages are served apart from it (the
+ *  static site), else this page's origin. Deployment configuration only, never the URL, a chat or a
+ *  tool result: the request key is sent nowhere else. null = misconfigured, and then Ask is off
+ *  rather than silently sent to another host. */
+const ASK_ORIGIN_SET = !!(window.TEMPO_CONFIG || {}).api_origin;
+const ASK_ORIGIN = (() => {
+    const o = String((window.TEMPO_CONFIG || {}).api_origin || '');
+    if (!o) return window.location.origin;
+    try {
+        const u = new URL(o);
+        if ((u.protocol === 'https:' || u.protocol === 'http:') && u.origin === o.replace(/\/$/, '')) return u.origin;
+    } catch { /* not a URL */ }
+    console.warn('js/config.js api_origin is not a bare http(s) origin; Ask is off');
+    return null;
+})();
+const askUrl = path => `${ASK_ORIGIN}/api${path}`;
+const ASK_HOST = ASK_ORIGIN ? new URL(ASK_ORIGIN).host : '';
+
+/** Only http(s) URLs become links (never javascript: and the like). A relative API path (live
+ *  re-run, CSV, evidence) is on the Ask API's origin; a relative page path is on this site. */
 function safeHref(u) {
     try {
-        const url = new URL(u, window.location.origin);
+        const s = String(u);
+        const api = /^\/(api|sdmx)\//.test(s) && ASK_ORIGIN;
+        const url = new URL(s, api ? ASK_ORIGIN : window.location.origin);
         return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
     } catch { return null; }
 }
 
 let askConfigPromise = null;
-/** /api/ask/config, fetched once (null when unreachable). */
+/** /api/ask/config, fetched once (null when unreachable). A static site without an Ask API
+ *  answers it from its build (always unavailable). */
 function askConfig() {
-    askConfigPromise = askConfigPromise || API.fetch('/ask/config').catch(() => null);
+    askConfigPromise = askConfigPromise || (
+        !ASK_ORIGIN ? Promise.resolve({ available: false })
+        : API.isStatic && !ASK_ORIGIN_SET ? API.fetch('/ask/config').catch(() => null)
+        : fetch(askUrl('/ask/config'), { credentials: 'omit' })
+            .then(r => (r.ok ? r.json() : null)).catch(() => null));
     return askConfigPromise;
+}
+
+/** The Ask API on another origin cannot be reached (down, or this site is not among its allowed
+ *  origins): say so, and offer a retry. Nothing falls back to this site's own /api. */
+function showAskUnreachable() {
+    const box = document.getElementById('ask-unavailable');
+    box.textContent = tr(`Serviciul de întrebări (${ASK_HOST}) nu poate fi contactat acum. `,
+                         `The question service (${ASK_HOST}) cannot be reached right now. `);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chat-reset';
+    b.textContent = tr('Încearcă din nou', 'Try again');
+    b.addEventListener('click', () => location.reload());
+    box.appendChild(b);
+    box.classList.remove('hidden');
 }
 
 /** Show the chat-logging disclosure before any question is submitted. */
 async function initServerNotices() {
     try {
         const cfg = await askConfig();
-        if (!cfg) return;
+        if (!cfg) {
+            if (ASK_ORIGIN !== window.location.origin) showAskUnreachable();
+            return;
+        }
         if (cfg.limits && cfg.limits.max_history_turns) MAX_HISTORY_TURNS = cfg.limits.max_history_turns;
         if (cfg.limits && cfg.limits.max_seconds) MAX_SECONDS = cfg.limits.max_seconds;
         DEBUG_AVAILABLE = !!cfg.debug;
@@ -837,8 +881,9 @@ function appendDebugPanel(parent, events, raw) {
 
 /** Debug mode: POST /api/ask/stream, show each step live, resolve with the result. */
 async function askStreaming(body, loadingEl, signal) {
-    const resp = await fetch('/api/ask/stream', {
+    const resp = await fetch(askUrl('/ask/stream'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal,
+        credentials: 'omit',
     });
     if (!resp.ok || !resp.body) return { error: { status: resp.status, detail: resp.statusText }, events: [] };
     const reader = resp.body.getReader();
@@ -908,8 +953,23 @@ function appendFailure(text, question, opts = {}) {
     return el;
 }
 
+/** The request never reached the Ask API or its answer was cut off. The browser does not say
+ *  which (a refused cross-origin request looks like a network error), and its message is not
+ *  shown: the question stays in the box, with a retry. */
+function appendInterrupted(question) {
+    const el = appendFailure(tr(`Serviciul de întrebări (${ASK_HOST}) nu a putut fi contactat sau răspunsul s-a întrerupt. Întrebarea a rămas în câmp.`,
+                                `The question service (${ASK_HOST}) could not be reached or its answer was cut off. Your question is still in the box.`),
+                             question);
+    el.dataset.outcome = 'interrupted';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = tr('Încearcă din nou', 'Try again');
+    b.addEventListener('click', () => { if (!isLoading) sendMessage(); });
+    el.querySelector('.chat-next').prepend(b);
+}
+
 async function sendMessage() {
-    if (ASK_UNAVAILABLE) return;
+    if (ASK_UNAVAILABLE || !ASK_ORIGIN) return;
     const input = document.getElementById('chat-input');
     const question = input.value.trim();
     if (!question || isLoading) return;
@@ -935,6 +995,10 @@ async function sendMessage() {
         if (debugOn()) {
             const out = await askStreaming(body, loadingEl, ctl.signal);
             loadingEl.remove();
+            if (out.error && out.error.status === 0) {
+                appendInterrupted(question);
+                return;
+            }
             if (out.error) {
                 const d = out.error.detail;
                 if (out.error.status === 409 && d && d.action === 'refresh') askContext = [];
@@ -945,11 +1009,12 @@ async function sendMessage() {
             }
             result = { ...out.result, debug: { events: out.events } };
         } else {
-            const resp = await fetch('/api/ask', {
+            const resp = await fetch(askUrl('/ask'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
                 signal: ctl.signal,
+                credentials: 'omit',
             });
 
             loadingEl.remove();
@@ -965,7 +1030,7 @@ async function sendMessage() {
                               question, { reset: stale });
                 return;
             }
-            result = await resp.json();
+            try { result = await resp.json(); } catch { appendInterrupted(question); return; }
         }
         appendAssistantResponse(result);
         if (Array.isArray(result.context)) askContext = result.context;
@@ -977,10 +1042,12 @@ async function sendMessage() {
 
     } catch (e) {
         loadingEl.remove();
-        appendFailure(e.name === 'AbortError'
-            ? tr(`Niciun răspuns după ${MAX_SECONDS + 30}s; cererea a fost oprită. Încercați o întrebare mai restrânsă (un singur indicator, un an, un județ).`,
-                 `No answer after ${MAX_SECONDS + 30}s; the request was stopped. Try a narrower question (one indicator, one year, one county).`)
-            : `Network error: ${e.message}`, question);
+        if (e.name === 'AbortError') {
+            appendFailure(tr(`Niciun răspuns după ${MAX_SECONDS + 30}s; cererea a fost oprită. Încercați o întrebare mai restrânsă (un singur indicator, un an, un județ).`,
+                             `No answer after ${MAX_SECONDS + 30}s; the request was stopped. Try a narrower question (one indicator, one year, one county).`), question);
+        } else {
+            appendInterrupted(question);   // network, refused cross-origin request or a cut stream
+        }
     } finally {
         clearTimeout(abortTimer);
         isLoading = false;

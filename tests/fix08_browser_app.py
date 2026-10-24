@@ -8,6 +8,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.config import cors_origins
+from app.main import _CorsExceptMcp, cors_options
 from app.routers import ask as ask_router
 from app.services import agent
 from app.services.llm_client import LLMResponse
@@ -17,7 +19,7 @@ LAST_REQUEST = {}
 
 def _fake_complete(messages, tools, **kw):
     LAST_REQUEST.update(provider=kw.get("provider"), model=kw.get("model"),
-                        got_key=bool(kw.get("api_key")))
+                        got_key=bool(kw.get("api_key")), calls=LAST_REQUEST.get("calls", 0) + 1)
     return LLMResponse(stop_reason="end_turn", text="Răspuns de test (mock).", tool_calls=[])
 
 
@@ -26,6 +28,8 @@ agent.get_conn = lambda: object()
 
 app = FastAPI()
 app.include_router(ask_router.router, prefix="/api")
+# the app's own CORS (TEMPO_CORS_ORIGINS; local origins when unset), for the AQ-06A two-origin test
+app.add_middleware(_CorsExceptMcp, **cors_options(cors_origins()))
 
 
 @app.get("/__last")

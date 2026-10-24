@@ -198,7 +198,10 @@ def test_busy_and_network_errors_keep_the_question_and_suggest_a_next_step(page)
     srv.queue.append(lambda route: route.abort("failed"))
     page.fill("#chat-input", "A doua?")
     page.click("#chat-send")
-    page.wait_for_selector(".chat-msg--error >> text=Network error")
+    page.wait_for_selector(".chat-msg--error[data-outcome=interrupted]")    # AQ-06A: recoverable, with a retry
+    err = page.locator(".chat-msg--error").last
+    assert "nu a putut fi contactat" in err.inner_text() and err.locator(".chat-next button").first.inner_text() == "Încearcă din nou"
+    assert page.input_value("#chat-input") == "A doua?"
     assert page.locator("#chat-loading").count() == 0 and page.locator("#chat-send").is_enabled()
     no_sideways_scroll(page)
 
