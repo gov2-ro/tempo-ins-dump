@@ -1,5 +1,25 @@
 # Activity History
 
+## 2026-10-25 — AQ-06A: Ask on a separate origin
+
+The static site (DreamHost) has no API, so its Ask page now talks to the API host
+(`api-ins.gov2.ro`) named at build time: `build-static.py --api-origin` writes `api_origin`
+into `config.js`, and `ask.js` sends config, questions, the debug stream and the key only
+there. Only deployment configuration sets that origin; a query parameter, chat or tool
+result cannot. If it is malformed, Ask is off rather than falling back to the page's own host.
+CORS is no longer `*`: `TEMPO_CORS_ORIGINS` lists bare origins (no wildcard). When it is
+unset, only local development origins are allowed, and `/mcp` keeps its own gate.
+`TEMPO_PUBLIC_SITE_URL` moves the tools' page links to the site, while `/api` and `/sdmx`
+links stay on the API host. Unreachable config, refused preflights and cut streams now show
+a recoverable state: the question stays in the box and a retry button appears.
+
+Playwright tests check this across three local origins (site, API and a foreign site),
+at 320, 390 and 1280 px. Finding: Playwright request interception answers CORS preflights
+itself, so the foreign-site test routes nothing and lets the real preflight decide.
+Production note: a deploy without `TEMPO_CORS_ORIGINS` ends cross-origin browser access to
+the REST API. Full suite: 2076 passed, 89 skipped. No deploy, no `fly.toml` change, no provider calls.
+Record: `docs/plans/ask-and-public-mcp/remaining/aq-06a-record.md`.
+
 
 ## 2026-10-18 — National unemployment keeps the clarification
 

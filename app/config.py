@@ -32,6 +32,34 @@ DEBUG = os.environ.get("TEMPO_DEBUG", "false").lower() in ("1", "true", "yes")
 # analytical tools (e.g. https://ins.gov2.ro). Unset: root-relative links. Links
 # are never derived from a request's Host or forwarded headers.
 PUBLIC_BASE_URL = os.environ.get("TEMPO_PUBLIC_BASE_URL", "").strip()
+# Trusted origin of the site's pages when they are served apart from the API (the static
+# site, e.g. https://ins.gov2.ro, with the API on its own host). Page links (dataset,
+# recipe pages) use it; /api, /sdmx and /mcp links keep TEMPO_PUBLIC_BASE_URL. Unset: the
+# pages are on TEMPO_PUBLIC_BASE_URL too.
+PUBLIC_SITE_URL = os.environ.get("TEMPO_PUBLIC_SITE_URL", "").strip()
+
+
+def cors_origins(environ=None) -> list[str]:
+    """TEMPO_CORS_ORIGINS: the web origins allowed to call the API from a browser (comma list
+    of bare origins, e.g. https://ins.gov2.ro). Unset: none listed, and only local development
+    origins (localhost, 127.0.0.1, any port) are allowed. No wildcard: an open policy has to
+    be the explicit list of sites, and /mcp keeps its own Host/Origin gate either way."""
+    from urllib.parse import urlsplit
+    env = os.environ if environ is None else environ
+    out = []
+    for o in (x.strip().rstrip("/") for x in env.get("TEMPO_CORS_ORIGINS", "").split(",")):
+        if not o:
+            continue
+        u = urlsplit(o)
+        if "*" in o or u.scheme not in ("http", "https") or not u.hostname or u.username \
+                or u.password or u.path or u.query or u.fragment:
+            raise ValueError(f"TEMPO_CORS_ORIGINS: {o!r} is not a bare http(s) origin "
+                             "such as https://ins.gov2.ro (no wildcard, path or credentials)")
+        out.append(f"{u.scheme}://{u.netloc}")
+    return list(dict.fromkeys(out))
+
+
+CORS_ORIGINS = cors_origins()
 
 # LLM agent (POST /api/ask) — disabled by default
 ASK_ENABLED        = os.environ.get("TEMPO_ASK_ENABLED", "false").lower() in ("1", "true", "yes")

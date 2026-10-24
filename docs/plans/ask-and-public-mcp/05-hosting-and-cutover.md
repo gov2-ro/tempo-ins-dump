@@ -33,17 +33,20 @@ uploads each need the owner's explicit go-ahead.
    (`47ac900`) predates the Ask and UI work: rebuild it.
 2. **Ask exposure.** Bring-your-own-key (`TEMPO_ASK_BYOK_ENABLED`) costs the operator
    nothing. Server-funded Ask needs `fly secrets set <PROVIDER>_API_KEY=…` and a budget.
-   Neither goes public before the key-redaction P1 in `docs/BACKLOG.md` is fixed.
+   The request key is redacted from logs and debug events (AT-02); exposure still needs
+   the AQ-06 gates (capacity, live quality, owner approval).
 3. **Order.** Fly serves `ins.gov2.ro` today, so `fly deploy` replaces the live site
    immediately. To avoid that, do C and D before B.
 
 ## A. Code (small, before any build)
 
-- `askApiBase` in the generated `config.js`; `ask.js` uses it instead of relative
-  `/api/ask` and `/api/ask/stream`.
-- CORS restricted to `https://ins.gov2.ro` through an env var (`app/main.py` has
-  `allow_origins=["*"]`).
-- Request keys are redacted before Ask events are logged.
+- Done (AQ-06A, `remaining/aq-06a-record.md`): `build-static.py --api-origin` writes
+  `api_origin` into `config.js`; `ask.js` sends `/api/ask/config`, `/api/ask` and
+  `/api/ask/stream` there and nowhere else. CORS is the explicit `TEMPO_CORS_ORIGINS`
+  list (unset: local development origins only; no wildcard; never `/mcp`).
+  `TEMPO_PUBLIC_SITE_URL` puts the tools' page links on the static site while API links
+  stay on `TEMPO_PUBLIC_BASE_URL`.
+- Done (AT-02): request keys are redacted before Ask events are logged.
 - MCP (AT-03, implemented, off by default): set `TEMPO_MCP_ENABLED=true`,
   `TEMPO_PUBLIC_BASE_URL=https://api-ins.gov2.ro` (a bare https origin; startup fails otherwise)
   and `TEMPO_MCP_ALLOWED_HOSTS=api-ins.gov2.ro,tempo-ins-explorer.fly.dev` only when the endpoint
@@ -59,7 +62,8 @@ export TEMPO_CORPUS_SRC=~/devbox/gov2/tempo-gen-20261012/data/corpus
 bash scripts/prepare-deploy-data.sh
 python scripts/release-check.py --source "$TEMPO_CORPUS_SRC"   # validates stage, runs tests
 fly auth login
-# fly.toml [env]: Ask/MCP switches, CORS origin, TEMPO_PUBLIC_BASE_URL
+# fly.toml [env]: Ask/MCP switches, TEMPO_CORS_ORIGINS=https://ins.gov2.ro,
+#   TEMPO_PUBLIC_BASE_URL=https://api-ins.gov2.ro, TEMPO_PUBLIC_SITE_URL=https://ins.gov2.ro
 fly deploy                                  # or: release-check.py --docker --deploy
 ```
 
@@ -75,7 +79,8 @@ fly deploy                                  # or: release-check.py --docker --de
 
 ```bash
 TEMPO_DATA_DIR=~/devbox/gov2/tempo-gen-20261012/data \
-  python scripts/build-static.py --out ../tempo-gen-20261012/static --base-url https://ins.gov2.ro
+  python scripts/build-static.py --out ../tempo-gen-20261012/static --base-url https://ins.gov2.ro \
+    --api-origin https://api-ins.gov2.ro      # omit for a static site without Ask
 python scripts/release-check.py --static ../tempo-gen-20261012/static
 scripts/deploy-static.sh ../tempo-gen-20261012/static USER@iad1-shared-b7-17.dreamhost.com ins.gov2.ro        # dry run
 scripts/deploy-static.sh ../tempo-gen-20261012/static USER@iad1-shared-b7-17.dreamhost.com ins.gov2.ro --go

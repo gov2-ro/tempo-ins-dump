@@ -96,7 +96,11 @@ reads env: `TEMPO_DATA_DIR`, `TEMPO_MAX_ROWS` (50,000), `TEMPO_DEBUG`,
 `TEMPO_ASK_ENABLED` (hosted Ask) and `TEMPO_ASK_BYOK_ENABLED` (own-key Ask), both
 off by default (set the second for local Ask work), and other `TEMPO_ASK_*`/`TEMPO_LLM_*`.
 `TEMPO_PUBLIC_BASE_URL` is the trusted origin of the tools' citation/evidence links
-(unset: root-relative links; never derived from a request's Host header). The public MCP
+(unset: root-relative links; never derived from a request's Host header);
+`TEMPO_PUBLIC_SITE_URL` moves their page links to a separately served site.
+`TEMPO_CORS_ORIGINS` lists the browser origins allowed to call the API (unset: local
+development origins only; no wildcard; `/mcp` has its own gate). A static build reaches
+Ask on the API with `build-static.py --api-origin`. The public MCP
 (`TEMPO_MCP_ENABLED`, default off, and its `TEMPO_MCP_*` limits, listed in
 `docs/plans/ask-and-public-mcp/at-03-record.md`) is read when the app is built, not at import.
 

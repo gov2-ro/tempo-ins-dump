@@ -310,9 +310,9 @@ def test_origin_policy_approved_absent_and_foreign(tmp_path, monkeypatch):
 def test_the_apps_development_cors_never_applies_to_mcp():
     from app.main import app as real
     c = TestClient(real)
-    web = c.get("/api/health", headers={"origin": "https://anywhere.example"})
-    assert web.headers.get("access-control-allow-origin") == "*"           # the web app keeps its CORS
-    mcp = c.options("/mcp", headers={"origin": "https://anywhere.example",
+    web = c.get("/api/health", headers={"origin": "http://localhost:5173"})
+    assert web.headers.get("access-control-allow-origin") == "http://localhost:5173"  # web app CORS (AQ-06A)
+    mcp = c.options("/mcp", headers={"origin": "http://localhost:5173",
                                      "access-control-request-method": "POST"})
     assert mcp.status_code == 404 and "access-control-allow-origin" not in mcp.headers
 
