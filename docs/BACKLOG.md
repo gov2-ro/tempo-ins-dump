@@ -6,7 +6,18 @@ see also [charting-ideas.md](charting-ideas.md)
 
 ## Ask/MCP answer quality follow-up — 2026-10-17
 
-- [ ] **P1 — The county unemployment recipe is refused on the public MCP.** AQ-06B local
+- [ ] **P2 — A year-range population question gets a one-year call.** 06C example check: discovery
+  for "populația rezidentă a județului Cluj între 2015 și 2024" suggests `query_data
+  POP105A_judete_grupe` with `TIME_PERIOD: ["2024"]` only, and the result is
+  `partial/unverified_total` for a single county-year. The suggested call should respect the
+  requested range (or say it does not) and use a verified total for an all-ages county
+  population.
+
+- [ ] **P1 — The public MCP refuses county-filtered work it should admit.** 06C found the same
+  cause for `rank_entities` cities in one county (Iași: 3,898,870-row estimate on
+  `POP107D_grupe_localitate`). The admission estimate is the whole file's footer `num_rows`
+  (`public_mcp` estimator), so filters never lower it.
+  Original finding — **the county unemployment recipe is refused on the public MCP.** AQ-06B local
   candidate (2026-10-25, generation `9b3e065d`): `run_recipe registered_unemployment_county`
   returns `unavailable/query_budget` (estimate 1,369,357 rows > the public 1,000,000), even
   with `year` and one area. Discovery's reviewed default for a county unemployment question
