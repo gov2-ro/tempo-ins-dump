@@ -5,7 +5,8 @@ Written 2026-10-17. **Status, later on 2026-10-17:** 01A, 02A/B, 03A/B, 04A/B/C 
 `aq-*-record.md` in this folder). Not done: 01B/01C (need a Linux 512 MiB run),
 02C (live runs need authorization), 05B–05D, AQ-06C. AQ-06A (separate-origin Ask) is
 code-ready; AQ-06B ran the local release candidate (2026-10-25: local gates pass; image,
-Linux 512 MiB and hosted clients `not_run`). Nothing deployed.
+Linux 512 MiB and hosted clients `not_run`). AQ-06C: onboarding draft for owner review;
+client tests need an authorized endpoint. Nothing deployed.
 
 Originally: implement one numbered step per session, then stop. These
 packages break the remaining AT-04/backlog work into tasks suitable for cheaper

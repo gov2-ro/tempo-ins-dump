@@ -1,5 +1,22 @@
 # Activity History
 
+## 2026-10-25 — AQ-06C: onboarding draft
+
+Drafted the Romanian-first help text for connecting INS+ to Claude and ChatGPT
+(`remaining/06c-onboarding-draft.md`). Claude's steps and plans are checked against its
+support article. ChatGPT's steps come from OpenAI's developer page, but its plan
+eligibility is unverified (third-party guides disagree), so it is left for the owner to
+observe. The data-flow text follows the code: tool arguments, not the chat. Discovery
+queries can hold the whole question. Logs keep request metadata and per-tool
+status/duration/bytes, not search text, plus a 5-minute in-memory answer cache. Domain,
+contact, privacy, terms and log retention are marked owner blockers.
+
+Checked the example questions with the SDK client on the local candidate. The tourism
+and net-earnings recipes and the unemployment clarification work. The county unemployment
+recipe and a city ranking in one county are refused, because the admission estimate is
+the whole-file footer row count (backlog P1, widened). A population range question gets a
+one-year call with an unverified total (backlog P2). Hosted-client tests: not run.
+
 ## 2026-10-25 — AQ-06B: local release candidate
 
 Ran the release gates on a scratch stage of generation `9b3e065d` with candidate `a6f41a1`.

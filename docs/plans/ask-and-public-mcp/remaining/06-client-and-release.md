@@ -2,7 +2,8 @@
 
 **Status: 06A code-ready (2026-10-25, [record](aq-06a-record.md)); 06B local candidate
 passed with image/Linux/hosted-client gates `not_run` (2026-10-25, [record](aq-06b-record.md));
-06C not started. External tests and production
+06C: onboarding draft ready for owner review ([draft](06c-onboarding-draft.md)); hosted-client
+tests `not_run`. External tests and production
 exposure remain separate gates.** This decomposes the existing
 [AT-04](../04-evaluation-and-release.md) and
 [hosting runbook](../05-hosting-and-cutover.md), rather than replacing them.
