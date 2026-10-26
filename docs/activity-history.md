@@ -1,5 +1,24 @@
 # Activity History
 
+## 2026-10-27 — Docker image gate and first 512 MiB runs (Colima)
+
+Installed Colima (MIT, CLI-only; a 4 CPU / 6 GiB Linux VM with Rosetta for amd64) plus the
+Docker CLI on the Mac, and moved the stale Docker Desktop config aside
+(`~/.docker/*.docker-desktop-bak`). The first `release-check.py --docker` caught a release
+blocker that `--local` cannot see: the image did not copy `sdmx_labels.py`, which
+`sdmx_registry` imports since FIX-01 phase 2, so the container exited at import. Fixed, and
+a test now checks that every root-level module the app imports is copied. Then the strict
+gate passed on the image.
+
+Ran the AQ-01A harness in `--mode container` for the first time. Three harness bugs only showed
+against a real daemon: the gate checked the host OS instead of the daemon's, readiness used a
+TCP connect that a published port accepts before the app listens, and the slot probe used up
+the variant pool in 300 s phases. Memory is now split into heap and page cache. Results
+(AT-04 mixed load, 512 MiB, 1 CPU): no OOM. Peak 73 % on arm64 and 76–77 % on amd64, the same
+with the default or a 5M scan cap and with smaller DuckDB budgets. On amd64 the defaults already
+cross the proposed 75 % line, so it is a REST/search heap question, not an MCP-cap one.
+No limit or setting changed; per-tool worst cases and a soak are still open (01B not complete).
+
 ## 2026-10-25 — AQ-06C: onboarding draft
 
 Drafted the Romanian-first help text for connecting INS+ to Claude and ChatGPT

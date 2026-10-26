@@ -10,6 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN python -c "import duckdb; c = duckdb.connect(); c.execute('INSTALL fts'); c.execute('LOAD fts'); print('fts', duckdb.__version__)"
 
 COPY app/ app/
+# Root-level modules the app imports (tests/test_aq06b_release_check.py keeps this list complete).
+COPY sdmx_labels.py .
 COPY llms.txt .
 
 # Data is staged by scripts/prepare-deploy-data.sh (must run BEFORE the image build;

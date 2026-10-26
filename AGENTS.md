@@ -271,6 +271,10 @@ smoke on this checkout without Docker, incl. MCP, SDK client, recipes, evidence 
 --accept-restriction conflicting_grain`; load: `scripts/alpha-workload.py`, never against production); it deploys only with an
 explicit `--deploy`. The image won't build without a staged manifest and search
 index. Only `.github/workflows/ci.yml` is tracked (synthetic tests).
+Docker on the Mac is Colima (`colima start --vm-type vz --vz-rosetta`; build Fly's architecture
+with `docker buildx build --platform linux/amd64 --load`). The image copies only `app/`, `llms.txt`
+and the root modules the app imports (a test checks the list), so `--local` passing does not prove
+the image starts. 512 MiB runs: `benchmark-mcp.py run --mode container --image TAG --container-data image`.
 Oracle/HF Spaces templates live in `scripts/deploy/`. Validated release gates: FIX-05.
 
 ## Static site (shared hosting, no Python process)

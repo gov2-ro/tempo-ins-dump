@@ -11,7 +11,8 @@ production or at a server it did not start.
   # candidate: a larger scan cap in the child only, AT-04 mixed-load lengths, a CSV export in the REST mix
   python scripts/benchmark-mcp.py run --data-dir DIR --out-dir OUT --max-scan-rows 5000000 \\
       --mixed-phase single_client:1:2:180 --mixed-phase five_clients:5:2:300 --export-dataset TUR105D_judete
-  # container: an existing image, DIR mounted read-only, 512 MiB with no swap (needs Docker on Linux)
+  # container: an existing image, DIR mounted read-only, 512 MiB with no swap (needs a Docker daemon on a Linux kernel:
+  # a Linux host, or a Linux VM such as Colima on macOS)
   python scripts/benchmark-mcp.py run --mode container --image IMAGE --data-dir DIR --out-dir OUT
 
 DIR is a data directory (it holds corpus/); the child opens it read-only. OUT must be outside the repository.
@@ -58,6 +59,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = Path(__file__).resolve()
 SCHEMA = "benchmark-mcp/1"
 CONTAINER_PORT = 8080
+SLOT_PROBES = 1           # fresh rank requests kept back per mixed phase for the slot-free check
 
 # sample states: percentiles are computed per (case, state) and never across states
 STATES = ("cold", "miss_warm", "cache", "mixed", "observed")
@@ -544,6 +546,24 @@ def wait_listening(port: int, timeout: float, alive=lambda: True) -> float:
     raise HarnessError(f"the child did not listen on port {port} within {timeout:g}s")
 
 
+def wait_http_ready(port: int, timeout: float, alive=lambda: True) -> float:
+    """Seconds until GET /api/health on 127.0.0.1:port answers 200. A published Docker port accepts TCP
+    before anything listens inside the container, so a connect proves nothing there."""
+    import urllib.request
+    t0 = time.perf_counter()
+    while time.perf_counter() - t0 < timeout:
+        if not alive():
+            raise HarnessError("the child exited before it answered /api/health")
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=1) as r:
+                if r.status == 200:
+                    return time.perf_counter() - t0
+        except Exception:
+            pass
+        time.sleep(0.05)
+    raise HarnessError(f"the child did not answer /api/health on port {port} within {timeout:g}s")
+
+
 def tail_text(path: Path, n: int = 600) -> str:
     try:
         return path.read_bytes()[-n:].decode("utf-8", "replace")
@@ -682,8 +702,8 @@ class LocalChild:
 
 class ContainerChild:
     """The same launcher inside a Docker container with a hard memory limit (`--memory`, no swap). This path
-    is written to the Docker CLI's documented behaviour and exercised only with an injected runner here:
-    Docker was not available when it was written, so the Linux gate stays `not_run` until it is run."""
+    is written to the Docker CLI's documented behaviour; its tests use an injected runner, and the Linux gate is
+    filled only by a run against a daemon on a Linux kernel (`ContainerChild.daemon`)."""
     kind = "container"
 
     def __init__(self, *, name: str, port: int, image: str, env: dict, log_path: Path, startup_timeout: float,
@@ -712,6 +732,34 @@ class ContainerChild:
         except (OSError, subprocess.TimeoutExpired) as e:
             return False, f"docker not usable: {type(e).__name__}"
         return True, None
+
+    @staticmethod
+    def daemon(image: str | None = None, runner=None) -> dict | None:
+        """The Docker daemon's kernel and cgroup facts (and the image's id/arch): the gate needs a Linux kernel
+        enforcing the limit, which is the daemon's OS, not the host's (Colima/Docker Desktop run a Linux VM)."""
+        runner = runner or subprocess.run
+        try:
+            out = runner(["docker", "info", "--format", "{{json .}}"], capture_output=True, text=True, timeout=30)
+            info = json.loads(out.stdout) if out.returncode == 0 else None
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            info = None
+        if not isinstance(info, dict):
+            return None
+        d = {"os_type": info.get("OSType"), "kernel": info.get("KernelVersion"),
+             "operating_system": info.get("OperatingSystem"), "architecture": info.get("Architecture"),
+             "cgroup_version": info.get("CgroupVersion"), "mem_total_bytes": info.get("MemTotal"),
+             "ncpu": info.get("NCPU"), "server_version": info.get("ServerVersion"),
+             "image_id": None, "image_architecture": None}
+        if image:
+            try:
+                out = runner(["docker", "image", "inspect", "--format", "{{.Id}} {{.Architecture}}", image],
+                             capture_output=True, text=True, timeout=30)
+                parts = out.stdout.split() if out.returncode == 0 else []
+                if len(parts) == 2:
+                    d["image_id"], d["image_architecture"] = parts
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        return d
 
     def command(self) -> list[str]:
         cmd = ["docker", "run", "-d", "--name", self.container, "--memory", self.memory,
@@ -742,7 +790,7 @@ class ContainerChild:
             self._logger = self.popen(["docker", "logs", "-f", self.container], stdout=log,
                                       stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
         try:
-            self.startup_s = wait_listening(self.port, self.startup_timeout, alive=self.alive)
+            self.startup_s = wait_http_ready(self.port, self.startup_timeout, alive=self.alive)
         except HarnessError as e:
             detail = tail_text(self.log_path)
             self.stop()
@@ -760,7 +808,17 @@ class ContainerChild:
         return None
 
     def sample(self) -> dict:
-        text = self._read("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.usage_in_bytes")
+        """cgroup v2 memory.current, split by memory.stat into anon (heap: what an OOM is made of) and file
+        (page cache, which the kernel reclaims under the limit before it kills anything)."""
+        out = self._docker("exec", self.container, "cat", "/sys/fs/cgroup/memory.current",
+                           "/sys/fs/cgroup/memory.stat", timeout=10)
+        lines = out.stdout.splitlines() if out is not None and out.returncode == 0 else []
+        if lines and lines[0].strip().isdigit():
+            stat = dict(ln.split(None, 1) for ln in lines[1:] if len(ln.split()) == 2)
+            num = lambda k: int(stat[k]) if stat.get(k, "").isdigit() else None    # noqa: E731
+            return {"rss_tree_bytes": None, "container_memory_bytes": int(lines[0]),
+                    "container_anon_bytes": num("anon"), "container_file_bytes": num("file")}
+        text = self._read("/sys/fs/cgroup/memory/memory.usage_in_bytes")             # cgroup v1
         return {"rss_tree_bytes": None,
                 "container_memory_bytes": int(text.strip()) if text and text.strip().isdigit() else None}
 
@@ -804,7 +862,7 @@ class ContainerChild:
     def describe(self) -> dict:
         return {"kind": "container", "container": self.container, "image": self.image, "port": self.port,
                 "memory_limit": self.memory, "memory_swap": self.memory, "cpus": self.cpus,
-                "memory_limit_bytes": parse_memory_flag(self.memory)}
+                "memory_limit_bytes": parse_memory_flag(self.memory), "startup_measure": "http_health_200"}
 
 
 class ResourceMonitor:
@@ -840,7 +898,8 @@ class ResourceMonitor:
             for w in self._open.values():
                 w["samples"] += 1
                 for key, field in (("rss_tree_bytes", "rss_peak_bytes"),
-                                   ("container_memory_bytes", "container_memory_peak_bytes")):
+                                   ("container_memory_bytes", "container_memory_peak_bytes"),
+                                   ("container_anon_bytes", "container_anon_peak_bytes")):
                     v = s.get(key)
                     if v is not None and (w[field] is None or v > w[field]):
                         w[field] = v
@@ -848,7 +907,7 @@ class ResourceMonitor:
     @contextlib.contextmanager
     def window(self, name: str):
         w = {"name": name, "wall_s": None, "samples": 0, "rss_peak_bytes": None,
-             "container_memory_peak_bytes": None, "cpu_s": None}
+             "container_memory_peak_bytes": None, "container_anon_peak_bytes": None, "cpu_s": None}
         t0, cpu0 = time.perf_counter(), None
         with contextlib.suppress(Exception):
             cpu0 = self.child.cpu_seconds()
@@ -1346,12 +1405,16 @@ class VariantPool:
         return out
 
 
-async def await_slot_free(ctx: Ctx, run: Run, sess: Sess, pool: VariantPool, timeout: float):
+async def await_slot_free(ctx: Ctx, run: Run, sess: Sess, pool: VariantPool, timeout: float,
+                          reserved: list | None = None):
     """Poll with fresh rank requests (a cached answer never touches the slot) until one is not answered
-    `busy`. That call is also the first request after the work. Returns (seconds, Result) or (None, None)."""
+    `busy`. That call is also the first request after the work. Returns (seconds, Result) or (None, None).
+    `reserved` holds variants set aside before a long phase, which can use up the whole pool."""
     t0 = time.perf_counter()
+    fresh = None
     while time.perf_counter() - t0 < timeout:
-        fresh = pool.fresh(1, counties=False)
+        # A `busy` answer was neither dispatched nor cached, so the same variant stays fresh for the next poll.
+        fresh = fresh or ([reserved.pop(0)] if reserved else pool.fresh(1, counties=False))
         if not fresh:
             break
         r = await call(ctx, run, sess, "slot_poll", "observed", "rank_entities", fresh[0][1], attribute=False,
@@ -1708,6 +1771,7 @@ async def scenario_mixed(ctx: Ctx) -> None:
         phase_results = []
         for name, n_mcp, n_rest, seconds in cfg.mixed_phases:
             ctx.budget.check(f"mixed phase {name}")
+            probes = pool.fresh(SLOT_PROBES, counties=False)         # before the phase can use them all
             end = time.monotonic() + seconds
             fivexx, fourxx = [], []
 
@@ -1757,7 +1821,7 @@ async def scenario_mixed(ctx: Ctx) -> None:
             run.record.setdefault("windows", []).append(w)
             # work that outlived the phase: the slot must come free by itself
             async with open_session(ctx, run) as s:
-                linger, _ = await await_slot_free(ctx, run, s, pool, 30.0)
+                linger, _ = await await_slot_free(ctx, run, s, pool, 30.0, reserved=probes)
             linger = None if linger is None else round(linger, 3)
             phase_results.append({"phase": name, "mcp_clients": n_mcp, "rest_clients": n_rest, "seconds": seconds,
                                   "unexpected_5xx": len(fivexx), "unexpected_4xx": len(fourxx), "examples": (fivexx + fourxx)[:5], "slot_free_after_phase_s": linger,
@@ -1813,7 +1877,7 @@ def new_report(cfg: Cfg) -> dict:
     mem = parse_memory_flag(cfg.container_memory) if cfg.mode == "container" else None
     env["container"] = {"mode": cfg.mode, "image": cfg.image, "memory_limit_bytes": mem,
                         "cpus": cfg.container_cpus if cfg.mode == "container" else None,
-                        "data": cfg.container_data if cfg.mode == "container" else None}
+                        "data": cfg.container_data if cfg.mode == "container" else None, "daemon": None}
     est = next((d["rows"] for d in fp["datasets"] if d["dataset"] == cfg.workload.dataset), None)
     return {
         "schema": SCHEMA, "label": cfg.label, "started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -1835,12 +1899,37 @@ def new_report(cfg: Cfg) -> dict:
             "are counted per process and it is not cgroup memory; rss_peak_kernel_bytes is the child's exact "
             "lifetime peak RSS (wait4 ru_maxrss, normalised to bytes)",
             "cpu_s is the child's CPU over a window (or its lifetime in stats.cpu_s_total), not per call",
-            "a local run is not constrained to 512 MiB; only a container run on Linux can fill gates.linux_512mib",
+            "a local run is not constrained to 512 MiB; only a container run on a Linux kernel can fill gates.linux_512mib",
             "the per-minute request limits are lifted in the child unless --keep-rate-limits (see profile.harness_overrides)",
             "latency percentiles use served answers only and nearest-rank; refusals and failures are counted beside them",
             "a larger scan cap or deadline applies to the benchmark child only; application defaults are unchanged",
         ],
     }
+
+
+def linux_gate(r: dict, cfg: Cfg) -> dict:
+    """`gates.linux_512mib`: measured only from container runs on a daemon with a Linux kernel and a cgroup peak."""
+    run_containers = [x for x in r["runs"] if x.get("target", {}).get("kind") == "container"]
+    peaks = [x["stats"].get("container_memory_peak_bytes") for x in run_containers if x.get("stats")]
+    oom = any(x["stats"].get("oom_killed") or x["stats"].get("oom_suspected") for x in run_containers
+              if x.get("stats"))
+    daemon = r["environment"].get("container", {}).get("daemon") or {}
+    # A killed container has no readable peak, but an OOM kill under the limit is itself the measurement.
+    if run_containers and daemon.get("os_type") == "linux" and (oom or any(p is not None for p in peaks)):
+        return {
+            "status": "measured", "memory_limit_bytes": parse_memory_flag(cfg.container_memory),
+            "container_memory_peak_bytes": max((p for p in peaks if p is not None), default=None),
+            # sampled every 0.1 s inside measured windows, so it can miss a short spike; page cache excluded
+            "container_anon_peak_bytes_sampled": max((w.get("container_anon_peak_bytes") or 0 for x in run_containers
+                                                      for w in x.get("windows") or []), default=0) or None,
+            "oom_killed": oom,
+            "evaluated": False, "note": "pass/fail against the 75% headroom threshold is AQ-01B's decision"}
+    if run_containers:
+        return {"status": "not_run",
+                "reason": "the Docker daemon is not a Linux kernel or exposed no cgroup peak"}
+    return {"status": "not_run",
+            "reason": "local mode: an unconstrained run is not a 512 MiB result" if cfg.mode == "local"
+                      else "no container ran"}
 
 
 def finalize_report(ctx: Ctx) -> int:
@@ -1856,22 +1945,7 @@ def finalize_report(ctx: Ctx) -> int:
          "method": "provider client entry points replaced in the child (calls logged and refused), keys unset"})
     ctx.checks.setdefault("unexpected_5xx_or_child_loss", {
         "status": "fail" if ctx.problems else "pass", "problems": ctx.problems[:20]})
-    run_containers = [x for x in r["runs"] if x.get("target", {}).get("kind") == "container"]
-    peaks = [x["stats"].get("container_memory_peak_bytes") for x in run_containers if x.get("stats")]
-    if run_containers and platform.system() == "Linux" and any(p is not None for p in peaks):
-        r["gates"]["linux_512mib"] = {
-            "status": "measured", "memory_limit_bytes": parse_memory_flag(cfg.container_memory),
-            "container_memory_peak_bytes": max(p for p in peaks if p is not None),
-            "oom_killed": any(x["stats"].get("oom_killed") for x in run_containers if x.get("stats")),
-            "evaluated": False, "note": "pass/fail against the 75% headroom threshold is AQ-01B's decision"}
-    elif run_containers:
-        r["gates"]["linux_512mib"] = {"status": "not_run",
-                                      "reason": "Docker ran on a non-Linux host or exposed no cgroup peak"}
-    else:
-        r["gates"]["linux_512mib"] = {
-            "status": "not_run",
-            "reason": "local mode: an unconstrained run is not a 512 MiB result" if cfg.mode == "local"
-                      else "no container ran"}
+    r["gates"]["linux_512mib"] = linux_gate(r, cfg)
     failed = [s for s, v in r["scenarios"].items() if v["status"] == "failed"]
     bad = [k for k, v in r["checks"].items() if v.get("status") == "fail"]
     r["finished_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
@@ -2001,6 +2075,8 @@ def run_command(args) -> int:
     try:
         if cfg.mode == "container":
             ok, why = ContainerChild.available()
+            if ok:
+                report["environment"]["container"]["daemon"] = ContainerChild.daemon(cfg.image)
             if not ok:
                 report["blocked_reason"] = f"container mode unavailable: {why}"
                 for s in SCENARIOS:

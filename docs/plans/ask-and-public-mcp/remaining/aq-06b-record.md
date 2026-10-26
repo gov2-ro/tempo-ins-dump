@@ -20,7 +20,7 @@ written.
 | Scratch stage | `/Users/pax/devbox/gov2/tempo-rc-06b/deploy-data` (8,223 files, 971 MB). The repository's `deploy-data/` was not touched |
 | Static build | `/Users/pax/devbox/gov2/tempo-rc-06b/static`: commit `a6f41a1`, built 2026-10-24T23:41:56Z, 3,376 datasets, 46,078 files, 666 MB, `api_origin` `https://api-ins.gov2.ro` |
 | Task set | `ask-tasks/1`, set `2026-10-17.1`, file sha256 `af89bde0b1ccc41d…`, system prompt `03831146ca72a687…`, contract `tempo-tools/2` |
-| Image | none: no `docker` or other container runtime on this host |
+| Image | none on 2026-10-25 (no container runtime). Built and smoked on 2026-10-27 under Colima: see [aq-01b-linux-run-record.md](aq-01b-linux-run-record.md) |
 | Host | macOS 15.8.1 arm64, Python 3.12.15, mcp 1.27.0, FastAPI 0.133.1, DuckDB 1.4.2, uvicorn 0.44.0 |
 
 ## What changed in code
@@ -64,8 +64,8 @@ written.
 | Pinned copied-generation task checks | pass (scripted) | as AT-02 row | | Same run |
 | Separately authorized live-provider tasks | not_run | | | Needs AQ-02C authorization and budget |
 | ChatGPT / Claude interoperability | not_run | | | 06C. Needs a reachable test endpoint and accounts |
-| Linux image/memory/mixed-load gate | not_run | | | No container runtime here. `benchmark-mcp.py --mode container` (AQ-01A) needs a Linux host with Docker. The macOS numbers in `aq-01a-record.md` are not a 512 MiB result |
-| Docker image build + smoke | not_run | | `release-check.py --docker` | Same reason. It now uses the same checks as `--local` |
+| Linux image/memory/mixed-load gate | measured, above 75 % on amd64 | f88924c / 9b3e065d, 2026-10-27 | `benchmark-mcp.py --mode container` under Colima | No OOM or restart, no unexpected 4xx/5xx, slot frees. Peak 73 % of 512 MiB on arm64, 76–77 % on amd64 (Fly's architecture), with the default or a 5M scan cap. Per-tool worst cases not run. [aq-01b-linux-run-record.md](aq-01b-linux-run-record.md) |
+| Docker image build + smoke | pass after a fix | f88924c / 9b3e065d, 2026-10-27 | `release-check.py --docker` (strict stage flags) | The first build exited at import: `sdmx_labels.py` was not copied into the image (fixed, with a test). Then every `--local` check also passed on the image (arm64) |
 | Plugin package validation and real help links | not_run | | | 06C |
 | Owner exposure/publication approval | pending | | | |
 

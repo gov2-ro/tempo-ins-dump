@@ -62,3 +62,25 @@ def test_docker_refuses_a_stage_the_image_would_not_contain(rc, tmp_path, monkey
     rep = rc.Report()
     assert rc.docker_smoke(rep, tmp_path, 8303) is None
     assert rep.failures and "Dockerfile COPY" in rep.failures[0] and calls == []   # nothing built or run
+
+
+def test_the_image_copies_every_root_level_module_the_app_imports():
+    """`--local` runs from the checkout, where every root module imports; the image has only what the
+    Dockerfile copies. A missing one (sdmx_labels, 2026-10-27) only showed when the image would not start."""
+    import ast
+    local = {p.stem for p in ROOT.glob("*.py")}
+    needed = set()
+    for f in (ROOT / "app").rglob("*.py"):
+        if "_obsolete" in f.parts:
+            continue
+        for n in ast.walk(ast.parse(f.read_text(encoding="utf-8"))):
+            if isinstance(n, ast.Import):
+                needed |= {a.name.split(".")[0] for a in n.names}
+            elif isinstance(n, ast.ImportFrom) and n.level == 0 and n.module:
+                needed.add(n.module.split(".")[0])
+    copied = {line.split()[1] for line in (ROOT / "Dockerfile").read_text().splitlines()
+              if line.startswith("COPY ") and line.split()[1].endswith(".py")}
+    ignored = (ROOT / ".dockerignore").read_text().split()
+    missing = sorted(m for m in needed & local if f"{m}.py" not in copied or f"{m}.py" in ignored)
+    assert missing == [], f"the image would fail to import: {missing}"
+    assert "sdmx_labels" in needed                                       # the guard sees real imports

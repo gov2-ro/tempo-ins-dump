@@ -1,11 +1,13 @@
 """AQ-01 / 01A: the capacity harness (scripts/benchmark-mcp.py): report schema, grouping, units, cleanup,
 timeout accounting, and two end-to-end acceptance runs through a real child process and the real MCP client."""
+import http.server
 import importlib.util
 import json
 import os
 import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -601,9 +603,10 @@ class FakeDocker:
         elif sub == "inspect":
             out = ("true\n" if self.running else "false\n") if "Running" in cmd[3] else f"{str(self.oom).lower()} 0 0\n"
         elif sub == "exec":
-            files = {"memory.current": "250000000", "memory.peak": "300000000", "memory.events": "oom_kill 0\n",
+            files = {"memory.current": "250000000\n", "memory.peak": "300000000\n", "memory.events": "oom_kill 0\n",
+                     "memory.stat": "anon 180000000\nfile 60000000\nkernel 1\n",
                      "cpu.stat": "usage_usec 2500000\nuser_usec 1\n"}
-            out = next((v for k, v in files.items() if cmd[-1].endswith(k)), "")
+            out = "".join(next((v for k, v in files.items() if path.endswith(k)), "") for path in cmd[4:])
         elif sub in ("stop", "rm"):
             self.running = False
         return subprocess.CompletedProcess(cmd, 0, out, "")
@@ -640,26 +643,49 @@ def test_the_container_command_enforces_the_limit_mounts_read_only_and_passes_no
 def test_a_container_that_does_not_come_up_is_stopped_and_removed(tmp_path):
     docker = FakeDocker()
     c = container(tmp_path, docker, 8115)
-    with pytest.raises(B.HarnessError, match="did not listen"):
+    with pytest.raises(B.HarnessError, match="did not answer /api/health"):
         c.start()
     subs = [x[1] for x in docker.calls]
     assert "stop" in subs and "rm" in subs and not docker.running and c not in B.CHILDREN.children
     assert c._logger.terminated
 
 
-def test_container_measurements_come_from_the_cgroup_and_inspect(tmp_path):
+class _Health(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200 if self.path == "/api/health" else 404)
+        self.end_headers()
+
+    def log_message(self, *a):
+        pass
+
+
+def test_a_published_port_that_accepts_tcp_is_not_ready_until_health_answers(tmp_path):
+    """Docker's port forwarder accepts connections before the app listens (seen with Colima)."""
     srv = socket.socket()
-    srv.bind(("127.0.0.1", 8115))
+    srv.bind(("127.0.0.1", 8116))
     srv.listen()
+    try:
+        assert B.wait_listening(8116, 0.5) < 0.5                               # the old check: "ready"
+        with pytest.raises(B.HarnessError, match="did not answer /api/health"):
+            B.wait_http_ready(8116, 0.6)
+    finally:
+        srv.close()
+
+
+def test_container_measurements_come_from_the_cgroup_and_inspect(tmp_path):
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8115), _Health)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
         c = container(tmp_path, FakeDocker(), 8115)
         c.start()
         assert c.startup_s is not None and c.alive()
-        assert c.sample() == {"rss_tree_bytes": None, "container_memory_bytes": 250_000_000}
+        assert c.sample() == {"rss_tree_bytes": None, "container_memory_bytes": 250_000_000,
+                              "container_anon_bytes": 180_000_000, "container_file_bytes": 60_000_000}
         assert c.cpu_seconds() == pytest.approx(2.5)
         stats = c.stop()
     finally:
-        srv.close()
+        srv.shutdown()
+        srv.server_close()
     assert stats["container_memory_peak_bytes"] == 300_000_000 and stats["oom_killed"] is False
     assert stats["oom_kill_events"] == 0 and stats["restarts"] == 0 and stats["oom_suspected"] is False
     assert stats["rss_peak_kernel_bytes"] is None and stats["cpu_s_total"] == pytest.approx(2.5)
@@ -774,3 +800,81 @@ def test_mixed_load_keeps_rest_and_mcp_kinds_and_phases_in_separate_groups(data_
     assert [p["phase"] for p in phases] == ["one", "many"]
     assert all(p["unexpected_5xx"] == 0 and p["unexpected_4xx"] == 0 for p in phases)
     assert all(p["slot_free_after_phase_s"] is not None and p["window"]["rss_peak_bytes"] > 50_000_000 for p in phases)
+
+
+class InfoDocker(FakeDocker):
+    def __init__(self, info: dict | None, image="sha256:abc arm64\n", **kw):
+        super().__init__(**kw)
+        self.info, self.image = info, image
+
+    def __call__(self, cmd, **kw):
+        if cmd[1] == "info":
+            self.calls.append(list(cmd))
+            return subprocess.CompletedProcess(cmd, 0 if self.info else 1, json.dumps(self.info or {}), "")
+        if cmd[1:3] == ["image", "inspect"]:
+            self.calls.append(list(cmd))
+            return subprocess.CompletedProcess(cmd, 0, self.image, "")
+        return super().__call__(cmd, **kw)
+
+
+def test_the_daemon_facts_come_from_docker_info_and_the_image(tmp_path):
+    info = {"OSType": "linux", "KernelVersion": "6.8.0", "OperatingSystem": "Ubuntu 24.04", "Architecture": "aarch64",
+            "CgroupVersion": "2", "MemTotal": 6_000_000_000, "NCPU": 4, "ServerVersion": "29.5.2"}
+    d = B.ContainerChild.daemon("tempo:cand", runner=InfoDocker(info))
+    assert d == {"os_type": "linux", "kernel": "6.8.0", "operating_system": "Ubuntu 24.04", "architecture": "aarch64",
+                 "cgroup_version": "2", "mem_total_bytes": 6_000_000_000, "ncpu": 4, "server_version": "29.5.2",
+                 "image_id": "sha256:abc", "image_architecture": "arm64"}
+    assert B.ContainerChild.daemon("tempo:cand", runner=InfoDocker(None)) is None
+
+
+def _gate(tmp_path, daemon, stats, mode="container"):
+    cfg = B.Cfg(data_dir=tmp_path / "nodata", out_dir=tmp_path, mode=mode, image="tempo:cand")
+    r = B.new_report(cfg)
+    r["environment"]["container"]["daemon"] = daemon
+    r["runs"] = [{"target": {"kind": "container"}, "stats": s} for s in stats]
+    return B.linux_gate(r, cfg)
+
+
+def test_the_linux_gate_follows_the_daemon_kernel_not_the_host(tmp_path, monkeypatch):
+    monkeypatch.setattr(B.platform, "system", lambda: "Darwin")      # a Linux VM on a Mac still counts
+    ok = {"container_memory_peak_bytes": 300_000_000, "oom_killed": False, "oom_suspected": False}
+    g = _gate(tmp_path, {"os_type": "linux"}, [ok, dict(ok, container_memory_peak_bytes=350_000_000)])
+    assert g["status"] == "measured" and g["container_memory_peak_bytes"] == 350_000_000 and g["oom_killed"] is False
+    assert g["container_anon_peak_bytes_sampled"] is None                     # no measured window
+    cfg = B.Cfg(data_dir=tmp_path / "nodata", out_dir=tmp_path, mode="container", image="tempo:cand")
+    r = B.new_report(cfg)
+    r["environment"]["container"]["daemon"] = {"os_type": "linux"}
+    r["runs"] = [{"target": {"kind": "container"}, "stats": ok,
+                  "windows": [{"container_anon_peak_bytes": 200_000_000}, {"container_anon_peak_bytes": None}]}]
+    assert B.linux_gate(r, cfg)["container_anon_peak_bytes_sampled"] == 200_000_000
+    assert g["memory_limit_bytes"] == 512 * 1024 ** 2 and g["evaluated"] is False
+    assert _gate(tmp_path, {"os_type": "windows"}, [ok])["status"] == "not_run"
+    assert _gate(tmp_path, None, [ok])["status"] == "not_run"
+    assert _gate(tmp_path, {"os_type": "linux"}, [dict(ok, container_memory_peak_bytes=None)])["status"] == "not_run"
+    assert _gate(tmp_path, {"os_type": "linux"}, [], mode="local")["reason"].startswith("local mode")
+
+
+def test_an_oom_killed_container_is_a_measured_failure_even_without_a_peak(tmp_path):
+    killed = {"container_memory_peak_bytes": None, "oom_killed": True, "oom_suspected": True}
+    g = _gate(tmp_path, {"os_type": "linux"}, [killed])
+    assert g["status"] == "measured" and g["oom_killed"] is True and g["container_memory_peak_bytes"] is None
+
+
+def test_the_slot_probe_reuses_a_busy_answered_request_and_can_use_a_reserved_one(monkeypatch):
+    """A `busy` answer is neither dispatched nor cached, so polling must not burn the variant pool:
+    a 300 s mixed phase used up every fresh variant and the slot check then reported nothing."""
+    import asyncio
+    import types
+    sent, answers = [], iter(["busy", "busy", None])
+
+    async def fake_call(ctx, run, sess, case, state, tool, args, **kw):
+        sent.append(json.dumps(args, sort_keys=True))
+        return types.SimpleNamespace(sample={"reason": next(answers)})
+
+    monkeypatch.setattr(B, "call", fake_call)
+    pool = B.VariantPool(B.Workload(year="2025"))
+    reserved = pool.fresh(1, counties=False)
+    secs, r = asyncio.run(B.await_slot_free(None, None, None, pool, 5.0, reserved=reserved))
+    assert secs is not None and r.sample["reason"] is None
+    assert len(sent) == 3 and len(set(sent)) == 1 and reserved == []          # one variant, polled three times
+    assert len(pool.used) == 1                                                # nothing else taken from the pool
