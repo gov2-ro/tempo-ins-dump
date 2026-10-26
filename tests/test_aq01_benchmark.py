@@ -774,3 +774,54 @@ def test_mixed_load_keeps_rest_and_mcp_kinds_and_phases_in_separate_groups(data_
     assert [p["phase"] for p in phases] == ["one", "many"]
     assert all(p["unexpected_5xx"] == 0 and p["unexpected_4xx"] == 0 for p in phases)
     assert all(p["slot_free_after_phase_s"] is not None and p["window"]["rss_peak_bytes"] > 50_000_000 for p in phases)
+
+
+class InfoDocker(FakeDocker):
+    def __init__(self, info: dict | None, image="sha256:abc arm64\n", **kw):
+        super().__init__(**kw)
+        self.info, self.image = info, image
+
+    def __call__(self, cmd, **kw):
+        if cmd[1] == "info":
+            self.calls.append(list(cmd))
+            return subprocess.CompletedProcess(cmd, 0 if self.info else 1, json.dumps(self.info or {}), "")
+        if cmd[1:3] == ["image", "inspect"]:
+            self.calls.append(list(cmd))
+            return subprocess.CompletedProcess(cmd, 0, self.image, "")
+        return super().__call__(cmd, **kw)
+
+
+def test_the_daemon_facts_come_from_docker_info_and_the_image(tmp_path):
+    info = {"OSType": "linux", "KernelVersion": "6.8.0", "OperatingSystem": "Ubuntu 24.04", "Architecture": "aarch64",
+            "CgroupVersion": "2", "MemTotal": 6_000_000_000, "NCPU": 4, "ServerVersion": "29.5.2"}
+    d = B.ContainerChild.daemon("tempo:cand", runner=InfoDocker(info))
+    assert d == {"os_type": "linux", "kernel": "6.8.0", "operating_system": "Ubuntu 24.04", "architecture": "aarch64",
+                 "cgroup_version": "2", "mem_total_bytes": 6_000_000_000, "ncpu": 4, "server_version": "29.5.2",
+                 "image_id": "sha256:abc", "image_architecture": "arm64"}
+    assert B.ContainerChild.daemon("tempo:cand", runner=InfoDocker(None)) is None
+
+
+def _gate(tmp_path, daemon, stats, mode="container"):
+    cfg = B.Cfg(data_dir=tmp_path / "nodata", out_dir=tmp_path, mode=mode, image="tempo:cand")
+    r = B.new_report(cfg)
+    r["environment"]["container"]["daemon"] = daemon
+    r["runs"] = [{"target": {"kind": "container"}, "stats": s} for s in stats]
+    return B.linux_gate(r, cfg)
+
+
+def test_the_linux_gate_follows_the_daemon_kernel_not_the_host(tmp_path, monkeypatch):
+    monkeypatch.setattr(B.platform, "system", lambda: "Darwin")      # a Linux VM on a Mac still counts
+    ok = {"container_memory_peak_bytes": 300_000_000, "oom_killed": False, "oom_suspected": False}
+    g = _gate(tmp_path, {"os_type": "linux"}, [ok, dict(ok, container_memory_peak_bytes=350_000_000)])
+    assert g["status"] == "measured" and g["container_memory_peak_bytes"] == 350_000_000 and g["oom_killed"] is False
+    assert g["memory_limit_bytes"] == 512 * 1024 ** 2 and g["evaluated"] is False
+    assert _gate(tmp_path, {"os_type": "windows"}, [ok])["status"] == "not_run"
+    assert _gate(tmp_path, None, [ok])["status"] == "not_run"
+    assert _gate(tmp_path, {"os_type": "linux"}, [dict(ok, container_memory_peak_bytes=None)])["status"] == "not_run"
+    assert _gate(tmp_path, {"os_type": "linux"}, [], mode="local")["reason"].startswith("local mode")
+
+
+def test_an_oom_killed_container_is_a_measured_failure_even_without_a_peak(tmp_path):
+    killed = {"container_memory_peak_bytes": None, "oom_killed": True, "oom_suspected": True}
+    g = _gate(tmp_path, {"os_type": "linux"}, [killed])
+    assert g["status"] == "measured" and g["oom_killed"] is True and g["container_memory_peak_bytes"] is None

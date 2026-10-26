@@ -11,7 +11,8 @@ production or at a server it did not start.
   # candidate: a larger scan cap in the child only, AT-04 mixed-load lengths, a CSV export in the REST mix
   python scripts/benchmark-mcp.py run --data-dir DIR --out-dir OUT --max-scan-rows 5000000 \\
       --mixed-phase single_client:1:2:180 --mixed-phase five_clients:5:2:300 --export-dataset TUR105D_judete
-  # container: an existing image, DIR mounted read-only, 512 MiB with no swap (needs Docker on Linux)
+  # container: an existing image, DIR mounted read-only, 512 MiB with no swap (needs a Docker daemon on a Linux kernel:
+  # a Linux host, or a Linux VM such as Colima on macOS)
   python scripts/benchmark-mcp.py run --mode container --image IMAGE --data-dir DIR --out-dir OUT
 
 DIR is a data directory (it holds corpus/); the child opens it read-only. OUT must be outside the repository.
@@ -682,8 +683,8 @@ class LocalChild:
 
 class ContainerChild:
     """The same launcher inside a Docker container with a hard memory limit (`--memory`, no swap). This path
-    is written to the Docker CLI's documented behaviour and exercised only with an injected runner here:
-    Docker was not available when it was written, so the Linux gate stays `not_run` until it is run."""
+    is written to the Docker CLI's documented behaviour; its tests use an injected runner, and the Linux gate is
+    filled only by a run against a daemon on a Linux kernel (`ContainerChild.daemon`)."""
     kind = "container"
 
     def __init__(self, *, name: str, port: int, image: str, env: dict, log_path: Path, startup_timeout: float,
@@ -712,6 +713,34 @@ class ContainerChild:
         except (OSError, subprocess.TimeoutExpired) as e:
             return False, f"docker not usable: {type(e).__name__}"
         return True, None
+
+    @staticmethod
+    def daemon(image: str | None = None, runner=None) -> dict | None:
+        """The Docker daemon's kernel and cgroup facts (and the image's id/arch): the gate needs a Linux kernel
+        enforcing the limit, which is the daemon's OS, not the host's (Colima/Docker Desktop run a Linux VM)."""
+        runner = runner or subprocess.run
+        try:
+            out = runner(["docker", "info", "--format", "{{json .}}"], capture_output=True, text=True, timeout=30)
+            info = json.loads(out.stdout) if out.returncode == 0 else None
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            info = None
+        if not isinstance(info, dict):
+            return None
+        d = {"os_type": info.get("OSType"), "kernel": info.get("KernelVersion"),
+             "operating_system": info.get("OperatingSystem"), "architecture": info.get("Architecture"),
+             "cgroup_version": info.get("CgroupVersion"), "mem_total_bytes": info.get("MemTotal"),
+             "ncpu": info.get("NCPU"), "server_version": info.get("ServerVersion"),
+             "image_id": None, "image_architecture": None}
+        if image:
+            try:
+                out = runner(["docker", "image", "inspect", "--format", "{{.Id}} {{.Architecture}}", image],
+                             capture_output=True, text=True, timeout=30)
+                parts = out.stdout.split() if out.returncode == 0 else []
+                if len(parts) == 2:
+                    d["image_id"], d["image_architecture"] = parts
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        return d
 
     def command(self) -> list[str]:
         cmd = ["docker", "run", "-d", "--name", self.container, "--memory", self.memory,
@@ -1813,7 +1842,7 @@ def new_report(cfg: Cfg) -> dict:
     mem = parse_memory_flag(cfg.container_memory) if cfg.mode == "container" else None
     env["container"] = {"mode": cfg.mode, "image": cfg.image, "memory_limit_bytes": mem,
                         "cpus": cfg.container_cpus if cfg.mode == "container" else None,
-                        "data": cfg.container_data if cfg.mode == "container" else None}
+                        "data": cfg.container_data if cfg.mode == "container" else None, "daemon": None}
     est = next((d["rows"] for d in fp["datasets"] if d["dataset"] == cfg.workload.dataset), None)
     return {
         "schema": SCHEMA, "label": cfg.label, "started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -1835,12 +1864,34 @@ def new_report(cfg: Cfg) -> dict:
             "are counted per process and it is not cgroup memory; rss_peak_kernel_bytes is the child's exact "
             "lifetime peak RSS (wait4 ru_maxrss, normalised to bytes)",
             "cpu_s is the child's CPU over a window (or its lifetime in stats.cpu_s_total), not per call",
-            "a local run is not constrained to 512 MiB; only a container run on Linux can fill gates.linux_512mib",
+            "a local run is not constrained to 512 MiB; only a container run on a Linux kernel can fill gates.linux_512mib",
             "the per-minute request limits are lifted in the child unless --keep-rate-limits (see profile.harness_overrides)",
             "latency percentiles use served answers only and nearest-rank; refusals and failures are counted beside them",
             "a larger scan cap or deadline applies to the benchmark child only; application defaults are unchanged",
         ],
     }
+
+
+def linux_gate(r: dict, cfg: Cfg) -> dict:
+    """`gates.linux_512mib`: measured only from container runs on a daemon with a Linux kernel and a cgroup peak."""
+    run_containers = [x for x in r["runs"] if x.get("target", {}).get("kind") == "container"]
+    peaks = [x["stats"].get("container_memory_peak_bytes") for x in run_containers if x.get("stats")]
+    oom = any(x["stats"].get("oom_killed") or x["stats"].get("oom_suspected") for x in run_containers
+              if x.get("stats"))
+    daemon = r["environment"].get("container", {}).get("daemon") or {}
+    # A killed container has no readable peak, but an OOM kill under the limit is itself the measurement.
+    if run_containers and daemon.get("os_type") == "linux" and (oom or any(p is not None for p in peaks)):
+        return {
+            "status": "measured", "memory_limit_bytes": parse_memory_flag(cfg.container_memory),
+            "container_memory_peak_bytes": max((p for p in peaks if p is not None), default=None),
+            "oom_killed": oom,
+            "evaluated": False, "note": "pass/fail against the 75% headroom threshold is AQ-01B's decision"}
+    if run_containers:
+        return {"status": "not_run",
+                "reason": "the Docker daemon is not a Linux kernel or exposed no cgroup peak"}
+    return {"status": "not_run",
+            "reason": "local mode: an unconstrained run is not a 512 MiB result" if cfg.mode == "local"
+                      else "no container ran"}
 
 
 def finalize_report(ctx: Ctx) -> int:
@@ -1856,22 +1907,7 @@ def finalize_report(ctx: Ctx) -> int:
          "method": "provider client entry points replaced in the child (calls logged and refused), keys unset"})
     ctx.checks.setdefault("unexpected_5xx_or_child_loss", {
         "status": "fail" if ctx.problems else "pass", "problems": ctx.problems[:20]})
-    run_containers = [x for x in r["runs"] if x.get("target", {}).get("kind") == "container"]
-    peaks = [x["stats"].get("container_memory_peak_bytes") for x in run_containers if x.get("stats")]
-    if run_containers and platform.system() == "Linux" and any(p is not None for p in peaks):
-        r["gates"]["linux_512mib"] = {
-            "status": "measured", "memory_limit_bytes": parse_memory_flag(cfg.container_memory),
-            "container_memory_peak_bytes": max(p for p in peaks if p is not None),
-            "oom_killed": any(x["stats"].get("oom_killed") for x in run_containers if x.get("stats")),
-            "evaluated": False, "note": "pass/fail against the 75% headroom threshold is AQ-01B's decision"}
-    elif run_containers:
-        r["gates"]["linux_512mib"] = {"status": "not_run",
-                                      "reason": "Docker ran on a non-Linux host or exposed no cgroup peak"}
-    else:
-        r["gates"]["linux_512mib"] = {
-            "status": "not_run",
-            "reason": "local mode: an unconstrained run is not a 512 MiB result" if cfg.mode == "local"
-                      else "no container ran"}
+    r["gates"]["linux_512mib"] = linux_gate(r, cfg)
     failed = [s for s, v in r["scenarios"].items() if v["status"] == "failed"]
     bad = [k for k, v in r["checks"].items() if v.get("status") == "fail"]
     r["finished_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
@@ -2001,6 +2037,8 @@ def run_command(args) -> int:
     try:
         if cfg.mode == "container":
             ok, why = ContainerChild.available()
+            if ok:
+                report["environment"]["container"]["daemon"] = ContainerChild.daemon(cfg.image)
             if not ok:
                 report["blocked_reason"] = f"container mode unavailable: {why}"
                 for s in SCENARIOS:
