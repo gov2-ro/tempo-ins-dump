@@ -545,6 +545,24 @@ def wait_listening(port: int, timeout: float, alive=lambda: True) -> float:
     raise HarnessError(f"the child did not listen on port {port} within {timeout:g}s")
 
 
+def wait_http_ready(port: int, timeout: float, alive=lambda: True) -> float:
+    """Seconds until GET /api/health on 127.0.0.1:port answers 200. A published Docker port accepts TCP
+    before anything listens inside the container, so a connect proves nothing there."""
+    import urllib.request
+    t0 = time.perf_counter()
+    while time.perf_counter() - t0 < timeout:
+        if not alive():
+            raise HarnessError("the child exited before it answered /api/health")
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=1) as r:
+                if r.status == 200:
+                    return time.perf_counter() - t0
+        except Exception:
+            pass
+        time.sleep(0.05)
+    raise HarnessError(f"the child did not answer /api/health on port {port} within {timeout:g}s")
+
+
 def tail_text(path: Path, n: int = 600) -> str:
     try:
         return path.read_bytes()[-n:].decode("utf-8", "replace")
@@ -771,7 +789,7 @@ class ContainerChild:
             self._logger = self.popen(["docker", "logs", "-f", self.container], stdout=log,
                                       stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
         try:
-            self.startup_s = wait_listening(self.port, self.startup_timeout, alive=self.alive)
+            self.startup_s = wait_http_ready(self.port, self.startup_timeout, alive=self.alive)
         except HarnessError as e:
             detail = tail_text(self.log_path)
             self.stop()
@@ -833,7 +851,7 @@ class ContainerChild:
     def describe(self) -> dict:
         return {"kind": "container", "container": self.container, "image": self.image, "port": self.port,
                 "memory_limit": self.memory, "memory_swap": self.memory, "cpus": self.cpus,
-                "memory_limit_bytes": parse_memory_flag(self.memory)}
+                "memory_limit_bytes": parse_memory_flag(self.memory), "startup_measure": "http_health_200"}
 
 
 class ResourceMonitor:

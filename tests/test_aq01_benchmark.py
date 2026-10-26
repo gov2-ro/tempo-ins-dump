@@ -1,11 +1,13 @@
 """AQ-01 / 01A: the capacity harness (scripts/benchmark-mcp.py): report schema, grouping, units, cleanup,
 timeout accounting, and two end-to-end acceptance runs through a real child process and the real MCP client."""
+import http.server
 import importlib.util
 import json
 import os
 import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -640,17 +642,38 @@ def test_the_container_command_enforces_the_limit_mounts_read_only_and_passes_no
 def test_a_container_that_does_not_come_up_is_stopped_and_removed(tmp_path):
     docker = FakeDocker()
     c = container(tmp_path, docker, 8115)
-    with pytest.raises(B.HarnessError, match="did not listen"):
+    with pytest.raises(B.HarnessError, match="did not answer /api/health"):
         c.start()
     subs = [x[1] for x in docker.calls]
     assert "stop" in subs and "rm" in subs and not docker.running and c not in B.CHILDREN.children
     assert c._logger.terminated
 
 
-def test_container_measurements_come_from_the_cgroup_and_inspect(tmp_path):
+class _Health(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200 if self.path == "/api/health" else 404)
+        self.end_headers()
+
+    def log_message(self, *a):
+        pass
+
+
+def test_a_published_port_that_accepts_tcp_is_not_ready_until_health_answers(tmp_path):
+    """Docker's port forwarder accepts connections before the app listens (seen with Colima)."""
     srv = socket.socket()
-    srv.bind(("127.0.0.1", 8115))
+    srv.bind(("127.0.0.1", 8116))
     srv.listen()
+    try:
+        assert B.wait_listening(8116, 0.5) < 0.5                               # the old check: "ready"
+        with pytest.raises(B.HarnessError, match="did not answer /api/health"):
+            B.wait_http_ready(8116, 0.6)
+    finally:
+        srv.close()
+
+
+def test_container_measurements_come_from_the_cgroup_and_inspect(tmp_path):
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8115), _Health)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
         c = container(tmp_path, FakeDocker(), 8115)
         c.start()
@@ -659,7 +682,8 @@ def test_container_measurements_come_from_the_cgroup_and_inspect(tmp_path):
         assert c.cpu_seconds() == pytest.approx(2.5)
         stats = c.stop()
     finally:
-        srv.close()
+        srv.shutdown()
+        srv.server_close()
     assert stats["container_memory_peak_bytes"] == 300_000_000 and stats["oom_killed"] is False
     assert stats["oom_kill_events"] == 0 and stats["restarts"] == 0 and stats["oom_suspected"] is False
     assert stats["rss_peak_kernel_bytes"] is None and stats["cpu_s_total"] == pytest.approx(2.5)
