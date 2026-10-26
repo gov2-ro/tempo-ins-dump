@@ -59,6 +59,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = Path(__file__).resolve()
 SCHEMA = "benchmark-mcp/1"
 CONTAINER_PORT = 8080
+SLOT_PROBES = 1           # fresh rank requests kept back per mixed phase for the slot-free check
 
 # sample states: percentiles are computed per (case, state) and never across states
 STATES = ("cold", "miss_warm", "cache", "mixed", "observed")
@@ -1393,12 +1394,16 @@ class VariantPool:
         return out
 
 
-async def await_slot_free(ctx: Ctx, run: Run, sess: Sess, pool: VariantPool, timeout: float):
+async def await_slot_free(ctx: Ctx, run: Run, sess: Sess, pool: VariantPool, timeout: float,
+                          reserved: list | None = None):
     """Poll with fresh rank requests (a cached answer never touches the slot) until one is not answered
-    `busy`. That call is also the first request after the work. Returns (seconds, Result) or (None, None)."""
+    `busy`. That call is also the first request after the work. Returns (seconds, Result) or (None, None).
+    `reserved` holds variants set aside before a long phase, which can use up the whole pool."""
     t0 = time.perf_counter()
+    fresh = None
     while time.perf_counter() - t0 < timeout:
-        fresh = pool.fresh(1, counties=False)
+        # A `busy` answer was neither dispatched nor cached, so the same variant stays fresh for the next poll.
+        fresh = fresh or ([reserved.pop(0)] if reserved else pool.fresh(1, counties=False))
         if not fresh:
             break
         r = await call(ctx, run, sess, "slot_poll", "observed", "rank_entities", fresh[0][1], attribute=False,
@@ -1755,6 +1760,7 @@ async def scenario_mixed(ctx: Ctx) -> None:
         phase_results = []
         for name, n_mcp, n_rest, seconds in cfg.mixed_phases:
             ctx.budget.check(f"mixed phase {name}")
+            probes = pool.fresh(SLOT_PROBES, counties=False)         # before the phase can use them all
             end = time.monotonic() + seconds
             fivexx, fourxx = [], []
 
@@ -1804,7 +1810,7 @@ async def scenario_mixed(ctx: Ctx) -> None:
             run.record.setdefault("windows", []).append(w)
             # work that outlived the phase: the slot must come free by itself
             async with open_session(ctx, run) as s:
-                linger, _ = await await_slot_free(ctx, run, s, pool, 30.0)
+                linger, _ = await await_slot_free(ctx, run, s, pool, 30.0, reserved=probes)
             linger = None if linger is None else round(linger, 3)
             phase_results.append({"phase": name, "mcp_clients": n_mcp, "rest_clients": n_rest, "seconds": seconds,
                                   "unexpected_5xx": len(fivexx), "unexpected_4xx": len(fourxx), "examples": (fivexx + fourxx)[:5], "slot_free_after_phase_s": linger,

@@ -849,3 +849,23 @@ def test_an_oom_killed_container_is_a_measured_failure_even_without_a_peak(tmp_p
     killed = {"container_memory_peak_bytes": None, "oom_killed": True, "oom_suspected": True}
     g = _gate(tmp_path, {"os_type": "linux"}, [killed])
     assert g["status"] == "measured" and g["oom_killed"] is True and g["container_memory_peak_bytes"] is None
+
+
+def test_the_slot_probe_reuses_a_busy_answered_request_and_can_use_a_reserved_one(monkeypatch):
+    """A `busy` answer is neither dispatched nor cached, so polling must not burn the variant pool:
+    a 300 s mixed phase used up every fresh variant and the slot check then reported nothing."""
+    import asyncio
+    import types
+    sent, answers = [], iter(["busy", "busy", None])
+
+    async def fake_call(ctx, run, sess, case, state, tool, args, **kw):
+        sent.append(json.dumps(args, sort_keys=True))
+        return types.SimpleNamespace(sample={"reason": next(answers)})
+
+    monkeypatch.setattr(B, "call", fake_call)
+    pool = B.VariantPool(B.Workload(year="2025"))
+    reserved = pool.fresh(1, counties=False)
+    secs, r = asyncio.run(B.await_slot_free(None, None, None, pool, 5.0, reserved=reserved))
+    assert secs is not None and r.sample["reason"] is None
+    assert len(sent) == 3 and len(set(sent)) == 1 and reserved == []          # one variant, polled three times
+    assert len(pool.used) == 1                                                # nothing else taken from the pool
