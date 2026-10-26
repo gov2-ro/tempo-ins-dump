@@ -603,9 +603,10 @@ class FakeDocker:
         elif sub == "inspect":
             out = ("true\n" if self.running else "false\n") if "Running" in cmd[3] else f"{str(self.oom).lower()} 0 0\n"
         elif sub == "exec":
-            files = {"memory.current": "250000000", "memory.peak": "300000000", "memory.events": "oom_kill 0\n",
+            files = {"memory.current": "250000000\n", "memory.peak": "300000000\n", "memory.events": "oom_kill 0\n",
+                     "memory.stat": "anon 180000000\nfile 60000000\nkernel 1\n",
                      "cpu.stat": "usage_usec 2500000\nuser_usec 1\n"}
-            out = next((v for k, v in files.items() if cmd[-1].endswith(k)), "")
+            out = "".join(next((v for k, v in files.items() if path.endswith(k)), "") for path in cmd[4:])
         elif sub in ("stop", "rm"):
             self.running = False
         return subprocess.CompletedProcess(cmd, 0, out, "")
@@ -678,7 +679,8 @@ def test_container_measurements_come_from_the_cgroup_and_inspect(tmp_path):
         c = container(tmp_path, FakeDocker(), 8115)
         c.start()
         assert c.startup_s is not None and c.alive()
-        assert c.sample() == {"rss_tree_bytes": None, "container_memory_bytes": 250_000_000}
+        assert c.sample() == {"rss_tree_bytes": None, "container_memory_bytes": 250_000_000,
+                              "container_anon_bytes": 180_000_000, "container_file_bytes": 60_000_000}
         assert c.cpu_seconds() == pytest.approx(2.5)
         stats = c.stop()
     finally:
@@ -838,6 +840,13 @@ def test_the_linux_gate_follows_the_daemon_kernel_not_the_host(tmp_path, monkeyp
     ok = {"container_memory_peak_bytes": 300_000_000, "oom_killed": False, "oom_suspected": False}
     g = _gate(tmp_path, {"os_type": "linux"}, [ok, dict(ok, container_memory_peak_bytes=350_000_000)])
     assert g["status"] == "measured" and g["container_memory_peak_bytes"] == 350_000_000 and g["oom_killed"] is False
+    assert g["container_anon_peak_bytes_sampled"] is None                     # no measured window
+    cfg = B.Cfg(data_dir=tmp_path / "nodata", out_dir=tmp_path, mode="container", image="tempo:cand")
+    r = B.new_report(cfg)
+    r["environment"]["container"]["daemon"] = {"os_type": "linux"}
+    r["runs"] = [{"target": {"kind": "container"}, "stats": ok,
+                  "windows": [{"container_anon_peak_bytes": 200_000_000}, {"container_anon_peak_bytes": None}]}]
+    assert B.linux_gate(r, cfg)["container_anon_peak_bytes_sampled"] == 200_000_000
     assert g["memory_limit_bytes"] == 512 * 1024 ** 2 and g["evaluated"] is False
     assert _gate(tmp_path, {"os_type": "windows"}, [ok])["status"] == "not_run"
     assert _gate(tmp_path, None, [ok])["status"] == "not_run"

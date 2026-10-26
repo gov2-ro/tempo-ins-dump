@@ -808,7 +808,17 @@ class ContainerChild:
         return None
 
     def sample(self) -> dict:
-        text = self._read("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.usage_in_bytes")
+        """cgroup v2 memory.current, split by memory.stat into anon (heap: what an OOM is made of) and file
+        (page cache, which the kernel reclaims under the limit before it kills anything)."""
+        out = self._docker("exec", self.container, "cat", "/sys/fs/cgroup/memory.current",
+                           "/sys/fs/cgroup/memory.stat", timeout=10)
+        lines = out.stdout.splitlines() if out is not None and out.returncode == 0 else []
+        if lines and lines[0].strip().isdigit():
+            stat = dict(ln.split(None, 1) for ln in lines[1:] if len(ln.split()) == 2)
+            num = lambda k: int(stat[k]) if stat.get(k, "").isdigit() else None    # noqa: E731
+            return {"rss_tree_bytes": None, "container_memory_bytes": int(lines[0]),
+                    "container_anon_bytes": num("anon"), "container_file_bytes": num("file")}
+        text = self._read("/sys/fs/cgroup/memory/memory.usage_in_bytes")             # cgroup v1
         return {"rss_tree_bytes": None,
                 "container_memory_bytes": int(text.strip()) if text and text.strip().isdigit() else None}
 
@@ -888,7 +898,8 @@ class ResourceMonitor:
             for w in self._open.values():
                 w["samples"] += 1
                 for key, field in (("rss_tree_bytes", "rss_peak_bytes"),
-                                   ("container_memory_bytes", "container_memory_peak_bytes")):
+                                   ("container_memory_bytes", "container_memory_peak_bytes"),
+                                   ("container_anon_bytes", "container_anon_peak_bytes")):
                     v = s.get(key)
                     if v is not None and (w[field] is None or v > w[field]):
                         w[field] = v
@@ -896,7 +907,7 @@ class ResourceMonitor:
     @contextlib.contextmanager
     def window(self, name: str):
         w = {"name": name, "wall_s": None, "samples": 0, "rss_peak_bytes": None,
-             "container_memory_peak_bytes": None, "cpu_s": None}
+             "container_memory_peak_bytes": None, "container_anon_peak_bytes": None, "cpu_s": None}
         t0, cpu0 = time.perf_counter(), None
         with contextlib.suppress(Exception):
             cpu0 = self.child.cpu_seconds()
@@ -1908,6 +1919,9 @@ def linux_gate(r: dict, cfg: Cfg) -> dict:
         return {
             "status": "measured", "memory_limit_bytes": parse_memory_flag(cfg.container_memory),
             "container_memory_peak_bytes": max((p for p in peaks if p is not None), default=None),
+            # sampled every 0.1 s inside measured windows, so it can miss a short spike; page cache excluded
+            "container_anon_peak_bytes_sampled": max((w.get("container_anon_peak_bytes") or 0 for x in run_containers
+                                                      for w in x.get("windows") or []), default=0) or None,
             "oom_killed": oom,
             "evaluated": False, "note": "pass/fail against the 75% headroom threshold is AQ-01B's decision"}
     if run_containers:
