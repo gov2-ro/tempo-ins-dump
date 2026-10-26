@@ -36,9 +36,16 @@ On `fix/ask-answer-quality` (2026-10-17, code-ready, not deployed, not model/cli
   (3,898,870 rows) with no dispatch; a 5M cap in the child ranks 319 cities identically to
   the direct tool on macOS. **Postponed 2026-10-17 (owner):** where to run the 512 MiB test
   (local container runtime, a Linux Docker host, or a separate Fly test machine) is undecided.
-  Still needed: `--mode container` on a Linux host with the
-  candidate image at 512 MiB, the AT-04 180 s/300 s mixed phases, and worst admitted
-  requests of every scan-gated tool. Do not change limits before that.
+  **2026-10-27: first container runs done under Colima** ([record](plans/ask-and-public-mcp/remaining/aq-01b-linux-run-record.md)):
+  AT-04 mixed phases at 512 MiB, no OOM. Peak 73 % on arm64 and 76–77 % on amd64, the same
+  with the 1M or the 5M scan cap and with smaller DuckDB budgets, so the REST and search heap
+  drives it, not the cap. Still needed: worst admitted requests of every scan-gated tool, a
+  ≥ 30 min soak (the heap still grew between phases), and an owner decision on the 75 %
+  line for amd64. Do not change limits before that.
+- [ ] **Five-client mixed load puts the heap near 400 MB at 512 MiB on amd64**, even with the MCP
+  at its defaults (`aq-01b-linux-run-record.md`). Find what holds it (metadata/search caches,
+  export buffers, view-profile JSON) before trusting the 512 MB Fly machine under real
+  load. Lowering `TEMPO_DB_MEMORY`/`TEMPO_SEARCH_MEMORY` did not reduce it.
 - [ ] **Live task evaluation** (AQ-02C): runner `scripts/eval-ask-tasks.py` + `data/eval/ask_tasks.json`
   is offline/scripted only (142/142 positives on generation 9b3e065d; scripted tool choice is not
   model quality). The live mode needs explicit provider/model/budget authorization. Also check
