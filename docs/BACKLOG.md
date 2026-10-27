@@ -24,12 +24,19 @@ see also [charting-ideas.md](charting-ideas.md)
     A reviewed recipe (population / area, county and municipality) would answer it; INS's own enrolment rate
     SCL102A (national, by sex) was also not found when a model built its own proxy.
   - **Ask page:** the "Set your API key" notice is English on the Romanian page.
-  - **Publish the dev questions and answers (owner wish, 2026-10-27).** Capture exists (Ask
-    `TEMPO_ASK_LOG_CHATS`, MCP `TEMPO_MCP_LOG_CALLS`, both disclosed as "may be published"). Before publishing:
-    where (a page or a dataset), a scrub pass (emails, phone numbers, CNP, names typed into questions), review
-    or delay before release, retention, and an opt-out. On Fly the log file is on the machine's disk and is lost
-    on redeploy (stdout `fly logs` keeps only a short window): a volume or a periodic copy is needed. The MCP
-    never sees the final answer (the client's model writes it), only the calls and results.
+  - **Publish the dev questions and answers (owner decisions, 2026-10-27).** Capture exists (Ask
+    `TEMPO_ASK_LOG_CHATS`, MCP `TEMPO_MCP_LOG_CALLS`, both disclosed as "may be published"). Decided:
+    - **Manual approval:** the owner approves each question before it is published; no automated
+      personal-data scrub. Nothing is published without approval.
+    - **Where:** a page on the site ("questions asked, with the answers given"), optionally with a downloadable file.
+    - **Signature per user:** every published question carries a handle. Default: a random, friendly one —
+      three words or adjective-noun-number (e.g. `vulpe-zâmbitoare-42`), generated once and kept in the
+      browser (Ask) — which the user can edit to a real name if they want to be known. MCP clients have no
+      browser: give them a handle per connection or session, or let them set one through an optional argument.
+    - **Storage on Fly:** the log file is on the machine's disk and is lost on redeploy (`fly logs` keeps only a
+      short window): add a volume or a periodic copy.
+    - **Opt-out:** a "don't publish my question" choice on the Ask page (not possible over MCP).
+    The MCP never sees the final answer (the client's model writes it), only the calls and results.
 
 - [ ] **P2 — A year-range population question gets a one-year call.** 06C example check: discovery
   for "populația rezidentă a județului Cluj între 2015 și 2024" suggests `query_data
