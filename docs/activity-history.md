@@ -25,6 +25,13 @@ before DNS.
   smoke clean. Upload waits for the DreamHost shell user; DNS unchanged.
 - Rollback: `fly deploy --image registry.fly.io/tempo-ins-explorer:deployment-01M20DR7A8D94BZE2A36D1TDF6`
   (v26) and `fly secrets unset` the profile.
+- **Cutover (same night, by the owner):** uploaded the static build to DreamHost (site IP 67.205.6.170; the
+  first upload was the 10-24 candidate, replaced by this build), switched the Cloudflare `ins` A record to
+  it and removed the AAAA, requested Let's Encrypt (issued in about a minute). Checked: DNS on Cloudflare
+  and public resolvers, `build.json` over HTTPS = `8d95a7c` / `062bd2b03173`, http → https 301, hashes of
+  126 sampled files, `/api` 404, pages without console errors, Ask on the static site reaches
+  `api-ins.gov2.ro` (CORS ok, logging notice and key prompt shown). Still to do: remove Fly's
+  `ins.gov2.ro` certificate after 24–48 h (keep `api-ins`).
 
 ## 2026-10-27 — Live client test of the local MCP, and three fixes
 

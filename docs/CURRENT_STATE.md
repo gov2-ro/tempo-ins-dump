@@ -203,7 +203,8 @@ generation `062bd2b03173` (the 2026-10-12 copy with the rebuilt search index), a
 `ins.gov2.ro` and `api-ins.gov2.ro`. Production profile set with `fly secrets` from
 `scripts/deploy/fly/mcp-public.env`: public MCP at `https://api-ins.gov2.ro/mcp` (5M scan cap),
 own-key Ask, content logs on the `/logs` volume. One machine stays running; a stopped standby has
-its own volume. The static site for DreamHost is built but not uploaded; DNS is unchanged.
+its own volume. Since the same night `ins.gov2.ro` is the static build on DreamHost (Let's Encrypt),
+same commit and generation; Fly answers `api-ins.gov2.ro` (and still holds an `ins` certificate).
 
 Fly app `tempo-ins-explorer`, live https://ins.gov2.ro/, shared-cpu-1x/512MB,
 Amsterdam, one uvicorn worker. Main DuckDB connection is read-only with a 400MB
