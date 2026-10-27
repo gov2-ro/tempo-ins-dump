@@ -24,6 +24,11 @@ SDMX_MAX_OBS = int(os.environ.get("TEMPO_SDMX_MAX_OBS", "250000"))
 EXPORT_MAX_CONCURRENT = int(os.environ.get("TEMPO_EXPORT_MAX_CONCURRENT", "2"))
 EXPORT_XLSX_MAX_CONCURRENT = int(os.environ.get("TEMPO_EXPORT_XLSX_MAX_CONCURRENT", "1"))
 EXPORT_BATCH_ROWS = int(os.environ.get("TEMPO_EXPORT_BATCH_ROWS", "5000"))
+# Place profiles: a first computation holds ~270 MB on a 512 MiB machine (AQ-01C), so they are built
+# one at a time (others wait up to PLACE_WAIT_SECONDS, then 503 + Retry-After) and kept per generation.
+PLACE_MAX_CONCURRENT = max(1, int(os.environ.get("TEMPO_PLACE_MAX_CONCURRENT", "1")))
+PLACE_WAIT_SECONDS = float(os.environ.get("TEMPO_PLACE_WAIT_SECONDS", "20"))
+PLACE_CACHE_ENTRIES = int(os.environ.get("TEMPO_PLACE_CACHE_ENTRIES", "128"))
 LARGE_DATASET_THRESHOLD = 50_000  # Require filters above this row count
 
 DEBUG = os.environ.get("TEMPO_DEBUG", "false").lower() in ("1", "true", "yes")

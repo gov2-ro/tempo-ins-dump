@@ -8,7 +8,10 @@ from app.config import DB_PATH
 # get their own bounded budget: an unconfigured DuckDB instance may use 80% of
 # the machine's RAM, which on a 512 MiB VM is an OOM (PA-04 workload).
 SCRATCH_MEMORY = os.environ.get("TEMPO_SCRATCH_MEMORY", "128MB")
-DB_MEMORY = os.environ.get("TEMPO_DB_MEMORY", "400MB")
+# 160MB: the main connection caches every table page it scans up to this limit, next to the FTS
+# sidecar, scratch instances and the Python heap, all inside 512 MiB. 400MB let the cache alone
+# approach the machine; 160MB cost ~5-10% p50 latency in the AT-04 mix (AQ-01C record).
+DB_MEMORY = os.environ.get("TEMPO_DB_MEMORY", "160MB")
 DB_THREADS = int(os.environ.get("TEMPO_DB_THREADS", "0"))   # 0 = DuckDB default (all cores)
 
 _conn = None
