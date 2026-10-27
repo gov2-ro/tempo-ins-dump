@@ -898,7 +898,9 @@ def test_worst_case_runs_every_scan_gated_tool_with_parity_and_the_one_slot_gate
     reqs.write_text(json.dumps(B.default_worst_requests(wl, [])))
     r = harness(["--data-dir", str(data_dir), "--out-dir", str(out), "--dataset", "CITYBIG", "--years", "2025,2024",
                  "--max-scan-rows", "2000000", "--scenarios", "worst_case", "--worst-requests", str(reqs),
-                 "--ports", PORTS])
+                 # the fixture's entities-by-year group is ~1M groups: the harness logic is under test here,
+                 # not whether the 160MB default budget fits it (see aq-01b-linux-run-record.md)
+                 "--setting", "TEMPO_DB_MEMORY=400MB", "--ports", PORTS])
     assert r.returncode == 0, r.stdout + r.stderr
     rep = report_of(out)
     reqs = rep["observations"]["worst_case_requests"]
