@@ -39,6 +39,10 @@ log = logging.getLogger(__name__)
 
 MAX_ALTERNATIVES = 2          # related datasets offered at most
 SUMMARIZE_OVER = 50           # effective-filter lists longer than this are summarized
+# Groups one grouped query may build. At the 160MB DuckDB budget a 4-dimension grouping of
+# POP107D_grupe_localitate fit with 570k groups and failed with 860k (AQ-01B); half leaves
+# room for the REST traffic sharing that budget.
+MAX_GROUPS = 250_000
 _UNSET = object()
 
 
@@ -63,7 +67,9 @@ def query_data(args, ctx):
             subject=str(ctx.generation.get("status"))))
     try:
         res = dq.run_query(ctx.conn, code, filters, request["group_by"], limit=args.limit,
-                           approximate=request["approximate"])
+                           approximate=request["approximate"], max_groups=MAX_GROUPS)
+    except dq.TooManyGroups as e:
+        raise _too_many_groups(e, ctx, code, request["group_by"])
     except dq.QueryError as e:
         raise C.query_failure(e, ctx, code)
     aid = _Aid(ctx, code, request, res, args.limit)
@@ -73,6 +79,19 @@ def query_data(args, ctx):
     if sel and sel.get("empty"):
         return _empty_selection(aid, warnings)
     return _answer(aid, warnings)
+
+
+def _too_many_groups(e: "dq.TooManyGroups", ctx, code: str, group_by: list) -> C.ToolFailure:
+    """Refused before execution: the grouping is close to the raw table, and the tool would
+    only show a preview of it anyway. The way on is fewer groups, never raw rows."""
+    col = e.widest[0] if e.widest else group_by[-1]
+    rec = [C.recovery("narrow", M.t(ctx.lang, "query.too_many_groups_narrow"))]
+    if e.widest:
+        rec.append(C.recovery("tool_call", M.t(ctx.lang, "query.too_many_groups_values", col=col),
+                              "find_dimension_values", {"dataset": code, "column": col, "lang": ctx.lang}))
+    return C.ToolFailure("unavailable", "query_budget", M.t(
+        ctx.lang, "query.too_many_groups", cols=", ".join(group_by), groups=f"{e.groups:,}",
+        limit=f"{e.limit:,}", col=col), provenance=C.base_provenance(ctx), recovery=rec)
 
 
 def _normalize_filters(filters: dict) -> tuple[dict, list]:

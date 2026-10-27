@@ -83,6 +83,12 @@ TEXT = {
         "query.raw_uncertified": "The served data generation is {status}; these raw observations "
                                  "are not certified against a generation manifest.",
         "query.more_values": ", … ({n} values)",
+        "query.too_many_groups": "Grouping by {cols} gives about {groups} rows, more than the {limit} "
+                                 "one query can compute here; a preview would show only the first "
+                                 "few. Filter {col} (or the period) to the values the question needs, "
+                                 "or group by fewer columns.",
+        "query.too_many_groups_narrow": "Filter a grouped column or group by fewer columns.",
+        "query.too_many_groups_values": "Look up the values of {col} to filter on.",
         "query.rows_one": "{n} row returned.",
         "query.rows_many": "{n} rows returned.",
         "query.raw_rows_one": "{n} raw observation row returned.",
@@ -741,6 +747,13 @@ TEXT = {
         "query.raw_uncertified": "Generația de date servită este {status}; aceste observații "
                                  "brute nu sunt certificate printr-un manifest de generație.",
         "query.more_values": ", … ({n} valori)",
+        "query.too_many_groups": "Gruparea după {cols} dă aproximativ {groups} rânduri, mai mult decât "
+                                 "cele {limit} pe care le poate calcula aici o singură interogare; o "
+                                 "previzualizare ar arăta doar primele câteva. Filtrează {col} (sau "
+                                 "perioada) la valorile de care are nevoie întrebarea, sau grupează "
+                                 "după mai puține coloane.",
+        "query.too_many_groups_narrow": "Filtrează o coloană grupată sau grupează după mai puține coloane.",
+        "query.too_many_groups_values": "Caută valorile lui {col} după care să filtrezi.",
         "query.rows_one": "{n} rând returnat.",
         "query.rows_many": "{n} rânduri returnate.",
         "query.raw_rows_one": "{n} rând de observații brute returnat.",

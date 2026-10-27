@@ -251,6 +251,9 @@ Latency, arm64 native (AT-04 targets: warm p95 < 2 s metadata, < 5 s analytical;
   160MB budget. DuckDB does not spill them, even with a `temp_directory`. Such a request returns
   `execution_failed`, not a crash. With 4 dimensions it needs ≥ 256MB; with 5, more. The REST `/data` path
   time-windows these, and its 18 heaviest requests pass at 160MB.
+  *Resolved 2026-10-27 (owner: refuse before execution):* the tools estimate the groups and answer
+  `query_budget` above 250,000 with the column to filter (570k groups fit at 160MB, 860k failed). See the
+  activity log.
 - **amd64 is emulated (Rosetta),** which adds about 50 MB of heap at idle (108 vs 58 MB) and after light load
   (288 vs 232 MB). So amd64 figures here overstate the real x86 heap, and arm64 may understate it slightly. A
   real x86 Linux run (a Fly test machine or a Linux host) is the only exact one.

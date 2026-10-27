@@ -36,6 +36,20 @@ class QueryError(Exception):
         self.message = message
 
 
+class TooManyGroups(QueryError):
+    """A grouped request whose result would not fit the query memory budget.
+
+    DuckDB does not spill a hash aggregate over millions of groups at the 512 MB
+    machine's budget; it fails. `groups` is the estimate, `widest` the unfiltered
+    grouped columns (SDMX names), the one with the most distinct values first.
+    """
+
+    def __init__(self, groups: int, limit: int, widest: list):
+        super().__init__(413, f"Too many groups: about {groups:,} (at most {limit:,} per query). "
+                              f"Filter a grouped column or group by fewer columns.")
+        self.groups, self.limit, self.widest = groups, limit, widest
+
+
 # Legacy period labels that sort chronologically as plain strings. Annual
 # labels do ("Anul 1990" < "Anul 2024"); month names do not ("Aprilie" sorts
 # before "Ianuarie"), so those datasets keep the old unordered behaviour
@@ -105,6 +119,46 @@ def _rows_per_period(dimensions, group_by_cols, filter_dict, time_dim,
     return float(cells)
 
 
+def _group_estimate(conn, matrix_code, dimensions, filter_dict, group_by_cols,
+                    row_count: int, max_groups: int) -> tuple[int, dict]:
+    """How many groups the grouped query will produce, and the distinct values
+    each grouped column contributes, under the filters that will run.
+
+    Cheap bounds first: a result never has more groups than the file has rows,
+    and a filtered column contributes at most its listed values. Declared option
+    counts bound the rest when every column declares more than one (0 or 1 is
+    "not recorded" for split children's locality columns). Otherwise one
+    HyperLogLog scan (constant memory, about 2% error) counts them.
+    """
+    if row_count <= max_groups:
+        return row_count, {}
+    declared: dict[str, int] = {}
+    for d in dimensions:
+        col = d['dim_column_name']
+        declared[col] = max(declared.get(col, 0), d.get('declared_options') or 0)
+    per = {c: len(filter_dict[c]) if filter_dict.get(c) else declared.get(c, 0)
+           for c in group_by_cols}
+    if all(n > 1 or filter_dict.get(c) for c, n in per.items()):
+        bound = 1
+        for n in per.values():
+            bound *= max(n, 1)
+        if bound <= max_groups:
+            return bound, per
+    where, params = [], [str(PARQUET_DIR / f"{matrix_code}.parquet")]
+    for col, values in filter_dict.items():
+        vals = [str(v) for v in values or [] if v is not None]
+        if vals:
+            params.extend(vals)
+            where.append(f'CAST({quote_ident(col)} AS VARCHAR) IN ({", ".join("?" for _ in vals)})')
+    cols = [quote_ident(c) for c in group_by_cols]
+    row = conn.execute(
+        f"SELECT approx_count_distinct(hash({', '.join(cols)})), "
+        + ", ".join(f"approx_count_distinct({c})" for c in cols)
+        + f" FROM read_parquet(?) {'WHERE ' + ' AND '.join(where) if where else ''}",
+        params).fetchone()
+    return int(row[0] or 0), dict(zip(group_by_cols, (int(n or 0) for n in row[1:])))
+
+
 def _allowed_columns(dimensions, schema) -> set:
     """Every column name a request may legitimately mention for this dataset:
     the recorded dimension names plus both spellings from the schema maps
@@ -128,7 +182,8 @@ def schema_mismatch(schema, dimensions) -> str | None:
 
 
 def run_query(conn, matrix_code: str, filters=MISSING, group_by=MISSING,
-              limit: int = MAX_DATA_ROWS, approximate: bool = False) -> dict:
+              limit: int = MAX_DATA_ROWS, approximate: bool = False,
+              max_groups: int | None = None) -> dict:
     """Validate, decide and execute one data query; the REST, Ask and MCP shape.
 
     `filters` / `group_by` are decoded JSON values (`MISSING` when absent).
@@ -136,6 +191,8 @@ def run_query(conn, matrix_code: str, filters=MISSING, group_by=MISSING,
     file, 500 execution failure). A refused aggregation is not an error: the
     result has `unavailable: true`, no rows and the decision under
     `aggregation`. Approximations happen only with `approximate=True`.
+    `max_groups` (the analytical tools set it) refuses, before execution, a
+    grouping estimated above it with TooManyGroups; REST is time-windowed instead.
     """
     if not isinstance(limit, int) or isinstance(limit, bool) \
             or not 1 <= limit <= MAX_DATA_ROWS:
@@ -168,7 +225,7 @@ def run_query(conn, matrix_code: str, filters=MISSING, group_by=MISSING,
 
     dimensions = [
         {'dim_code': d[0], 'dim_label': d[1], 'dim_column_name': d[2],
-         'option_count': d[3] or 1}
+         'option_count': d[3] or 1, 'declared_options': d[3]}
         for d in dims
     ]
 
@@ -324,6 +381,14 @@ def run_query(conn, matrix_code: str, filters=MISSING, group_by=MISSING,
                            'method': 'none'}
             return _unavailable(matrix_code, [legacy_to_sdmx.get(c, c) for c in group_by_cols],
                                 row_count, aggregation, grain)
+
+    if group_by_cols and max_groups:
+        groups, per = _group_estimate(conn, matrix_code, dimensions, filter_dict,
+                                      group_by_cols, row_count, max_groups)
+        if groups > max_groups:
+            widest = sorted((c for c in group_by_cols if not filter_dict.get(c)),
+                            key=lambda c: -per.get(c, 0))
+            raise TooManyGroups(groups, max_groups, [legacy_to_sdmx.get(c, c) for c in widest])
 
     # Build and execute query
     sql, params = build_data_query_params(
