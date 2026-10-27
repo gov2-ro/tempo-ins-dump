@@ -403,9 +403,29 @@ def _recipe_run(rid: str, year=None):
             res = {"error": e.to_dict()}
     finally:
         con.close()
+    res = _recipe_slim(res)
     with _recipe_lock:
+        for k in [k for k in _recipe_cache if k[0] != key[0]]:   # one generation at a time
+            del _recipe_cache[k]
         _recipe_cache[key] = res
     return res
+
+
+_RECIPE_ROW_KEYS = ("geo_id", "value", "weight_total", "count_total", "base_total")
+
+
+def _recipe_slim(res: dict) -> dict:
+    """Only what place KPIs and baselines read. A full result also carries every source table
+    (`inputs`, `sources`); kept per recipe and year, those held ~70 MB of Python objects (AQ-01C)."""
+    if "error" in res:
+        return res
+    r = res["recipe"]
+    return {"recipe": {"id": r["id"], "kind": r["kind"], "value_source": r.get("value_source")},
+            "years_available": res.get("years_available") or [],
+            "rows": [{k: row[k] for k in _RECIPE_ROW_KEYS if k in row} for row in res.get("rows") or []],
+            "excluded": res.get("excluded") or [],
+            "aggregates": [{"geo_id": a["geo_id"], "value": a["value"]} for a in res.get("aggregates") or []],
+            "value_source": res.get("value_source")}
 
 
 def _recipe_combine(kind: str, rows: list[dict]) -> float | None:

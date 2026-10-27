@@ -878,3 +878,48 @@ def test_the_slot_probe_reuses_a_busy_answered_request_and_can_use_a_reserved_on
     assert secs is not None and r.sample["reason"] is None
     assert len(sent) == 3 and len(set(sent)) == 1 and reserved == []          # one variant, polled three times
     assert len(pool.used) == 1                                                # nothing else taken from the pool
+
+
+def test_the_default_worst_set_covers_every_scan_gated_tool_and_every_recipe():
+    wl = B.Workload(year="2025", years=["2025", "2024", "2023"])
+    reqs = B.default_worst_requests(wl, ["r1", "r2"])
+    assert {q["tool"] for q in reqs} == set(B.WORST_TOOLS)
+    assert [q["arguments"]["recipe"] for q in reqs if q["tool"] == "run_recipe"] == ["r1", "r2"]
+    iv = next(q for q in reqs if q["tool"] == "compare_periods")["arguments"]["intervals"]
+    assert len(iv) == len({(i["from"], i["to"]) for i in iv}) and all(i["from"] < i["to"] for i in iv)
+    two = B.default_worst_requests(B.Workload(year="2025", years=["2025", "2024"]), [])
+    assert next(q for q in two if q["tool"] == "compare_periods")["arguments"]["intervals"] == [{"from": "2024", "to": "2025"}]
+
+
+def test_worst_case_runs_every_scan_gated_tool_with_parity_and_the_one_slot_gate(data_dir, tmp_path):
+    out = tmp_path / "out"
+    wl = B.Workload(dataset="CITYBIG", year="2025", years=["2025", "2024"])
+    reqs = tmp_path / "worst.json"                       # the fixture has no recipe sources: tools only
+    reqs.write_text(json.dumps(B.default_worst_requests(wl, [])))
+    r = harness(["--data-dir", str(data_dir), "--out-dir", str(out), "--dataset", "CITYBIG", "--years", "2025,2024",
+                 "--max-scan-rows", "2000000", "--scenarios", "worst_case", "--worst-requests", str(reqs),
+                 # the fixture's entities-by-year group is ~1M groups: the harness logic is under test here,
+                 # not whether the 160MB default budget fits it (see aq-01b-linux-run-record.md)
+                 "--setting", "TEMPO_DB_MEMORY=400MB", "--ports", PORTS])
+    assert r.returncode == 0, r.stdout + r.stderr
+    rep = report_of(out)
+    reqs = rep["observations"]["worst_case_requests"]
+    assert {q["tool"] for q in reqs} == set(B.WORST_TOOLS) - {"run_recipe"}
+    wc = rep["checks"]["worst_case"]
+    assert wc["status"] == "pass" and wc["failed"] == {} and wc["requests"] == len(reqs)
+    obs = rep["observations"]["worst_case"]
+    assert set(obs) == {q["name"] for q in reqs} and all(v["outcome"] in ("served", "refused") for v in obs.values())
+    par = rep["checks"]["worst_case_parity"]
+    assert par["status"] == "pass" and par["compared"] == wc["served"] and par["differing"] == 0
+    conc = rep["observations"]["worst_case_concurrent"]
+    assert conc["requests"] == len(reqs) and sum(conc["results"].values()) == len(reqs)
+
+
+def test_worst_requests_file_is_validated(tmp_path):
+    bad = tmp_path / "w.json"
+    for items in ([], [{"name": "x", "tool": "describe_dataset", "arguments": {}}], [{"name": "x", "tool": "query_data"}]):
+        bad.write_text(json.dumps(items))
+        with pytest.raises(B.HarnessError, match="worst-requests"):
+            B.load_worst_requests(str(bad))
+    bad.write_text(json.dumps([{"name": "q", "tool": "query_data", "arguments": {"dataset": "X"}}]))
+    assert B.load_worst_requests(str(bad))[0]["tool"] == "query_data"

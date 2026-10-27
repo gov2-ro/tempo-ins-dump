@@ -1,5 +1,28 @@
 # Activity History
 
+## 2026-10-27 — AQ-01B/01C: memory at 512 MiB (DuckDB budget, place profiles)
+
+The owner kept the 75 % memory line. Diagnosis in 512 MiB containers:
+- The PA-04 site workload alone (MCP off) reached the limit, with heap at 96 %.
+- The main DuckDB connection cached up to 400MB.
+- A first place-profile build took about 270 MB: 57 scratch DuckDB instances, plus a recipe cache holding
+  every source table (~70 MB).
+
+Changes:
+- `TEMPO_DB_MEMORY` 160MB, at most 2 DuckDB threads by default.
+- Place profiles built one at a time (503 + Retry-After after 20 s) and cached per generation.
+- A slim recipe cache.
+- An MCP operator profile file with the scan cap at 5M (app defaults unchanged).
+
+Results:
+- Heap 71–72 % in the AT-04 harness and PA-04 runs; place p50 went from 6 s to 0.015 s.
+- Every scan-gated tool's worst admitted request passes, with parity.
+- A 30-min soak reached 78 % with a falling slope, so a longer soak is still open.
+- Not adopted: smaller budgets (96MB makes queries fail), malloc arena and allocator flush settings
+  (no effect), one shared scratch instance (worse).
+- The footer-statistics scan estimate is impossible (row groups are unsorted).
+- Group-bys over every dimension of a 3.9M-row file fail at 160MB (backlog).
+
 ## 2026-10-27 — Docker image gate and first 512 MiB runs (Colima)
 
 Installed Colima (MIT, CLI-only; a 4 CPU / 6 GiB Linux VM with Rosetta for amd64) plus the

@@ -201,7 +201,9 @@ tools in the session rather than assuming another checkout has the same setup.
 Fly app `tempo-ins-explorer`, live https://ins.gov2.ro/, shared-cpu-1x/512MB,
 Amsterdam, one uvicorn worker. Main DuckDB connection is read-only with a 400MB
 limit; get_conn returns a cursor per request. Other services open independent
-connections, so this is not a global process memory cap.
+connections, so this is not a global process memory cap. (`fix/ask-answer-quality`, not
+deployed: the default is 160MB, and place profiles are built one at a time and cached per
+generation. See `docs/plans/ask-and-public-mcp/remaining/aq-01b-linux-run-record.md`.)
 
 `bash scripts/prepare-deploy-data.sh` stages metadata, `search.duckdb`, parquets
 and view profiles: it builds in a temp dir, rejects source changes mid-copy,

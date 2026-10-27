@@ -13,7 +13,7 @@ see also [charting-ideas.md](charting-ideas.md)
   requested range (or say it does not) and use a verified total for an all-ages county
   population.
 
-- [ ] **P1 — The public MCP refuses county-filtered work it should admit.** 06C found the same
+- [ ] **P1 — The public MCP refuses county-filtered work it should admit.** **2026-10-27:** a footer-statistics estimate cannot work (every row group spans all counties and years). The measured operator profile `scripts/deploy/fly/mcp-public.env` raises the cap to 5M, which admits both cases; enabling it awaits owner approval. A filter-aware count would need per-value row counts in the generation. 06C found the same
   cause for `rank_entities` cities in one county (Iași: 3,898,870-row estimate on
   `POP107D_grupe_localitate`). The admission estimate is the whole file's footer `num_rows`
   (`public_mcp` estimator), so filters never lower it.
@@ -25,6 +25,12 @@ see also [charting-ideas.md](charting-ideas.md)
   Cluj 2023. Options: a scan estimate that counts the recipe's own filters, a reviewed
   admission exception for recipes, or a raised cap backed by the AQ-01B Linux run. Don't
   change the cap without that run. `release-check.py --local` reports it as a warning.
+
+- [ ] **MCP `query_data` over every dimension of a multi-million-row file fails at the 160MB budget**:
+  grouping POP107D_grupe_localitate (3.9M rows) by 4–5 dimensions returns `execution_failed` (DuckDB OOM; it
+  does not spill these aggregates, even with a `temp_directory`). Such a group-by is close to raw rows: route it
+  to a raw-row preview, or refuse it before execution with a "narrow the selection" message. REST `/data` is
+  time-windowed and unaffected. Record: `aq-01b-linux-run-record.md`.
 
 Implementation status: [AT-05](plans/ask-and-public-mcp/06-answer-quality.md).
 Remaining work is split into [small implementation packages](plans/ask-and-public-mcp/remaining/README.md).
@@ -42,7 +48,7 @@ On `fix/ask-answer-quality` (2026-10-17, code-ready, not deployed, not model/cli
   drives it, not the cap. Still needed: worst admitted requests of every scan-gated tool, a
   ≥ 30 min soak (the heap still grew between phases), and an owner decision on the 75 %
   line for amd64. Do not change limits before that.
-- [ ] **Five-client mixed load puts the heap near 400 MB at 512 MiB on amd64**, even with the MCP
+- [ ] **Five-client mixed load puts the heap near 400 MB at 512 MiB on amd64** (**2026-10-27, `aq/01bc-capacity`:** 160MB DuckDB budget, place profiles serialized and cached, slimmer recipe cache. Short runs are at 71–72 % heap, PA-04 at 71 % (was 96 %). A 30-min soak still reaches 78 % with a falling slope, so a ≥ 2 h soak is open; see `aq-01b-linux-run-record.md`), even with the MCP
   at its defaults (`aq-01b-linux-run-record.md`). Find what holds it (metadata/search caches,
   export buffers, view-profile JSON) before trusting the 512 MB Fly machine under real
   load. Lowering `TEMPO_DB_MEMORY`/`TEMPO_SEARCH_MEMORY` did not reduce it.
