@@ -130,3 +130,31 @@ def test_the_public_mcp_operator_profile_is_valid_and_only_raises_the_scan_cap()
     changed = {k for k in vars(s) if getattr(s, k) != getattr(d, k)}
     assert changed == {"max_scan_rows"}                   # every other limit stays at its measured default
     assert 3_898_870 <= s.max_scan_rows < 8_662_140       # admits *_grupe_localitate, not *_varste_judet
+
+
+def test_the_place_recipe_cache_keeps_only_what_kpis_read_and_one_generation(monkeypatch):
+    from app.services import place_service as P
+    full = {"recipe": {"id": "r", "kind": "weighted_mean", "value_source": None, "definition": "x" * 100},
+            "years_available": ["2023", "2024"], "year": "2024",
+            "rows": [{"geo_id": "CJ", "value": 1.5, "weight_total": 10, "label": "Cluj", "inputs": [1, 2]}],
+            "excluded": [{"geo_id": "B", "reason": "missing_input", "bounds": [1, 2]}],
+            "aggregates": [{"geo_id": "total", "value": 2.0, "inputs": [3]}],
+            "inputs": [[1] * 1000], "sources": [{"table": [[0] * 1000]}], "value_source": None}
+    slim = P._recipe_slim(full)
+    assert set(slim) == {"recipe", "years_available", "rows", "excluded", "aggregates", "value_source"}
+    assert slim["recipe"] == {"id": "r", "kind": "weighted_mean", "value_source": None}
+    assert slim["rows"] == [{"geo_id": "CJ", "value": 1.5, "weight_total": 10}]
+    assert slim["aggregates"] == [{"geo_id": "total", "value": 2.0}] and slim["excluded"] == full["excluded"]
+    assert P._recipe_slim({"error": {"reason": "x"}}) == {"error": {"reason": "x"}}
+
+    gen = {"id": "g1"}
+    monkeypatch.setattr(P, "_recipe_cache", {})
+    import app.services.generation as G
+    import app.services.recipes as R
+    monkeypatch.setattr(G, "current", lambda: dict(gen))
+    monkeypatch.setattr(R, "run", lambda con, rid, year=None: full)
+    monkeypatch.setattr(P, "get_conn", lambda: type("C", (), {"close": lambda self: None})())
+    P._recipe_run("r", "2024")
+    gen["id"] = "g2"
+    P._recipe_run("r", "2024")
+    assert list(P._recipe_cache) == [("g2", "r", "2024")]
