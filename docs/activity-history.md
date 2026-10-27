@@ -16,6 +16,10 @@ Numbers checked against the data were right and caveats were passed on; 23 of 13
 - **Ranking refusals explain themselves:** `rank_entities` now gives query_data's reason and next steps
   (e.g. conflicting keys → the same ranking on the parent), instead of "the shared query refused the input".
 - Local Ask needs `TEMPO_ASK_BYOK_ENABLED=true`; the test server sets it.
+- **Content logs for the dev phase (owner wants questions and answers kept, possibly public):** new opt-in
+  `TEMPO_MCP_LOG_CALLS` writes each MCP call's arguments and full result to `mcp-calls.jsonl` (no IP or client
+  identity) and appends a notice to the server instructions; Ask already had `TEMPO_ASK_LOG_CHATS`. Both banners
+  now say the content may be published. Publishing itself is a backlog decision.
 
 ## 2026-10-27 — MCP answer quality: oversized groupings and year ranges
 

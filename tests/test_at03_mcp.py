@@ -178,7 +178,8 @@ def test_the_real_app_ships_with_mcp_off(monkeypatch):
     assert c.post("/mcp", json=E.RPC, headers=E.HEADERS).status_code == 404
     assert c.post("/mcp/", json=E.RPC, headers=E.HEADERS).status_code == 404
     assert c.get("/api/health").json()["mcp"] == {"enabled": False, "contract": "tempo-tools/2",
-                                                  "generation": c.get("/api/health").json()["generation"]["status"]}
+                                                  "generation": c.get("/api/health").json()["generation"]["status"],
+                                                  "call_logging": False}
 
 
 def test_the_ask_and_mcp_switches_are_independent(tmp_path, monkeypatch):
@@ -462,7 +463,7 @@ def test_health_reports_the_mcp_capability_without_secrets(tmp_path, monkeypatch
     from app.main import health
     app, mcp = E.make_app(tmp_path, monkeypatch)
     summary = P.health_summary(app)
-    assert summary == {"enabled": True, "contract": "tempo-tools/2", "generation": "present"}
+    assert summary == {"enabled": True, "contract": "tempo-tools/2", "generation": "present", "call_logging": False}
     off, _ = E.make_app(tmp_path, monkeypatch, environ={"TEMPO_MCP_ENABLED": "false"}, env=app.state.corpus_env)
     assert P.health_summary(off)["enabled"] is False
     body = health(SimpleNamespace(app=app))
@@ -513,3 +514,30 @@ def test_a_real_server_starts_serves_mcp_and_shuts_down_cleanly(tmp_path, monkey
         server.should_exit = True
         thread.join(10)
     assert not thread.is_alive() and mcp.gate.executor._shutdown and corpus_env
+
+
+# ---------------------------------------------------------------- content log (dev servers)
+
+def test_the_call_log_is_off_by_default_and_disclosed_when_on(tmp_path, monkeypatch):
+    from app import config
+    logs = tmp_path / "logs"
+    monkeypatch.setattr(config, "ASK_LOG_DIR", logs)
+    off, mcp_off = E.make_app(tmp_path, monkeypatch)
+    assert P.LOGGING_NOTICE not in P.build_server(mcp_off.gate, mcp_off.settings).instructions
+
+    async def call(app):
+        async with E.started(app), E.session(app) as s:
+            return await s.call_tool("describe_dataset", {"dataset": "POPC", "lang": "en"})
+    run(call(off))
+    assert not (logs / P.CALL_LOG).exists()
+
+    on, mcp_on = E.make_app(tmp_path, monkeypatch, environ={"TEMPO_MCP_LOG_CALLS": "true"}, env=off.state.corpus_env)
+    assert P.build_server(mcp_on.gate, mcp_on.settings).instructions.endswith(P.LOGGING_NOTICE)
+    assert P.health_summary(on)["call_logging"] is True
+    env = E.payload(run(call(on)))[0]
+    lines = (logs / P.CALL_LOG).read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    rec = json.loads(lines[0])
+    assert rec["tool"] == "describe_dataset" and rec["arguments"] == {"dataset": "POPC", "lang": "en"}
+    assert rec["status"] == env["status"] and rec["result"]["data"] == env["data"]
+    assert not {"ip", "client", "host", "headers", "user_agent"} & set(rec)       # nothing about the caller

@@ -152,7 +152,9 @@ The measured profile for enabling it on the 512 MB machine is `scripts/deploy/fl
   `TEMPO_MCP_QUEUE_SECONDS`/`_MAX_WAITING`, then `busy`), a deadline that interrupts
   the operation's own cursor, a scan admission limit from Parquet footers, a generation-keyed
   cache. It never calls a model, asks for sampling, or runs SQL/code. `scripts/mcp_probe.py`
-  smokes a running endpoint.
+  smokes a running endpoint. Content logs are opt-in and disclosed to the client/user:
+  `TEMPO_MCP_LOG_CALLS` (`mcp-calls.jsonl`) and Ask's `TEMPO_ASK_LOG_CHATS` (`ask-chats.jsonl`),
+  both in `TEMPO_ASK_LOG_DIR`; neither records an IP or client identity.
 - **Pages** (`static/`):
   - `dataset-v2.html` + `js/dashboard-v2.js` — main dataset page
   - `index.html` + `js/explore-app.js` — v1 explorer: home, catalog, legacy

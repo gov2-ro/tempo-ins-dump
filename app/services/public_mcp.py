@@ -75,6 +75,11 @@ INSTRUCTIONS = (
     "exists for that request: follow its recovery suggestion; do not total or rank raw rows yourself. "
     "Messages and warnings follow each call's `lang` (ro default, or en): pass the user's language. "
     "The server never calls a model.")
+# Appended when TEMPO_MCP_LOG_CALLS is on, so a client (and its user) is told before any call.
+LOGGING_NOTICE = (" This is a development server: every tool call (arguments and result, no IP address or client "
+                  "identity) is recorded and may be published to improve the answers. Do not send personal or "
+                  "confidential information.")
+CALL_LOG = "mcp-calls.jsonl"               # in TEMPO_ASK_LOG_DIR, next to Ask's ask-chats.jsonl
 
 
 # ---------------------------------------------------------------- settings
@@ -130,6 +135,7 @@ class McpSettings:
     cache_ttl: float = 300.0
     allowed_hosts: tuple = ()
     allowed_origins: tuple = ()
+    log_calls: bool = False
 
     @classmethod
     def from_env(cls, environ=None, *, base_url: str | None = None) -> "McpSettings":
@@ -160,7 +166,8 @@ class McpSettings:
             cache_bytes=_number(env, "TEMPO_MCP_CACHE_BYTES", 4 * 1024 * 1024),
             cache_entries=_number(env, "TEMPO_MCP_CACHE_ENTRIES", 128),
             cache_ttl=_number(env, "TEMPO_MCP_CACHE_TTL_SECONDS", 300.0, cast=float),
-            allowed_hosts=tuple(dict.fromkeys(hosts)), allowed_origins=tuple(dict.fromkeys(origins)))
+            allowed_hosts=tuple(dict.fromkeys(hosts)), allowed_origins=tuple(dict.fromkeys(origins)),
+            log_calls=_flag(env, "TEMPO_MCP_LOG_CALLS"))
 
 
 def _check_base_url(base: str, local_test: bool) -> tuple[str, str]:
@@ -356,11 +363,29 @@ class Gate:
         self.stats["calls"] += 1
         env, cached = await self._call(name, arguments)
         self.stats[env["status"]] += 1
+        ms = int((self.clock() - t0) * 1000)
         log.info("MCP_METRICS %s", json.dumps({
             "tool": str(name)[:40], "status": env["status"], "reason": env.get("reason"),
-            "cached": cached, "duration_ms": int((self.clock() - t0) * 1000),
-            "result_bytes": C.size(env)}))
+            "cached": cached, "duration_ms": ms, "result_bytes": C.size(env)}))
+        if self.s.log_calls:
+            self._log_call(name, arguments, env, cached, ms)
         return env
+
+    def _log_call(self, name, arguments, env: dict, cached: bool, ms: int) -> None:
+        """Content log (TEMPO_MCP_LOG_CALLS, disclosed in the server instructions): the call and its
+        whole result, one JSON line. Nothing about the caller: no IP, headers or client name."""
+        line = json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "tool": str(name)[:64],
+                           "arguments": ask_guard.redact(arguments) if isinstance(arguments, dict) else None,
+                           "status": env.get("status"), "reason": env.get("reason"), "cached": cached,
+                           "duration_ms": ms, "generation": (env.get("provenance") or {}).get("generation"),
+                           "result": env}, ensure_ascii=False, default=str)
+        try:
+            with self._lock:
+                config.ASK_LOG_DIR.mkdir(parents=True, exist_ok=True)
+                with open(config.ASK_LOG_DIR / CALL_LOG, "a", encoding="utf-8") as f:
+                    f.write(line + "\n")
+        except Exception:                           # a full disk must not fail the call
+            log.error("MCP call log write failed")
 
     async def _call(self, name: str, arguments) -> tuple[dict, bool]:
         bad = registry.precheck(name, arguments)
@@ -534,7 +559,8 @@ def build_server(gate: Gate, settings: McpSettings):
     from mcp import types
     from mcp.server.lowlevel import Server
 
-    server = Server(SERVER_NAME, version=SERVER_VERSION, instructions=INSTRUCTIONS,
+    server = Server(SERVER_NAME, version=SERVER_VERSION,
+                    instructions=INSTRUCTIONS + (LOGGING_NOTICE if settings.log_calls else ""),
                     website_url=settings.base_url or None)
     tools = [types.Tool(
         name=name, title=spec.title, description=spec.description,
@@ -697,4 +723,5 @@ def health_summary(app) -> dict:
     """Capability summary for /api/health: no secrets, paths, contents or client identifiers."""
     mcp = getattr(app.state, "public_mcp", None)
     return {"enabled": mcp is not None, "contract": C.CONTRACT,
-            "generation": generation.current().get("status")}
+            "generation": generation.current().get("status"),
+            "call_logging": bool(mcp is not None and mcp.settings.log_calls)}

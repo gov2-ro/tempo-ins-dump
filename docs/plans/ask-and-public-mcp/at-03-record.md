@@ -80,6 +80,7 @@ was done: those are AT-04 and the release gate.
 | `TEMPO_MCP_MAX_SECONDS` | 10 | deadline of one operation |
 | `TEMPO_MCP_QUEUE_SECONDS` | 15 | how long a call waits for a busy slot (0 = answer `busy` at once; added 2026-10-27) |
 | `TEMPO_MCP_MAX_WAITING` | 4 | calls that may wait at once; more are `busy` (added 2026-10-27) |
+| `TEMPO_MCP_LOG_CALLS` | false | development servers: every call's arguments and full result to `mcp-calls.jsonl` in `TEMPO_ASK_LOG_DIR`, nothing about the caller; the server instructions then say calls are recorded and may be published (added 2026-10-27) |
 | `TEMPO_MCP_MAX_CALLS_PER_MINUTE` | 120 | `tools/call` admissions (aggregate, not per user) |
 | `TEMPO_MCP_MAX_REQUESTS_PER_MINUTE` | 600 | every HTTP request, initialize/list included (429 + Retry-After) |
 | `TEMPO_MCP_MAX_SCAN_ROWS` | 1,000,000 | estimated rows an operation may read. The measured operator profile for enabling the MCP on Fly, `scripts/deploy/fly/mcp-public.env`, raises it to 5,000,000 (AQ-01B) |
