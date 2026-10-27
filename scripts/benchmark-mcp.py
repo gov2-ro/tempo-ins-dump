@@ -52,6 +52,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from collections import Counter
 from pathlib import Path
 
@@ -59,6 +60,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = Path(__file__).resolve()
 SCHEMA = "benchmark-mcp/1"
 CONTAINER_PORT = 8080
+WORST_TOOLS = ("rank_entities", "query_data", "compare_periods", "find_dimension_values", "run_recipe")
 SLOT_PROBES = 1           # fresh rank requests kept back per mixed phase for the slot-free check
 
 # sample states: percentiles are computed per (case, state) and never across states
@@ -66,7 +68,7 @@ STATES = ("cold", "miss_warm", "cache", "mixed", "observed")
 REQUIRED_N = {"cold": 5, "miss_warm": 20, "cache": 20, "mixed": 1, "observed": 1}
 SINGLE_CASES = ("rank_latest_year", "rank_topk_", "warm.first_rank")   # one observation each, not a latency population
 SERVED = frozenset({"ok", "partial", "needs_clarification"})
-SCENARIOS = ("cold_chain", "cold_first_rank", "warm", "admission", "timeout_probe", "mixed")
+SCENARIOS = ("cold_chain", "cold_first_rank", "warm", "admission", "timeout_probe", "worst_case", "mixed")
 AT04_PHASES = (("single_client", 1, 180.0), ("five_clients", 5, 300.0))      # 04-evaluation-and-release.md
 IGNORED_IN_PARITY = frozenset({"request_id", "elapsed_ms", "duration_ms", "timing"})
 
@@ -1069,6 +1071,7 @@ class Cfg:
     scenarios: tuple = SCENARIOS
     mixed_phases: tuple = (("single_client", 1, 0, 10.0), ("five_clients", 5, 2, 10.0))
     rest_requests: list | None = None
+    worst_requests: list | None = None
     ports: list | None = None
     call_timeout: float = 30.0
     startup_timeout: float = 90.0
@@ -1576,18 +1579,18 @@ async def scenario_warm(ctx: Ctx) -> None:
     run_parity(ctx, port)
 
 
-def run_parity(ctx: Ctx, port: int) -> None:
+def run_parity(ctx: Ctx, port: int, check: str = "parity") -> None:
     """MCP result vs the shared tool called directly in a fresh process, for the same selection/generation.
     `port` is the MCP child's: its public base URL is part of every link in the envelope."""
     pairs = {k: v for k, v in ctx.parity.items() if v[1].served and v[1].env}
     if not pairs:
-        ctx.checks["parity"] = {"status": "not_run", "reason": "no served MCP answer to compare (all refused)",
-                                "compared": 0}
+        ctx.checks[check] = {"status": "not_run", "reason": "no served MCP answer to compare (all refused)",
+                             "compared": 0}
         return
-    pdir = ctx.cfg.out_dir / "parity"
+    pdir = ctx.cfg.out_dir / check
     pdir.mkdir(parents=True, exist_ok=True)
     (pdir / "requests.json").write_text(json.dumps(
-        [{"id": k, "tool": "rank_entities", "arguments": a} for k, (a, _r) in pairs.items()]))
+        [{"id": k, "tool": (v[2] if len(v) > 2 else "rank_entities"), "arguments": v[0]} for k, v in pairs.items()]))
     env = build_child_env(os.environ, data_dir=str(ctx.cfg.data_dir), port=port, declared=ctx.cfg.declared,
                           overrides=ctx.cfg.overrides)
     proc = subprocess.run([sys.executable, str(SCRIPT), "inproc", "--app-root", str(ROOT),
@@ -1595,24 +1598,27 @@ def run_parity(ctx: Ctx, port: int) -> None:
                           env=env, cwd=str(ROOT), capture_output=True, text=True,
                           timeout=max(60.0, ctx.budget.remaining()))
     if proc.returncode != 0:
-        ctx.checks["parity"] = {"status": "fail", "reason": f"direct run failed: {proc.stderr[-300:]}", "compared": 0}
+        ctx.checks[check] = {"status": "fail", "reason": f"direct run failed: {proc.stderr[-300:]}", "compared": 0}
         return
     direct = json.loads((pdir / "direct.json").read_text())
     by_id = {r["id"]: r for r in direct["results"]}
     rows, bad = [], 0
-    for k, (args, res) in pairs.items():
+    for k, v in pairs.items():
+        args, res = v[0], v[1]
         d_env = by_id[k]["envelope"]
         diffs = diff_json(res.env, d_env)
-        same = {f: (res.env.get("data", {}).get(f) == d_env.get("data", {}).get(f))
+        part = lambda env, k: env.get(k) if isinstance(env.get(k), dict) else {}      # noqa: E731
+        same = {f: (part(res.env, "data").get(f) == part(d_env, "data").get(f))
                 for f in ("rows", "eligible_count", "excluded_count", "outside_class_count", "unit")}
-        same["sources"] = (res.env.get("provenance", {}).get("sources") == d_env.get("provenance", {}).get("sources"))
-        same["scope"] = (res.env.get("provenance", {}).get("scope") == d_env.get("provenance", {}).get("scope"))
+        same["sources"] = part(res.env, "provenance").get("sources") == part(d_env, "provenance").get("sources")
+        same["scope"] = part(res.env, "provenance").get("scope") == part(d_env, "provenance").get("scope")
         same["warnings"] = res.env.get("warnings") == d_env.get("warnings")
         bad += bool(diffs)
         rows.append({"id": k, "equal": not diffs, "differences": diffs, "fields_equal": same,
                      "mcp_sha256": sha256_json(res.env), "direct_sha256": sha256_json(d_env),
-                     "view": ranking_view(res.env)})
-    ctx.checks["parity"] = {"status": "fail" if bad else "pass", "compared": len(rows), "differing": bad,
+                     "view": ranking_view(res.env) if (v[2] if len(v) > 2 else "rank_entities") == "rank_entities"
+                     else None})
+    ctx.checks[check] = {"status": "fail" if bad else "pass", "compared": len(rows), "differing": bad,
                             "ignored_keys": sorted(IGNORED_IN_PARITY), "executed_in": "fresh local process",
                             "direct": {"wall_s": direct["wall_s"], "cpu_s": direct["cpu_s"],
                                        "rss_peak_bytes": direct["rss_peak_bytes"]},
@@ -1740,6 +1746,82 @@ async def scenario_timeout_probe(ctx: Ctx) -> None:
                 "the work is a fault-injected sleep standing in for uninterruptible slow work"}
 
 
+def default_worst_requests(wl: Workload, recipe_ids: list[str]) -> list[dict]:
+    """The heaviest request of every scan-gated tool on the workload source (the largest file the candidate
+    cap admits, by default) plus every reviewed recipe, multi-source ones included (AQ-01B)."""
+    ent, years = list(wl.entity_columns), sorted(wl.years or ([wl.year] if wl.year else []))
+    year = wl.year or (years[-1] if years else None)
+    reqs = [{"name": "query_data_entities_by_year", "tool": "query_data",
+             "arguments": {"dataset": wl.dataset, "group_by": [*ent, "TIME_PERIOD"]}},
+            {"name": "find_values_finest_entity", "tool": "find_dimension_values",
+             "arguments": {"dataset": wl.dataset, "column": ent[-1], "query": "a", "limit": 50}},
+            {"name": "rank_all_entities_top100", "tool": "rank_entities",
+             "arguments": {**wl.rank_args(year=year, top_k=100), "entity_class": "all"}}]
+    if year:
+        reqs.insert(1, {"name": "query_data_finest_entity_one_year", "tool": "query_data",
+                        "arguments": {"dataset": wl.dataset, "group_by": [ent[-1]],
+                                      "filters": {"TIME_PERIOD": [year]}}})
+    if len(years) >= 2:
+        pairs = [(years[0], years[-1]), (years[len(years) // 2], years[-1]), (years[0], years[len(years) // 2]),
+                 (years[-2], years[-1])]
+        reqs.append({"name": "compare_periods_four_intervals", "tool": "compare_periods",
+                     "arguments": {"dataset": wl.dataset, "entity_columns": ent, "entity_class": "all",
+                                   "top_k": 100, "intervals": [{"from": a, "to": b}
+                                                               for a, b in dict.fromkeys(pairs) if a < b]}})
+    reqs += [{"name": f"recipe_{rid}", "tool": "run_recipe", "arguments": {"recipe": rid}} for rid in recipe_ids]
+    return reqs
+
+
+async def scenario_worst_case(ctx: Ctx) -> None:
+    """Each worst admitted request once on a fresh child, its own memory window, then all of them from as
+    many concurrent sessions (the one-slot gate must answer the rest `busy`), then parity with the direct tool."""
+    import httpx
+    cfg, wl = ctx.cfg, ctx.wl
+    async with running_child(ctx, "worst_case", "worst_case") as run:
+        async with open_session(ctx, run) as sess:
+            d = await call(ctx, run, sess, "worst.setup_describe", "observed", "describe_dataset",
+                           {"dataset": wl.dataset}, record=False)
+            resolve_workload(ctx, d.env)
+            async with httpx.AsyncClient(base_url=run.child.base_url, timeout=cfg.call_timeout) as c:
+                r = await c.get("/api/recipes")
+                recipe_ids = [x["id"] for x in (r.json().get("recipes") or [])] if r.status_code == 200 else []
+            reqs = cfg.worst_requests or default_worst_requests(wl, recipe_ids)
+            ctx.report["observations"]["worst_case_requests"] = reqs
+            pairs, outcomes = {}, {}
+            for q in reqs:
+                with run.monitor.window(f"worst.{q['name']}") as w:
+                    res = await call(ctx, run, sess, f"worst.{q['name']}", "observed", q["tool"], q["arguments"])
+                run.record.setdefault("windows", []).append(w)
+                outcomes[q["name"]] = {"tool": q["tool"], "outcome": res.sample["outcome"],
+                                       "status": res.sample["status"], "reason": res.sample["reason"],
+                                       "wall_s": round(res.sample["wall_s"], 4),
+                                       "container_memory_peak_bytes": w["container_memory_peak_bytes"],
+                                       "container_anon_peak_bytes": w["container_anon_peak_bytes"]}
+                if res.served:
+                    pairs[q["name"]] = (q["arguments"], res, q["tool"])
+            ctx.report["observations"]["worst_case"] = outcomes
+        # the same requests at once, with fresh years where the tool takes one so the cache cannot answer
+        async with contextlib.AsyncExitStack() as stack:
+            sessions = [await stack.enter_async_context(open_session(ctx, run)) for _ in reqs]
+            with run.monitor.window("worst.concurrent") as w:
+                outs = await asyncio.gather(*[
+                    call(ctx, run, s, "worst.concurrent", "observed", q["tool"], {**q["arguments"], "lang": "en"},
+                         attribute=False) for s, q in zip(sessions, reqs)], return_exceptions=True)
+            run.record["windows"].append(w)
+        ctx.report["observations"]["worst_case_concurrent"] = {
+            "requests": len(reqs), "container_memory_peak_bytes": w["container_memory_peak_bytes"],
+            "results": dict(Counter(f"{o.sample['outcome']}/{o.sample['reason']}" if isinstance(o, Result)
+                                    else type(o).__name__ for o in outs))}
+        port = run.child.port
+    ctx.parity = pairs
+    run_parity(ctx, port, check="worst_case_parity")
+    failed = {k: v for k, v in outcomes.items() if v["outcome"] not in ("served", "refused")}
+    ctx.checks["worst_case"] = {"status": "fail" if failed else "pass", "requests": len(reqs),
+                                "served": sum(v["outcome"] == "served" for v in outcomes.values()),
+                                "refused": {k: v["reason"] for k, v in outcomes.items() if v["outcome"] == "refused"},
+                                "failed": failed}
+
+
 def default_rest_requests(wl: Workload) -> list[dict]:
     from urllib.parse import quote
     reqs = [{"kind": "health", "path": "/api/health"},
@@ -1836,7 +1918,7 @@ async def scenario_mixed(ctx: Ctx) -> None:
 
 
 SCENARIO_FUNCS = {"cold_chain": scenario_cold_chain, "cold_first_rank": scenario_cold_first_rank,
-                  "warm": scenario_warm, "admission": scenario_admission,
+                  "warm": scenario_warm, "admission": scenario_admission, "worst_case": scenario_worst_case,
                   "timeout_probe": scenario_timeout_probe, "mixed": scenario_mixed}
 
 
@@ -1978,7 +2060,8 @@ async def run_all(ctx: Ctx) -> None:
             ctx.report["errors"].append(f"{sid}: harness time budget exhausted")
         except Exception as e:  # noqa: BLE001 — one failed scenario must not lose the others or the report
             entry.clear()
-            entry.update(status="failed", error=f"{type(e).__name__}: {str(e)[:300]}")
+            entry.update(status="failed", error=f"{type(e).__name__}: {str(e)[:300]}",
+                         traceback=traceback.format_exc().splitlines()[-8:])
             ctx.report["errors"].append(f"{sid}: {type(e).__name__}: {str(e)[:300]}")
         entry["seconds"] = round(time.monotonic() - t0, 2)
         ctx.flush()
@@ -1995,6 +2078,21 @@ def load_rest_requests(path: str | None) -> list | None:
             isinstance(i, dict) and isinstance(i.get("kind"), str) and str(i.get("path", "")).startswith("/")
             for i in items)):
         raise HarnessError('--rest-requests must be a non-empty JSON list of {"kind": ..., "path": "/..."}')
+    return items
+
+
+def load_worst_requests(path: str | None) -> list | None:
+    if not path:
+        return None
+    try:
+        items = json.loads(Path(path).read_text())
+    except (OSError, ValueError) as e:
+        raise HarnessError(f"--worst-requests unreadable: {e}") from None
+    if (not isinstance(items, list) or not items or not all(
+            isinstance(i, dict) and isinstance(i.get("name"), str) and i.get("tool") in WORST_TOOLS
+            and isinstance(i.get("arguments"), dict) for i in items)):
+        raise HarnessError("--worst-requests must be a non-empty JSON list of {name, tool, arguments} with tool "
+                           f"one of {', '.join(WORST_TOOLS)}")
     return items
 
 
@@ -2028,6 +2126,7 @@ def make_cfg(args) -> Cfg:
                concurrency=args.concurrency, declared=declared, overrides=overrides, workload=wl,
                scenarios=scenarios, mixed_phases=phases,
                rest_requests=load_rest_requests(args.rest_requests),
+               worst_requests=load_worst_requests(args.worst_requests),
                ports=parse_ports(args.ports), call_timeout=args.call_timeout, startup_timeout=args.startup_timeout,
                max_total_seconds=args.max_total_seconds, cancel_after=args.cancel_after,
                timeout_probe_seconds=args.timeout_probe_seconds, label=args.label or "")
@@ -2143,6 +2242,8 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--over-limit-dataset", help="a second source expected to exceed the scan cap")
     r.add_argument("--export-dataset", help="dataset whose CSV export joins the mixed REST load")
     r.add_argument("--rest-requests", help="JSON list of {kind, path} for the mixed REST load")
+    r.add_argument("--worst-requests", help="JSON list of {name, tool, arguments} for worst_case "
+                                            "(default: the heaviest call of every scan-gated tool + every recipe)")
     r.add_argument("--scenarios", help=f"comma list of {','.join(SCENARIOS)} (default all)")
     r.add_argument("--mixed-phase", action="append", metavar="NAME:MCP:REST:SECONDS",
                    help="repeatable; AT-04 length: single_client:1:2:180 five_clients:5:2:300")
