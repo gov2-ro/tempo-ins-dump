@@ -8,17 +8,24 @@ primary_region = 'ams'
 
 [build]
 
+# [env] holds the code's safe defaults (release-check.py smokes the image with exactly these). The
+# production profile (public MCP, own-key Ask, content logs) is set with `fly secrets`, from
+# scripts/deploy/fly/mcp-public.env; unset a secret to switch that feature off again.
 [env]
   TEMPO_DATA_DIR = '/app/data'
   TEMPO_DEBUG = 'false'
-  TEMPO_ASK_LOG_CHATS = 'false'
+
+# Content logs (TEMPO_ASK_LOG_DIR=/logs) must survive redeploys: a 1 GB volume, so one machine.
+[mounts]
+  source = 'tempo_logs'
+  destination = '/logs'
 
 [http_service]
   internal_port = 8080
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1          # MCP clients time out on a cold start
 
 [[vm]]
   size = 'shared-cpu-1x'

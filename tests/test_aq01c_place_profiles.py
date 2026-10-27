@@ -126,9 +126,11 @@ def test_the_public_mcp_operator_profile_is_valid_and_only_raises_the_scan_cap()
     s = McpSettings.from_env(env, base_url=env["TEMPO_PUBLIC_BASE_URL"])
     d = McpSettings.from_env({"TEMPO_MCP_ENABLED": "true"}, base_url=env["TEMPO_PUBLIC_BASE_URL"])
     assert s.enabled and s.max_scan_rows == 5_000_000 and not s.local_test
-    assert s.allowed_hosts == ("api-ins.gov2.ro",) and s.allowed_origins == ("https://api-ins.gov2.ro",)
+    assert s.allowed_hosts == ("api-ins.gov2.ro", "tempo-ins-explorer.fly.dev")
+    assert s.allowed_origins == ("https://api-ins.gov2.ro",)
     changed = {k for k in vars(s) if getattr(s, k) != getattr(d, k)}
-    assert changed == {"max_scan_rows"}                   # every other limit stays at its measured default
+    # every limit stays at its measured default; the fly.dev name and the dev-phase call log are additions
+    assert changed == {"max_scan_rows", "allowed_hosts", "log_calls"} and s.log_calls
     assert 3_898_870 <= s.max_scan_rows < 8_662_140       # admits *_grupe_localitate, not *_varste_judet
 
 
