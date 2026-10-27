@@ -62,6 +62,7 @@ MAX_SPLITS = 30             # sub-datasets listed by describe_dataset
 FIT_BYTES = 30 * 1024       # keep clear of the 32 KiB envelope budget
 UNSAFE_GRAIN = ("conflicting", "duplicate_keys")
 PERIOD_NOTES = ("period_unavailable", "period_not_single")
+RANGE_NOTES = ("period_range_partial", "period_range_single")     # several years asked: a warning, not an ambiguity
 GEO_LEVELS = ("county", "region", "macroregion", "national")
 ACTION_TOOLS = ("query_data", "rank_entities", "run_recipe", "describe_dataset", "find_dimension_values")
 PLACE_NOTES = ("place_not_in_dataset", "place_level_unavailable", "level_differs")
@@ -285,6 +286,37 @@ def _period_state(conn, code: str, facts, year, lang: str) -> tuple:
     return str(year), None, None
 
 
+def _periods_state(conn, code: str, wanted: list, lang: str) -> tuple:
+    """(the requested years that are actual annual periods of `code` | None, note | None).
+    Requested years the data does not have are named, never filled in or swapped."""
+    try:
+        actual = data_query.dimension_values(conn, code, "TIME_PERIOD", limit=500)["values"]
+    except data_query.QueryError:
+        actual = []
+    asked = _years_text(wanted)
+    have = [str(y) for y in wanted if str(y) in actual]
+    if not have:
+        span = f"{actual[-1]}–{actual[0]}" if actual else "?"
+        return None, _note("period_unavailable", M.t(lang, "discover.range_outside", asked=asked, code=code,
+                                                     span=span))
+    missing = [y for y in wanted if str(y) not in actual]
+    if not missing:
+        return have, None
+    return have, _note("period_range_partial", M.t(
+        lang, "discover.range_partial", asked=asked, code=code, n=len(have), missing=_years_text(missing)))
+
+
+def _years_text(years: list) -> str:
+    """'2010–2011, 2014': consecutive years joined as spans."""
+    runs = []
+    for y in map(int, years):
+        if runs and y == runs[-1][1] + 1:
+            runs[-1][1] = y
+        else:
+            runs.append([y, y])
+    return ", ".join(str(x) if x == y else f"{x}–{y}" for x, y in runs)
+
+
 def _worst_quality(statuses: list) -> str:
     for bad in ("conflicting", "duplicate_keys", "unverified"):
         if bad in statuses:
@@ -432,7 +464,7 @@ def _level_pairs(raw: dict) -> list:
 def _dataset_candidates(ctx, raw: dict, parsed: dict) -> list:
     conn, lang = ctx.conn, ctx.lang
     levels = _level_pairs(raw)
-    year = parsed.get("period")
+    year, wanted = parsed.get("period"), parsed.get("periods")
     sel = _filters_for_call(raw.get("selection"))
     cands = []
     for idx, (level, code) in enumerate(levels):
@@ -440,7 +472,15 @@ def _dataset_candidates(ctx, raw: dict, parsed: dict) -> list:
         facts = cs.dataset_facts(conn, code, lang)
         if idx == 0 and sel.get("REF_AREA"):
             filters["REF_AREA"] = sel["REF_AREA"]
-        if year:
+        if wanted and ((facts or {}).get("coverage") or {}).get("frequency") == "annual":
+            tvs, pnote = _periods_state(conn, code, wanted, lang)
+            if pnote:
+                notes.append(pnote)
+            if tvs:
+                filters["TIME_PERIOD"] = tvs
+            else:
+                period_call = _lookup_periods(code, lang)
+        elif year:
             tv, pnote, lookup_q = _period_state(conn, code, facts, year, lang)
             if pnote:
                 notes.append(pnote)
@@ -495,6 +535,9 @@ def _recipe_candidate(ctx, rid: str, parsed: dict, coverage: dict | None, relati
     year = parsed.get("period")
     cov = coverage or {}
     notes, period_call = list(notes), None
+    if parsed.get("periods") and year:
+        notes.append(_note("period_range_single", M.t(ctx.lang, "discover.recipe_range", year=year,
+                                                      asked=_years_text(parsed["periods"]))))
     if year:
         try:
             inside = int(str(cov["first"])[:4]) <= year <= int(str(cov["last"])[:4])
@@ -599,7 +642,7 @@ def _concept_card(ctx, raw: dict, by_id: dict, parsed: dict, query: str) -> dict
                 cands.append(rc)
     first = cands[0] if cands else None
     if first:           # the requested year, as the card's primary source answers it
-        card["notes"] += [n for n in first["notes"] if n["code"] in PERIOD_NOTES]
+        card["notes"] += [n for n in first["notes"] if n["code"] in PERIOD_NOTES + RANGE_NOTES]
     wanted = parsed.get("level") or (first["level"] if first else None)
     _choose(cands, wanted, ctx.lang)
     # preferred first, the rest in discovery order
@@ -913,6 +956,10 @@ def discover_indicators(args, ctx):
     res = cs.search(plan.query, conn, lang=lang, limit=args.limit)
     parsed = res["interpretation"]
     parsed["latest"] = parsed.get("latest") or intent["latest"]
+    parsed["period_range"] = rng = intent["period_range"]
+    # every year asked for when there is more than one: a span, or years listed one by one
+    parsed["periods"] = list(range(rng["from"], rng["to"] + 1)) if rng else (
+        intent["years"] if len(intent["years"]) > 1 else None)
     if plan.locality:
         parsed["level"] = "locality"
         res["concepts"] = [_locality_card(conn, lang, plan, parsed, by_id)]
@@ -982,6 +1029,8 @@ def discover_indicators(args, ctx):
                                     "requested": parsed.get("period"),
                                     "coverage": c.get("coverage"), "message": n["message"]})
                 warnings.append(C.warning(n["code"], n["message"], c["id"]))
+            elif n["code"] in RANGE_NOTES:
+                warnings.append(C.warning(n["code"], n["message"], c["id"]))
     city = [p for p in places if p.get("note") == "city_not_county"]
     for p in city:
         ambiguities.append({
@@ -1027,6 +1076,7 @@ def discover_indicators(args, ctx):
         warnings.append(C.warning("search_degraded", M.t(lang, "discover.search_degraded")))
 
     interp = {"places": places, "level": parsed.get("level"), "period": parsed.get("period"),
+              "period_range": parsed.get("period_range"), "periods": parsed.get("periods"),
               "latest": parsed.get("latest"), "family_query": parsed.get("fts"),
               "ambiguities": ambiguities, "operation": intent["operation"], "assumed_definition": assumed,
               "unapplied_constraints": unapplied}

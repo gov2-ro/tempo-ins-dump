@@ -11,7 +11,12 @@ see also [charting-ideas.md](charting-ideas.md)
   POP105A_judete_grupe` with `TIME_PERIOD: ["2024"]` only, and the result is
   `partial/unverified_total` for a single county-year. The suggested call should respect the
   requested range (or say it does not) and use a verified total for an all-ages county
-  population.
+  population. **Range done 2026-10-27:** a span ("între 2015 și 2024", "2015-2024", "from … to …") or
+  listed years become every year the data has, and missing years are named in a `period_range_partial`
+  warning; a recipe says it answers one year per call. **Still open — the verified total:** the sum is
+  right (equal to INS by county, every year, in the PA-00 check) but SEX and RESIDENCE are partitions only
+  the metadata vouches for, so the result stays `partial/unverified_total`. Verifying it means serving
+  INS's own county Total cells (POP105A in `published_totals.json`, like Q2/Q3) — an owner decision.
 
 - [ ] **P1 — The public MCP refuses county-filtered work it should admit.** **2026-10-27:** a footer-statistics estimate cannot work (every row group spans all counties and years). The measured operator profile `scripts/deploy/fly/mcp-public.env` raises the cap to 5M, which admits both cases; enabling it awaits owner approval. A filter-aware count would need per-value row counts in the generation. 06C found the same
   cause for `rank_entities` cities in one county (Iași: 3,898,870-row estimate on
@@ -26,11 +31,17 @@ see also [charting-ideas.md](charting-ideas.md)
   admission exception for recipes, or a raised cap backed by the AQ-01B Linux run. Don't
   change the cap without that run. `release-check.py --local` reports it as a warning.
 
-- [ ] **MCP `query_data` over every dimension of a multi-million-row file fails at the 160MB budget**:
-  grouping POP107D_grupe_localitate (3.9M rows) by 4–5 dimensions returns `execution_failed` (DuckDB OOM; it
-  does not spill these aggregates, even with a `temp_directory`). Such a group-by is close to raw rows: route it
-  to a raw-row preview, or refuse it before execution with a "narrow the selection" message. REST `/data` is
-  time-windowed and unaffected. Record: `aq-01b-linux-run-record.md`.
+- [x] **MCP `query_data` over every dimension of a multi-million-row file fails at the 160MB budget**:
+  grouping POP107D_grupe_localitate (3.9M rows) by 4–5 dimensions returned `execution_failed` (DuckDB OOM; it
+  does not spill these aggregates, even with a `temp_directory`). Record: `aq-01b-linux-run-record.md`.
+  **Done 2026-10-27 (owner chose "refuse before execution"):** `query_data` estimates the groups (cheap bounds,
+  else one HyperLogLog scan under the effective filters) and above 250,000 answers `unavailable/query_budget`
+  naming the column to filter, with a `find_dimension_values` lookup. Measured at 160MB: 570k groups fit,
+  860k failed. REST `/data` keeps its time window and no group limit.
+- [ ] **REST `/data` windowing under-counts locality columns**: `_rows_per_period` uses
+  `dimensions.option_count`, which is 0 for split children's `REF_AREA_2` (counted as 1), so a 4-dimension
+  REST group-by of POP107D_grupe_localitate is not windowed and fails at 160MB (500). The site never asks
+  for it. Fix: the same data-derived cardinality `data_query._group_estimate` uses.
 
 Implementation status: [AT-05](plans/ask-and-public-mcp/06-answer-quality.md).
 Remaining work is split into [small implementation packages](plans/ask-and-public-mcp/remaining/README.md).

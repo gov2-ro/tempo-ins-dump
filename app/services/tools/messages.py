@@ -302,6 +302,12 @@ TEXT = {
                                             "recipe.",
         "discover.grain_unverified": "Grain is not certified by the generation evidence; "
                                      "query_data checks the selected slice.",
+        "discover.range_outside": "{code} has none of the years asked for ({asked}; its data: {span}); "
+                                  "no period was applied and nothing was substituted.",
+        "discover.range_partial": "{code} has {n} of the years asked for ({asked}); it has no data "
+                                  "for {missing}. The call asks for the years it has.",
+        "discover.recipe_range": "A recipe answers one year per call: this call is for {year}. Call it "
+                                 "once for each of the other years asked for ({asked}).",
         "discover.latest_period": "'Latest' was resolved to the last period with data in {code}: "
                                   "{period}.",
         "discover.recipe_period": "{year} is outside the years both sources share{span}; the year "
@@ -988,6 +994,12 @@ TEXT = {
                                             "rețetă revizuită.",
         "discover.grain_unverified": "Granularitatea nu este certificată de dovezile generației; "
                                      "query_data verifică felia selectată.",
+        "discover.range_outside": "{code} nu are niciunul dintre anii ceruți ({asked}; datele sale: "
+                                  "{span}); nu a fost aplicată nicio perioadă și nimic nu a fost înlocuit.",
+        "discover.range_partial": "{code} are {n} dintre anii ceruți ({asked}); nu are date pentru "
+                                  "{missing}. Apelul cere anii pe care îi are.",
+        "discover.recipe_range": "O rețetă răspunde pentru un an la fiecare apel: acest apel este pentru "
+                                 "{year}. Apeleaz-o o dată pentru fiecare dintre ceilalți ani ceruți ({asked}).",
         "discover.latest_period": "„Ultimul” a fost rezolvat la ultima perioadă cu date din "
                                   "{code}: {period}.",
         "discover.recipe_period": "{year} este în afara anilor pe care îi au în comun ambele "

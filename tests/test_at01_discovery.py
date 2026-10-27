@@ -351,6 +351,51 @@ def test_a_year_on_monthly_data_is_not_one_period(env):
     assert [v["value"] for v in res["data"]["values"]] == ["2024-03", "2024-02", "2024-01"]
 
 
+@pytest.mark.parametrize("q,expected", [
+    ("între 2015 și 2024", {"from": 2015, "to": 2024}), ("between 2015 and 2024", {"from": 2015, "to": 2024}),
+    ("din 2015 până în 2020", {"from": 2015, "to": 2020}), ("from 2015 to 2020", {"from": 2015, "to": 2020}),
+    ("perioada 2015-2024", {"from": 2015, "to": 2024}), ("2015–2024", {"from": 2015, "to": 2024}),
+    ("2015, 2024", None), ("2015 și 2024", None), ("2024-2015", None), ("2024", None)])
+def test_a_span_of_years_is_read_only_where_the_words_say_so(q, expected):
+    from app.services.tools.intent import period_range
+    assert period_range(q) == expected
+
+
+def test_a_year_range_asks_for_every_year_the_data_has_and_names_the_rest(env):
+    # P2 (06C): "between 2015 and 2024" got a call for 2024 alone
+    out = disc("castigul testat Cluj intre 2019 si 2023")
+    interp = out["data"]["interpretation"]
+    assert interp["period_range"] == {"from": 2019, "to": 2023} and interp["periods"] == list(range(2019, 2024))
+    c = card(out, "wage")
+    nc = c["next_call"]
+    assert nc["arguments"]["filters"] == {"REF_AREA": ["Cluj"], "TIME_PERIOD": ["2021", "2022", "2023"]}
+    assert nc["arguments"]["group_by"] == ["REF_AREA", "TIME_PERIOD"]
+    note = next(n for n in c["notes"] if n["code"] == "period_range_partial")
+    assert "2019–2020" in note["message"]
+    assert [w["code"] for w in out["warnings"] if w.get("subject") == "wage"] == ["period_range_partial"]
+    assert interp["ambiguities"] == []
+    res = R.call_tool(nc["tool"], nc["arguments"])
+    assert sorted(r[1:] for r in res["data"]["rows"]) == [["2021", 5000.0], ["2022", 5001.0], ["2023", 5002.0]]
+
+
+def test_listed_years_are_all_asked_for(env):
+    nc = card(disc("castigul testat Cluj 2021 si 2024"), "wage")["next_call"]
+    assert nc["arguments"]["filters"]["TIME_PERIOD"] == ["2021", "2024"]
+
+
+def test_a_year_range_outside_the_data_is_reported_never_pinned(env):
+    c = card(disc("castigul testat Cluj 2010-2015"), "wage")
+    assert "period_unavailable" in codes(c["notes"])
+    assert c["next_call"] == {"tool": "find_dimension_values", "arguments": {
+        "dataset": "WAGEK_judete", "column": "TIME_PERIOD", "limit": 20}}
+
+
+def test_a_recipe_asked_for_a_range_says_it_answers_one_year(env):
+    c = card(disc("intensitate testata Cluj 2022-2024"), "intensity")
+    assert c["next_call"]["arguments"]["year"] == "2024"
+    assert "period_range_single" in codes(c["notes"])
+
+
 def test_recipe_concept_gets_a_run_recipe_call_with_year_and_areas(env):
     out = disc("intensitate testata Cluj 2023")
     assert out["status"] == "ok"

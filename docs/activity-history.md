@@ -1,5 +1,22 @@
 # Activity History
 
+## 2026-10-27 — MCP answer quality: oversized groupings and year ranges
+
+The owner put answer quality ahead of Fly hardening (long soak, x86 run parked).
+- **Oversized groupings (owner chose "refuse before execution"):** `query_data` grouped by nearly every
+  dimension of a 3.9M-row file failed with `execution_failed` at the 160MB budget. `data_query.run_query`
+  takes `max_groups` (only the tools set it, 250,000); the estimate uses cheap bounds (rows, filtered values,
+  declared options) and otherwise one HyperLogLog scan under the effective filters (~0.6 s on 3.9M rows,
+  constant memory). Above it the tool answers `unavailable/query_budget`, names the widest grouped column and
+  offers its `find_dimension_values` lookup. Measured: 570k groups fit at 160MB, 860k failed; the limit
+  leaves room for REST traffic sharing the budget. Static engine untouched (REST behaviour unchanged).
+- **Year ranges (P2):** discovery read only the last year of "între 2015 și 2024". `intent.period_range`
+  reads spans (words, or a dash in the unfolded text, since folding makes "2015, 2024" look the same);
+  listed years count too. Candidates ask for every year the data has and warn about the missing ones
+  (`period_range_partial`); recipes warn they answer one year per call. Done in the tools layer, so
+  `concept_search` and the static search mirror are unchanged.
+- **Not done:** the verified county total (needs INS's own POP105A cells; owner decision, backlog P2).
+
 ## 2026-10-27 — AQ-01B/01C: memory at 512 MiB (DuckDB budget, place profiles)
 
 The owner kept the 75 % memory line. Diagnosis in 512 MiB containers:

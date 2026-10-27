@@ -17,8 +17,26 @@ _AGE = re.compile(
     r'\d{1,3}\s+(?:de\s+)?ani\s+si\s+peste|\d{1,3}\s+(?:years?\s+)?(?:and|or)\s+(?:over|older|above)|'
     r'varst\w*|ages?|aged|age groups?|copii\w*|tineri\w*|varstnic\w*|pensionar\w*|adult\w*|children|youth|'
     r'elderly|seniors?)\b')
+_Y = r'(19[5-9]\d|20[0-4]\d)'
+# A span of years ("între 2015 și 2024", "from 2015 to 2024", "perioada 2015-2024"). A bare
+# "2015 2024" is not one: folding turns "2015, 2024" (two years) into the same text, so a dash
+# counts only in the unfolded question.
+_RANGE = re.compile(
+    rf'\b(?:intre|between)\s+(?:anii\s+|years\s+)?{_Y}\s+(?:si|and)\s+(?:anul\s+)?{_Y}\b|'
+    rf'\b(?:din|de la|from|since)\s+(?:anul\s+)?{_Y}\s+(?:pana\s+(?:in|la)|to|until|through|till)\s+(?:anul\s+)?{_Y}\b|'
+    rf'\b(?:perioada|period|anii|years)\s+{_Y}\s+{_Y}\b')
+_DASH = re.compile(rf'\b{_Y}\s*[-–—]\s*{_Y}\b')
 _DENOMINATOR = re.compile(r'\b((?:pe|per|la(?: un)?) locuitor|per (?:resident|inhabitant|capita)|pe cap de locuitor|'
                           r'mia de locuitori|(?:1000|1 000|100 000) (?:de )?(?:locuitori|residents|inhabitants))\b')
+
+
+def period_range(query: str) -> dict | None:
+    """{"from", "to"} for a span of years the question names, earliest first; None otherwise."""
+    m = _RANGE.search(fold(query)) or _DASH.search(str(query or ""))
+    if not m:
+        return None
+    a, b = (int(y) for y in m.groups() if y)
+    return {"from": a, "to": b} if a < b else None
 
 
 def interpret(query: str) -> dict:
@@ -45,5 +63,7 @@ def interpret(query: str) -> dict:
             'top_k': int(k) if k else 30, 'order': 'asc' if bottom else 'desc',
             'tourism_ratio': tourism_ratio,
             'unsupported_measure': density or (stays and thousands) or (arrivals and per_resident),
+            'period_range': period_range(query),
+            'years': sorted({int(y) for y in re.findall(_Y, t)}),
             'population': bool(re.search(r'\b(populati\w*|population|populate|populated)\b', t)),
             'constraints': constraints}
