@@ -1,5 +1,31 @@
 # Activity History
 
+## 2026-10-28 — Deployed to Fly (MCP, own-key Ask, content logs); static site built
+
+Owner approved: public MCP with the measured profile, own-key Ask, content logs on a volume, and a stop
+before DNS.
+- **Generation `062bd2b03173`:** the 2026-10-12 copy (`9b3e065d`) with only the search index rebuilt
+  (split children inherit their parent's text). Built beside the copy in
+  `tempo-gen-20261012-search2` (symlinks + new `search.duckdb` + regenerated manifest); the copy itself
+  is untouched. Strict stage gate + `--local` smoke pass (warnings: 734 non-canonical parquets, the county
+  unemployment recipe under the 1M default cap). No local Docker this time (Colima was removed): the image
+  was built on Fly's builder and checked by its own build step (FTS index, 3,376 docs).
+- **Fly:** image `rel-062bd2b0-8d95a7c`; production switches as `fly secrets` from
+  `scripts/deploy/fly/mcp-public.env` so `fly.toml` [env] stays the safe defaults the gates smoke;
+  `[mounts]` `/logs` (1 GB) and `min_machines_running = 1`. The stopped standby machine could not be
+  removed from here, so it got its own volume (logs would split if it ever runs). Checks after deploy:
+  health on both hostnames (generation `062bd2b03173`, FTS, MCP on, call logging on), Ask BYOK available,
+  CORS for `https://ins.gov2.ro`, SDK client on `https://api-ins.gov2.ro/mcp` (county unemployment
+  recipe now ok under 5M), pages with no console errors, ~323 MB RSS after the smoke.
+- **Found:** `api-ins.gov2.ro` is proxied by Cloudflare (orange cloud), not DNS-only as planned: its
+  Browser Integrity Check answers the stdlib probe with 403 (error 1010) and could block MCP clients;
+  proxying also cuts long requests at ~100 s.
+- **Static:** built at `tempo-rc-06b/release-1028/static` (commit `8d95a7c`, 46,078 files, 666 MB, Ask →
+  `api-ins.gov2.ro`); `release-check.py --static` passes with 1,017/1,017 API parity cases; local browser
+  smoke clean. Upload waits for the DreamHost shell user; DNS unchanged.
+- Rollback: `fly deploy --image registry.fly.io/tempo-ins-explorer:deployment-01M20DR7A8D94BZE2A36D1TDF6`
+  (v26) and `fly secrets unset` the profile.
+
 ## 2026-10-27 — Live client test of the local MCP, and three fixes
 
 The owner tested Claude Code and Codex against the local MCP (generation copy, 512 MiB settings).

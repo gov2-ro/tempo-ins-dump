@@ -198,6 +198,13 @@ tools in the session rather than assuming another checkout has the same setup.
 
 ## Deployment today
 
+**2026-10-28:** Fly runs `fix/ask-answer-quality` `8d95a7c` (image `rel-062bd2b0-8d95a7c`) on
+generation `062bd2b03173` (the 2026-10-12 copy with the rebuilt search index), at both
+`ins.gov2.ro` and `api-ins.gov2.ro`. Production profile set with `fly secrets` from
+`scripts/deploy/fly/mcp-public.env`: public MCP at `https://api-ins.gov2.ro/mcp` (5M scan cap),
+own-key Ask, content logs on the `/logs` volume. One machine stays running; a stopped standby has
+its own volume. The static site for DreamHost is built but not uploaded; DNS is unchanged.
+
 Fly app `tempo-ins-explorer`, live https://ins.gov2.ro/, shared-cpu-1x/512MB,
 Amsterdam, one uvicorn worker. Main DuckDB connection is read-only with a 400MB
 limit; get_conn returns a cursor per request. Other services open independent
