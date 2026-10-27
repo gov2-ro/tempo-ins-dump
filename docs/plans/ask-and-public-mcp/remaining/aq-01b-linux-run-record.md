@@ -132,3 +132,64 @@ zero provider calls, and no lost child.
 2. **The P1 scan estimate:** the cap is not what drives memory (5M vs 1M is within noise), so a
    filter-aware estimate is safe to add. Raising the cap alone is the cheaper fix, but it
    still needs the per-tool runs above.
+
+## Follow-up: where the memory goes (2026-10-27, after the owner kept the 75 % line)
+
+These are diagnostic runs, not gate runs. They used the same images and limits (512 MiB, 1 CPU), arm64
+unless noted. The scratch probes are in `/Users/pax/devbox/gov2/tempo-rc-06b/aq01b/`
+(`heap_probe.py`, `run_alpha.sh`, `serve_sampled.py`, `place_mem.py`).
+
+**Main DuckDB budget.** The main metadata connection caches the table pages it scans, up to its
+`memory_limit` (default `400MB`, 381 MiB effective). This is in addition to the FTS sidecar (192MB budget),
+every scratch instance (128MB each) and the MCP footer reads (32MB). The budgets sum to more than the
+machine. Under the AT-04 mixed load (harness, scan cap 5M):
+
+| `TEMPO_DB_MEMORY` | arm64 peak | amd64 peak | Latency vs default (arm64) |
+|---|---:|---:|---|
+| default (400MB) | 73.3 % | 76.0–77.0 % | baseline |
+| 200MB | | 75.5 % | |
+| 160MB | 69.2 % | not run | about 5–10 % slower p50, all well under target |
+| 128MB | 69.6 % | 69.6 % | the same as 160MB |
+| 96MB | | 72.6 % | (an emulated run with lower throughput, so this row is noise) |
+
+**The PA-04 site workload is heavier than the AT-04 mix, and it reaches the limit.**
+`scripts/alpha-workload.py` (5 clients, 300 s; the MCP off) in the same container:
+
+- **Default budgets:** `memory.peak` = 100 % of the limit, 168 `memory.max` events, sampled heap up to 513 MB.
+  There was no OOM kill, no 5xx and no inconsistency, but the kernel was reclaiming at the limit.
+- **`TEMPO_DB_MEMORY=160MB`:** heap up to 470 MB, 2 `max` events.
+- **Plus `TEMPO_SCRATCH_MEMORY=64MB`:** 91.9 % peak.
+
+Per request kind (5 clients, 120 s, default budgets):
+
+| Kind | Peak |
+|---|---:|
+| place profile `/api/places/county/cluj` | **76.9 %** |
+| concept search `/api/search` | 60.6 % |
+| export | 40.0 % |
+| query | 36.7 % |
+| recipe | 31.2 % |
+| page | 27.2 % |
+| evidence | 26.1 % |
+| health (AT-04 probe) | about 12 % |
+
+**One place profile, in-process:**
+
+- The first call adds 273 MB of heap in 3.9 s and opens **57 separate in-memory DuckDB instances**
+  (`scratch_conn()`, one per KPI step). Later calls take 0.55 s, open 52 instances each and add nothing.
+- Afterwards the main DuckDB holds 133 MB of cached table pages and the glibc heap holds about 70 MB.
+- Smaller jemalloc flush thresholds and background threads, `MALLOC_ARENA_MAX=2` and `malloc_trim` change
+  nothing. One shared scratch instance instead of 57 made it worse: 95.6 % with 5 clients.
+
+**At the peak of the PA-04 workload** (160MB main budget), anon was 489 MB:
+
+| Part | Size |
+|---|---:|
+| main DuckDB | 124 MB (93 table pages, 20 hash tables, 10 indexes) |
+| FTS | 4 MB |
+| glibc heap (Python objects, 1.69M blocks) | 120 MB |
+| outside DuckDB's and glibc's accounting (scratch instances in flight, pymalloc arenas, allocator overhead) | about 240 MB |
+
+`main` (the live site) has the same design: a 400MB main budget and place KPIs on separate DuckDB
+connections. These runs are of `fix/ask-answer-quality`, so whether the live machine reaches its
+limit under this load is not measured. Its Fly logs were not read.
