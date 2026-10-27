@@ -361,6 +361,20 @@ def test_a_span_of_years_is_read_only_where_the_words_say_so(q, expected):
     assert period_range(q) == expected
 
 
+def test_families_that_publish_the_requested_level_come_first():
+    # AQ live test: "in ce judet sunt cele mai multe scoli" listed the national SCL101D first
+    from app.services.tools.discovery import _level_families
+    fam = {"total": 3, "items": [
+        {"family": "NAT", "title": "Unitatile de invatamant, pe categorii", "members": [{"code": "NAT"}]},
+        {"family": "LOC", "title": "Unitatile de invatamant pe niveluri de educatie, judete si localitati",
+         "members": [{"code": "LOC_localitate"}]},
+        {"family": "SPL", "title": "Unitatile de invatamant, pe categorii",
+         "members": [{"code": "SPL_regiuni"}, {"code": "SPL_judete"}]}]}
+    assert [f["family"] for f in _level_families(fam, "county")["items"]] == ["LOC", "SPL", "NAT"]
+    assert [f["family"] for f in _level_families(fam, "region")["items"]] == ["SPL", "NAT", "LOC"]
+    assert _level_families(fam, None) is fam and _level_families(fam, "national") is fam
+
+
 def test_a_year_range_asks_for_every_year_the_data_has_and_names_the_rest(env):
     # P2 (06C): "between 2015 and 2024" got a call for 2024 alone
     out = disc("castigul testat Cluj intre 2019 si 2023")

@@ -1,5 +1,22 @@
 # Activity History
 
+## 2026-10-27 — Live client test of the local MCP, and three fixes
+
+The owner tested Claude Code and Codex against the local MCP (generation copy, 512 MiB settings).
+Numbers checked against the data were right and caveats were passed on; 23 of 132 calls were `busy`.
+- **Queue (owner approved changing AT-03's "no queue"):** a call that finds the slot taken waits first come
+  first served (`TEMPO_MCP_QUEUE_SECONDS` 15, `TEMPO_MCP_MAX_WAITING` 4) and its result carries a `queued`
+  warning that tells the model calls run one at a time. Still one operation at a time, so memory is unchanged.
+  The benchmark harness turns the queue off to keep probing the slot itself.
+- **Search: split children inherit their parent's text.** The index held only titles for all 2,191 split
+  children (the parent carries the definition, tags, context and English name, and is not indexed), so a model
+  concluded there was no county school data while SCL101A/B/C exist. Search eval on the copy: schools,
+  hospitals, doctors and the English unemployment queries improve; one weak query changed for the worse
+  (backlog). Discovery also moves families that publish the requested level (county, region) to the front.
+- **Ranking refusals explain themselves:** `rank_entities` now gives query_data's reason and next steps
+  (e.g. conflicting keys → the same ranking on the parent), instead of "the shared query refused the input".
+- Local Ask needs `TEMPO_ASK_BYOK_ENABLED=true`; the test server sets it.
+
 ## 2026-10-27 — MCP answer quality: oversized groupings and year ranges
 
 The owner put answer quality ahead of Fly hardening (long soak, x86 run parked).

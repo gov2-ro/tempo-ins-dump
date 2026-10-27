@@ -6,6 +6,25 @@ see also [charting-ideas.md](charting-ideas.md)
 
 ## Ask/MCP answer quality follow-up — 2026-10-17
 
+- [ ] **Live client test 2026-10-27 — follow-ups** (Claude Code + Codex on the local MCP; transcripts in
+  `~/.claude/projects/-Users-pax-tempo-mcp-test/` and `~/.codex/sessions/2026/10/27/`, server log
+  `tempo-rc-06b/mcp-test/server.log`). Fixed the same day: the `busy` queue, split children missing from
+  search, opaque ranking refusals. Still open:
+  - **Rebuild the search index in a generation.** `build-search-index.py` now gives split children their
+    parent's English name, definition, tags and context (they had only a title: SCL101A_judete ranked 89th for
+    "unitati invatamant"). The local test serves an index rebuilt beside the copy
+    (`tempo-gen-20261012-search2`, symlinks + new `search.duckdb`); its manifest still records the old index's
+    hash, so a release needs the index rebuilt in the generation and `build-generation-manifest.py` rerun.
+    Known loss in the search eval: "cheltuieli educatie buget" now lists ASS113C (old list was weak too).
+  - **Two-interval city change is refused by discovery** ("între 1990 și 2005 și 2010 și 2015" → "needs exactly
+    two years") although `compare_periods` takes up to 4 intervals; read year pairs.
+  - **`find_dimension_values` counts as a full scan.** AGE of POP108D_varste_judet (8.6M rows) was refused by
+    the 5M scan cap; listing one column's values should be estimated (or served) separately.
+  - **Population density is refused although its parts exist** (area: AGR101A by county, AGR101B by locality).
+    A reviewed recipe (population / area, county and municipality) would answer it; INS's own enrolment rate
+    SCL102A (national, by sex) was also not found when a model built its own proxy.
+  - **Ask page:** the "Set your API key" notice is English on the Romanian page.
+
 - [ ] **P2 — A year-range population question gets a one-year call.** 06C example check: discovery
   for "populația rezidentă a județului Cluj între 2015 și 2024" suggests `query_data
   POP105A_judete_grupe` with `TIME_PERIOD: ["2024"]` only, and the result is

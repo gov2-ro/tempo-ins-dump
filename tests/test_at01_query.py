@@ -454,6 +454,23 @@ def test_conflicting_child_names_a_verified_parent_or_sibling(env):
     assert "10.0" not in json.dumps(e) and "11.0" not in json.dumps(e)
 
 
+@pytest.mark.parametrize("lang", ["en", "ro"])
+def test_a_refused_ranking_says_why_and_offers_the_same_next_steps(env, lang):
+    # AQ live test: rank_entities answered only "the shared query refused the ranking input"
+    e = call("rank_entities", dataset="CHILDX", entity_columns=["REF_AREA"], year="2024", lang=lang)
+    assert (e["status"], e["reason"]) == ("unavailable", "conflicting_grain")
+    q_env = q(dataset="CHILDX", group_by=["REF_AREA", "TIME_PERIOD"], filters={"TIME_PERIOD": ["2024"]}, lang=lang)
+    assert q_env["message"] in e["message"] and len(e["message"]) > len(q_env["message"])
+    ranks = recs(e, "rank_entities")
+    assert [r["arguments"]["dataset"] for r in ranks] == [r["arguments"]["dataset"] for r in recs(q_env, "query_data")] == ["PARENTX"]
+    assert ranks[0]["arguments"] == {"dataset": "PARENTX", "entity_columns": ["REF_AREA"], "year": "2024",
+                                     "entity_class": "all", "top_k": ranks[0]["arguments"]["top_k"],
+                                     "order": "desc", "filters": {}, "lang": lang}
+    alt = call(ranks[0]["tool"], **ranks[0]["arguments"])
+    assert [(r["entity"]["REF_AREA"], r["value"]) for r in alt["data"]["rows"]] == [("Sud", 70.0), ("Nord", 30.0)]
+    assert "11.0" not in json.dumps(e)
+
+
 def test_alternative_must_have_every_requested_column_and_value(env):
     e = q(dataset="CHILDX", group_by=["TIME_PERIOD"], filters={"REF_AREA": ["Nord"]})
     assert e["reason"] == "conflicting_grain"

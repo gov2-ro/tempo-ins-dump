@@ -57,11 +57,19 @@ def build_index(debug: bool = False):
     # ---------------------------------------------------------------------------
     log.info("Building search_docs table from metadata.duckdb ...")
 
-    # Fetch matrix data
+    # Fetch matrix data. A split child has only its own title: its English name, definition, tags
+    # and context path live on the parent (which is not canonical, so not indexed). Without them
+    # the 2,191 children were found by title words alone and ranked below unrelated national files
+    # ("unitati invatamant": SCL101A_judete 89th). They inherit the parent's text here.
     matrices = src.execute("""
-        SELECT matrix_code, matrix_name, matrix_name_en, definitie
-        FROM matrices
-        WHERE is_canonical = TRUE
+        SELECT m.matrix_code, m.matrix_name,
+               COALESCE(m.matrix_name_en, p.matrix_name_en
+                        || COALESCE(' [' || regexp_extract(m.matrix_name, '\[([^\]]*)\]\s*$', 1) || ']', '')),
+               COALESCE(m.definitie, p.definitie),
+               CASE WHEN m.is_split THEN m.parent_matrix_code END
+        FROM matrices m
+        LEFT JOIN matrices p ON p.matrix_code = m.parent_matrix_code
+        WHERE m.is_canonical = TRUE
     """).fetchall()
 
     # Fetch tags grouped by matrix_code
@@ -82,7 +90,6 @@ def build_index(debug: bool = False):
         FROM matrices m,
              UNNEST(m.ancestor_codes) AS t(ac)
         JOIN contexts c ON t.ac::VARCHAR = c.context_code
-        WHERE m.is_canonical = TRUE
         GROUP BY m.matrix_code
     """).fetchall()
     context_map = {r[0]: (r[1], r[2]) for r in contexts_raw}
@@ -110,9 +117,9 @@ def build_index(debug: bool = False):
     """
 
     count = 0
-    for code, name_ro, name_en, definitie in matrices:
-        tags_ro, tags_en = tags_map.get(code, ("", ""))
-        ctx_ro, ctx_en = context_map.get(code, ("", ""))
+    for code, name_ro, name_en, definitie, parent in matrices:
+        tags_ro, tags_en = tags_map.get(code) or tags_map.get(parent) or ("", "")
+        ctx_ro, ctx_en = context_map.get(code) or context_map.get(parent) or ("", "")
 
         # Merge all searchable text into one field for FTS
         search_text = " ".join(filter(None, [

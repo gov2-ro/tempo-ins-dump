@@ -511,7 +511,7 @@ TEXT = {
         "rank.key_too_long": "The full entity key exceeds eight columns.",
         "rank.cities_need_locality": "Cities require REF_AREA_2 with SIRUTA locality keys.",
         "rank.no_year": "No observations for {year}; no nearby year was substituted.",
-        "rank.query_refused": "The shared query refused the ranking input.",
+        "rank.query_refused": "No ranking was computed: the values to rank were refused. {why}",
         "rank.source_incomplete": "No ranking was computed from a capped or windowed input; "
                                   "narrow the selection.",
         "rank.approximation": "An approximate aggregation is not a ranking input.",
@@ -1227,7 +1227,7 @@ TEXT = {
         "rank.cities_need_locality": "Orașele necesită REF_AREA_2 cu chei de localitate SIRUTA.",
         "rank.no_year": "Nu există observații pentru {year}; niciun an apropiat nu a fost "
                         "înlocuit.",
-        "rank.query_refused": "Interogarea comună a refuzat datele de intrare ale clasamentului.",
+        "rank.query_refused": "Nu s-a calculat niciun clasament: valorile de clasat au fost refuzate. {why}",
         "rank.source_incomplete": "Nu s-a calculat niciun clasament dintr-o intrare limitată sau "
                                   "pe fereastră; restrânge selecția.",
         "rank.approximation": "O agregare aproximativă nu poate fi intrare pentru un clasament.",

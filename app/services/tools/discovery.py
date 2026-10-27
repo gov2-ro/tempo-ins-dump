@@ -317,6 +317,33 @@ def _years_text(years: list) -> str:
     return ", ".join(str(x) if x == y else f"{x}–{y}" for x, y in runs)
 
 
+# How a family shows it publishes a geographic level: a split child named for it or the level in its
+# title ("... macroregiuni, regiuni de dezvoltare si judete"). The level words are taken out of the
+# full-text query, so "how many schools per county" listed the national file first and the county
+# ones (SCL101A/B/C) 40th or lower (AQ live test); they are moved up, not added.
+LEVEL_POOL = 20                 # families considered for moving up: the plain search's best, not its tail
+LEVEL_MARKS = {"county": ("_judete", "_judet", "judete", "judet"),
+               "region": ("_regiuni", "regiuni"),
+               "macroregion": ("_macroregiuni", "macroregiuni")}
+
+
+def _has_level(item: dict, level: str) -> bool:
+    marks = LEVEL_MARKS[level]
+    if any(m["code"].lower().endswith(marks[:2]) for m in item.get("members") or []):
+        return True
+    words = set(cs.fold(item.get("title") or "").split())
+    return any(w in words for w in marks[2:])
+
+
+def _level_families(fam: dict, level: str | None) -> dict:
+    """Family results with those that publish the requested level first, in search order."""
+    if level not in LEVEL_MARKS:
+        return fam
+    items = fam["items"]
+    first = [it for it in items if _has_level(it, level)]
+    return {**fam, "items": first + [it for it in items if not _has_level(it, level)]}
+
+
 def _worst_quality(statuses: list) -> str:
     for bad in ("conflicting", "duplicate_keys", "unverified"):
         if bad in statuses:
@@ -953,7 +980,8 @@ def discover_indicators(args, ctx):
     by_id = {c["id"]: c for c in cs.load_concepts()}
     geo = dpol.read_geography(args.query, conn)             # counties, regions and levels the question names
     plan = dpol.plan(intent, args.query, by_id, lang, geo=geo)       # reviewed defaults, routes, refusals
-    res = cs.search(plan.query, conn, lang=lang, limit=args.limit)
+    # more families than shown, so those at the requested level can be moved up (_level_families)
+    res = cs.search(plan.query, conn, lang=lang, limit=max(args.limit, LEVEL_POOL))
     parsed = res["interpretation"]
     parsed["latest"] = parsed.get("latest") or intent["latest"]
     parsed["period_range"] = rng = intent["period_range"]
@@ -1065,7 +1093,7 @@ def discover_indicators(args, ctx):
                     have.add(("series_break", n["subject"]))
                     warnings.append(C.warning("series_break", n["message"], n["subject"]))
 
-    fam = res["families"]
+    fam = _level_families(res["families"], parsed.get("level"))
     cap = max(0, args.limit - len(cards))
     families = [_family_item(ctx, it) for it in fam["items"][:cap]]
     families_info = {

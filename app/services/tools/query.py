@@ -311,6 +311,13 @@ def _refused(aid: "_Aid", warnings: list) -> dict:
                       limits=C.query_limits(res, 0), warnings=warnings + extra, recovery=recs)
 
 
+def refusal(ctx, code: str, request: dict, res: dict, limit: int) -> tuple[str, list]:
+    """The message and recovery query_data gives for a selection the shared query refused, for
+    the tools that run the same query underneath (rank_entities), so a refusal says why."""
+    env = _refused(_Aid(ctx, code, request, res, limit), [])
+    return env["message"], env["recovery"]
+
+
 def _plan_generic(aid, reason, col, simple: bool = False):
     where = aid.t("query.dimension_suffix", col=col) if col else ""
     msg = aid.t("query.refused", reason=reason, where=where)

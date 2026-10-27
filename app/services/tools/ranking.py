@@ -15,6 +15,7 @@ from app.services.tools import contract as C
 from app.services.tools import messages as M
 
 CITY_CATALOGUE = "GOS102A"
+QUERY_PREVIEW = 100          # the query_data limit its refusal plan builds candidate calls with
 
 
 def _refuse(reason, message, provenance=None):
@@ -120,7 +121,18 @@ def rank_entities(args, ctx):
     prov.update(selection=selection, source_query=query)
     agg = res.get("aggregation") or {}
     if res.get("unavailable"):
-        _refuse(agg.get("reason") or "aggregation_unavailable", M.t(lang, "rank.query_refused"), prov)
+        # the same explanation and next steps query_data gives for this selection, not a bare refusal
+        from app.services.tools import query as query_tool
+        try:
+            why, recs = query_tool.refusal(ctx, code, query, res, QUERY_PREVIEW)
+        except Exception:
+            why, recs = "", []
+        # a related dataset query_data would try is offered as the same ranking there
+        recs = [C.recovery("tool_call", r["message"], "rank_entities",
+                           {**args.model_dump(exclude_none=True), "dataset": r["arguments"]["dataset"]})
+                if r.get("tool") == "query_data" else r for r in recs]
+        raise C.ToolFailure("unavailable", agg.get("reason") or "aggregation_unavailable",
+                            M.t(lang, "rank.query_refused", why=why).strip(), recovery=recs, provenance=prov)
     if res.get("truncated") or res.get("time_windowed") or res.get("partial_period_dropped") is not None:
         _refuse("source_incomplete", M.t(lang, "rank.source_incomplete"), prov)
     if agg.get("outcome") == "approximation":
