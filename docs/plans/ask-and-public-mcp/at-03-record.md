@@ -46,7 +46,10 @@ was done: those are AT-04 and the release gate.
   schema failure answer at once, with no slot, budget or scan), cache lookup, calls-per-minute
   admission, scan estimate, a non-blocking execution slot, then the work in a pool thread on its own
   cursor with a deadline interrupt. A busy gate answers immediately with `busy` and a retry delay; there
-  is no queue. The slot is released in the worker, when the work has ended: a caller that gave up at the
+  is no queue. *Changed 2026-10-27 (owner, after the live client test: 23 of 132 calls were `busy`
+  because chat clients send calls in parallel): a call that finds the slot taken waits in a first-come
+  queue of at most `TEMPO_MCP_MAX_WAITING` calls for up to `TEMPO_MCP_QUEUE_SECONDS`, and its result
+  carries a `queued` warning; past that it is `busy` as before. Still one operation at a time.* The slot is released in the worker, when the work has ended: a caller that gave up at the
   deadline (or disconnected) does not free it early. Protocol metadata (initialize, list) stays
   available while busy.
 - **Scan admission.** The rows an operation may read are bounded from Parquet footers
@@ -75,6 +78,8 @@ was done: those are AT-04 and the release gate.
 | `TEMPO_MCP_MAX_BODY_BYTES` | 65,536 | whole request body |
 | `TEMPO_MCP_MAX_CONCURRENT` | 1 | analytical operations in flight per worker |
 | `TEMPO_MCP_MAX_SECONDS` | 10 | deadline of one operation |
+| `TEMPO_MCP_QUEUE_SECONDS` | 15 | how long a call waits for a busy slot (0 = answer `busy` at once; added 2026-10-27) |
+| `TEMPO_MCP_MAX_WAITING` | 4 | calls that may wait at once; more are `busy` (added 2026-10-27) |
 | `TEMPO_MCP_MAX_CALLS_PER_MINUTE` | 120 | `tools/call` admissions (aggregate, not per user) |
 | `TEMPO_MCP_MAX_REQUESTS_PER_MINUTE` | 600 | every HTTP request, initialize/list included (429 + Retry-After) |
 | `TEMPO_MCP_MAX_SCAN_ROWS` | 1,000,000 | estimated rows an operation may read. The measured operator profile for enabling the MCP on Fly, `scripts/deploy/fly/mcp-public.env`, raises it to 5,000,000 (AQ-01B) |

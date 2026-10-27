@@ -14,8 +14,10 @@ Bounds, per worker (one worker in the first release; this is not a deployment-wi
   * body size, Host and Origin are checked before any parsing or tool work (CORS is not
     authentication, and the app's development CORS never applies to /mcp);
   * requests per minute (cheap, covers initialize/list) and tools/call per minute;
-  * one analytical operation at a time by default, no waiting queue: a busy gate answers at once
-    with a retry delay, and the slot stays taken until the work has really stopped;
+  * one analytical operation at a time by default, and the slot stays taken until the work has
+    really stopped. A call that finds it taken waits in a short first-come queue (a few calls, up
+    to `queue_seconds`; chat clients send calls in parallel) and its result says it waited; past
+    that it is answered `busy` with a retry delay. TEMPO_MCP_QUEUE_SECONDS=0 answers busy at once;
   * a wall-clock deadline enforced by interrupting the cursor the operation owns;
   * an admission limit on the rows an operation may read, estimated from Parquet footers (never a
     preliminary COUNT): an unknown estimate is refused unless a generation-bound result is cached;
@@ -59,6 +61,8 @@ POLICY_VERSION = "mcp-2"                   # part of every cache key: bump when 
 MAX_WIRE_BYTES = 72 * 1024                 # the complete JSON-RPC response (both representations)
 WIRE_ALLOWANCE = 512                       # JSON-RPC wrapper around the result
 DEADLINE_GRACE = 2.0                       # seconds the caller waits past the interrupt before answering
+QUEUE_POLL_SECONDS = 0.05                  # how often a queued call looks for a free slot
+QUEUE_NOTICE_SECONDS = 0.5                 # a wait this long is reported on the result
 SCAN_TOOLS = ("rank_entities", "query_data", "compare_periods", "find_dimension_values", "run_recipe")
 TRANSIENT_REASONS = frozenset({"busy", "query_timeout", "query_budget", "response_budget",
                                "generation_changed", "generation_unverified", "execution_failed"})
@@ -88,7 +92,9 @@ def _flag(env, name: str) -> bool:
     raise McpConfigError(f"{name} must be true or false, not {raw!r}")
 
 
-def _number(env, name: str, default, *, cast=int):
+def _number(env, name: str, default, *, cast=int, minimum=None):
+    """A positive number (zero is never 'unlimited'); `minimum=0` also accepts zero where it means
+    'none' (no queue)."""
     raw = env.get(name)
     if raw is None or str(raw).strip() == "":
         return default
@@ -96,7 +102,8 @@ def _number(env, name: str, default, *, cast=int):
         v = cast(str(raw).strip())
     except ValueError:
         raise McpConfigError(f"{name} must be a number, not {raw!r}") from None
-    if not (v > 0 and math.isfinite(v)):
+    ok = v >= 0 if minimum == 0 else v > 0
+    if not (ok and math.isfinite(v)):
         raise McpConfigError(f"{name} must be positive (zero is not 'unlimited'), not {raw!r}")
     return v
 
@@ -112,6 +119,8 @@ class McpSettings:
     base_url: str = ""
     max_body_bytes: int = 65_536
     max_concurrent: int = 1
+    queue_seconds: float = 15.0
+    max_waiting: int = 4
     max_seconds: float = 10.0
     max_calls_per_minute: int = 120
     max_requests_per_minute: int = 600
@@ -142,6 +151,8 @@ class McpSettings:
             enabled=True, local_test=local, base_url=base,
             max_body_bytes=_number(env, "TEMPO_MCP_MAX_BODY_BYTES", 65_536),
             max_concurrent=_number(env, "TEMPO_MCP_MAX_CONCURRENT", 1),
+            queue_seconds=_number(env, "TEMPO_MCP_QUEUE_SECONDS", 15.0, cast=float, minimum=0),
+            max_waiting=_number(env, "TEMPO_MCP_MAX_WAITING", 4),
             max_seconds=_number(env, "TEMPO_MCP_MAX_SECONDS", 10.0, cast=float),
             max_calls_per_minute=_number(env, "TEMPO_MCP_MAX_CALLS_PER_MINUTE", 120),
             max_requests_per_minute=_number(env, "TEMPO_MCP_MAX_REQUESTS_PER_MINUTE", 600),
@@ -329,6 +340,7 @@ class Gate:
         self.executor = ThreadPoolExecutor(max_workers=settings.max_concurrent,
                                            thread_name_prefix="mcp-tool")
         self.active = 0                           # operations holding a slot (tests, health of the gate)
+        self._waiting: deque = deque()            # calls queued for a slot, first come first served
         self.stats: Counter = Counter()
         self._lock = threading.Lock()
 
@@ -381,7 +393,8 @@ class Gate:
                     [C.recovery("tool_call", M.t(lang, "gate.query_budget_describe"),
                                 "describe_dataset", {"dataset": arguments["dataset"], "lang": arguments.get("lang", "ro")})
                      if "dataset" in arguments else C.recovery("narrow", M.t(lang, "gate.query_budget_narrow"))]), False
-        if not self.slots.acquire(blocking=False):
+        waited = await self._acquire()
+        if waited is None:
             self.stats["busy"] += 1
             return _gate_envelope(name, arguments, "unavailable", "busy",
                                   M.t(_lang(arguments), "gate.busy_slot"), [_retry(2.0, arguments)]), False
@@ -418,7 +431,29 @@ class Gate:
             return self._timeout(name, arguments), False
         if key is not None and self._cacheable(env) and generation.current().get("id") == gen.get("id"):
             self.cache.put(key, env)
+        if waited >= QUEUE_NOTICE_SECONDS:            # said on this answer only, never on a cached copy
+            self.stats["queued"] += 1
+            env = {**env, "warnings": [*env.get("warnings", []), C.warning(
+                "queued", M.t(_lang(arguments), "gate.queued", s=f"{waited:.0f}" if waited >= 1 else "<1"))]}
         return env, False
+
+    async def _acquire(self) -> float | None:
+        """Seconds this call waited for a slot, or None when none came free in time. Waiters are
+        served in arrival order; a new call never overtakes one already waiting."""
+        if not self._waiting and self.slots.acquire(blocking=False):
+            return 0.0
+        if self.s.queue_seconds <= 0 or len(self._waiting) >= self.s.max_waiting:
+            return None
+        me, t0 = object(), time.monotonic()        # real time: the queue bound is wall clock
+        self._waiting.append(me)
+        try:
+            while time.monotonic() - t0 < self.s.queue_seconds:
+                if self._waiting[0] is me and self.slots.acquire(blocking=False):
+                    return time.monotonic() - t0
+                await asyncio.sleep(QUEUE_POLL_SECONDS)
+            return None
+        finally:
+            self._waiting.remove(me)
 
     def _timeout(self, name, arguments) -> dict:
         lang = _lang(arguments)

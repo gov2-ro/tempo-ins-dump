@@ -76,8 +76,11 @@ PROFILE_FLAGS = {"max_scan_rows": "TEMPO_MCP_MAX_SCAN_ROWS", "max_seconds": "TEM
                  "max_concurrent": "TEMPO_MCP_MAX_CONCURRENT", "cache_bytes": "TEMPO_MCP_CACHE_BYTES",
                  "cache_entries": "TEMPO_MCP_CACHE_ENTRIES", "cache_ttl_seconds": "TEMPO_MCP_CACHE_TTL_SECONDS"}
 # Per-minute rate limits are admission policy, not capacity: lifted so a sequential sample loop is not
-# throttled into `busy` answers. Recorded in the report under profile.harness_overrides.
-HARNESS_OVERRIDES = {"TEMPO_MCP_MAX_CALLS_PER_MINUTE": "1000000", "TEMPO_MCP_MAX_REQUESTS_PER_MINUTE": "1000000"}
+# throttled into `busy` answers. The slot queue is switched off so the slot probes and concurrent phases
+# still see the one-slot gate directly (a queued call would hide whether the slot was held; memory is the
+# same, since queued calls do no work). Recorded in the report under profile.harness_overrides.
+HARNESS_OVERRIDES = {"TEMPO_MCP_MAX_CALLS_PER_MINUTE": "1000000", "TEMPO_MCP_MAX_REQUESTS_PER_MINUTE": "1000000",
+                     "TEMPO_MCP_QUEUE_SECONDS": "0"}
 ENV_ALLOW = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "VIRTUAL_ENV", "SYSTEMROOT")
 SECRET_NAME = re.compile(r"(API_KEY|_TOKEN|SECRET|PASSWORD)$|^(ANTHROPIC|OPENAI|GEMINI|MISTRAL|DEEPSEEK|XAI|OPENROUTER)_")
 FORBIDDEN_SETTING = re.compile(r"^TEMPO_(ASK|LLM|OLLAMA)")

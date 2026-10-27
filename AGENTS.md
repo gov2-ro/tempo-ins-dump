@@ -148,7 +148,8 @@ The measured profile for enabling it on the 512 MB machine is `scripts/deploy/fl
   is scrubbed by `ask_guard.secrets_scope`.
 - **Public MCP** (`services/public_mcp.py`, `/mcp`, record `at-03-record.md`): a read-only
   Streamable HTTP endpoint over the same eight tools, disabled by default (404 for every method
-  and subpath). Per-worker gate: one operation at a time, no queue, a deadline that interrupts
+  and subpath). Per-worker gate: one operation at a time (parallel calls wait in a short first-come queue,
+  `TEMPO_MCP_QUEUE_SECONDS`/`_MAX_WAITING`, then `busy`), a deadline that interrupts
   the operation's own cursor, a scan admission limit from Parquet footers, a generation-keyed
   cache. It never calls a model, asks for sampling, or runs SQL/code. `scripts/mcp_probe.py`
   smokes a running endpoint.

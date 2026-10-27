@@ -253,7 +253,7 @@ the request's own key is scrubbed before anything is logged. See
 
 Public MCP (AT-03, same branch, not deployed, off unless `TEMPO_MCP_ENABLED`): `/mcp`
 serves the same seven tools read-only over Streamable HTTP, with a per-worker gate (one
-operation at a time, no queue, 10 s deadline, 1,000,000-row scan admission limit, a bounded
+operation at a time, a short first-come queue (4 calls, 15 s; added 2026-10-27), 10 s deadline, 1,000,000-row scan admission limit, a bounded
 generation-keyed cache) and Host/Origin/body checks. See
 [at-03-record.md](plans/ask-and-public-mcp/at-03-record.md). `/api/health` reports
 `mcp.enabled`. Neither package has run against a live provider, a ChatGPT/Claude connector or

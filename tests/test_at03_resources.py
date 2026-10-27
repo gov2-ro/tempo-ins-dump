@@ -97,7 +97,8 @@ def test_a_slow_query_is_interrupted_at_the_deadline_and_the_next_call_works(tmp
 
 
 def test_the_slot_stays_taken_until_work_that_cannot_be_interrupted_really_ends(tmp_path, monkeypatch):
-    app, mcp = E.make_app(tmp_path, monkeypatch, environ={"TEMPO_MCP_MAX_SECONDS": "0.5"})
+    app, mcp = E.make_app(tmp_path, monkeypatch, environ={"TEMPO_MCP_MAX_SECONDS": "0.5",
+                                                          "TEMPO_MCP_QUEUE_SECONDS": "0"})
     monkeypatch.setattr(P, "DEADLINE_GRACE", 0.2)
     release = threading.Event()
     real = R.call_tool
@@ -124,8 +125,8 @@ def test_the_slot_stays_taken_until_work_that_cannot_be_interrupted_really_ends(
     assert still == 1 and E.payload(after)[0]["status"] == "ok"
 
 
-def test_overload_answers_busy_at_once_with_a_retry_and_never_queues(tmp_path, monkeypatch):
-    app, mcp = E.make_app(tmp_path, monkeypatch)
+def test_without_a_queue_overload_answers_busy_at_once_with_a_retry(tmp_path, monkeypatch):
+    app, mcp = E.make_app(tmp_path, monkeypatch, environ={"TEMPO_MCP_QUEUE_SECONDS": "0"})
     gate_open, entered = threading.Event(), threading.Event()
     real = R.call_tool
 
@@ -157,7 +158,8 @@ def test_overload_answers_busy_at_once_with_a_retry_and_never_queues(tmp_path, m
 
 
 def test_two_concurrent_operations_when_configured(tmp_path, monkeypatch):
-    app, mcp = E.make_app(tmp_path, monkeypatch, environ={"TEMPO_MCP_MAX_CONCURRENT": "2"})
+    app, mcp = E.make_app(tmp_path, monkeypatch, environ={"TEMPO_MCP_MAX_CONCURRENT": "2",
+                                                          "TEMPO_MCP_QUEUE_SECONDS": "0"})
     hold, in_flight, lock = threading.Event(), [], threading.Lock()
     real = R.call_tool
 
@@ -179,6 +181,97 @@ def test_two_concurrent_operations_when_configured(tmp_path, monkeypatch):
             await asyncio.gather(t1, t2)
             return third
     assert E.payload(run(go()))[0]["reason"] == "busy"
+
+
+def _blocking(monkeypatch, hold_for: float | None = None):
+    """call_tool held until `gate_open` is set (or for `hold_for` seconds); `entered` counts calls."""
+    gate_open, entered = threading.Event(), []
+    real = R.call_tool
+
+    def blocked(name, arguments, *, conn=None):
+        entered.append(arguments.get("limit"))
+        if hold_for is None:
+            gate_open.wait(5)
+        else:
+            time.sleep(hold_for)
+        return real(name, arguments, conn=conn)
+    monkeypatch.setattr(R, "call_tool", blocked)
+    return gate_open, entered
+
+
+def test_parallel_calls_wait_in_turn_and_say_they_waited(tmp_path, monkeypatch):
+    # chat clients send several calls at once; with one slot they used to get `busy` (AQ live test)
+    app, mcp = E.make_app(tmp_path, monkeypatch)
+    _, entered = _blocking(monkeypatch, hold_for=0.7)
+
+    async def go():
+        async with E.started(app), E.session(app) as a, E.session(app) as b, E.session(app) as c:
+            first = asyncio.ensure_future(a.call_tool("query_data", {**QUERY, "limit": 1}))
+            while not entered:
+                await asyncio.sleep(0.01)
+            second = asyncio.ensure_future(b.call_tool("query_data", {**QUERY, "limit": 2, "lang": "en"}))
+            await asyncio.sleep(0.1)
+            third = asyncio.ensure_future(c.call_tool("query_data", {**QUERY, "limit": 3}))
+            return await asyncio.gather(first, second, third)
+    out = [E.payload(r)[0] for r in run(go())]
+    assert [e["status"] for e in out] == ["ok", "ok", "ok"]
+    assert entered == [1, 2, 3]                                       # served in arrival order
+    assert not any(w["code"] == "queued" for w in out[0]["warnings"])
+    second = next(w for w in out[1]["warnings"] if w["code"] == "queued")
+    assert "waited" in second["message"] and any(w["code"] == "queued" for w in out[2]["warnings"])
+    assert mcp.gate.stats["busy"] == 0 and mcp.gate.stats["queued"] == 2
+    assert wait_until(lambda: mcp.gate.active == 0) and not mcp.gate._waiting
+
+
+def test_a_queued_result_is_cached_without_the_wait_notice(tmp_path, monkeypatch):
+    app, mcp = E.make_app(tmp_path, monkeypatch)
+    _, entered = _blocking(monkeypatch, hold_for=0.7)
+
+    async def go():
+        async with E.started(app), E.session(app) as a, E.session(app) as b:
+            first = asyncio.ensure_future(a.call_tool("query_data", {**QUERY, "limit": 1}))
+            while not entered:
+                await asyncio.sleep(0.01)
+            queued = await b.call_tool("query_data", {**QUERY, "limit": 2})
+            await first
+            return queued, await b.call_tool("query_data", {**QUERY, "limit": 2})
+    queued, hit = (E.payload(r)[0] for r in run(go()))
+    assert any(w["code"] == "queued" for w in queued["warnings"])
+    assert not any(w["code"] == "queued" for w in hit["warnings"]) and mcp.gate.stats["cache_hits"] == 1
+
+
+def test_the_queue_is_bounded_in_length_and_time(tmp_path, monkeypatch):
+    app, mcp = E.make_app(tmp_path, monkeypatch, environ={"TEMPO_MCP_MAX_WAITING": "1",
+                                                          "TEMPO_MCP_QUEUE_SECONDS": "0.5"})
+    gate_open, entered = _blocking(monkeypatch)
+
+    async def go():
+        async with E.started(app), E.session(app) as a, E.session(app) as b, E.session(app) as c:
+            first = asyncio.ensure_future(a.call_tool("query_data", {**QUERY, "limit": 1}))
+            while not entered:
+                await asyncio.sleep(0.01)
+            waiting = asyncio.ensure_future(b.call_tool("query_data", {**QUERY, "limit": 2}))
+            await asyncio.sleep(0.1)
+            t0 = time.monotonic()
+            full = await c.call_tool("query_data", {**QUERY, "limit": 3, "lang": "en"})
+            quick = time.monotonic() - t0
+            timed_out = await waiting                                  # the slot never came free in 0.5 s
+            gate_open.set()
+            await first
+            return full, quick, timed_out
+    full, quick, timed_out = run(go())
+    full, timed_out = E.payload(full)[0], E.payload(timed_out)[0]
+    assert full["reason"] == "busy" and quick < 0.3 and "one call at a time" in full["message"]
+    assert timed_out["reason"] == "busy" and timed_out["recovery"][0]["kind"] == "retry"
+    assert entered == [1] and wait_until(lambda: mcp.gate.active == 0) and not mcp.gate._waiting
+
+
+@pytest.mark.parametrize("raw", ["-1", "nan", "x"])
+def test_queue_seconds_rejects_bad_values_but_accepts_zero(tmp_path, monkeypatch, raw):
+    assert P.McpSettings.from_env({**E.ENV, "TEMPO_PUBLIC_BASE_URL": "https://api.example.org",
+                                   "TEMPO_MCP_QUEUE_SECONDS": "0"}, base_url="https://api.example.org").queue_seconds == 0
+    with pytest.raises(P.McpConfigError):
+        P.McpSettings.from_env({**E.ENV, "TEMPO_MCP_QUEUE_SECONDS": raw}, base_url="https://api.example.org")
 
 
 def test_a_failing_query_releases_its_slot_and_leaks_nothing(tmp_path, monkeypatch):

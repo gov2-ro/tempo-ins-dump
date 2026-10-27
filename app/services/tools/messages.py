@@ -60,7 +60,10 @@ TEXT = {
                                        "nothing from it is reported. Run the request again.",
         "registry.generation_retry": "Run the same request again on the new generation.",
         "gate.busy_rate": "The server is handling many requests; retry shortly.",
-        "gate.busy_slot": "Another analysis is running; retry shortly.",
+        "gate.busy_slot": "Other analyses are running and the queue is full or the wait ran out; "
+                          "retry shortly, one call at a time.",
+        "gate.queued": "This call waited {s} s for other analyses to finish: the server runs one "
+                       "at a time, so calls sent in parallel wait in turn.",
         "gate.retry_in": "Retry in about {s} second(s).",
         "gate.scan_unbounded": "could not be bounded",
         "gate.scan_over": "may read up to {est} rows (the public limit is {limit})",
@@ -727,7 +730,10 @@ TEXT = {
                                        "apel; nimic din el nu este raportat. Repetă cererea.",
         "registry.generation_retry": "Repetă aceeași cerere pe noua generație.",
         "gate.busy_rate": "Serverul procesează multe cereri; încearcă din nou în scurt timp.",
-        "gate.busy_slot": "O altă analiză este în curs; încearcă din nou în scurt timp.",
+        "gate.busy_slot": "Alte analize sunt în curs, iar coada este plină sau așteptarea a expirat; "
+                          "încearcă din nou în scurt timp, câte un apel pe rând.",
+        "gate.queued": "Acest apel a așteptat {s} s să se încheie alte analize: serverul rulează "
+                       "câte una, deci apelurile trimise în paralel așteaptă pe rând.",
         "gate.retry_in": "Încearcă din nou peste aproximativ {s} secundă(e).",
         "gate.scan_unbounded": "nu a putut fi delimitată",
         "gate.scan_over": "poate citi până la {est} rânduri (limita publică este {limit})",

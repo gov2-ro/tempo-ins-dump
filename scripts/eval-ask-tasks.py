@@ -361,7 +361,12 @@ async def _mcp_turn(world, turn, lang) -> dict:
     from app.services import agent, public_mcp as P
     from app.services.tools import contract, registry
     prompt = turn["prompt"][lang]
-    app, mcp = E.make_app(Path(world.tmp.name), world.mp, env=world.env)
+    # A held call occupies the slot until the turn ends, so the next call can only wait out the queue:
+    # a 1 s queue keeps that path (bounded wait, then `busy`) quick. Queued service is tested in
+    # tests/test_at03_resources.py.
+    held_turn = any(s.get("hold") for s in turn.get("steps", []))
+    app, mcp = E.make_app(Path(world.tmp.name), world.mp, env=world.env,
+                          environ={"TEMPO_MCP_QUEUE_SECONDS": "1"} if held_turn else None)
     # a model call from the MCP surface is a failure of the property under test
     model_calls = []
     world.mp.setattr(agent, "complete_with_tools", lambda *a, **k: model_calls.append(1))

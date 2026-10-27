@@ -1089,7 +1089,7 @@
   },
   {
    "id": "T20C",
-   "title": "A second public MCP call while one runs gets 'busy' at once; the slot is released",
+   "title": "A second public MCP call while one runs waits its turn and, when the wait runs out, gets 'busy'; the slot is released",
    "category": "capacity",
    "fixture": "synthetic-v1",
    "surfaces": ["mcp"],
