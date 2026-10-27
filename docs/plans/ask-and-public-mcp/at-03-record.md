@@ -77,7 +77,7 @@ was done: those are AT-04 and the release gate.
 | `TEMPO_MCP_MAX_SECONDS` | 10 | deadline of one operation |
 | `TEMPO_MCP_MAX_CALLS_PER_MINUTE` | 120 | `tools/call` admissions (aggregate, not per user) |
 | `TEMPO_MCP_MAX_REQUESTS_PER_MINUTE` | 600 | every HTTP request, initialize/list included (429 + Retry-After) |
-| `TEMPO_MCP_MAX_SCAN_ROWS` | 1,000,000 | estimated rows an operation may read |
+| `TEMPO_MCP_MAX_SCAN_ROWS` | 1,000,000 | estimated rows an operation may read. The measured operator profile for enabling the MCP on Fly, `scripts/deploy/fly/mcp-public.env`, raises it to 5,000,000 (AQ-01B) |
 | `TEMPO_MCP_CACHE_BYTES` / `_ENTRIES` / `_TTL_SECONDS` | 4 MiB / 128 / 300 | result cache |
 
 Zero, negative, non-numeric or non-finite values, a wildcard host or origin, a missing or non-https

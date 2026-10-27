@@ -92,7 +92,8 @@ Other root scripts: `generate_sdmx_yaml.py`, `build-geo-regions.py`,
 
 `main.py` mounts routers, `/view-profiles`, and `static/` at `/`. `config.py`
 reads env: `TEMPO_DATA_DIR`, `TEMPO_MAX_ROWS` (50,000), `TEMPO_DEBUG`,
-`TEMPO_DB_MEMORY` / `TEMPO_SEARCH_MEMORY` / `TEMPO_SCRATCH_MEMORY` (DuckDB budgets),
+`TEMPO_DB_MEMORY` (160MB) / `TEMPO_SEARCH_MEMORY` / `TEMPO_SCRATCH_MEMORY` (DuckDB budgets),
+`TEMPO_PLACE_*` (place profiles: built one at a time, 503 + Retry-After after a 20 s wait, cached per generation),
 `TEMPO_ASK_ENABLED` (hosted Ask) and `TEMPO_ASK_BYOK_ENABLED` (own-key Ask), both
 off by default (set the second for local Ask work), and other `TEMPO_ASK_*`/`TEMPO_LLM_*`.
 `TEMPO_PUBLIC_BASE_URL` is the trusted origin of the tools' citation/evidence links
@@ -103,6 +104,8 @@ development origins only; no wildcard; `/mcp` has its own gate). A static build 
 Ask on the API with `build-static.py --api-origin`. The public MCP
 (`TEMPO_MCP_ENABLED`, default off, and its `TEMPO_MCP_*` limits, listed in
 `docs/plans/ask-and-public-mcp/at-03-record.md`) is read when the app is built, not at import.
+The measured profile for enabling it on the 512 MB machine is `scripts/deploy/fly/mcp-public.env`
+(scan cap 5M; applied only with owner approval).
 
 - **Routers:** `datasets` (catalog/search/detail), `dataset_data` (data, insights,
   CSV/XLSX download), `categories`, `sdmx` (SDMX 2.1 data/datastructure/dataflow),

@@ -158,3 +158,17 @@ def test_the_place_recipe_cache_keeps_only_what_kpis_read_and_one_generation(mon
     gen["id"] = "g2"
     P._recipe_run("r", "2024")
     assert list(P._recipe_cache) == [("g2", "r", "2024")]
+
+
+def test_the_main_connection_defaults_to_at_most_two_threads(tmp_path):
+    import duckdb
+    db = tmp_path / "m.duckdb"
+    duckdb.connect(str(db)).close()
+    env = {k: v for k, v in os.environ.items() if k not in ("TEMPO_DB_THREADS", "TEMPO_DB_MEMORY")}
+    code = ("import app.db as d, app.config as c; d.DB_PATH = c.DB_PATH = __import__('pathlib').Path(%r); "
+            "print(d.get_conn().execute(\"SELECT current_setting('threads'), current_setting('memory_limit')\").fetchone())"
+            % str(db))
+    out = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True,
+                         cwd=str(Path(__file__).resolve().parent.parent))
+    threads, limit = eval(out.stdout.strip())
+    assert 1 <= threads <= 2 and limit.startswith("152"), out.stderr          # 160MB == 152.5 MiB

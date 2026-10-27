@@ -12,7 +12,11 @@ SCRATCH_MEMORY = os.environ.get("TEMPO_SCRATCH_MEMORY", "128MB")
 # sidecar, scratch instances and the Python heap, all inside 512 MiB. 400MB let the cache alone
 # approach the machine; 160MB cost ~5-10% p50 latency in the AT-04 mix (AQ-01C record).
 DB_MEMORY = os.environ.get("TEMPO_DB_MEMORY", "160MB")
-DB_THREADS = int(os.environ.get("TEMPO_DB_THREADS", "0"))   # 0 = DuckDB default (all cores)
+DB_THREADS = int(os.environ.get("TEMPO_DB_THREADS", "0"))   # 0 = DuckDB's default, at most MAX_DEFAULT_THREADS
+# Each thread keeps its own aggregation state: at 160MB the heaviest admitted MCP query
+# (a 3.9M-row parquet grouped to 108k rows) failed with 8 threads and passed 16/16 with 1-2.
+# Fly's one vCPU already gives 1; this keeps a many-core dev machine inside the same budget.
+MAX_DEFAULT_THREADS = 2
 
 _conn = None
 
@@ -28,7 +32,10 @@ def get_conn() -> duckdb.DuckDBPyConnection:
         cfg = {"memory_limit": DB_MEMORY}
         if DB_THREADS:
             cfg["threads"] = DB_THREADS
-        _conn = duckdb.connect(str(DB_PATH), read_only=True, config=cfg)
+        conn = duckdb.connect(str(DB_PATH), read_only=True, config=cfg)
+        if not DB_THREADS and conn.execute("SELECT current_setting('threads')").fetchone()[0] > MAX_DEFAULT_THREADS:
+            conn.execute(f"SET threads = {MAX_DEFAULT_THREADS}")
+        _conn = conn
     return _conn.cursor()
 
 
