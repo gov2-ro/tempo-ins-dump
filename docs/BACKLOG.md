@@ -958,3 +958,16 @@ See also: `docs/chart-taxonomy.md` for full gap analysis per cluster (33 exempla
 - [x] ~~**`split_parquet_by_filter` leaves 0-row parquet files on disk, unlike `split_parquet_cross_product`**~~ — fixed 2026-09-08. Added the same "delete 0-row combo files" step the cross-product path already had. Verified on `FOM107A` (previously left `FOM107A_macroregiuni.parquet` behind).
 - [x] ~~**`split_parquet_cross_product` reads a dead `parquet-v2` snapshot**~~ — fixed 2026-09-06, see activity-history. Was hardcoded to `PARQUET_V2_DIR`, unlike the single-rule `split_parquet_by_filter` which already preferred canonical parquet; broke every multi-dimension split after the stage-9 migration (running `12-split-datasets.py` globally deleted all 300 existing split children and regenerated almost none). Now mirrors the single-rule v3 branch. 2,141 split children across 733 parents restored (up from 300 before, 209 immediately after the incident).
 - [x] ~~**`detect_all()` in `split_rules.py` produced a different rule set across back-to-back global runs**~~ — root-caused and fixed 2026-09-06, see activity-history. Not non-determinism: `detect_multi_um()`, `detect_mixed_metrics()`, `detect_slash_dims()`, and `detect_hierarchy()` had no `is_split` guard (unlike `detect_geo_hierarchy()`/`detect_mixed_time_granularity()`, which already had one), so a split child — which inherits its parent's dimension metadata — could get re-matched as a fresh parent by those four detectors. `detect_all()` now excludes any `is_split=TRUE` matrix_code centrally, once, rather than requiring every detector to guard itself. A full run's own "created" vs "dataset_splits rows" counters, previously off by 100+ every time, now agree exactly (2183 = 2183).
+
+
+## 261016 notes
+- [ ] we have 2 types of searches, we should maybe only have one?
+- [ ] include some pre-packed query results there too, most popular 'asks' 
+- [ ] ask results, have tehcnical id table header names, as `REF_AREA_2` and `OBS_VALUE`
+- [ ] in search box, add option to comment on results.
+- [ ] log & cache queries.
+
+## 261027 notes
+- [ ] split data fetcher from UI, different repos
+- [ ] make queries public, at the beginning?
+- [ ] what other data might we want to add? See all public apis? - that should be an external tool

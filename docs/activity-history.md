@@ -291,6 +291,37 @@ checkout's existing work is preserved. Record: [AT-05](plans/ask-and-public-mcp/
   locality population file. The new tool does not bypass that gate. Density, correlations
   and native-provider evaluation remain backlog work.
 
+## 2026-10-16 — Review of completed Ask and MCP packages
+
+Compared local worktrees and commits since the October 15 handoff. The newest
+Ask/MCP implementation is `../tempo-at23`, branch `at/02-ask-runtime`, `22d9d4d`:
+AT-01 shared tools, UI/landing integration, AT-02 runtime and AT-03 public MCP,
+plus an exploratory CLI-mediated model evaluation. Its records distinguish
+local implementation from native-provider/client evaluation and deployment.
+This checkout remains on the earlier repair branch. The local graph predates
+the analytical tools, so current source and completion records were inspected.
+
+Fresh read-only tool probes on copied generation `9b3e065d` reproduce generic
+population/unemployment clarification blocks, missing `curentă`/`orașe`
+interpretation, and two 2023 births sums (164,004 and 168,079) labelled `ok` /
+`valid_total` with unknown domain completeness and no warnings. Different sums
+alone do not establish which series is correct; their scope needs verification.
+Confirmed no current-level ranking operation in the seven-tool contract.
+
+Additional reproduction: a natural “înnoptări ... la un locuitor” question finds
+the count instead of the existing ratio recipe. The numeric checker accepts a
+deliberately incorrect per-resident claim using that count because unit matching
+is not enforced. Recorded exact probes and next steps in BACKLOG. Inspected the
+Ask table adapter: it selects the last usable data result, and the UI renders
+raw column identifiers. No application code, corpus or deployment changes.
+
+Verification: targeted discovery/query, Ask loop/context and public-MCP suites:
+223 passed, 13 corpus tests skipped; two localhost socket tests were blocked by
+the sandbox, then both passed on the authorized rerun (225 passed in total).
+The corpus probes above were separate read-only checks; no live provider call
+was made. `git diff --check` reports one pre-existing trailing space in the
+owner's `261016 notes` backlog section; the new notes introduce none.
+
 ## 2026-10-16 — Initial model evaluation of the tools over MCP
 
 Why: the first browser runs of Ask were poor and it was unclear whether tools, prompt or the
@@ -474,6 +505,109 @@ Preview is still `http://localhost:8092/`. Dated insight records for the selecte
 examples were regenerated only in the temporary overlay; the frozen build and
 corpus are unchanged. Publishing still requires a fresh static build/recording
 and release validation.
+
+## 2026-10-15 — Ask/public MCP implementation handoff
+
+Created [six linked handoff documents](plans/ask-and-public-mcp/README.md) for the
+next coding session: shared `tempo-tools/1` contract; AT-01 analytical tools;
+AT-02 bounded/recoverable Ask; AT-03 public read-only Streamable HTTP MCP; AT-04
+task evaluation, client onboarding and release evidence. The README pins the
+actual alpha baseline (`pa/00-baseline`, `8a9689d`), distinguishes it from this
+older repair checkout, and includes a copy-paste prompt for one scoped package.
+
+Specified seven typed tools, exact result/status/provenance and size contracts,
+multi-interval change/ranking fixtures, incomplete-age scope disclosure, bounded
+context/follow-up state, provider output/deadline recovery, credential-safe
+telemetry, public scan/concurrency/cancellation limits and generation-bound
+evidence. Preserve existing shared query/policy/grain/recipe services and static
+parity. Keep public MCP free of server model calls and dev introspection.
+
+Decisions: no corpus migration or dependency-wide rewrite; public MCP off by
+default; local code acceptance separate from live models/clients/Linux Fly
+resource checks and directory publication. Initial execution/token/response
+budgets are explicit engineering defaults with measurement gates, not capacity
+claims. Owner identity/domain/legal placeholders block publication, not useful
+local implementation. Existing model/provider choices stay in scope only for
+verified adapter fixes.
+
+Validated all local document links, section bodies, fenced blocks and the
+numerical fixture expectations independently. Re-read target service interfaces
+and official SDK guidance to identify v1/v2 mounting/lifespan differences. This
+is specification work only; application tests were not rerun for Markdown-only
+edits. No model calls, corpus writes, commits, merges, publication or deployment.
+
+## 2026-10-15 — Ask failure analysis and public MCP direction
+
+Read the recent alpha activity/backlog and inspected its Ask, LLM client and dev
+MCP implementation at `8a9689d`. Parsed the retained `tempo-gen-20261012/reports/
+uvicorn-8080.log` using a whitelist of non-secret fields; no raw credentials or
+provider-error text were printed. Three completed DeepSeek runs in that log stop
+on the 12-tool limit, the 8-model-call limit, and an empty `length` response
+respectively. Two separate Anthropic requests fail authentication. The 22 traced
+tools total 974 ms (maximum 248 ms); the oversized 186,658-character data response
+and 49,232-character categories result go back into later model calls. This is a
+small diagnostic sample, not an overall success-rate measurement.
+
+Read-only probes on generation `9b3e065d2fe9` confirm Ask's older keyword discovery
+misses reviewed concept/recipe routing. AMG157G's schema gives 20 of 261 periods
+and `time_range=null`, with no option lookup tool to reach the rest. The current
+`tempo_eval_agent` evaluates search only; it does not establish answer quality.
+Recorded shared-tool improvements, bounded context/output recovery, end-to-end
+task evaluation and public MCP work in the backlog. Existing debug-key and
+incomplete-age findings remain applicable.
+
+Checked current official OpenAI, Anthropic, MCP and Fly documentation. A public
+data-only remote MCP can serve users in their existing chat accounts without
+model API keys sent to INS; hosting/query/egress costs remain with the operator.
+MCP is the reusable interface, and a plugin/connector supplies installation and
+discovery. The current stdio dev MCP is not the public surface. ChatGPT's current
+plugin docs describe HTTPS Streamable HTTP, anonymous tools and reviewed directory
+publication; Claude documents remote connectors including a Free-plan allowance.
+ChatGPT plan usage inside a remotely hosted website is a separate access question:
+the documented open-source/local-app path directs remotely hosted apps to an
+interest form. Do not assume a login enables the hosted Ask to use subscriptions.
+
+No app changes, paid model calls, publication or deployment. The research and
+read-only probes do not certify live provider quality or Fly resource capacity.
+
+## 2026-10-15 — Audit of corpus repair and public-alpha work
+
+Reviewed local branch history and the newer `pa/00-baseline` worktree
+(`../tempo-alpha`, `8a9689d`), including the integrated corpus/measure fixes,
+structural chart controls, shared REST/Ask/MCP query boundary, grain guards,
+concept discovery, reviewed recipes, evidence bundles, static engine and today's
+Ask provider/debug changes. The current checkout (`fix/03-corpus-repair`,
+`b11f48d`) does not contain the later alpha work; main is also behind it.
+
+Read-only checks used the copied `tempo-gen-20261012` generation
+`9b3e065d2fe9`. Its manifest records zero served missing-file, NULL-dimension,
+invalid-time or invalid-file violations, with 160 conflicting-grain files still
+restricted. The static artifact (`47ac900`) passes the integrity/completeness
+gate: 46,074 files, 3,376 datasets, full-text search exported. All 1,017 retained
+API parity cases pass, including five expected browser-budget refusals. This
+replay uses retained server answers, not a fresh full-corpus source verification.
+
+Verification: this checkout's suite passed 464, skipped 6. Alpha's full run
+passed 668, skipped 17, with four static-test failures caused by Homebrew Node's
+missing `libsimdjson.33.dylib`; all six static tests then passed using installed
+Node 22.13.1 (four failed tests recovered, two repeated). No rebaseline or system
+Node repair. Browser smoke: v1, v2, tourism recipe and disabled Ask at 390/1280px;
+Cluj place profile at 320/390/1280px, with seven KPI cards; no page errors, failed
+requests or horizontal overflow on the checked routes. FTS health and generation
+identity agree. Ask providers were mocked; no paid calls were made.
+
+Confirmed two remaining issues (backlog): Ask debug logs retain an arbitrary-format
+request key echoed by a provider error even though HTTP output is redacted; and
+single-age county rankings are labelled `valid_total` despite excluding 85+
+(21,179,764 vs the INS-confirmed 21,646,220 for 2026). Insights currently withholds
+that child's headline, so the remaining numerical exposure is the grouped query.
+Public-alpha status summaries also lag their detailed completion records.
+
+Release limits remain: static host/Apache validation and formative sessions are
+unperformed; the static build precedes today's Ask changes. A Fly release still
+needs the image/512 MiB resource gate (the earlier unconstrained workload peaked
+at 1.2 GiB). This audit changed only backlog/activity notes in this checkout;
+no application fixes, corpus writes, merges, commits or deployments.
 
 ## 2026-10-15 — Shared UI rhythm and static preview
 

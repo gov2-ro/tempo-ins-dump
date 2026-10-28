@@ -348,4 +348,5 @@ see [docs/misc-ideas/static-site](/docs/misc-ideas/static-site/), [STATIC-CONVER
 
 ---
 
-[![License: OGL v3.0](https://img.shields.io/badge/license-OGL%20v3.0-blue.svg)](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/)
+Copyright (c) 2026 [gov2.ro](https://gov2.ro)
+Date reutilizabile conform [EUPL v1.2](https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12) (the "Licence")
