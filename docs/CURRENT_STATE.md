@@ -321,6 +321,27 @@ collisions, 18 inherited, 15 dropped another dimension. Backfilling
 latest KPIs (1,525 → 2,274 of 3,368), all on split children; 584 of those rest only
 on `profile_flat` verification and need an independent additivity check.
 
+**Folder consolidation, 2026-10-28.** The sibling copies are gone; the repo's `data/`
+now *is* the deployed generation `062bd2b03173` (the 10-12 copy's corpus + the
+rebuilt search index from `tempo-gen-20261012-search2`; hashes match the manifest).
+The pre-repair corpus that used to sit in `data/` was deleted. Old paths cited in
+dated records map as follows:
+
+| Old path | Now |
+|---|---|
+| `tempo-gen-20261012/data` (+ `-search2`'s `search.duckdb`, manifest) | `data/` |
+| `tempo-gen-20261012/{reports,snapshots}` | `data/_archive/gen-20261012/` |
+| `tempo-gen-20261005/{reports,snapshots}`, its corpus (`a6737a26`) | `data/_archive/gen-20261005/` (`corpus-a6737a26/`) |
+| `tempo-gen-20261005/data/4-datasets/judet-localitate` | merged into `data/4-datasets/judet-localitate` (newer 10-12 files kept) |
+| `tempo-rc-06b/{release-1028,aq01b,ask-tasks,mcp-test,*.log,*.jsonl}` | `data/_archive/rc-06b/` |
+| 9b3e065d's `search.duckdb` + manifest | `data/_archive/gen-9b3e065d/` |
+| `.worktrees/aq-reports/` | `data/_archive/aq-reports/` |
+| staged deploy of 062bd2b0 (`.worktrees/ask-answer-quality/deploy-data{,.prev}`) | `deploy-data{,.prev}/` |
+
+Deleted as duplicates: both copies' `deploy-data{,.prev}`, `tempo-rc-06b/static` and
+`tempo-gen-20261012/static` (the uploaded build is `_archive/rc-06b/release-1028/static`),
+`-search3`, and all linked worktrees (every branch was merged into `fix/ask-answer-quality`).
+
 Refreshed generation, 2026-10-12 (copy at `~/devbox/gov2/tempo-gen-20261012/data`,
 generation `c307f28a8c7b`, not published): the 10-05 repair copy below with POP105A,
 SOM103A and TUR105D re-fetched from INS (1 Jan 2026 population, 2025 unemployment and

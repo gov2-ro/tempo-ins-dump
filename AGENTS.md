@@ -152,7 +152,7 @@ The measured profile for enabling it on the 512 MB machine is `scripts/deploy/fl
   `TEMPO_MCP_QUEUE_SECONDS`/`_MAX_WAITING`, then `busy`), a deadline that interrupts
   the operation's own cursor, a scan admission limit from Parquet footers, a generation-keyed
   cache. It never calls a model, asks for sampling, or runs SQL/code. `scripts/mcp_probe.py`
-  smokes a running endpoint. Content logs are opt-in and disclosed to the client/user:
+  smokes a running endpoint; `scripts/serve-mcp-test.sh` runs a local one on :8090 with the operator profile. Content logs are opt-in and disclosed to the client/user:
   `TEMPO_MCP_LOG_CALLS` (`mcp-calls.jsonl`) and Ask's `TEMPO_ASK_LOG_CHATS` (`ask-chats.jsonl`),
   both in `TEMPO_ASK_LOG_DIR`; neither records an IP or client identity.
 - **Pages** (`static/`):
@@ -258,12 +258,15 @@ data/
   meta/               reference data (judet CSVs, SIRUTA)
   logs/               pipeline logs, last-pipeline-run.txt
   eval/               chart/search eval baselines (tracked)
-  corpus/             ← what the app reads
+  quarantine/         files removed from the corpus by the FIX-03 repair
+  corpus/             ← what the app reads (since 2026-10-28: the deployed generation;
+    generation-manifest.json  its id and file hashes — check it before trusting a number)
     metadata.duckdb   inspect the actual schema; it is authoritative
     search.duckdb     bilingual FTS sidecar
     parquet/          one SDMX parquet per dataset + split children (includes leftovers)
     view-profiles/    per-dataset JSON
-  _obsolete/          archived intermediates
+  _archive/           old generation copies' reports, DuckDB snapshots, release evidence
+                      (bound for an external disk; nothing reads it)
 ```
 Most of `data/` is gitignored, except `data/eval/`.
 

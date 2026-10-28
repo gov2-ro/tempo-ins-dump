@@ -63,7 +63,7 @@ Read the target checkout's `AGENTS.md` first. Then read these target documents:
 - the Oct 15 entries in `docs/BACKLOG.md`.
 
 The inspected copied generation is `9b3e065d2fe9bb1df9bae2131b7bdeae9be3426f3c82b9a9954f7e6dc8f45550`
-at `../tempo-gen-20261012/data`. Corpus tests must verify their generation and
+at `../tempo-gen-20261012/data` (since 2026-10-28 the repo's `data/` holds its successor `062bd2b0`, same corpus). Corpus tests must verify their generation and
 skip explicitly if it is unavailable. CI must work using synthetic fixtures.
 
 Observed failures, for reproduction rather than permanent corpus constants:
@@ -78,7 +78,7 @@ Observed failures, for reproduction rather than permanent corpus constants:
 | A fake arbitrary-format key survives in debug logs while HTTP output is redacted | Redaction must happen before logging, including non-`sk-` keys |
 | Single-age population county results omit 85+ but say `valid_total` | A structurally valid partition can still be an incomplete population scope |
 
-The retained log is `../tempo-gen-20261012/reports/uvicorn-8080.log`. Treat it as
+The retained log is `data/_archive/gen-20261012/reports/uvicorn-8080.log`. Treat it as
 potentially credential-bearing: extract whitelisted fields, never paste the raw
 log into an issue, test fixture or prompt. Two Anthropic 401s in it are distinct
 authentication failures, not evidence of analytical incapability. This small

@@ -13,10 +13,13 @@ see also [charting-ideas.md](charting-ideas.md)
   overrun the deadline. Check the 403 is Cloudflare's Browser Integrity Check (error 1010, python-urllib UA)
   before blaming the app. Options: `min_machines_running = 1`, a longer deadline, or a different host. Owner
   decision: "we'll fix Fly or look for alternatives later".
-- [ ] **P3 — Local MCP test server lives in a session scratchpad.** `serve_mcp_test.sh` (port 8090, generation
-  copy, 5M scan cap, content logs to `tempo-rc-06b/mcp-test`) sits under `/private/tmp/claude-501/…/scratchpad/`,
-  which is per-session and not versioned. Move it into the repo (e.g. `scripts/`) with the generation path as a
-  parameter, and document it in AGENTS.md next to `mcp_probe.py`.
+- [x] **P3 — Local MCP test server lives in a session scratchpad.** Moved to `scripts/serve-mcp-test.sh`
+  (2026-10-28): data defaults to the repo's `data/` (`TEMPO_TEST_DATA` overrides), content logs to
+  `data/logs/mcp-test`; mentioned in AGENTS.md next to `mcp_probe.py`.
+- [ ] **Owner — Move `data/_archive/` (~8.5 GB) to the external HDD.** Old generation copies' DuckDB snapshots
+  (FIX-03 repair and PA-00 refresh rollback evidence), reports, release-1028 evidence and the uploaded static
+  build, gathered there by the 2026-10-28 folder consolidation (path map in `docs/CURRENT_STATE.md`). Nothing
+  reads it; dated records still cite the old sibling paths.
 
 ## Ask/MCP answer quality follow-up — 2026-10-17
 

@@ -58,7 +58,7 @@ uploads each need the owner's explicit go-ahead.
 
 ```bash
 source ~/devbox/envs/240826/bin/activate
-export TEMPO_CORPUS_SRC=~/devbox/gov2/tempo-gen-20261012/data/corpus
+export TEMPO_CORPUS_SRC=data/corpus   # the repo's data/ is the generation since 2026-10-28
 bash scripts/prepare-deploy-data.sh
 python scripts/release-check.py --source "$TEMPO_CORPUS_SRC"   # validates stage, runs tests
 fly auth login
@@ -78,12 +78,11 @@ fly deploy                                  # or: release-check.py --docker --de
 ## C. Static site on DreamHost
 
 ```bash
-TEMPO_DATA_DIR=~/devbox/gov2/tempo-gen-20261012/data \
-  python scripts/build-static.py --out ../tempo-gen-20261012/static --base-url https://ins.gov2.ro \
+python scripts/build-static.py --out data/_builds/static --base-url https://ins.gov2.ro \
     --api-origin https://api-ins.gov2.ro      # omit for a static site without Ask
-python scripts/release-check.py --static ../tempo-gen-20261012/static
-scripts/deploy-static.sh ../tempo-gen-20261012/static USER@iad1-shared-b7-17.dreamhost.com ins.gov2.ro        # dry run
-scripts/deploy-static.sh ../tempo-gen-20261012/static USER@iad1-shared-b7-17.dreamhost.com ins.gov2.ro --go
+python scripts/release-check.py --static data/_builds/static
+scripts/deploy-static.sh data/_builds/static USER@iad1-shared-b7-17.dreamhost.com ins.gov2.ro        # dry run
+scripts/deploy-static.sh data/_builds/static USER@iad1-shared-b7-17.dreamhost.com ins.gov2.ro --go
 ```
 
 1. The upload creates `~/ins.gov2.ro/releases/<gen>-<commit>/` and a `current` symlink.

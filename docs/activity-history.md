@@ -1,5 +1,24 @@
 # Activity History
 
+## 2026-10-28 — One folder: sibling copies and worktrees consolidated into the repo
+
+Owner asked to leave only one `tempo-*` folder in `~/devbox/gov2/`. Kept `tempo-ins-dump`, now on
+`fix/ask-answer-quality` (`main` fast-forwarded to it, both pushed).
+- **Data:** `data/` is now the deployed generation `062bd2b03173`: the 10-12 copy moved in, plus the
+  rebuilt `search.duckdb` and manifest from `-search2` as real files (sha256 of `metadata.duckdb` and
+  `search.duckdb` match the manifest; 4,110 parquets/view profiles). The old pre-repair `data/` was
+  deleted; its unique bits (slim samples, `eval/` extras, `misc/split_overrides.json`,
+  `sdmx-dashboards`, `insse_news.csv`, logs) moved in, and 20261005's 2,828 extra `judet-localitate`
+  CSVs were merged without overwriting the newer ones.
+- **Archive:** reports, the repair generation's corpus (`a6737a26`), all DuckDB snapshots (owner: keep all, they go to an external HDD), release-1028
+  evidence and the uploaded static build are in `data/_archive/` (~8.5 GB); path map in
+  `docs/CURRENT_STATE.md`. Dated records keep citing the old paths on purpose.
+- **Git:** 23 linked worktrees removed and 30 merged branches deleted (all were ancestors of
+  `fix/ask-answer-quality`; `pa/00-baseline` kept until its 7 local commits reach origin via this push).
+  Uncommitted docs from the main checkout were carried over (owner notes in BACKLOG, EUPL `LICENSE.txt`,
+  four activity entries); `b11f48d` (.codex/ ignore) cherry-picked.
+- The scratchpad MCP test server became `scripts/serve-mcp-test.sh` (defaults to `data/`).
+
 ## 2026-10-28 — Deployed to Fly (MCP, own-key Ask, content logs); static site built
 
 Owner approved: public MCP with the measured profile, own-key Ask, content logs on a volume, and a stop
