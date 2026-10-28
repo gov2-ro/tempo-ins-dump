@@ -16,6 +16,10 @@ see also [charting-ideas.md](charting-ideas.md)
 - [x] **P3 — Local MCP test server lives in a session scratchpad.** Moved to `scripts/serve-mcp-test.sh`
   (2026-10-28): data defaults to the repo's `data/` (`TEMPO_TEST_DATA` overrides), content logs to
   `data/logs/mcp-test`; mentioned in AGENTS.md next to `mcp_probe.py`.
+- [ ] **P2 — Re-pin corpus tests to generation `062bd2b0`.** Since the 2026-10-28 consolidation the repo's
+  `data/` is `062bd2b0` (= `9b3e065d` with a rebuilt search index), so 34 corpus tests that pin `9b3e065d` (probe
+  numbers, PA-00 answer records, AQ-02 prerequisites) self-skip. Accept both ids where only search changed, or
+  re-pin; then run `pytest -m corpus` and `scripts/eval-ask-tasks.py` with `TEMPO_DATA_DIR=data`.
 - [ ] **Owner — Move `data/_archive/` (~8.5 GB) to the external HDD.** Old generation copies' DuckDB snapshots
   (FIX-03 repair and PA-00 refresh rollback evidence), reports, release-1028 evidence and the uploaded static
   build, gathered there by the 2026-10-28 folder consolidation (path map in `docs/CURRENT_STATE.md`). Nothing
