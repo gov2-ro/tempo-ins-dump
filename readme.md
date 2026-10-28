@@ -219,6 +219,7 @@ data/
 - **Dockerfile** + **fly.toml** — Fly.io deployment (shared-cpu-1x, 512MB, Amsterdam region)
 - `scripts/prepare-deploy-data.sh` — stages `metadata.duckdb`, `search.duckdb`, parquets, view profiles and a `MANIFEST.json` (file sizes + sha256, source build times, latest source observation date; the generation block is a placeholder until FIX-03)
 - `scripts/release-check.py` — the release gate
+- Ask/MCP content logs (`mcp-calls.jsonl`, `ask-chats.jsonl`) live on the Fly `/logs` volume and are read with `fly ssh`/`fly sftp`; see the runbook in [AGENTS.md](AGENTS.md) ("Reading Ask and MCP content logs on Fly")
 
 Release flow (staging must precede the image build; `fly deploy` never runs implicitly):
 

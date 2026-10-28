@@ -4,6 +4,20 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Public MCP operations — 2026-10-28
+
+- [ ] **P1 — Production `/mcp` fails on every question (Fly).** `tempo-ins-explorer.fly.dev/mcp` timed out
+  and `api-ins.gov2.ro/mcp` returned 403 to the smoke probe. Fly logs show `discover_indicators` failing with
+  `INTERRUPT Error: Interrupted!` (the 10 s deadline) and Ask logging `provider_timeout`. Suspected cause, not
+  verified: `fly.toml` has `min_machines_running = 0`, so the 512 MB machine cold-starts and the first queries
+  overrun the deadline. Check the 403 is Cloudflare's Browser Integrity Check (error 1010, python-urllib UA)
+  before blaming the app. Options: `min_machines_running = 1`, a longer deadline, or a different host. Owner
+  decision: "we'll fix Fly or look for alternatives later".
+- [ ] **P3 — Local MCP test server lives in a session scratchpad.** `serve_mcp_test.sh` (port 8090, generation
+  copy, 5M scan cap, content logs to `tempo-rc-06b/mcp-test`) sits under `/private/tmp/claude-501/…/scratchpad/`,
+  which is per-session and not versioned. Move it into the repo (e.g. `scripts/`) with the generation path as a
+  parameter, and document it in AGENTS.md next to `mcp_probe.py`.
+
 ## Ask/MCP answer quality follow-up — 2026-10-17
 
 - [ ] **Live client test 2026-10-27 — follow-ups** (Claude Code + Codex on the local MCP; transcripts in

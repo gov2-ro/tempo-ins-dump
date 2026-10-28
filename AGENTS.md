@@ -283,6 +283,27 @@ and the root modules the app imports (a test checks the list), so `--local` pass
 the image starts. 512 MiB runs: `benchmark-mcp.py run --mode container --image TAG --container-data image`.
 Oracle/HF Spaces templates live in `scripts/deploy/`. Validated release gates: FIX-05.
 
+### Reading Ask and MCP content logs on Fly
+
+Production keeps content logs on the `/logs` volume (`TEMPO_ASK_LOG_DIR=/logs`), not in `fly logs`:
+- `mcp-calls.jsonl` (`TEMPO_MCP_LOG_CALLS=true`): each MCP call's arguments and full result, one JSON line.
+- `ask-chats.jsonl` (`TEMPO_ASK_LOG_CHATS=true`): Ask question, answer, tool trace and citations.
+
+`fly logs` only shows `MCP_METRICS` / `ASK_METRICS` lines (no question text) and, for Ask, `CHAT_LOG`.
+The volume belongs to one machine, so pick the running one first. Read-only commands (check flags
+with `fly ssh console --help` and `fly sftp --help`; not yet run against production):
+
+```bash
+fly machine list -a tempo-ins-explorer
+fly ssh console -a tempo-ins-explorer -s -C "tail -n 20 /logs/mcp-calls.jsonl"
+fly sftp get /logs/mcp-calls.jsonl ./mcp-calls.jsonl -a tempo-ins-explorer
+```
+
+The logs contain full questions and results, and anyone with log access can read them. Keep copies
+out of shared locations. To stop content logging, `fly secrets unset TEMPO_MCP_LOG_CALLS -a tempo-ins-explorer`
+(and/or `TEMPO_ASK_LOG_CHATS`); to disable `/mcp` entirely, unset `TEMPO_MCP_ENABLED`. Profile:
+`scripts/deploy/fly/mcp-public.env` (documentation only; nothing applies it automatically).
+
 ## Static site (shared hosting, no Python process)
 `scripts/build-static.py` turns a generation into a static site:
 - data and policies per dataset;
