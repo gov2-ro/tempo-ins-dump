@@ -120,6 +120,17 @@ _UNKNOWN_UNIT_NON_ADD_RE = re.compile(
     r'tarif\w*|densitat\w*|speranta de viata|per capita|pe locuitor|pe cap de locuitor|'
     r'la 1000|la 100|la 100000)\b', re.I)
 
+# Rates by another name (C03): prevalence, incidence, mortality, natality,
+# fertility. Not plain 'incidente' (security incidents are counts) and not
+# the fertility of the soil. A name that says it counts cases ("[cazuri noi]",
+# the TCX0352 split child) keeps the count.
+_RATE_WORD_RE = re.compile(
+    r'\b(rates|ratio|prevalen(?:ta|tei|ce)|incidenta|incidentei|incidence|'
+    r'mortalitat\w*|mortality|natalitat\w*|natality|'
+    r'fertilitat\w*(?! solului)|fertility|fecunditat\w*|fecundity)\b', re.I)
+_CASE_COUNT_RE = re.compile(
+    r'\[cazuri noi\]|\bnumarul? (?:de )?cazuri\b|\bnumber of (?:new )?cases\b', re.I)
+
 # Indicator *option* labels that name an average, median or per-head amount
 # ("media veniturilor disponibile pe adult-echivalent"). SAR119E's name and
 # definition read as income amounts ("Veniturile ..."), so only its options
@@ -165,7 +176,10 @@ def classify_measure(unit_type: str | None, text: str = '',
     text = _fold(text)
     if ut in ('', 'other'):
         # Unknown unit: rates, averages, shares and indices by name are never summed.
-        return 'non_additive' if text and _UNKNOWN_UNIT_NON_ADD_RE.search(text) else 'additive'
+        if text and (_UNKNOWN_UNIT_NON_ADD_RE.search(text) or (
+                _RATE_WORD_RE.search(text) and not _CASE_COUNT_RE.search(text))):
+            return 'non_additive'
+        return 'additive'
     if ut not in NON_ADDITIVE_UNIT_TYPES:
         return 'additive'
     if ut == 'currency' and text:
