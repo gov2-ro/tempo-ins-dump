@@ -15,8 +15,9 @@ Rules (docs/plans/ask-and-public-mcp/01-analytical-tools.md section 5):
   * at most one finite value per (full key, year); a repeated key is refused even
     when the values agree
   * absolute = to - from; percent = 100 * absolute / from only when from > 0
-  * ranks are ordinal over EVERY eligible entity (ties: full key ascending);
-    top_k only limits what is returned
+  * ranks are competition ranks over EVERY eligible entity: equal values share a rank (1, 1, 3)
+    and carry `tied_with`; rows of one rank are listed by full key ascending; top_k only limits
+    what is returned, and a cut through a tie group is disclosed (`tie_split`)
   * status mirrors `rank_entities`: `ok` only when the selection's `scope.domain_complete` is
     true and nothing was excluded; `partial` with reason `incomplete_domain` (false) or
     `unverified_total` (null, with an `unverified_total` warning), else `partial` for exclusions
@@ -49,6 +50,27 @@ AGGREGATE_ROW = "aggregate_row"          # a total/national row among its own pa
 
 
 # ------------------------------------------------------------------ pure calculator
+
+def assign_ranks(items, value_of) -> None:
+    """Competition ranks in place over `items` (dicts, already sorted): equal `value_of(item)`
+    share the rank of the first of them (1, 1, 3); `tied_with` is the size of the group."""
+    i = 0
+    while i < len(items):
+        j = i
+        while j + 1 < len(items) and value_of(items[j + 1]) == value_of(items[i]):
+            j += 1
+        for item in items[i:j + 1]:
+            item["rank"] = i + 1
+            item["tied_with"] = j - i + 1
+        i = j + 1
+
+
+def tie_cut(rows, n: int) -> int:
+    """How many rows of the tie group at the cut `rows[:n]` fall outside it (0: no tie is split)."""
+    if n <= 0 or n >= len(rows) or rows[n - 1].get("rank") != rows[n].get("rank"):
+        return 0
+    return sum(1 for r in rows[n:] if r.get("rank") == rows[n - 1]["rank"])
+
 
 def _skey(key: tuple) -> tuple:
     """Sort key of an entity: the full key as strings, ascending."""
@@ -136,10 +158,8 @@ def compute(table: dict, key_cols, intervals, metric: str = "absolute", order: s
                 row["percent_note"] = note
             ranked.append((sign * (percent if metric == "percent" else absolute), _skey(key), row))
         ranked.sort(key=lambda x: (x[0], x[1]))
-        rows = []
-        for i, (_, _, row) in enumerate(ranked, 1):
-            row["rank"] = i
-            rows.append(row)
+        rows = [row for _, _, row in ranked]
+        assign_ranks(rows, lambda r: r["percent"] if metric == "percent" else r["absolute"])
         counts: dict = {}
         for e in excluded:
             counts[e["reason"]] = counts.get(e["reason"], 0) + 1

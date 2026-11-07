@@ -524,6 +524,11 @@ TEXT = {
                                   "zero.",
         "rank.unverified_total": "The collapsed domain's completeness is unverified; do not claim "
                                  "an official complete total.",
+        "rank.tie_split": "Top K ends inside a tie: {n} more entities share rank {rank} and were cut. "
+                     "Do not name a single entity as the extreme; raise top_k.",
+        "rank.tie_split_interval": "Top K ends inside a tie in {a}→{b}: {n} more entities share rank "
+                              "{rank} and were cut. Do not name a single entity as the extreme; "
+                              "raise top_k.",
         "rank.message": "Top {k} of {n} eligible entities in {year}; ranked before limiting "
                         "output. {scope}",
         "changes.evidence_link": "Get the link to the complete ranking and the full exclusion "
@@ -1241,6 +1246,11 @@ TEXT = {
                                   "zero.",
         "rank.unverified_total": "Completitudinea domeniului colapsat nu este verificată; nu "
                                  "pretinde un total oficial complet.",
+        "rank.tie_split": "Primele K se opresc în mijlocul unei egalități: încă {n} entități au rangul "
+                     "{rank} și au fost tăiate. Nu numi o singură entitate drept extremă; mărește top_k.",
+        "rank.tie_split_interval": "Primele K se opresc în mijlocul unei egalități în {a}→{b}: încă {n} "
+                              "entități au rangul {rank} și au fost tăiate. Nu numi o singură "
+                              "entitate drept extremă; mărește top_k.",
         "rank.message": "Primele {k} din {n} entități eligibile în {year}; clasate înainte de "
                         "limitarea ieșirii. {scope}",
         "changes.evidence_link": "Obține linkul către clasamentul complet și lista completă a "

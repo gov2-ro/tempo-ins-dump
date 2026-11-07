@@ -177,12 +177,14 @@ def rank_entities(args, ctx):
                      for k in sorted(set(catalogue) - seen_ids)]
     rows.sort(key=lambda r: ((-1 if args.order == "desc" else 1) * r["value"],
                              tuple(str(r["entity"][k]) for k in keys)))
-    for i, row in enumerate(rows, 1):
-        row["rank"] = i
+    period_changes.assign_ranks(rows, lambda r: r["value"])
     scope = prov["scope"]
     warnings = []
     if catalogue:
         warnings.append(C.warning("classification_reference", M.t(lang, "rank.classification")))
+    cut = period_changes.tie_cut(rows, args.top_k)
+    if cut:
+        warnings.append(C.warning("tie_split", M.t(lang, "rank.tie_split", n=cut, rank=rows[args.top_k - 1]["rank"])))
     if excluded:
         warnings.append(C.warning("entities_excluded", M.t(lang, "rank.entities_excluded", n=len(excluded))))
     if scope.get("domain_complete") is not True:
