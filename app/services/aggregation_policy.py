@@ -332,6 +332,33 @@ def age_ranges_overlap(options) -> bool | None:
     return any(spans[i][1] >= spans[i + 1][0] for i in range(len(spans) - 1))
 
 
+_SEX_VALUES = frozenset({'masculin', 'feminin', 'masculi', 'barbati', 'femei',
+                         'male', 'female', 'males', 'females', 'men', 'women'})
+_RESIDENCE_VALUES = frozenset({'urban', 'rural'})
+
+
+def partition_kind(labels) -> str | None:
+    """'sex' | 'residence' | 'mixed' | None for a dimension's option labels.
+
+    INS sometimes puts sex and residence options in one dimension (TAV0212,
+    TGA0526: Masculin, Feminin, Urban, Rural). Each pair covers everyone, so
+    the four options count every person twice: 'mixed' is never a partition.
+    Total-like labels are ignored. None: the labels are not sex/residence only.
+    """
+    kinds = set()
+    for l in labels:
+        v = _fold(l).strip()
+        if not v or TOTAL_RE.match(v):
+            continue
+        kinds.add('sex' if v in _SEX_VALUES else
+                  'residence' if v in _RESIDENCE_VALUES else 'other')
+    if {'sex', 'residence'} <= kinds:
+        return 'mixed'
+    if kinds == {'sex'} or kinds == {'residence'}:
+        return kinds.pop()
+    return None
+
+
 def _norm(v) -> str:
     return str(v).strip()
 
@@ -655,6 +682,8 @@ def _metadata_overlap(dim, options) -> str | None:
     elif dtype == 'age':
         if age_ranges_overlap(options):
             return 'overlapping_levels'
+    if partition_kind(o.get('label') or '' for o in options) == 'mixed':
+        return 'overlapping_levels'     # sex and residence: two partitions
     return None
 
 

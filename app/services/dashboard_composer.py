@@ -412,13 +412,16 @@ def _stack_ok(s_dim: dict, actual_values: dict | None, struct: dict | None,
     hierarchy. Rates or overlapping categories stack into a meaningless total,
     and a 'flat' profile only means no hierarchy was *detected*: AED103A's
     flat series nests "Formala" in "Formala sau non-formala" in "Formala,
-    non-formala sau informala"."""
+    non-formala sau informala". A dim that mixes sex and residence options
+    (Masculin, Feminin, Urban, Rural) counts everyone twice, whatever its type."""
     s_struct = (struct or {}).get(_col(s_dim)) or {}
+    eff = _effective(s_dim, actual_values)
     partition = (s_struct.get('additive') is True
                  or s_dim.get('dim_type') in PARTITION_DIM_TYPES)
     return (not non_additive and partition
             and (s_struct.get('n_levels') or 0) <= 1
-            and _hierarchy_root_pin(s_dim, _effective(s_dim, actual_values)) is None)
+            and ap.partition_kind(o.get('label') or '' for o, _ in eff) != 'mixed'
+            and _hierarchy_root_pin(s_dim, eff) is None)
 
 
 # Time × category tiles: lines stay readable up to a handful of series; the

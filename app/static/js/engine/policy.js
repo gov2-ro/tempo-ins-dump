@@ -156,6 +156,25 @@ function appliedLevel(struct, col, applied) {
     return l ? (l.level_id ?? null) : null;
 }
 
+// aggregation_policy._fold: lower-case, accent-stripped.
+const fold = t => (t ? String(t).normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase() : '');
+const SEX_VALUES = new Set(['masculin', 'feminin', 'masculi', 'barbati', 'femei',
+    'male', 'female', 'males', 'females', 'men', 'women']);
+const RESIDENCE_VALUES = new Set(['urban', 'rural']);
+
+/** aggregation_policy.partition_kind: 'sex' | 'residence' | 'mixed' | null. */
+export function partitionKind(labels) {
+    const kinds = new Set();
+    for (const l of labels) {
+        const v = pyStrip(fold(l));
+        if (!v || TOTAL_RE.test(v)) continue;
+        kinds.add(SEX_VALUES.has(v) ? 'sex' : RESIDENCE_VALUES.has(v) ? 'residence' : 'other');
+    }
+    if (kinds.has('sex') && kinds.has('residence')) return 'mixed';
+    if (kinds.size === 1 && (kinds.has('sex') || kinds.has('residence'))) return [...kinds][0];
+    return null;
+}
+
 function metadataOverlap(dim, options) {
     if (dim.dim_type === 'geo') {
         const lv = new Set(options.map(o => (o.parsed || {}).geo_level));
@@ -164,6 +183,7 @@ function metadataOverlap(dim, options) {
     } else if (dim.dim_type === 'age') {
         if (ageRangesOverlap(options)) return 'overlapping_levels';
     }
+    if (partitionKind(options.map(o => o.label || '')) === 'mixed') return 'overlapping_levels';
     return null;
 }
 
