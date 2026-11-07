@@ -2,6 +2,10 @@
 
 Rules used by `generate_view_profiles.py` to decide which charts each dataset gets. Each dataset gets a **Timeline** view, a **Snapshot** view, and a **Table** view.
 
+## Status
+
+The served charts do not come from the rules in this file. `app/services/dataset_meta.py` calls `chart_selector.select_charts` to rank charts. It then calls `dashboard_composer.compose_dashboard` to build the dataset page tiles. Each tile carries an aggregation verdict from `aggregation_policy`, and `/data` checks it again. This file documents only the pipeline-time profile rules that `generate_view_profiles.py` writes to `data/corpus/view-profiles/`. The page code reads that JSON for dimension data, not for chart choice.
+
 ## Dimension Classification
 
 Every dimension is classified before chart selection:
