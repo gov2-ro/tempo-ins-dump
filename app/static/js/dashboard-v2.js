@@ -44,6 +44,10 @@ const UI_STRINGS = {
         seasonalTooltip: 'Suprapune anii: o linie pe an, luni/trimestre pe axa X',
         perCapita: '‰',
         perCapitaTooltip: 'La 1.000 de locuitori (populația rezidentă la 1 ianuarie a aceluiași an)',
+        granularity: { annual: { only: 'doar date anuale', name: 'anuale' },
+                       quarterly: { only: 'doar date trimestriale', name: 'trimestriale' },
+                       monthly: { only: 'doar date lunare', name: 'lunare' } },
+        granularityTip: l => `Datele conțin mai multe periodicități; acest grafic o arată pe una singură. Omise: ${l}.`,
         mixedGrain: 'niveluri amestecate',
         mixedGrainTip: 'Axa amestecă niveluri sau intervale suprapuse (ex. regiuni și județe, 15-24 și 15-74 ani). Barele nu sunt direct comparabile.',
         perCapitaDropped: n => `${n} valori fără populație în același an`,
@@ -120,6 +124,10 @@ const UI_STRINGS = {
         seasonalTooltip: 'Overlay years: one line per year, months/quarters on X',
         perCapita: '‰',
         perCapitaTooltip: 'Per 1,000 residents (resident population on 1 January of the same year)',
+        granularity: { annual: { only: 'annual data only', name: 'annual' },
+                       quarterly: { only: 'quarterly data only', name: 'quarterly' },
+                       monthly: { only: 'monthly data only', name: 'monthly' } },
+        granularityTip: l => `The data mix several periodicities; this chart shows one. Left out: ${l}.`,
         mixedGrain: 'mixed levels',
         mixedGrainTip: 'The axis mixes levels or overlapping ranges (e.g. regions and counties, 15-24 and 15-74 years). Bars are not directly comparable.',
         perCapitaDropped: n => `${n} values without same-year population`,
@@ -1179,11 +1187,23 @@ class DashboardV2 {
 
     /** Badge for a live slice (reflects the user's filters, unlike the
      *  composition-time decision). */
-    sliceBadge(data) {
+    /** The tile keeps one periodicity of a mixed time dim; name it and list what was left out. */
+    granularityBadgeHTML(chart) {
+        const g = chart?.granularity;
+        if (!g) return '';
+        const names = this.ui.granularity || {};
+        const omitted = (chart.granularity_omitted || []).map(o => (names[o] || {}).name || o);
+        const label = (names[g] || {}).only || g;
+        const tip = omitted.length ? this.ui.granularityTip(omitted.join(', ')) : '';
+        return `<span class="agg-badge agg-badge-granularity" title="${_escHtml(tip)}">${_escHtml(label)}</span>`;
+    }
+
+    sliceBadge(data, chart) {
         // Mixed grains stay on the axis when the dim has no verified level (C06): say so.
         const mixed = (data?.aggregation?.warnings || []).some(w => w.code === 'mixed_grain_on_axis')
             ? `<span class="agg-badge agg-badge-mixed" title="${_escHtml(this.ui.mixedGrainTip)}">${_escHtml(this.ui.mixedGrain)}</span>` : '';
-        const html = aggBadgeHTML(data?.aggregation, this.lang) + scopeNoteHTML(data?.scope, this.lang) + mixed;
+        const html = aggBadgeHTML(data?.aggregation, this.lang) + scopeNoteHTML(data?.scope, this.lang) + mixed
+            + this.granularityBadgeHTML(chart);
         if (!html) return null;
         const tmp = document.createElement('template');
         tmp.innerHTML = html;
@@ -1265,7 +1285,7 @@ class DashboardV2 {
             const note = this.coverageNote(data);
             const bar0 = container.parentNode.querySelector('.dbv2-tile-bar');
             if (note) bar0?.insertBefore(note, bar0.querySelector('.dbv2-tile-type'));
-            const badge = this.sliceBadge(data);
+            const badge = this.sliceBadge(data, chart);
             if (badge) bar0?.insertBefore(badge, bar0.querySelector('.dbv2-tile-type'));
 
             let tileData = data;

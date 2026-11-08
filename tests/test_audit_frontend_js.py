@@ -132,3 +132,20 @@ def test_v1_offers_no_stacked_view_for_non_additive_measure(page):
     assert not stacked & set(out["pct"]["timeChartTypes"])
     assert not stacked & set(out["pct"]["snapshotChartTypes"])
     assert stacked <= set(out["add"]["timeChartTypes"])
+
+
+def test_v1_yearly_view_marks_an_incomplete_last_year(page):
+    page.add_script_tag(content=(JS / "explore-app.js").read_text(encoding="utf-8"))
+    out = page.evaluate("""() => {
+        const rows = [];
+        for (let m = 1; m <= 12; m++) rows.push(['2024-' + String(m).padStart(2, '0'), 1]);
+        for (let m = 1; m <= 3; m++) rows.push(['2025-' + String(m).padStart(2, '0'), 1]);
+        const data = { columns: ['TIME_PERIOD', 'OBS_VALUE'], column_labels: { TIME_PERIOD: {} }, rows };
+        const r = LensApp.prototype._aggregateByYear.call(
+          { metadata: { measure: 'additive' }, timeGranularity: 'monthly', ui: { incompleteYear: 'an incomplet' } },
+          data, 'TIME_PERIOD', null);
+        return { labels: r.column_labels.TIME_PERIOD, rows: r.rows };
+    }""")
+    assert out["labels"]["2024"] == "2024"
+    assert out["labels"]["2025"] == "2025 (an incomplet)"
+    assert [r[1] for r in out["rows"]] == [12, 3]
