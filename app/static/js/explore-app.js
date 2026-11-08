@@ -34,6 +34,7 @@ const UI = {
         total: 'total',
         noData: 'Fără date',
         noDataFilters: 'Nicio dată pentru filtrele curente',
+        chartError: 'Datele agregate nu s-au putut încărca. Încercați din nou.',
         datasets: 'seturi de date',
         subcategories: 'subcategorii',
         rows: 'rânduri',
@@ -66,6 +67,7 @@ const UI = {
         yoyTooltip: 'Variație anuală %',
         yearlyMode: 'Anual',
         yearlyTooltip: 'Grupează datele pe ani',
+        incompleteYear: 'an incomplet',
         zoomPresets: ['1A', '3A', '5A', 'Tot'],
         distribution: 'Distribuție',
         aboutLink: 'Despre',
@@ -104,6 +106,7 @@ const UI = {
         total: 'total',
         noData: 'No data',
         noDataFilters: 'No data for current filters',
+        chartError: 'Could not load the aggregated data. Try again.',
         datasets: 'datasets',
         subcategories: 'subcategories',
         rows: 'rows',
@@ -136,6 +139,7 @@ const UI = {
         yoyTooltip: 'Year-over-year %',
         yearlyMode: 'Yearly',
         yearlyTooltip: 'Group data by year',
+        incompleteYear: 'incomplete year',
         zoomPresets: ['1Y', '3Y', '5Y', 'All'],
         distribution: 'Distribution',
         aboutLink: 'About',
@@ -267,7 +271,7 @@ class LensApp {
         this._urlTChart  = params.get('tchart') || null;
         this._urlSChart  = params.get('schart') || null;
         this._urlPeriod  = params.get('period') || null;
-        this._urlTAgg    = params.get('tagg');   // '0' = yearly-agg explicitly off
+        this._urlTAgg    = params.get('tagg');   // '1' = yearly aggregation turned on
         this._urlTZoom   = params.get('tzoom') || null;  // '1y'|'3y'|'5y'|'all'
         const tmode = params.get('tmode');
         if (tmode === 'index' || tmode === 'yoy') this.timeTransform = tmode;
@@ -1330,12 +1334,13 @@ class LensApp {
             this.snapshotChartType = _snapDefault;
             this.selectedPeriodIdx = -1; // latest
 
-            // Yearly aggregation default for monthly/quarterly datasets
+            // Yearly aggregation is OFF by default: show the finest periodicity, as the
+            // composer does (C12). The user may turn it on; a partial last year is labelled.
             // time_granularity lives in meta.profile (matrix_profiles), not the view profile
             const _gran = this.metadata?.profile?.time_granularity;
             this.timeGranularity = _gran || null;
-            this.yearlyAgg = (_gran === 'monthly' || _gran === 'quarterly');
-            this.timeZoomPreset = '5y';  // default raw-monthly zoom window
+            this.yearlyAgg = false;
+            this.timeZoomPreset = 'all';  // default: the whole series
 
             // Restore URL state (first load only — consumed below)
             const setup = this.panelSetup;
@@ -1347,7 +1352,7 @@ class LensApp {
                 const pidx = setup.periods.findIndex(p => p.id === this._urlPeriod);
                 if (pidx >= 0) this.selectedPeriodIdx = pidx;
             }
-            if (this._urlTAgg !== null) this.yearlyAgg = this._urlTAgg !== '0';
+            if (this._urlTAgg !== null) this.yearlyAgg = this._urlTAgg === '1';
             if (this._urlTZoom) this.timeZoomPreset = this._urlTZoom;
             this._urlTChart = null;
             this._urlSChart = null;
@@ -1603,7 +1608,10 @@ class LensApp {
         // Time chart types
         const seriesDimMeta = timeSeriesDim ? dims.find(d => d.dim_column_name === timeSeriesDim) : null;
         const seriesCount = seriesDimMeta ? (seriesDimMeta.option_count || 0) : 0;
-        const timeChartTypes = hasTimePanel ? ['line', 'bar', 'area_stacked', 'stacked_bar'] : [];
+        // Stacking adds parts up: a non-additive measure (rates, %, indices) has no stacked view (C08).
+        const nonAdditive = this.metadata?.measure === 'non_additive';
+        const timeChartTypes = hasTimePanel
+            ? (nonAdditive ? ['line', 'bar'] : ['line', 'bar', 'area_stacked', 'stacked_bar']) : [];
         // small_multiples is the right primary for time + medium-cardinality categorical
         // (cluster 2). Add it as an option when the selector recommends it OR when a
         // facet-shaped categorical dim is present.
@@ -1624,7 +1632,8 @@ class LensApp {
         let snapshotChartTypes = [];
         if (hasSnapshotPanel) {
             if (categoryDims.length >= 2) {
-                snapshotChartTypes = ['grouped_bar', 'stacked_bar', 'heatmap', 'bubble'];
+                snapshotChartTypes = nonAdditive ? ['grouped_bar', 'heatmap', 'bubble']
+                                                 : ['grouped_bar', 'stacked_bar', 'heatmap', 'bubble'];
             } else {
                 snapshotChartTypes = ['bar_vertical', 'horizontal_bar'];
             }
@@ -2201,14 +2210,14 @@ class LensApp {
         else
             url.searchParams.delete('tmode');
 
-        // Yearly aggregation — only store when user explicitly turned it OFF (default is ON for monthly/quarterly)
-        if (this.yearlyAgg === false && (this.timeGranularity === 'monthly' || this.timeGranularity === 'quarterly'))
-            url.searchParams.set('tagg', '0');
+        // Yearly aggregation — stored only when the user turned it ON (default is OFF)
+        if (this.yearlyAgg === true && (this.timeGranularity === 'monthly' || this.timeGranularity === 'quarterly'))
+            url.searchParams.set('tagg', '1');
         else
             url.searchParams.delete('tagg');
 
-        // Zoom preset — only store when not default (5y)
-        if (!this.yearlyAgg && this.timeZoomPreset && this.timeZoomPreset !== '5y')
+        // Zoom preset — only store when not default (all)
+        if (!this.yearlyAgg && this.timeZoomPreset && this.timeZoomPreset !== 'all')
             url.searchParams.set('tzoom', this.timeZoomPreset);
         else
             url.searchParams.delete('tzoom');
@@ -2494,13 +2503,12 @@ class LensApp {
         const timeIdx = timeDim ? cols.indexOf(timeDim) : -1;
         if (timeIdx !== -1) {
             const nPeriods = new Set(rows.map(r => r[timeIdx]).filter(v => v != null)).size;
-            const nonTimeDims = cols.filter((c, i) => i !== valueIdx && c !== timeDim);
-            let catCount = 0;
-            for (const dim of nonTimeDims) {
-                const idx = cols.indexOf(dim);
-                const uniq = new Set(rows.map(r => r[idx]).filter(v => v != null)).size;
-                if (uniq > catCount) catCount = uniq;
-            }
+            // Categories = options of the dimension the chart splits by, not the
+            // widest dimension (a 4-macroregion axis is not "4 categories") (E13).
+            const serieDim = this.panelSetup?.timeSeriesDim;
+            const sIdx = serieDim ? cols.indexOf(serieDim) : -1;
+            const catCount = sIdx === -1 ? 0
+                : new Set(rows.map(r => r[sIdx]).filter(v => v != null)).size;
             const sub = catCount > 1
                 ? `${this.ui.periods} · ${catCount} ${this.ui.categories}`
                 : this.ui.periods;
@@ -2632,6 +2640,18 @@ class LensApp {
 
         const newLabels = { ...data.column_labels };
         newLabels[timeDim] = Object.fromEntries(newRows.map(r => [r[timeIdx], r[timeIdx]]));
+        // The last year may hold fewer periods than a full one: say so in its label.
+        const perYear = (this.timeGranularity === 'quarterly') ? 4 : (this.timeGranularity === 'monthly') ? 12 : 0;
+        if (perYear && newRows.length) {
+            const periodsByYear = {};
+            for (const row of data.rows) {
+                const per = String(row[timeIdx] || '');
+                (periodsByYear[per.slice(0, 4)] ||= new Set()).add(per);
+            }
+            const lastYear = Object.keys(periodsByYear).sort().pop();
+            if (lastYear && periodsByYear[lastYear].size < perYear && lastYear in newLabels[timeDim])
+                newLabels[timeDim][lastYear] = `${lastYear} (${this.ui.incompleteYear})`;
+        }
 
         return { ...data, rows: newRows, column_labels: newLabels };
     }
@@ -2780,7 +2800,12 @@ class LensApp {
                     { kind: 'tile', dimType: this._dimType(agg.aggregation?.blocking_dimension) }))}</div>`;
                 return;
             }
-            const translated = this._translateData(agg || this.data);
+            if (!agg) {
+                // Never chart raw cells as an aggregate (C11): show the error state.
+                container.innerHTML = `<div class="chart-loading" style="color:var(--red)">${_escHtml(this.ui.chartError)}</div>`;
+                return;
+            }
+            const translated = this._translateData(agg);
             // Yearly aggregation (default ON for monthly/quarterly; user can toggle)
             const aggregated = this.yearlyAgg
                 ? this._aggregateByYear(translated, setup.timeDim, setup.timeSeriesDim)
@@ -2833,22 +2858,14 @@ class LensApp {
             document.getElementById('distribution-strip')?.classList.add('hidden');
             return;
         }
-        // The server already pinned the period (non-choropleth) and collapsed
-        // other dims under the policy; fall back to raw rows only on a failed call.
-        let filteredData = aggSnap || this.data;
-        if (!aggSnap && selectedPeriod && setup.timeDim) {
-            const timeCol = this.data.columns.indexOf(setup.timeDim);
-            if (timeCol !== -1) {
-                const periodId = selectedPeriod.id;
-                const filteredRows = this.data.rows.filter(r =>
-                    String(r[timeCol]) === String(periodId)
-                );
-                filteredData = {
-                    ...this.data,
-                    rows: filteredRows,
-                };
-            }
+        if (!aggSnap) {
+            // Never chart raw cells as an aggregate (C11).
+            container.innerHTML = `<div class="chart-loading" style="color:var(--red)">${_escHtml(this.ui.chartError)}</div>`;
+            document.getElementById('distribution-strip')?.classList.add('hidden');
+            return;
         }
+        // The server already pinned the period (non-choropleth) and collapsed other dims.
+        const filteredData = aggSnap;
 
         const isChoropleth = this.snapshotChartType === 'choropleth';
 
@@ -2880,7 +2897,7 @@ class LensApp {
             };
             // Choropleth needs all time periods for its internal timeline
             // Also: choropleth must use untranslated data — geo names must match GeoJSON features
-            const chartData = isChoropleth ? (aggSnap || this.data) : filteredData;
+            const chartData = isChoropleth ? aggSnap : filteredData;
 
             const chart = await createChart(container, cfg, isChoropleth ? chartData : this._translateData(chartData), this.metadata);
             if (chart) {
@@ -2890,7 +2907,7 @@ class LensApp {
                 if (btn) { btn.classList.remove('hidden'); btn.onclick = () => _exportPng(chart, `${this.metadata.matrix_code}-snapshot`); }
             }
             // Distribution strip: auto-shown below choropleth
-            this._renderDistribution(isChoropleth ? (aggSnap || this.data) : this.data, setup);
+            this._renderDistribution(isChoropleth ? aggSnap : this.data, setup);
         } catch (err) {
             container.innerHTML = `<div class="chart-loading" style="color:var(--red)">Chart error: ${err.message}</div>`;
         }

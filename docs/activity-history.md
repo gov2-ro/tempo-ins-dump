@@ -1,5 +1,85 @@
 # Activity History
 
+## 2026-11-08 — Independent audit of chart selection and the public MCP, and its remediation
+
+Owner asked for an independent audit of the automatic chart choice and the public MCP, run by
+sub-agents with the orchestrator deciding, then "direct sub-agents to take care of what's possible".
+Report: [2026-11-08-charts-and-mcp-audit.md](reports/2026-11-08-charts-and-mcp-audit.md); backlog
+section "Chart selection and public MCP audit follow-ups — 2026-11-08". Branch
+`audit/charts-mcp-2026-11`, merged into `fix/ask-answer-quality`. Nothing deployed; the corpus and
+the generation manifest are untouched.
+- **Audit (5 agents, read-only):** charts had four P0 classes (a Total stacked on its parts; a dim
+  mixing sex and urban/rural stacked as one partition; sums that INS contradicts served as
+  `valid_total` by tiles, `/data` and ranking sentences, e.g. SCL104A_judete 88,736 for ≈24.9k;
+  annual and quarterly points on one axis in 113 parquets). The MCP transport had no P0 (one global
+  rate bucket, uncapped content log). The eight tools returned no wrong number: every sum matched a
+  direct parquet read and every recipe matched the INS cell. Both evals were stale (selector
+  baseline 2026-07-20 covering 1,986 of 4,110 datasets; Ask tasks pinned to 9b3e065d).
+- **PKG-POLICY** (`aggregation_policy`, `insights`, `_stack_ok`, `policy.js`): prevalence /
+  incidence / mortality / natality / fertility names with no unit type are rates (TAV0212 flips);
+  `partition_kind` refuses a mixed sex+residence dim (21 dims, 4 without Total); `decide()` returns
+  `source_total_mismatch` + `source_check` when the headline disagrees with INS and the summed dim is
+  not INS-verified (301 mismatch datasets: summing tiles 456 → 391, grouped `/data` totals 54 → 38;
+  126 keep sums because the faulty dim is on the axis and the summed one is INS-verified); the
+  ranking sentence names one pin and is withheld for two or more (FOM106E withheld, SOM103A
+  "Pentru „Masculin": …"). Orchestrator wired `dimension_structure.load()` to pass the
+  `kpi_total_checks` row (`SOURCE_TOTAL_KEY`).
+- **PKG-COMPOSER:** `_series_without_total` keeps the Total out of every series slice (FOM104G stack
+  10.9M → 5.45M = INS Total); `time_granularity()` restricts a temporal tile and its latest-period pin
+  to one periodicity (annual when ≥3 years exist, else the finest; CON109C axis 107 mixed values →
+  21 annual; 0 of 198 time-axis tiles on the 133 mixed datasets still mix); `_SliceProbe` runs
+  `grain_guard.check_slice` and the source-total gate per tile and lists refused tiles under
+  `suppressed` with a reason (POP107D_grupe_judet, TUR105H_judet, FOM104D_judet, SOM101E_anual_judet
+  now say why they have no chart); pins that never co-occur are re-picked (ASS118A unit → Mii lei
+  RON, 40 rows); a geo dim ≤6 options with no national row is a series (SAR102D_macroregiuni 1 → 4
+  lines). Orchestrator passed `conn`/`code` from `dataset_meta`.
+- **PKG-FRONTEND + selector:** stacked area, grouped bars and v1 stacks drop a Total series; the
+  tooltip ∑ shows only on stacked views and never includes a Total; choropleth needs a county /
+  region / macroregion geo level, with a ranking-bar fallback in `chart-geo.js` (22 datasets with
+  countries lose the map); `build_signature` treats a TIME_PERIOD dim with >1 option as time when the
+  profile flag is false (213 of 350 children change primary chart; stacked bar as primary 52 → 0);
+  `mixed_grain_on_axis` and the new `granularity`/`granularity_omitted` fields show as tile badges;
+  v1 hides Area/Stacked for non-additive measures, shows an error instead of charting raw rows, counts
+  categories correctly, and its yearly toggle is off by default for sub-annual data.
+- **PKG-MCP-HARDEN:** request and call windows per client (`Fly-Client-IP`, else peer; global
+  ceilings kept; a refused Origin/Host counts only against its own client); `mcp-calls.jsonl` capped
+  (`TEMPO_MCP_LOG_MAX_BYTES`, 256 MiB, one `.1` rotation) with argument-free lines for precheck
+  refusals, written off the event loop; a repeating deadline interrupt and any post-deadline answer
+  becomes `query_timeout`, uncached; cache key from the validated model with sorted keys; a client
+  hang-up cancels the token; the privacy notice now says platform logs may keep connection metadata
+  (owner keeps the access log). New settings in `at-03-record.md`. The benchmark harness lifts the
+  per-client limits too.
+- **PKG-TOOLS:** equal values share a rank, `tied_with` per row, `tie_split` warning; national
+  registered unemployment runs from INS's TOTAL cell (`areas:["TOTAL"]`, 2018–2025 = 3.3 … 3.3) and
+  the discovery choice is runnable; reviewed concepts for births (domicile vs usual residence) and CPI
+  (IPC102A/B first, unit type `index` via `tools/units.py`); `small_base` warning under 20; grain
+  check before the source-total check so refusal reasons agree across tools; recipe recovery for
+  rate refusals; annual-child recovery; `auto_pinned` copied into rankings; `series_break` in
+  `run_recipe`; integer years accepted; `newer_vintage` warning when a sibling table in the same
+  concept is newer (POP201A → POP201D, POP107A → POP107D) and discovery prefers the newest unless its
+  grain conflicts. `ask_tasks.json` re-pinned to 062bd2b0: 144/144 pass, 0 skipped (T11 known
+  unsafe acceptances remain).
+- **PKG-PIPELINE:** the `has_time=False` cause is `10-classify-dimensions.py`, which read only the
+  label that stage 12 relabels ("anual", "trimestrial", "lunar"); the canonical `TIME_PERIOD` column
+  now counts as time. Stage 12 drops a key column only with an additive measure and a verified
+  roll-up (`split_rules.key_drop_decision`), summing to the county key; otherwise it skips the child
+  and logs why. On the next run AGR101B, POP201D, POP201K and SOM101E lose their `_judet` children.
+  To repair the 350 profiles later, on a copied generation with `TEMPO_PIPELINE_DATA_DIR`:
+  `10-classify-dimensions.py --matrix <codes>` then `generate_view_profiles.py --matrix <codes>`
+  (codes: `dimensions.dim_column_name='TIME_PERIOD' AND option_count>1 AND NOT matrix_profiles.has_time`).
+- **Chart baseline rebuilt** over all 4,110 datasets. Against the 2026-07-20 file: 82 primary
+  changes on the 1,986 old entries — 39 were the already-recorded drift from corpus changes, the rest
+  come from the choropleth gate (choropleth → line/horizontal_bar) and the time derivation
+  (bar/horizontal_bar → line/small_multiples/heatmap) — plus 2,124 children scored for the first time.
+- **Docs:** tool contract lists eight tools; `llms.txt` gains an MCP section; `chart-rules.md` and
+  `CURRENT_STATE.md` say what decides the served charts and that the eval is a drift detector.
+- **Decisions (owner, 2026-11-08):** accept pages whose tiles are all suppressed as long as they say
+  why; hero from `published_totals` next; keep access logs; pipeline fixes yes; v1 yearly toggle off;
+  vintage caveat yes ("we try to do the best with what INS offers"); Fly/Cloudflare later.
+- **Lesson:** several agents running the full pytest suite at once hung for hours on fixed-port tests;
+  the orchestrator now runs the suite once on the merged branch.
+- **Tests:** full suite on the merged branch: 2,354 passed, 33 skipped (all pinned to another generation or a missing record), 1 failed. The failure was tests/test_fix02c_source_gate.py asserting the old headline-only scope of the INS gate; its expectation was updated to the extended rule (grouping by SEX is refused too, a full breakdown stays available) and the file passes.
+
 ## 2026-10-28 — One folder: sibling copies and worktrees consolidated into the repo
 
 Owner asked to leave only one `tempo-*` folder in `~/devbox/gov2/`. Kept `tempo-ins-dump`, now on

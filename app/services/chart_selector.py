@@ -110,9 +110,21 @@ def build_signature(profile: dict, dimensions: list,
         unit_types = []
     primary_unit = profile.get('primary_unit_type', 'count') or 'count'
 
+    # Split children by periodicity are profiled has_time=False although their
+    # TIME_PERIOD dim carries many options (E6): trust the dimension.
+    has_time = bool(profile.get('has_time'))
+    if not has_time:
+        time_opts = max((d.get('option_count') or 0 for d in dimensions
+                         if d.get('dim_column_name') == 'TIME_PERIOD'
+                         or d.get('dim_type') == 'time'), default=0)
+        if time_opts > 1:
+            has_time = True
+            if time_points == 0:
+                time_points = time_opts
+
     return {
         # Dimension presence
-        'has_time': bool(profile.get('has_time')),
+        'has_time': has_time,
         'time_points': int(time_points),
         'time_granularity': cov.get('time_granularity') or profile.get('time_granularity'),
         'has_geo': bool(profile.get('has_geo')),
@@ -195,6 +207,9 @@ def _gender_mf_count(dimensions: list) -> int | None:
 # 2. Eligibility rules (hard requirements)
 # ---------------------------------------------------------------------------
 
+_MAP_GEO_LEVELS = frozenset({'county', 'region', 'macroregion'})
+
+
 def _eligible(chart_type: str, sig: dict) -> bool:
     has_time = sig['has_time']
     tp = sig['time_points']
@@ -241,7 +256,10 @@ def _eligible(chart_type: str, sig: dict) -> bool:
         # Region-level (8) and up. 4-macroregion "maps" are near-useless —
         # four shapes bury the time story; those datasets read better as
         # bars/lines. GeoJSON exists for county/region/macroregion.
-        return has_geo and geo >= 8
+        # Only the levels a GeoJSON exists for: a country/EU-member geo dim
+        # ('unknown' level, large count) has no map to draw (C07).
+        return (has_geo and geo >= 8
+                and bool(set(sig.get('geo_levels') or ()) & _MAP_GEO_LEVELS))
     if chart_type == 'population_pyramid':
         # INS "Sexe si medii" dims mix gender+residence (Total+M+F+Urban+Rural = 5).
         # The mirrored sides must be actual male/female values — when the

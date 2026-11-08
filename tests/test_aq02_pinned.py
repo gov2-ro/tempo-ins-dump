@@ -24,19 +24,19 @@ DOC = load_taskset()
 
 @pytest.mark.corpus
 def test_pinned_cases_pass_against_the_read_only_copied_generation():
-    reason = R.copied_prerequisite(DOC["fixtures"]["copied-9b3e065d"])
+    reason = R.copied_prerequisite(DOC["fixtures"]["copied-062bd2b0"])
     if reason:
         pytest.skip(reason)
     run = R.run_taskset(copy.deepcopy(DOC), ids=["X01", "X02", "X03", "X03B", "X07", "X08"], surfaces=("direct",))
-    pinned = [r for r in run["results"] if r["fixture"] == "copied-9b3e065d"]
+    pinned = [r for r in run["results"] if r["fixture"] == "copied-062bd2b0"]
     assert len(pinned) == 12 and not [r for r in pinned if r["status"] not in ("pass", "known_failure")], \
         [(r["task_id"], r["variant"], r["failure_categories"]) for r in pinned if r["status"] not in ("pass", "known_failure")]
     assert {(r["task_id"], r["variant"]) for r in pinned if r["status"] == "known_failure"} <= {("X03B", "en")}
-    assert all(r["generation"].startswith("9b3e065d") for r in pinned if r["status"] == "pass")
+    assert all(r["generation"].startswith("062bd2b0") for r in pinned if r["status"] == "pass")
     x01 = next(r for r in pinned if r["task_id"] == "X01" and r["variant"] == "ro")
     assert x01["evidence"]["periods"] == ["2025"] and x01["evidence"]["unit"] == "înnoptări pe locuitor"
     # the explicit-year golden is a different year from "current" and is asserted separately
     assert next(r for r in pinned if r["task_id"] == "X03B" and r["variant"] == "ro")["evidence"]["periods"] == ["2025"]
     assert next(r for r in pinned if r["task_id"] == "X03" and r["variant"] == "ro")["evidence"]["periods"] == ["2026"]
     # the synthetic counterparts of the same tasks ran in the same call and are separate results
-    assert {r["fixture"] for r in run["results"] if r["task_id"] == "X03"} == {"synthetic-v1", "copied-9b3e065d"}
+    assert {r["fixture"] for r in run["results"] if r["task_id"] == "X03"} == {"synthetic-v1", "copied-062bd2b0"}

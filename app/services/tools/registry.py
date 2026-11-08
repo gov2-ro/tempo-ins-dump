@@ -20,6 +20,8 @@ from pydantic import BaseModel, ValidationError, create_model
 from app.services import generation
 from app.services.tools import messages as M
 from app.services.tools import schemas as S
+from app.services.tools import units
+from app.services.tools import vintage
 from app.services.tools.contract import (
     MAX_ARGUMENT_BYTES, MAX_RECOVERY, MAX_RESULT_BYTES, ToolContext, ToolFailure, dumps, envelope,
     failure_envelope, recovery, response_budget, shrink_rows, size)
@@ -275,6 +277,7 @@ def call_tool(name: str, arguments, *, conn=None) -> dict:
             conn = get_conn()
         ctx.conn = conn
         env = _resolve(spec.handler)(args, ctx)
+        vintage.apply(env, ctx)
     except ToolFailure as f:
         env = failure_envelope(tool, ctx, f)
     except Exception:
@@ -292,7 +295,7 @@ def call_tool(name: str, arguments, *, conn=None) -> dict:
     if (gen1.get("id"), gen1.get("status")) != (gen0.get("id"), gen0.get("status")):
         return fail("unavailable", "generation_changed", M.t(ctx.lang, "registry.generation_changed"),
                     recovery=[recovery("retry", M.t(ctx.lang, "registry.generation_retry"))])
-    return _fit(_valid_recovery(env), spec, args_hash, args_bytes, ctx.lang)
+    return _fit(_valid_recovery(units.apply(env)), spec, args_hash, args_bytes, ctx.lang)
 
 
 def tool_names() -> list[str]:

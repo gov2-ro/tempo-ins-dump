@@ -87,7 +87,13 @@
    },
    "alternatives": [
     "resident_population"
-   ]
+   ],
+   "also_families": [
+    "POP107D"
+   ],
+   "also_variants": {
+    "county": "POP107D_grupe_judet"
+   }
   },
   {
    "id": "resident_population_july",
@@ -398,6 +404,189 @@
    "alternatives": [
     "tourist_overnight_stays"
    ]
+  },
+  {
+   "id": "live_births_domicile",
+   "question": "PKG-TOOLS",
+   "family": "POP201A",
+   "variants": {
+    "county": "POP201A_judete",
+    "region": "POP201A_regiuni",
+    "macroregion": "POP201A_macroregiuni"
+   },
+   "name": {
+    "ro": "Născuți vii după domiciliu",
+    "en": "Live births by domicile"
+   },
+   "note": {
+    "ro": "născuții vii numărați după domiciliu (seria INS veche, anual); diferă cu până la ~10% de seria după reședința obișnuită",
+    "en": "live births counted by domicile (the older INS series, annual); it differs by up to about 10% from the usual-residence series"
+   },
+   "aliases": {
+    "ro": [
+     "nasteri dupa domiciliu",
+     "nascuti vii dupa domiciliu",
+     "nasterile dupa domiciliu",
+     "numarul nasterilor dupa domiciliu"
+    ],
+    "en": [
+     "births by domicile",
+     "live births by domicile",
+     "domicile births"
+    ]
+   },
+   "generic": {
+    "ro": [
+     "nasteri",
+     "nasterile",
+     "nasterilor",
+     "numarul nasterilor",
+     "nascuti vii",
+     "nascutii vii",
+     "nascuti",
+     "nascutilor"
+    ],
+    "en": [
+     "births",
+     "live births",
+     "number of births",
+     "birth"
+    ]
+   },
+   "alternatives": [
+    "live_births_residence"
+   ],
+   "also_families": [
+    "POP201D"
+   ]
+  },
+  {
+   "id": "live_births_residence",
+   "question": "PKG-TOOLS",
+   "family": "POP201H",
+   "variants": {
+    "county": "POP201H_judete",
+    "region": "POP201H_regiuni",
+    "macroregion": "POP201H_macroregiuni"
+   },
+   "name": {
+    "ro": "Născuți vii după reședința obișnuită",
+    "en": "Live births by usual residence"
+   },
+   "note": {
+    "ro": "născuții vii cu reședința obișnuită în România (definiția statistică comparabilă european; anual)",
+    "en": "live births with usual residence in Romania (the EU-comparable statistical definition; annual)"
+   },
+   "aliases": {
+    "ro": [
+     "nasteri dupa resedinta",
+     "nasteri dupa resedinta obisnuita",
+     "nascuti vii cu resedinta obisnuita",
+     "nascuti vii dupa resedinta obisnuita",
+     "nasterile dupa resedinta obisnuita"
+    ],
+    "en": [
+     "births by usual residence",
+     "live births by usual residence",
+     "usual residence births",
+     "births by residence"
+    ]
+   },
+   "alternatives": [
+    "live_births_domicile"
+   ],
+   "also_families": [
+    "POP201K"
+   ]
+  },
+  {
+   "id": "cpi_previous_month",
+   "question": "PKG-TOOLS",
+   "family": "IPC102A",
+   "name": {
+    "ro": "Indicele prețurilor de consum, față de luna anterioară",
+    "en": "Consumer price index, against the previous month"
+   },
+   "note": {
+    "ro": "indice lunar (luna anterioară = 100): 100,32 înseamnă +0,32% față de luna precedentă; fără celulă pentru total, doar categorii mari",
+    "en": "monthly index (previous month = 100): 100.32 means +0.32% on the previous month; no overall Total cell, only the main categories"
+   },
+   "aliases": {
+    "ro": [
+     "inflatia lunara",
+     "inflatia fata de luna anterioara",
+     "indicele preturilor de consum fata de luna anterioara",
+     "ipc fata de luna anterioara",
+     "evolutia lunara a preturilor"
+    ],
+    "en": [
+     "monthly inflation",
+     "monthly inflation rate",
+     "inflation against the previous month",
+     "cpi against the previous month",
+     "monthly consumer price index"
+    ]
+   },
+   "generic": {
+    "ro": [
+     "inflatie",
+     "inflatia",
+     "inflatiei",
+     "indicele preturilor de consum",
+     "indicele preturilor",
+     "ipc",
+     "preturile de consum",
+     "scumpiri"
+    ],
+    "en": [
+     "inflation",
+     "inflation rate",
+     "cpi",
+     "consumer price index",
+     "consumer prices"
+    ]
+   },
+   "alternatives": [
+    "cpi_since_december"
+   ],
+   "variants": {
+    "national": "IPC102A"
+   }
+  },
+  {
+   "id": "cpi_since_december",
+   "question": "PKG-TOOLS",
+   "family": "IPC102B",
+   "name": {
+    "ro": "Indicele prețurilor de consum, față de decembrie anul precedent",
+    "en": "Consumer price index, against December of the previous year"
+   },
+   "note": {
+    "ro": "indice lunar cumulat (decembrie anul precedent = 100): creșterea prețurilor de la începutul anului; fără celulă pentru total, doar categorii mari",
+    "en": "cumulative monthly index (December of the previous year = 100): price growth since the start of the year; no overall Total cell, only the main categories"
+   },
+   "aliases": {
+    "ro": [
+     "inflatia fata de decembrie",
+     "inflatia de la inceputul anului",
+     "indicele preturilor de consum fata de decembrie",
+     "ipc fata de decembrie",
+     "inflatia cumulata"
+    ],
+    "en": [
+     "inflation since december",
+     "inflation since the start of the year",
+     "year to date inflation",
+     "cpi against december",
+     "cumulative inflation"
+    ]
+   },
+   "alternatives": [
+    "cpi_previous_month"
+   ],
+   "variants": {
+    "national": "IPC102B"
+   }
   }
  ]
 }

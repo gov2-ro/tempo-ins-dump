@@ -367,24 +367,30 @@ class CancelToken:
                 pass
 
     @contextmanager
-    def running(self, cursor, deadline_in: float | None = None):
+    def running(self, cursor, deadline_in: float | None = None, repeat_interrupt: bool = False):
         """Attach `cursor` while one operation runs; optionally interrupt it when
-        `deadline_in` seconds pass. Raises Cancelled up front if already cancelled."""
+        `deadline_in` seconds pass. With `repeat_interrupt` the interrupt is repeated (every 50 ms)
+        until the operation ends, so a query started after the deadline is stopped too. Raises
+        Cancelled up front if already cancelled."""
         with self._lock:
             if self._event.is_set():
                 raise Cancelled(self.reason or "cancelled")
             self._cursor = cursor
         timer = None
+        stop = threading.Event()
         if deadline_in is not None:
             def expire():
                 self.timed_out = True
                 self._interrupt(cursor)
+                while repeat_interrupt and not stop.wait(0.05):
+                    self._interrupt(cursor)
             timer = threading.Timer(max(0.0, deadline_in), expire)
             timer.daemon = True
             timer.start()
         try:
             yield
         finally:
+            stop.set()
             if timer is not None:
                 timer.cancel()
             with self._lock:

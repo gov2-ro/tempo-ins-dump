@@ -525,7 +525,7 @@ def test_a_clean_slice_of_a_flagged_file_is_answered_and_labelled(env):
 
 def test_raw_rows_of_a_flagged_file_are_marked_do_not_total(env):
     e = q(dataset="CHILDX", filters={"REF_AREA": ["Nord"], "SEX": ["Masculin"]})
-    assert e["status"] == "ok" and sorted(r[-1] for r in rows(e)) == [10.0, 11.0]
+    assert e["status"] == "partial" and e["reason"] in ("conflicting_grain", "duplicate_keys") and sorted(r[-1] for r in rows(e)) == [10.0, 11.0]
     dq_ = [w for w in e["warnings"] if w["code"] == "data_quality"]
     assert dq_ and "Do not total or rank them" in dq_[0]["message"]
     assert "raw_rows" in codes(e)

@@ -15,11 +15,15 @@ categories), so pinning by metadata alone yields empty charts.
 """
 import hashlib
 import json
+import logging
 import re
 
+from app.config import PARQUET_DIR
 from app.services.chart_selector import TOTAL_RE
 from app.services import dimension_structure as dstruct
 from app.services import aggregation_policy as ap
+
+log = logging.getLogger(__name__)
 
 # "Taurine - total" style aggregate options inside hierarchical dims
 _TOTAL_SUFFIX_RE = re.compile(r'-\s*total\s*$', re.I)
@@ -241,6 +245,88 @@ def _latest_time_entry(time_dim, effective) -> tuple[dict, str | None] | None:
     return best
 
 
+# Period formats of SDMX TIME_PERIOD values (request_validation's period policy).
+_ANNUAL_RE = re.compile(r'^\d{4}$')
+_QUARTER_RE = re.compile(r'^\d{4}-Q[1-4]$')
+_MONTH_RE = re.compile(r'^\d{4}-(0[1-9]|1[0-2])$')
+GRANULARITY_FINEST_FIRST = ('monthly', 'quarterly', 'annual')
+MIN_GRANULARITY_POINTS = 3
+
+
+def _period_granularity(opt: dict, value) -> str | None:
+    """annual | quarterly | monthly for one period, from its stored value
+    ("2023", "2023-Q1", "2023-01") or, for legacy labels, the parsed option."""
+    s = str(value if value is not None else (opt.get('sdmx_value') or '')).strip()
+    if _ANNUAL_RE.match(s):
+        return 'annual'
+    if _QUARTER_RE.match(s):
+        return 'quarterly'
+    if _MONTH_RE.match(s):
+        return 'monthly'
+    p = opt.get('parsed') or {}
+    if p.get('month'):
+        return 'monthly'
+    if p.get('quarter'):
+        return 'quarterly'
+    if p.get('year') is not None:
+        return 'annual'
+    return None
+
+
+def time_granularity(time_dim, actual_values) -> dict | None:
+    """The one periodicity a time axis shows when the data mixes several.
+
+    113 parquets hold "2023" next to "2023-Q1" (or "2023-01") in one
+    TIME_PERIOD; drawn on one axis, a flow jumps 4x between a year and its
+    quarter (C04). Annual wins with at least MIN_GRANULARITY_POINTS points,
+    otherwise the finest periodicity that has that many.
+
+    Returns {column, granularity, entries, omitted}, or None when the data
+    holds a single periodicity (nothing to restrict).
+    """
+    if time_dim is None:
+        return None
+    by: dict = {}
+    for o, v in _effective(time_dim, actual_values):
+        g = _period_granularity(o, v)
+        if g:
+            by.setdefault(g, []).append((o, v))
+    if len(by) < 2:
+        return None
+    if len(by.get('annual', ())) >= MIN_GRANULARITY_POINTS:
+        pick = 'annual'
+    else:
+        pick = next((g for g in GRANULARITY_FINEST_FIRST
+                     if len(by.get(g, ())) >= MIN_GRANULARITY_POINTS), None)
+        if pick is None:
+            pick = max(by, key=lambda g: (len(by[g]), -GRANULARITY_FINEST_FIRST.index(g)))
+    return {'column': _col(time_dim), 'granularity': pick, 'entries': by[pick],
+            'omitted': [g for g in GRANULARITY_FINEST_FIRST if g in by and g != pick]}
+
+
+def _series_without_total(dim, effective, struct, level: list | None) -> list[str] | None:
+    """Filter values for a series dim with its Total left out, or None.
+
+    A Total drawn next to its parts doubles every stack and reads as one more
+    category in lines and grouped bars (C01/E3: FOM104G stacked privata +
+    publica + Total to twice the real total). The Total stays the off-axis
+    pin elsewhere. None when the dim has no Total, or only the Total.
+    """
+    total = _total_entry(dim, effective, struct)
+    if total is None:
+        return None
+    drop = set(_pin_values(dim, *total))
+    if level:
+        kept = [m for m in level if m not in drop]
+        return kept if kept and len(kept) < len(level) else None
+    kept: list = []
+    for o, v in effective:
+        if o is total[0]:
+            continue
+        kept.extend(x for x in _pin_values(dim, o, v) if x not in drop)
+    return list(dict.fromkeys(kept)) or None
+
+
 def _time_pin_values(entry) -> list[str]:
     """Filter values for a time pin. With a known data value the pin is
     exact; otherwise (legacy parquet, no actual_values) send every known
@@ -336,6 +422,10 @@ def _arbitrary_pin_count(series_col: str, dimensions: list, time_col: str | None
 SERIES_RETUNABLE = {'line', 'area_stacked', 'stacked_bar', 'bar_vertical'}
 
 
+# A geo dim this small and without a national row is a series, not a pin.
+MAX_GEO_SERIES = 6
+
+
 # Below this coefficient of variation the split's series sit on top of each
 # other and the legend costs more than it explains (POP107D's SEX: 0.02).
 FLAT_SPLIT_CV = 0.05
@@ -357,14 +447,21 @@ def _best_temporal_series(dimensions: list, time_col: str | None,
     """
     ranked = []
     for d in dimensions:
-        if d.get('dim_type') in ('time', 'unit', 'geo'):
+        if d.get('dim_type') in ('time', 'unit'):
             continue
+        if d.get('dim_type') == 'geo':
+            # A handful of areas with no national row (SAR102D's four
+            # macroregions) fit as lines; otherwise geo is the map's job and
+            # a pin would show one area as if it were the country (E10).
+            eff = _effective(d, actual_values)
+            if len(eff) > MAX_GEO_SERIES or _total_entry(d, eff, struct) is not None:
+                continue
         n = len(_non_total_options(d, actual_values))
         if not (2 <= n <= 8):
             continue
         pins = _arbitrary_pin_count(_col(d), dimensions, time_col,
                                     actual_values, non_additive)
-        substantive = d.get('dim_type') not in ('gender', 'residence', 'age')
+        substantive = d.get('dim_type') not in ('gender', 'residence', 'age', 'geo')
         cv = dstruct.discrimination(struct, _col(d)) if struct else None
         separates = cv is None or cv >= FLAT_SPLIT_CV
         ranked.append(((-pins, separates, substantive, n), d))
@@ -412,13 +509,16 @@ def _stack_ok(s_dim: dict, actual_values: dict | None, struct: dict | None,
     hierarchy. Rates or overlapping categories stack into a meaningless total,
     and a 'flat' profile only means no hierarchy was *detected*: AED103A's
     flat series nests "Formala" in "Formala sau non-formala" in "Formala,
-    non-formala sau informala"."""
+    non-formala sau informala". A dim that mixes sex and residence options
+    (Masculin, Feminin, Urban, Rural) counts everyone twice, whatever its type."""
     s_struct = (struct or {}).get(_col(s_dim)) or {}
+    eff = _effective(s_dim, actual_values)
     partition = (s_struct.get('additive') is True
                  or s_dim.get('dim_type') in PARTITION_DIM_TYPES)
     return (not non_additive and partition
             and (s_struct.get('n_levels') or 0) <= 1
-            and _hierarchy_root_pin(s_dim, _effective(s_dim, actual_values)) is None)
+            and ap.partition_kind(o.get('label') or '' for o, _ in eff) != 'mixed'
+            and _hierarchy_root_pin(s_dim, eff) is None)
 
 
 # Time × category tiles: lines stay readable up to a handful of series; the
@@ -547,6 +647,136 @@ def _aggregation_block(decision) -> dict:
     return d
 
 
+class _SliceProbe:
+    """Checks a composed slice against the parquet, the way `/data` will.
+
+    Two failures the metadata cannot see: pins chosen per dimension that never
+    co-occur (ASS118A: unit 'Milioane lei' only before 2004, time pinned to
+    2023; E8), and slices the unique-grain gate refuses (A04/E7). The composer
+    used to propose such tiles and the page rendered them empty.
+    """
+
+    def __init__(self, conn, code: str, dimensions: list):
+        from app.services.query_builder import resolve_parquet_schema
+        self.conn, self.code, self.dimensions = conn, code, dimensions
+        self.schema = resolve_parquet_schema(conn, code)
+        self.path = str(PARQUET_DIR / f'{code}.parquet')
+
+    def _file_filters(self, filters: dict) -> dict:
+        from app.services.query_builder import adapt_to_parquet
+        _, _, ff = adapt_to_parquet(self.schema, self.dimensions, None,
+                                    {k: list(v) for k, v in filters.items() if v})
+        return ff
+
+    def _where(self, file_filters: dict) -> tuple[str, list]:
+        from app.services.query_builder import quote_ident
+        cols = set(self.schema.get('columns') or [])
+        where, params = [], []
+        for c, vs in file_filters.items():
+            if c not in cols:
+                continue
+            where.append(f"CAST({quote_ident(c)} AS VARCHAR) IN ({', '.join('?' for _ in vs)})")
+            params.extend(str(v) for v in vs)
+        return (f"WHERE {' AND '.join(where)}" if where else ''), params
+
+    def has_rows(self, filters: dict) -> bool | None:
+        where, params = self._where(self._file_filters(filters))
+        try:
+            return self.conn.execute(f"SELECT 1 FROM read_parquet(?) {where} LIMIT 1",
+                                     [self.path, *params]).fetchone() is not None
+        except Exception:
+            log.exception('slice probe failed matrix=%s', self.code)
+            return None
+
+    def values_with(self, col: str, filters: dict) -> dict:
+        """{value: rows} of `col` among the rows matching `filters`."""
+        from app.services.query_builder import quote_ident
+        fcol = self._file_filters({col: ['x']})
+        fcol = next(iter(fcol), col)
+        if fcol not in set(self.schema.get('columns') or []):
+            return {}
+        where, params = self._where(self._file_filters(filters))
+        try:
+            rows = self.conn.execute(
+                f"SELECT CAST({quote_ident(fcol)} AS VARCHAR), count(*) FROM read_parquet(?) "
+                f"{where} GROUP BY 1", [self.path, *params]).fetchall()
+        except Exception:
+            log.exception('slice probe failed matrix=%s', self.code)
+            return {}
+        return {r[0]: r[1] for r in rows if r[0] is not None}
+
+    def repin(self, spec: dict, actual_values, struct) -> dict:
+        """Re-pick off-axis pins when their combination matches no row.
+
+        Time keeps its latest-period pin; a unit (then any other pinned dim)
+        is re-picked among the values present with the remaining pins. Only
+        two or more constrained columns can fail to co-occur: each single pin
+        exists in the data by construction.
+        """
+        filters = spec['filters']
+        if sum(1 for v in filters.values() if v) < 2 or self.has_rows(filters) is not False:
+            return spec
+        cands = [d for d in self.dimensions
+                 if _col(d) in filters and _col(d) not in spec['group_by']
+                 and d.get('dim_type') != 'time']
+        cands.sort(key=lambda d: d.get('dim_type') != 'unit')
+        for d in cands:
+            c = _col(d)
+            others = {k: v for k, v in filters.items() if k != c}
+            present = self.values_with(c, others)
+            if not present:
+                continue
+            eff = [(o, v) for o, v in _effective(d, actual_values)
+                   if any(x in present for x in _pin_values(d, o, v))]
+            total = _total_entry(d, eff, struct) if eff else None
+            if d.get('dim_type') == 'unit' and eff:
+                pick = _pin_values(d, *eff[0])
+            elif total:
+                pick = _pin_values(d, *total)
+            else:
+                pick = [max(present, key=present.get)]
+            new = {**filters, c: [x for x in pick if x in present] or pick}
+            return {**spec, 'filters': new, 'slice_id': _slice_id(spec['group_by'], new)}
+        return spec
+
+    def refusal(self, spec: dict, decision) -> dict | None:
+        """What `/data` would refuse this slice for: the grain gate on the rows
+        the decision reads, then the headline series' source-total gate."""
+        from app.services import grain_guard
+        filters = self._file_filters(decision.effective_filters or spec['filters'])
+        g = grain_guard.check_slice(self.conn, self.code, filters, None,
+                                    self.schema.get('value_column') or 'OBS_VALUE',
+                                    path=self.path)
+        if not g.get('ok'):
+            return {'reason': g.get('reason'), 'evidence': g.get('evidence')}
+        time_cols = {_col(d) for d in self.dimensions if d.get('dim_type') == 'time'}
+        gb = spec['group_by']
+        if not any(spec['filters'].values()) and len(gb) == 1 and gb[0] in time_cols:
+            from app.services.dataset_meta import source_total_gate
+            reason, _ = source_total_gate(self.conn, self.code, decision)
+            if reason:
+                return {'reason': reason, 'evidence': 'source_total'}
+        return None
+
+
+def _settle(spec: dict, dimensions: list, actual_values, struct, non_additive: bool,
+            probe: '_SliceProbe | None'):
+    """(spec, decision, refusal) for one composed slice: co-occurring pins,
+    the shared aggregation verdict, then what `/data` would refuse."""
+    if probe is not None:
+        spec = probe.repin(spec, actual_values, struct)
+    decision = spec_decision(spec, dimensions, actual_values, struct, non_additive)
+    refusal = probe.refusal(spec, decision) if (probe is not None and decision.available) \
+        else None
+    return spec, decision, refusal
+
+
+def _refused(chart_id: str, axis: str, refusal: dict) -> dict:
+    return {'id': chart_id, 'axis': axis, 'outcome': 'unavailable',
+            'reason': refusal['reason'], 'column': None,
+            'evidence': refusal.get('evidence')}
+
+
 # Chart modules with a built-in timeline browser; for any other chart a
 # 'timeline' role is dropped from the slice so time gets pinned to the
 # latest period instead (their renderers would otherwise sum across years).
@@ -558,10 +788,17 @@ def _build_slice(roles: dict, dimensions: list, time_dim,
                  actual_values: dict | None = None,
                  non_additive: bool = False,
                  struct: dict | None = None,
-                 levels: dict | None = None) -> dict:
+                 levels: dict | None = None,
+                 time_gran: dict | None = None,
+                 drop_series_total: bool = False) -> dict:
     """Declarative data spec for one chart: GROUP BY its role dims, pin every
     other dim to its Total option (avoids double-count sums), pin time to the
     latest period when time is not an axis.
+
+    `time_gran` (from time_granularity) keeps a mixed-periodicity time dim to
+    one periodicity, on an axis and in the latest-period pin alike.
+    `drop_series_total` leaves the Total out of the series dim (dashboard tiles;
+    see _series_without_total).
 
     Pins only use values present in the parquet. When a dim has no Total in
     the data, additive values are left unfiltered (sum = total) while
@@ -585,18 +822,29 @@ def _build_slice(roles: dict, dimensions: list, time_dim,
     filters: dict = {}
 
     levels = levels or {}
+    gran_col = time_gran['column'] if time_gran else None
     for dim in dimensions:
         c = _col(dim)
         eff = _effective(dim, actual_values)
+        n_present = len(eff)
+        if c == gran_col:
+            eff = time_gran['entries']
         if c in group_by:
+            if c == gran_col:
+                filters[c] = list(dict.fromkeys(
+                    x for e in eff for x in _time_pin_values(e)))
+                continue
             # On an axis: keep every option of one level, drop the others.
             # exclude_total cannot reach this case — sibling levels are not
             # spelled "total", they are just a coarser grain of the same thing.
             lvl = _level_filter(dim, eff, struct, levels.get(c))
+            if drop_series_total and c == roles.get('series') \
+                    and dim.get('dim_type') != 'time':
+                lvl = _series_without_total(dim, eff, struct, lvl) or lvl
             if lvl:
                 filters[c] = lvl
             continue
-        if len(eff) <= 1:
+        if n_present <= 1:
             continue  # singleton in the data — nothing to pin
         if dim.get('dim_type') == 'unit':
             # Multi-unit dataset: mixing units in one SUM is meaningless —
@@ -731,12 +979,18 @@ def _annotations_for(axis: str, group_by: list, time_col: str | None, trend: dic
 def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
                       trend: dict | None = None,
                       actual_values: dict | None = None,
-                      struct: dict | None = None) -> dict | None:
+                      struct: dict | None = None, *,
+                      conn=None, code: str | None = None) -> dict | None:
     """Compose the dashboard recipe from ranked charts (roles pre-assigned).
 
     actual_values maps dim column → set of values present in the parquet;
     slices and filters are restricted to them so tiles never pin on
     metadata-only options.
+
+    With `conn` and `code`, every slice is also checked against the parquet
+    (_SliceProbe): pins that match no row are re-picked, and a tile the
+    unique-grain gate or the source-total gate refuses goes to `suppressed`
+    with its reason instead of rendering empty.
 
     Returns the `composition` block for chart_config, or None when there is
     nothing rankable (frontend falls back to single-chart behaviour).
@@ -747,6 +1001,14 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
     geo_dim = next((d for d in dimensions if d.get('dim_type') == 'geo'), None)
     time_col = _col(time_dim) if time_dim else None
     geo_col = _col(geo_dim) if geo_dim else None
+    # Mixed periodicity: every tile shows (and pins) one periodicity.
+    time_gran = time_granularity(time_dim, actual_values)
+    probe = None
+    if conn is not None and code and (PARQUET_DIR / f'{code}.parquet').exists():
+        probe = _SliceProbe(conn, code, dimensions)
+
+    def settle(spec):
+        return _settle(spec, dimensions, actual_values, struct, non_additive, probe)
 
     candidates = [r for r in ranked
                   if r['chart_type'] != 'table' and r.get('score', 0) >= MIN_SCORE]
@@ -837,10 +1099,14 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
                 continue
             axis = _chart_axis(chart_type, roles, time_col, geo_col)
         spec = _build_slice(roles, dimensions, time_dim, chart_type,
-                            actual_values, non_additive, struct)
-        decision = spec_decision(spec, dimensions, actual_values, struct, non_additive)
+                            actual_values, non_additive, struct,
+                            time_gran=time_gran, drop_series_total=True)
+        spec, decision, refusal = settle(spec)
         if not decision.available:
             suppressed.append(_suppressed(entry['chart_type'], axis, decision))
+            continue
+        if refusal:
+            suppressed.append(_refused(entry['chart_type'], axis, refusal))
             continue
         spec['aggregation'] = _aggregation_block(decision)
         charts.append({
@@ -879,11 +1145,12 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
                 roles['series'] = _col(best)
             spec = _build_slice(roles, dimensions, time_dim,
                                 actual_values=actual_values,
-                                non_additive=non_additive, struct=struct)
-            decision = spec_decision(spec, dimensions, actual_values, struct,
-                                     non_additive)
-            if not decision.available:
-                suppressed.append(_suppressed('trend', 'temporal', decision))
+                                non_additive=non_additive, struct=struct,
+                                time_gran=time_gran, drop_series_total=True)
+            spec, decision, refusal = settle(spec)
+            if not decision.available or refusal:
+                suppressed.append(_refused('trend', 'temporal', refusal) if refusal
+                                  else _suppressed('trend', 'temporal', decision))
                 axes_used.add('temporal')
                 continue
             spec['aggregation'] = _aggregation_block(decision)
@@ -922,11 +1189,12 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
                 continue
             roles = {'x_axis': _col(rank_dim)}
             spec = _build_slice(roles, dimensions, time_dim, 'horizontal_bar',
-                                actual_values, non_additive, struct)
-            decision = spec_decision(spec, dimensions, actual_values, struct,
-                                     non_additive)
-            if not decision.available:
-                suppressed.append(_suppressed('ranking', 'ranking', decision))
+                                actual_values, non_additive, struct,
+                                time_gran=time_gran, drop_series_total=True)
+            spec, decision, refusal = settle(spec)
+            if not decision.available or refusal:
+                suppressed.append(_refused('ranking', 'ranking', refusal) if refusal
+                                  else _suppressed('ranking', 'ranking', decision))
                 axes_used.add('ranking')
                 continue
             spec['aggregation'] = _aggregation_block(decision)
@@ -961,6 +1229,10 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
         layout, slots = LAYOUTS[n], SLOTS[n]
     for chart, slot in zip(charts, slots):
         chart['slot'] = slot
+        if time_gran and time_gran['column'] in chart['data']['group_by']:
+            # Disclosed, not silent: the other periodicities exist in the data.
+            chart['granularity'] = time_gran['granularity']
+            chart['granularity_omitted'] = time_gran['omitted']
 
     grain_dims = _grain_dims(dimensions, actual_values, struct)
 
@@ -993,7 +1265,8 @@ def compose_dashboard(sig: dict, ranked: list[dict], dimensions: list,
         if total:
             default = total[1] if total[1] is not None else total[0].get('label')
         elif is_time:
-            default = _latest_time_value(d, eff)
+            default = _latest_time_value(
+                d, time_gran['entries'] if time_gran and time_gran['column'] == c else eff)
         elif lvl:
             # Several grains of the same thing in one dim: "Toate" would sum
             # them all and count the domain once per grain. Default to one

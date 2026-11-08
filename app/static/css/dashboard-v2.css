@@ -813,3 +813,9 @@ body.sidebar-open .dbv2-main {
 .dbv2-ssr-facts > dt { display: inline; } .dbv2-ssr-facts > dd { display: inline; }
 .dbv2-ssr-links a { color: var(--accent); }
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* mixed-grain and granularity tile badges (extend .agg-badge from explore.css) */
+.agg-badge-mixed { background: #fef3c7; color: #92400e; }
+.agg-badge-granularity { background: #e0e7ff; color: #3730a3; }
+:root[data-theme="dark"] .agg-badge-mixed { background: #4a3410; color: #fcd34d; }
+:root[data-theme="dark"] .agg-badge-granularity { background: #26295a; color: #c7d2fe; }

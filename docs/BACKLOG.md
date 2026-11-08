@@ -4,6 +4,69 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Chart selection and public MCP audit follow-ups — 2026-11-08
+
+Source: [audit report](reports/2026-11-08-charts-and-mcp-audit.md). The code fixes are on
+`audit/charts-mcp-2026-11` (merged into `fix/ask-answer-quality`). Owner decisions of 2026-11-08
+are recorded next to each item.
+
+- [ ] **P1 — Replace suppressed tiles instead of leaving the page empty.** The INS-total gate
+  (`source_total_mismatch`) and the composer's grain check now suppress tiles with a visible reason
+  (SCL104A_judete: 4 → 0 tiles; POP107D_grupe_judet, TUR105H_judet, FOM104D_judet,
+  SOM101E_anual_judet). Owner accepted the interim state ("mark them as such"). Next: offer one
+  verified level or the latest period as a replacement tile, and a corpus test that every composed
+  tile returns rows or is listed under `suppressed`.
+- [ ] **P1 — Hero tile from `published_totals`** (audit CH-15, owner: ok). FOM106E opens on
+  agriculture × men although INS publishes a Total series the app already stores. The composer's
+  default pin should use the published cell when one exists; define how a Total with no parquet row
+  is presented.
+- [ ] **P1 — Pipeline: `has_time` for split children** (CH-10, owner: "we should"). Code fix in
+  `audit/pkg-pipeline`; the stored profiles of ~350 children stay wrong until the scoped recompute
+  runs on a copied generation (command in the activity entry). Run the chart eval before publishing.
+- [ ] **P1 — Pipeline: stage-12 children that drop a key column** (AQ-11, owner: ok). AGR101B_judet,
+  POP201D_judet, POP201K_judet and SOM101E_anual_judet keep one row per locality after dropping
+  REF_AREA_2. New rule: aggregate only with a verified additive measure, otherwise skip the child.
+  Regenerate those four parents' children on a copied generation and re-run the grain audit.
+- [ ] **P2 — Newer-vintage caveat** (AQ-01, owner: ok, "we do the best with what INS offers").
+  Births 2024: POP201A 148,916 vs POP201D 157,270. Tool results warn when a sibling table in the same
+  concept is newer; discovery prefers the newest. Implemented in `audit/pkg-tools` follow-up; extend to
+  the dataset page notes.
+- [ ] **P2 — v1 yearly toggle** (CH-18, owner: ok). Default off for sub-annual data, incomplete last
+  year marked. Stock/flow detection is out of scope.
+- [ ] **P2 — Fly / Cloudflare: per-client keys and edge limits** (MCP-01, MCP-08; owner: later).
+  Behind Cloudflare `Fly-Client-IP` is the edge address, so per-client windows pool real clients;
+  use the Cloudflare real-IP header or an edge rate limit, and drop the fly.dev host from
+  `TEMPO_MCP_ALLOWED_HOSTS` once Cloudflare is the only entry.
+- [x] **Access logs** (MCP-07): owner keeps uvicorn's access log. The MCP notice now says the content
+  log holds no IP and that platform logs may keep connection metadata.
+- [ ] **P2 — Chart eval on the composer layer.** The selector eval diffs the selector against its own
+  output. Add a hand-labelled set (allowed hero types, forbidden views, expected total) run against
+  `compose_dashboard` on synthetic fixtures in CI; wire it into `release-check.py`.
+- [ ] **P2 — Gate `describe_dataset`/`discover_indicators` by scan size** (MCP-04): they read whole
+  parquets for period bounds (POP107D 2.4 s cold); read bounds from the dimension options instead.
+- [ ] **P2 — Rotate `ask-chats.jsonl`** like `mcp-calls.jsonl` (same volume); body-read timeout for
+  slow clients; replace SDK error bodies with fixed JSON-RPC errors (MCP-09).
+- [ ] **P2 — Unit type at the source for IPC102\*** (AQ-05): `tools/units.py` overrides the envelope
+  to `index`; fix the profile/classifier and drop the override. Remove "inflatie" from `no_concept` in
+  the search judgments and the `NOW_A_CONCEPT` exception in `tests/test_pa02_search.py`.
+- [ ] **P2 — Re-pin the remaining 9b3e065d probes** (test_at01_discovery, test_at01_changes,
+  test_at01_scope, test_at01_recipes_links, test_aq04b, test_aq_discovery_county_unemployment,
+  test_aq05a) so they run on 062bd2b0 instead of skipping.
+- [ ] **P2 — Pyramid and bar tiles over overlapping bands** (CH-08): `mixed_grain_on_axis` is now a
+  visible badge; the tile should restrict to one band set (AMG130M, AMG155F).
+- [ ] **P2 — Insights and `detect_trends` on one periodicity** (CH-05 remainder): the KPI change and
+  breakpoints still read mixed TIME_PERIOD values; the composer's time pin can disagree with them.
+- [ ] **P3 — Periodicity switch on the dataset page** (annual default, finest as toggle); show
+  `aggregation.source_check.message` in the UI and in the tools' text; ranking chips should carry the
+  pin label; `.agg-badge-mixed` styling.
+- [ ] **P3 — Tests with fixed ports collide** (`test_at02_browser`, `test_static_parity`,
+  benchmark child tests) when several suites run at once; `test_aqlang_browser` needs the external CDNs.
+- [ ] **P3 — `policy.js` lacks the per-dimension `kpi_dimension_checks` mismatch rule** Python applies;
+  a sum short of INS where INS's parts agree (POP201A) needs a coverage check, not a policy rule.
+- [ ] **P3 — Confirm "by domicile" wording for POP201A**; national variants for births; evidence link
+  for `run_recipe areas:["TOTAL"]`; REST `/data` empty-slice reason (AQ-12); EN messages with RO unit
+  labels; discovery noise on "medici".
+
 ## Public MCP operations — 2026-10-28
 
 - [ ] **P1 — Production `/mcp` fails on every question (Fly).** `tempo-ins-explorer.fly.dev/mcp` timed out

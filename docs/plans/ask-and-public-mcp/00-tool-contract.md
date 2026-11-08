@@ -10,7 +10,7 @@ Python types/Pydantic models may enforce it; do not require a new framework.
 
 ## Tool inputs and result envelope
 
-Expose exactly these seven logical tool names in public MCP v1:
+Expose exactly these eight logical tool names in public MCP v1:
 
 | Name | Purpose | Required inputs | Optional inputs/defaults |
 |---|---|---|---|
@@ -19,6 +19,9 @@ Expose exactly these seven logical tool names in public MCP v1:
 | `find_dimension_values` | Search/page actual values | `dataset`, `column` | `query=""`, `limit=20`, `offset=0` |
 | `query_data` | One validated, bounded data selection | `dataset` | `filters={}`, `group_by=[]`, `limit=100`, `approximate=false`, `lang=ro` |
 | `compare_periods` | Per-entity changes and rankings for explicit intervals | `dataset`, `entity_columns`, `intervals` | `filters={}`, `metric=absolute`, `order=asc`, `top_k=20`, `lang=ro` |
+| `rank_entities` | Rank a complete eligible entity set by value in one annual period | `dataset`, `entity_columns` | `year=null` (latest actual year), `filters={}`, `entity_class=all`, `order=desc`, `top_k=30`, `lang=ro` |
+
+`rank_entities` ranks a complete one-year selection before top K. `entity_class=cities` uses the GOS102A SIRUTA catalogue keys. That is not a historical city classification.
 | `run_recipe` | Run an existing reviewed recipe | `recipe` | `year=null`, `areas=null`, `lang=ro` |
 | `get_evidence_links` | Exact selection/evidence/share links | `selection`, `generation_id` | `lang=ro` |
 

@@ -85,9 +85,15 @@ def test_headline_series_refused_when_ins_disagrees(tmp_path, monkeypatch):
     assert not any(k["key"] == "latest" for k in ins["kpis"])
     assert {"key": "latest", "reason": "source_total_mismatch"}.items() <= next(
         s for s in ins["suppressed"] if s["key"] == "latest").items()
-    # other queries are not the checked slice and are left alone
-    assert not _data(client, ["SEX"]).get("unavailable")
-    assert not _data(client, ["TIME_PERIOD"], {"SEX": ["Feminin"]}).get("unavailable")
+    # Since the 2026-11-08 audit the gate sits in aggregation_policy.decide(): any sum over a
+    # dimension that INS has not shown to add up is refused, not only the headline slice.
+    by_sex = _data(client, ["SEX"])
+    assert by_sex["unavailable"] and by_sex["aggregation"]["reason"] == "source_total_mismatch"
+    assert by_sex["aggregation"]["blocking_dimension"] == "AGE"
+    pinned = _data(client, ["TIME_PERIOD"], {"SEX": ["Feminin"]})
+    assert pinned["unavailable"] and pinned["aggregation"]["reason"] == "source_total_mismatch"
+    # a full breakdown sums nothing and stays available
+    assert not _data(client, ["AGE", "SEX"], {"TIME_PERIOD": ["2025"]}).get("unavailable")
 
 
 def test_headline_series_kept_when_ins_agrees(tmp_path, monkeypatch):

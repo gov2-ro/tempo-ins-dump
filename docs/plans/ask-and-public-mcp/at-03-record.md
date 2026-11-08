@@ -84,12 +84,41 @@ was done: those are AT-04 and the release gate.
 | `TEMPO_MCP_MAX_CALLS_PER_MINUTE` | 120 | `tools/call` admissions (aggregate, not per user) |
 | `TEMPO_MCP_MAX_REQUESTS_PER_MINUTE` | 600 | every HTTP request, initialize/list included (429 + Retry-After) |
 | `TEMPO_MCP_MAX_SCAN_ROWS` | 1,000,000 | estimated rows an operation may read. The measured operator profile for enabling the MCP on Fly, `scripts/deploy/fly/mcp-public.env`, raises it to 5,000,000 (AQ-01B) |
-| `TEMPO_MCP_CACHE_BYTES` / `_ENTRIES` / `_TTL_SECONDS` | 4 MiB / 128 / 300 | result cache |
+| `TEMPO_MCP_CACHE_BYTES` / `TEMPO_MCP_CACHE_ENTRIES` / `TEMPO_MCP_CACHE_TTL_SECONDS` | 4 MiB / 128 / 300 | result cache (bytes, entries, seconds) |
+| `TEMPO_MCP_CLIENT_REQUESTS_PER_MINUTE` | 240 | HTTP requests per client key (PKG-MCP-HARDEN S1); the global 600 stays the ceiling |
+| `TEMPO_MCP_CLIENT_CALLS_PER_MINUTE` | 60 | `tools/call` admissions per client key; the global 120 stays the ceiling |
+| `TEMPO_MCP_TRUST_FORWARDED` | false | use the first `X-Forwarded-For` address as client key when no `Fly-Client-IP` is present. Turn it on only behind a proxy that overwrites the header |
+| `TEMPO_MCP_LOG_MAX_BYTES` | 268,435,456 | size at which `mcp-calls.jsonl` becomes `mcp-calls.jsonl.1` (one old file kept; disk use at most about twice the cap) |
 
 Zero, negative, non-numeric or non-finite values, a wildcard host or origin, a missing or non-https
 base URL and an unparseable flag fail startup with a clear message; zero is never "unlimited".
 `TEMPO_MCP_MAX_REQUESTS_PER_MINUTE`, `_CACHE_ENTRIES`, `_CACHE_TTL_SECONDS` and `_LOCAL_TEST` are
-additions to the proposed table.
+additions to the proposed table. The `_CLIENT_*`, `_TRUST_FORWARDED` and `_LOG_MAX_BYTES` settings were
+added by PKG-MCP-HARDEN (2026-11-08).
+
+## Hardening after the security audit (PKG-MCP-HARDEN, 2026-11-08)
+
+- **Per-client windows (S1).** The request and the calls window exist per client key in front of the
+  global windows. The key is `Fly-Client-IP`, else (only with `TEMPO_MCP_TRUST_FORWARDED`) the first
+  `X-Forwarded-For` address, else the peer address. The table holds 1,024 keys (least recently seen
+  dropped). A request that the SDK refuses for Host or Origin (421/403) uses only its own client's window,
+  not the global one. Both windows answer 429 with `retry-after`. Caveat: clients behind one shared
+  address (a chat provider's egress) share one key; `Fly-Client-IP` is the address that reached Fly, so
+  behind Cloudflare it is the Cloudflare edge address unless Fly is reached directly.
+- **Content log (S2).** `mcp-calls.jsonl` rotates to `.1` at `TEMPO_MCP_LOG_MAX_BYTES`. A refusal before
+  any work (`invalid_input`, which includes too big; `unknown_tool`; `busy`, which includes throttled)
+  logs only the tool, status, reason, argument byte size and a SHA-256 of the arguments, no arguments and
+  no result. The write runs on its own single thread, off the event loop.
+- **Deadline (S3).** From the deadline on, the interrupt is repeated every 50 ms until the work ends, so a
+  query started after the deadline is stopped too. An answer that arrives after the deadline is
+  `query_timeout` and is never cached. The slot is still held until the work ends.
+- **Cache key (S5).** Built from the validated arguments with defaults, with sorted keys: key order and an
+  omitted `lang` versus `ro` give the same entry.
+- **Hang-up (S6).** `McpEndpoint` reads `receive()` after the body; on `http.disconnect` it cancels the
+  call's token, which interrupts the running query and frees the slot when the work stops. A queued
+  call of a client that left drops out of the queue.
+- **Privacy notice (S7).** The disclosure now says the content log holds no IP address or client
+  identity, and that the hosting platform's access logs may keep connection metadata for a limited time.
 
 ## Checks run
 
@@ -153,8 +182,9 @@ sub-dataset or a recipe is the way in. This is the intended, conservative first-
   when the endpoint is enabled, so a disabled deployment pays disk, not memory). Not measured: no Docker here.
 - **No live client interoperability.** ChatGPT and Claude connector behaviour (schema acceptance, anonymous
   access, timeouts) is untested; the SDK client is the only client used.
-- **A caller that disconnects** is detected where the transport reports it; otherwise the deadline bounds
-  the work. Either way the slot is released only when the work ends.
+- **A caller that disconnects** is detected from the ASGI `http.disconnect` message and cancels the work
+  (PKG-MCP-HARDEN S6); the deadline remains the bound otherwise. Either way the slot is released only when
+  the work ends.
 - **Every tool call shares the one analytical slot**, metadata tools included: while a slow analysis runs,
   even `describe_dataset` answers `busy`. Only initialize and `tools/list` stay available.
 
