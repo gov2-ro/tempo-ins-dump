@@ -713,3 +713,37 @@ def _map_parsed_type(dim_type: str) -> str:
         "unit": "um",
     }
     return mapping.get(dim_type, dim_type)
+
+
+# --- Dropping a key column --------------------------------------------------
+
+def key_drop_decision(*, unit_type, text, struct, column, indicator_labels=()) -> tuple[bool, str, str | None]:
+    """May a split child drop the key column `column` by aggregating over it?
+
+    Returns (allowed, reason, aggregate_value). Dropping a key column while keeping
+    one row per old key leaves rows that share a key (conflicting grain). A child may
+    drop it only when its rows are summed to the remaining key AND
+
+      * the dataset measure is additive (the app's `aggregation_policy.dataset_measure`), and
+      * `dimension_structure` verified the column: a roll-up option whose value the
+        other options sum to (`additive` is True).
+
+    `aggregate_value` is that verified roll-up option (rows to leave out of the sum so
+    it is not counted twice), or None. `struct` is `dimension_structure.load()`'s
+    {column: structure}.
+    """
+    from app.services import aggregation_policy as ap
+
+    # Once with and once without the stored flags: a verified flag on some other column
+    # must not turn a rate or an average into a sum.
+    measure = ap.dataset_measure(unit_type, text, struct, indicator_labels)
+    if measure == 'additive':
+        measure = ap.dataset_measure(unit_type, text, None, indicator_labels)
+    if measure != 'additive':
+        return False, (f"measure is {measure} (unit type {unit_type!r}); "
+                       "rows cannot be summed over the dropped column"), None
+    info = (struct or {}).get(column) or {}
+    if info.get('additive') is not True:
+        return False, (f"column {column} has no verified additive structure "
+                       f"(additive={info.get('additive')!r}, confidence={info.get('confidence')!r})"), None
+    return True, "additive measure and verified column structure", info.get('aggregate_value')

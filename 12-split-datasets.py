@@ -40,13 +40,16 @@ from collections import defaultdict
 import duckdb
 
 from duckdb_config import DB_FILE, PARQUET_COMPRESSION, CORPUS_PARQUET_DIR, PARQUET_V2_DIR
-from split_rules import detect_all, SplitRule, SplitGroup
+from split_rules import detect_all, key_drop_decision, SplitRule, SplitGroup
 
 logger = logging.getLogger(__name__)
 
 # Handled split failures (child could not be written/registered). Any entry makes
 # main() exit nonzero so update-pipeline.py can record a required-stage failure.
 SPLIT_FAILURES: list[str] = []
+# parent -> children left out on purpose (county view refused by key_drop_decision); the
+# staged set is validated without them
+POLICY_SKIPPED: dict[str, int] = {}
 EXIT_SPLIT_FAILED = 1
 
 
@@ -189,7 +192,7 @@ def _init_id_counters(conn) -> None:
 
 def validate_staged(conn, parent: str, subs: list[dict]) -> None:
     """Raise SwapError unless the staged set is a complete, readable generation."""
-    if len(subs) < 2:
+    if len(subs) + POLICY_SKIPPED.get(parent, 0) < 2:
         raise SwapError(f"{parent}: need at least 2 children, got {len(subs)}")
     codes = [s["sub_code"] for s in subs]
     if len(set(codes)) != len(codes):
@@ -353,6 +356,60 @@ def _resolve_v3_column(conn, matrix_code: str, name: str, dim_cols: list) -> str
     return row[0] if row else name
 
 
+def _county_view_policy(conn, matrix_code: str, locality_col: str, alt_names=()) -> tuple[bool, str | None]:
+    """May the county view (`_judet` child) drop the locality column by summing over it?
+
+    Yes only for an additive measure with a verified structure for that column
+    (split_rules.key_drop_decision). Returns (allowed, aggregate_value) and logs why not.
+    """
+    from app.services import dimension_structure as dstruct
+    dstruct._cache.pop(matrix_code, None)        # structure may have changed since the last load
+    dstruct._TABLE_OK = None
+    struct = dstruct.load(conn, matrix_code)
+    col = next((c for c in (locality_col, *alt_names) if c in struct), locality_col)
+    row = conn.execute("SELECT matrix_name FROM matrices WHERE matrix_code = ?", [matrix_code]).fetchone()
+    try:
+        unit = conn.execute("SELECT primary_unit_type FROM matrix_profiles WHERE matrix_code = ?",
+                            [matrix_code]).fetchone()
+        labels = [r[0] or '' for r in conn.execute(
+            "SELECT o.option_label FROM dimensions d "
+            "JOIN dimension_options o ON o.dimension_id = d.dimension_id "
+            "JOIN dimension_options_parsed p ON p.nom_item_id = o.nom_item_id "
+            "WHERE d.matrix_code = ? AND p.dim_type = 'indicator'", [matrix_code]).fetchall()]
+    except duckdb.CatalogException:
+        unit, labels = None, []
+    ok, reason, agg = key_drop_decision(
+        unit_type=unit[0] if unit else None, text=row[0] if row else '', struct=struct,
+        column=col, indicator_labels=labels)
+    if not ok:
+        logger.warning(f"  {matrix_code}: no county-level child (drops {col}): {reason}")
+    return ok, agg
+
+
+def _county_view_select(conn, src: Path, keep_cols: list, locality_col: str, agg_value: str | None,
+                        where: str = "TRUE") -> str | None:
+    """SELECT that sums the rows to the key without `locality_col` (None: no value column).
+
+    A verified roll-up option of the locality column is left out of the sum.
+    """
+    types = {r[0]: r[1] for r in conn.execute(f"DESCRIBE SELECT * FROM read_parquet('{src}')").fetchall()}
+    value_col = next((c for c in ('OBS_VALUE', 'value') if c in keep_cols), None)
+    if value_col is None:
+        return None
+    exprs, keys = [], []
+    for c in keep_cols:
+        if c == value_col:
+            exprs.append(f'CAST(SUM("{c}") AS {types[c]}) AS "{c}"')
+        else:
+            exprs.append(f'"{c}"')
+            keys.append(f'"{c}"')
+    if agg_value is not None:
+        agg = str(agg_value).replace("'", "''")
+        where = f"({where}) AND CAST(\"{locality_col}\" AS VARCHAR) IS DISTINCT FROM '{agg}'"
+    group = f" GROUP BY {', '.join(keys)}" if keys else ""
+    return f"SELECT {', '.join(exprs)} FROM read_parquet('{src}') WHERE {where}{group}"
+
+
 def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False,
                             stage_dir: Path | None = None) -> list[dict]:
     """Split a parquet file based on a SplitRule. Returns list of sub-dataset info dicts.
@@ -378,6 +435,13 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False,
         split_col = _resolve_v3_column(conn, rule.matrix_code, rule.split_dimension, v3_dim_cols)
         drop_cols = [_resolve_v3_column(conn, rule.matrix_code, c, v3_dim_cols) for c in rule.drop_columns]
 
+    county_ok, county_agg, policy_skipped = True, None, 0
+    if rule.pattern == "hierarchy":
+        loc = (_resolve_v3_column(conn, rule.matrix_code, rule.split_dimension, v3_dim_cols)
+               if is_src_v3 else rule.split_dimension)
+        county_ok, county_agg = _county_view_policy(conn, rule.matrix_code, loc, (rule.split_dimension,))
+    POLICY_SKIPPED.pop(rule.matrix_code, None)
+
     # Deduplicate suffixes to avoid filename collisions
     seen_suffixes = {}
     for group in rule.groups:
@@ -388,6 +452,10 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False,
             seen_suffixes[group.label] = 0
 
     for group in rule.groups:
+        if rule.pattern == "hierarchy" and group.label == "judet" and not county_ok:
+            policy_skipped += 1
+            POLICY_SKIPPED[rule.matrix_code] = policy_skipped
+            continue
         sub_code = generate_sub_matrix_code(rule.matrix_code, group.label)
         final_dst = (PARQUET_V3_DIR if is_src_v3 else PARQUET_V2_DIR) / f"{sub_code}.parquet"
         dst = (stage_dir / final_dst.name) if stage_dir is not None else final_dst
@@ -404,7 +472,7 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False,
         # Build WHERE clause
         if rule.pattern == "hierarchy":
             # Special handling: hierarchy splits are row-level, not column-value
-            row_count = _split_hierarchy(conn, src, dst, rule, group)
+            row_count = _split_hierarchy(conn, src, dst, rule, group, county_agg)
         else:
             if is_src_v3:
                 # V3 SDMX source: split_col is already SDMX name (e.g. REF_AREA)
@@ -471,7 +539,7 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False,
 
     # Guard: a real split needs ≥2 groups with data.
     # If only 1 (or 0) succeeded, the metadata lied — abort and clean up.
-    if len(results) < 2:
+    if len(results) + policy_skipped < 2:
         logger.warning(
             f"  False-positive split for {rule.matrix_code}: "
             f"only {len(results)} group(s) produced data. Aborting split."
@@ -496,7 +564,8 @@ def split_parquet_by_filter(conn, rule: SplitRule, dry_run: bool = False,
     return results
 
 
-def _split_hierarchy(conn, src: Path, dst: Path, rule: SplitRule, group: SplitGroup) -> int:
+def _split_hierarchy(conn, src: Path, dst: Path, rule: SplitRule, group: SplitGroup,
+                     agg_value: str | None = None) -> int:
     """Handle hierarchy splits (county vs locality level)."""
     # Get the county and locality column names
     dims = conn.execute(f"""
@@ -515,14 +584,16 @@ def _split_hierarchy(conn, src: Path, dst: Path, rule: SplitRule, group: SplitGr
         locality_col = sdmx_map.get(rule.split_dimension, rule.split_dimension)
 
     if group.label == "judet":
-        # County level: exclude locality column entirely
+        # County level: the locality column is dropped and its rows are summed to the
+        # remaining key (the caller checked that the measure and the column allow it).
         keep_cols = [c for c in all_cols if c != locality_col]
-        select = ", ".join(f'"{c}"' for c in keep_cols)
-        # Deduplicate since multiple localities per county
+        inner = _county_view_select(conn, src, keep_cols, locality_col, agg_value)
+        if inner is None:
+            record_failure(f"Hierarchy split failed for {rule.matrix_code}/{group.label}: no value column")
+            return 0
         query = f"""
             COPY (
-                SELECT DISTINCT {select}
-                FROM read_parquet('{src}')
+                {inner}
             ) TO '{dst}' (FORMAT PARQUET, COMPRESSION '{PARQUET_COMPRESSION}')
         """
     else:
@@ -786,6 +857,15 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
     for rule in sorted_rules:
         all_drop_cols.update(rule.drop_columns)
 
+    county_ok, county_agg, policy_skipped = True, None, 0
+    hier = next((r for r in sorted_rules if r.pattern == "hierarchy"), None)
+    if hier is not None:
+        loc = (_resolve_v3_column(conn, matrix_code, hier.split_dimension,
+                                  [c for c in _get_parquet_columns(conn, src) if c != 'OBS_VALUE'])
+               if is_src_v3 else hier.split_dimension)
+        county_ok, county_agg = _county_view_policy(conn, matrix_code, loc, (hier.split_dimension,))
+    POLICY_SKIPPED.pop(matrix_code, None)
+
     results = []
     combos = list(iterproduct(*[rule.groups for rule in sorted_rules]))
     logger.debug(f"  Cross-product: {' × '.join(str(len(r.groups)) for r in sorted_rules)} = {len(combos)} sub-datasets")
@@ -799,6 +879,11 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
 
     seen_codes = {}  # track duplicate sub_codes
     for combo in combos:
+        if not county_ok and any(r.pattern == "hierarchy" and g.label == "judet"
+                                 for r, g in zip(sorted_rules, combo)):
+            policy_skipped += 1
+            POLICY_SKIPPED[matrix_code] = policy_skipped
+            continue
         suffix = "_".join(g.label for g in combo)
         sub_code = f"{matrix_code}_{suffix}"
         # Deduplicate: append _2, _3, etc. if sub_code already used
@@ -871,26 +956,30 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
         if skip:
             continue
 
-        distinct = ""
+        county_view = False
         if hierarchy_group is not None:
             locality_col = (_resolve_v3_column(conn, matrix_code, hierarchy_rule.split_dimension, v3_dim_cols) if is_src_v3
                              else sdmx_map.get(hierarchy_rule.split_dimension, hierarchy_rule.split_dimension))
             if hierarchy_group.label == "judet":
-                # County view: locality column dropped, so rows that only
-                # differed by locality collapse — dedupe, same as
-                # _split_hierarchy's single-rule county branch.
+                # County view: the locality column is dropped and its rows are summed
+                # to the remaining key (policy checked above).
                 keep_cols = [c for c in keep_cols if c != locality_col]
-                distinct = "DISTINCT "
-            # else "localitate": keep every column, no distinct — the parent
+                county_view = True
+            # else "localitate": keep every column, no aggregation — the parent
             # data is already locality-grained.
 
-        select = ", ".join(f'"{c}"' for c in keep_cols)
         where_clause = " AND ".join(where_parts) if where_parts else "TRUE"
+        if county_view:
+            inner = _county_view_select(conn, src, keep_cols, locality_col, county_agg, where_clause)
+            if inner is None:
+                record_failure(f"Failed to split {matrix_code} -> {sub_code}: no value column")
+                continue
+        else:
+            select = ", ".join(f'"{c}"' for c in keep_cols)
+            inner = f"SELECT {select} FROM read_parquet('{src}') WHERE {where_clause}"
         query = f"""
             COPY (
-                SELECT {distinct}{select}
-                FROM read_parquet('{src}')
-                WHERE {where_clause}
+                {inner}
             ) TO '{dst}' (FORMAT PARQUET, COMPRESSION '{PARQUET_COMPRESSION}')
         """
         try:
@@ -913,7 +1002,7 @@ def split_parquet_cross_product(conn, matrix_code: str, rules: list, dry_run: bo
 
     # Guard: a real split needs ≥2 combos with data.
     results_with_data = [r for r in results if r["row_count"] > 0]
-    if len(results_with_data) < 2:
+    if len(results_with_data) + policy_skipped < 2:
         logger.warning(
             f"  False-positive split for {matrix_code}: "
             f"only {len(results_with_data)} combo(s) produced data. Aborting split."

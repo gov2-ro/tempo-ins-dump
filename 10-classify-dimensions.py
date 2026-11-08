@@ -557,7 +557,8 @@ def main(argv=None):
             opt.option_label,
             d.dim_label,
             d.matrix_code,
-            d.dim_code
+            d.dim_code,
+            d.dim_column_name
         FROM dimension_options opt
         JOIN dimensions d ON opt.dimension_id = d.dimension_id
         WHERE 1=1 {matrix_filter}
@@ -596,13 +597,21 @@ def main(argv=None):
     # A period-labelled dimension none of whose options carries a year is not the
     # observation period: CNF101F/CNF102C pair 'Luni' (bare month names) with
     # 'Perioade' (years). Keep it categorical so it is never read as the time axis.
+    # Stage 12 relabels the split dimension of a child with the group name ('anual',
+    # 'trimestrial', 'lunar'), so the label no longer says 'period'. Stage 11 gives the
+    # observation period the canonical column TIME_PERIOD, so that column also marks time
+    # (exactly TIME_PERIOD: TIME_PERIOD_2 is the extra period-like column).
+    def label_type(dim_label, col):
+        t = detect_dim_type(dim_label)
+        return 'time' if col == 'TIME_PERIOD' and t == 'indicator' else t
+
     dated: set = set()
-    for nom_item_id, option_label, dim_label, matrix_code, dim_code in rows:
-        if detect_dim_type(dim_label) == 'time' and parse_time(option_label or '').get('year'):
+    for nom_item_id, option_label, dim_label, matrix_code, dim_code, dim_col in rows:
+        if label_type(dim_label, dim_col) == 'time' and parse_time(option_label or '').get('year'):
             dated.add((matrix_code, dim_code))
 
-    for nom_item_id, option_label, dim_label, matrix_code, dim_code in rows:
-        dim_type = detect_dim_type(dim_label)
+    for nom_item_id, option_label, dim_label, matrix_code, dim_code, dim_col in rows:
+        dim_type = label_type(dim_label, dim_col)
         if dim_type == 'time' and (matrix_code, dim_code) not in dated:
             dim_type = 'indicator'
 
