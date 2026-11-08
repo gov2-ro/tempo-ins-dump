@@ -144,6 +144,10 @@ def _answer(aid: "_Aid", warnings: list) -> dict:
         message = M.t(lang, "query.no_rows")
         warnings.append(C.warning("no_rows", M.t(lang, "query.no_rows_warning")))
 
+    grain = ((res.get("quality") or {}).get("grain") or {}).get("status")
+    if not grouped and grain in ("conflicting", "duplicate_keys"):
+        # raw rows are listed, but the file cannot be summed or ranked: the data_quality warning says so (F11)
+        status, reason = "partial", "conflicting_grain" if grain == "conflicting" else "duplicate_keys"
     native_scope = res.get("scope") or {}
     if grouped and native_scope.get("domain_complete") is False:
         status, reason = "partial", "incomplete_domain"
@@ -177,18 +181,26 @@ def _answer(aid: "_Aid", warnings: list) -> dict:
                       provenance=prov, limits=limits, warnings=warnings, recovery=recs)
 
 
+def auto_pinned_warning(agg: dict, request_filters: dict, lang: str):
+    """The `auto_pinned` warning for pins the aggregation applied beyond the request's own filters
+    (shared by query_data and rank_entities), or None."""
+    pins = {c: v for c, v in (agg.get("filters") or {}).items() if c not in request_filters}
+    if not pins:
+        return None
+    levels = agg.get("levels") or {}
+    parts = [f"{c}={_short(vs, lang)}" + (M.t(lang, "query.level_suffix", level=levels[c]) if levels.get(c) else "")
+             for c, vs in pins.items()]
+    return C.warning("auto_pinned", M.t(lang, "query.auto_pinned", parts="; ".join(parts)), subject=",".join(pins))
+
+
 def _result_warnings(aid: "_Aid", rows: list, columns: list, grouped: bool) -> list:
     res, request = aid.res, aid.request
     lang = aid.lang
     agg = res.get("aggregation") or {}
     out = []
-    pins = {c: v for c, v in (agg.get("filters") or {}).items() if c not in request["filters"]}
-    if pins:
-        levels = agg.get("levels") or {}
-        parts = [f"{c}={_short(vs, lang)}" + (M.t(lang, "query.level_suffix", level=levels[c]) if levels.get(c) else "")
-                 for c, vs in pins.items()]
-        out.append(C.warning("auto_pinned", M.t(lang, "query.auto_pinned", parts="; ".join(parts)),
-                             subject=",".join(pins)))
+    pinned = auto_pinned_warning(agg, request["filters"], lang)
+    if pinned:
+        out.append(pinned)
     if agg.get("outcome") == "approximation" and request["approximate"]:
         out.append(C.warning("approximation", M.t(lang, "query.approximation")))
     for w in agg.get("warnings") or []:
@@ -294,10 +306,28 @@ def _refusal_provenance(aid: "_Aid") -> dict:
 
 # ================================================================== a refusal
 
+SOURCE_TOTAL_REASONS = ("source_total_unchecked", "source_total_mismatch", "no_source_total")
+
+
+def refusal_reason(res: dict, code: str) -> str:
+    """The reason a refused selection reports. The grain gate comes first: a file with repeated
+    observation keys cannot be summed whatever its source total says, so a source-total reason on
+    such a file is reported as the grain reason in every tool (F11)."""
+    reason = (res.get("aggregation") or {}).get("reason") or "unavailable"
+    if reason in SOURCE_TOTAL_REASONS:
+        grain = ((res.get("quality") or {}).get("grain") or {}).get("status")
+        if grain not in ("conflicting", "duplicate_keys"):
+            from app.services import grain_guard
+            grain = grain_guard.file_status(code)["status"]
+        if grain in ("conflicting", "duplicate_keys"):
+            return "conflicting_grain" if grain == "conflicting" else "duplicate_keys"
+    return reason
+
+
 def _refused(aid: "_Aid", warnings: list) -> dict:
     res = aid.res
     agg = res.get("aggregation") or {}
-    reason = agg.get("reason") or "unavailable"
+    reason = refusal_reason(res, aid.code)
     col = agg.get("blocking_dimension")
     try:
         message, recs, extra = _PLANS.get(reason, _plan_generic)(aid, reason, col)
@@ -414,6 +444,10 @@ def _plan_overlap(aid, reason, col):
 def _plan_weights(aid, reason, col):
     msg = aid.t("query.weights")
     recs = []
+    from app.services.tools import recipe as recipe_tool
+    rid = recipe_tool.published_recipe_for(aid.conn, aid.code)
+    if rid:       # INS publishes the value itself; the reviewed recipe serves it (F10)
+        recs.append(recipe_tool.recipe_recovery(rid, aid.lang, aid.t("recipe.published_route", rid=rid)))
     agg = aid.res.get("aggregation") or {}
     collapsed = [d["column"] for d in agg.get("dimensions") or []
                  if d.get("treatment") in ("partition", "level", "explicit_set")]

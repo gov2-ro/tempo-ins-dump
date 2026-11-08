@@ -51,6 +51,7 @@ from app.services.tools import discovery_policy as dpol
 from app.services.tools import messages as M
 from app.services.tools import recipe as recipe_tool
 from app.services.tools import schemas as S
+from app.services.tools import units
 from app.services.tools.contract import ToolFailure
 
 log = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ PERIOD_NOTES = ("period_unavailable", "period_not_single")
 RANGE_NOTES = ("period_range_partial", "period_range_single")     # several years asked: a warning, not an ambiguity
 GEO_LEVELS = ("county", "region", "macroregion", "national")
 ACTION_TOOLS = ("query_data", "rank_entities", "run_recipe", "describe_dataset", "find_dimension_values")
+LEVEL_ORDER = {"county": 1, "region": 2, "macroregion": 3, "national": 4}     # a larger area contains a smaller one
 PLACE_NOTES = ("place_not_in_dataset", "place_level_unavailable", "level_differs")
 CARRIED_WARNINGS = ("series_break", "constraint_not_applied", "period_unavailable", "period_not_single")
 MAX_ACTION_NOTES = 4        # qualifications travelling with a choice's action
@@ -589,13 +591,21 @@ def _recipe_candidate(ctx, rid: str, parsed: dict, coverage: dict | None, relati
     unsafe = quality in UNSAFE_GRAIN
     if unsafe:
         notes.append(_note(f"grain_{quality}", M.t(ctx.lang, "discover.recipe_grain")))
+    level = r.get("geo_level", "county")
+    # a national question on a recipe with INS's published national cell: run it for that cell (F3)
+    if parsed.get("level") == "national" and not parsed.get("places") and r.get("published") \
+            and not (area_call or period_call):
+        national = recipe_tool.national_cells(ctx.conn, rid)
+        if national:
+            args["areas"], level = [national[-1][1]["label"]], "national"
+            notes.append(_note("national_published", M.t(ctx.lang, "discover.national_published")))
     next_call = area_call or period_call or _call("run_recipe", **args)
     lookup = None
     if labels is not None:      # the source's labels could be listed, so this lookup will run
         named = (absent or [p["name"] for p in parsed.get("places") or []])[:1]
         lookup = _call("find_dimension_values", dataset=area_ds, column="REF_AREA", limit=20,
                        **({"query": recipe_tool.lookup_query(named[0], labels)} if named else {}))
-    return {"dataset": None, "recipe": rid, "kind": "recipe", "relation": relation, "level": r.get("geo_level", "county"),
+    return {"dataset": None, "recipe": rid, "kind": "recipe", "relation": relation, "level": level,
             "quality": quality, "sources": sources, "area_lookup": lookup, "series_breaks": [],
             "domain": {"complete": None, "restrictions": [], "missing": [], "checked": [],
                        "description": M.t(ctx.lang, "discover.recipe_domain")},
@@ -611,9 +621,14 @@ def _choose(cands: list, wanted_level, lang: str) -> dict | None:
     if pick is not None:
         pick["preferred"] = True
         if wanted_level and pick["level"] != wanted_level:
-            pick["notes"].append(_note("level_differs", M.t(
-                lang, "discover.level_differs", wanted=wanted_level,
-                level=pick["level"] or M.t(lang, "discover.parent_level"))))
+            level = pick["level"] or M.t(lang, "discover.parent_level")
+            if LEVEL_ORDER.get(wanted_level, 0) > LEVEL_ORDER.get(pick["level"], 9):
+                # a larger area than the source's: its values can be summed (F8); not a place blocker
+                pick["notes"].append(_note("level_aggregated", M.t(
+                    lang, "discover.level_aggregated", wanted=wanted_level, level=level)))
+            else:
+                pick["notes"].append(_note("level_differs", M.t(
+                    lang, "discover.level_differs", wanted=wanted_level, level=level)))
     return pick
 
 
@@ -643,7 +658,8 @@ def _concept_card(ctx, raw: dict, by_id: dict, parsed: dict, query: str) -> dict
         "id": raw["id"], "kind": "recipe" if is_recipe else "dataset", "name": raw["name"],
         "concept_note": raw.get("note"), "matched": raw.get("matched"),
         "generic_match": bool(raw.get("ambiguous")), "definition": definition,
-        "definition_truncated": cut, "unit": raw.get("unit"), "unit_type": raw.get("unit_type"),
+        "definition_truncated": cut, "unit": raw.get("unit"),
+        "unit_type": units.unit_type(cdef.get("family"), raw.get("unit_type")),
         "source_updated": raw.get("source_updated"),
         "coverage": dict(raw["coverage"]) if raw.get("coverage") else None,
         "recipe": None, "levels": [], "notes": _card_notes(raw, ctx.lang),
@@ -1346,7 +1362,7 @@ def describe_dataset(args, ctx):
         "dataset": code, "name": meta.get("matrix_name"), "definition": definition,
         "definition_truncated": cut, "definition_url": C.dataset_page(code, lang),
         "measure": meta.get("measure"), "unit": facts.get("unit") if facts else None,
-        "unit_type": (facts or {}).get("unit_type") or profile.get("primary_unit_type"),
+        "unit_type": units.unit_type(code, (facts or {}).get("unit_type") or profile.get("primary_unit_type")),
         "unit_types": list(unit_types) if len(unit_types) > 1 else None,
         "source_updated": meta.get("ultima_actualizare"), "url": C.dataset_page(code, lang),
         "has_data": has_file, "row_count": meta.get("row_count"),

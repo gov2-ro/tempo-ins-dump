@@ -132,7 +132,7 @@ def test_task_fixtures_are_declared_and_pinned_cases_name_the_copied_generation(
         assert t["fixture"] in DOC["fixtures"]
         if t.get("pinned"):
             fx = DOC["fixtures"][t["pinned"]["fixture"]]
-            assert fx["kind"] == "copied" and fx["generation_prefix"] == "9b3e065d"
+            assert fx["kind"] == "copied" and fx["generation_prefix"] == "062bd2b0"
     assert sorted(t["id"] for t in DOC["tasks"] if t.get("pinned")) == ["X01", "X02", "X03", "X07", "X08"]
     assert [t["id"] for t in DOC["tasks"] if DOC["fixtures"][t["fixture"]]["kind"] == "copied"] == ["X03B"]
 
@@ -350,7 +350,7 @@ def copied_dir():
     if not (corpus / "metadata.duckdb").exists():
         pytest.skip("no corpus under TEMPO_DATA_DIR")
     gen = json.loads((corpus / "generation-manifest.json").read_text()).get("generation_id") or ""
-    prefix = DOC["fixtures"]["copied-9b3e065d"]["generation_prefix"]
+    prefix = DOC["fixtures"]["copied-062bd2b0"]["generation_prefix"]
     if not gen.startswith(prefix):
         pytest.skip(f"copied generation {gen[:8]} is not {prefix}")
     return corpus

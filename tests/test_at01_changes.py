@@ -171,9 +171,9 @@ def test_ties_break_by_the_full_entity_key(tmp_path, monkeypatch):
     make_env(tmp_path, monkeypatch, build=build)
     asc = call("compare_periods", dataset="TIEX", entity_columns=["REF_AREA"],
                intervals=[iv("2000", "2010")])
-    # Low -10 first; then the +5 tie in key order; rank is ordinal 1..n
-    assert [(r["entity"]["REF_AREA"], r["rank"]) for r in rows_of(asc)] == [
-        ("Low", 1), ("Alfa", 2), ("Beta", 3), ("Mid", 4), ("Zeta", 5)]
+    # Low -10 first; then the +5 tie in key order; tied rows share a rank (competition ranking, PKG-TOOLS F4)
+    assert [(r["entity"]["REF_AREA"], r["rank"], r["tied_with"]) for r in rows_of(asc)] == [
+        ("Low", 1, 1), ("Alfa", 2, 4), ("Beta", 2, 4), ("Mid", 2, 4), ("Zeta", 2, 4)]
     desc = call("compare_periods", dataset="TIEX", entity_columns=["REF_AREA"],
                 intervals=[iv("2000", "2010")], order="desc")
     assert [r["entity"]["REF_AREA"] for r in rows_of(desc)] == ["Alfa", "Beta", "Mid", "Zeta", "Low"]
