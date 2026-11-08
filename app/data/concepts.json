@@ -87,7 +87,13 @@
    },
    "alternatives": [
     "resident_population"
-   ]
+   ],
+   "also_families": [
+    "POP107D"
+   ],
+   "also_variants": {
+    "county": "POP107D_grupe_judet"
+   }
   },
   {
    "id": "resident_population_july",
@@ -449,6 +455,9 @@
    },
    "alternatives": [
     "live_births_residence"
+   ],
+   "also_families": [
+    "POP201D"
    ]
   },
   {
@@ -485,6 +494,9 @@
    },
    "alternatives": [
     "live_births_domicile"
+   ],
+   "also_families": [
+    "POP201K"
    ]
   },
   {
