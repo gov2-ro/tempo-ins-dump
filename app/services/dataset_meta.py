@@ -427,7 +427,8 @@ def get_dataset_meta(matrix_code: str, lang: str = "ro", *, conn=None) -> dict |
     # children) must not get a composition, or every tile 500s. The v2
     # frontend shows the sub-dataset pills instead.
     composition = compose_dashboard(sig, ranked, dimensions, trend,
-                                    actual_values, struct) if has_parquet else None
+                                    actual_values, struct,
+                                    conn=conn, code=matrix_code) if has_parquet else None
 
     chart_config = {
         'ranked_charts': ranked,
