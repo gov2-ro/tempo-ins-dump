@@ -30,7 +30,12 @@ Reasons (`reason`, machine-readable)
     declared_partition_invalid  curated partition has total-like/tree labels or
                             a non-additive measure
     source_total_mismatch   INS's own options of the dimension do not add up to
-                            INS's Total (kpi_dimension_checks): never summed
+                            INS's Total (kpi_dimension_checks): never summed.
+                            Also: the dataset's summed headline disagrees with
+                            the INS Total (kpi_total_checks) and the request
+                            sums a dimension that kpi_dimension_checks does not
+                            show agreeing with INS (`source_check` names the
+                            relative error)
     ambiguous_slice         (headlines) more rows than the declared method allows
     no_data                 (headlines) slice returned nothing
     comparator_missing / comparator_zero   (changes) no usable comparison base
@@ -72,6 +77,7 @@ FIX-07 and FIX-08 consume these exact names — see `provenance()`):
 """
 from __future__ import annotations
 
+import math
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -120,6 +126,17 @@ _UNKNOWN_UNIT_NON_ADD_RE = re.compile(
     r'tarif\w*|densitat\w*|speranta de viata|per capita|pe locuitor|pe cap de locuitor|'
     r'la 1000|la 100|la 100000)\b', re.I)
 
+# Rates by another name (C03): prevalence, incidence, mortality, natality,
+# fertility. Not plain 'incidente' (security incidents are counts) and not
+# the fertility of the soil. A name that says it counts cases ("[cazuri noi]",
+# the TCX0352 split child) keeps the count.
+_RATE_WORD_RE = re.compile(
+    r'\b(rates|ratio|prevalen(?:ta|tei|ce)|incidenta|incidentei|incidence|'
+    r'mortalitat\w*|mortality|natalitat\w*|natality|'
+    r'fertilitat\w*(?! solului)|fertility|fecunditat\w*|fecundity)\b', re.I)
+_CASE_COUNT_RE = re.compile(
+    r'\[cazuri noi\]|\bnumarul? (?:de )?cazuri\b|\bnumber of (?:new )?cases\b', re.I)
+
 # Indicator *option* labels that name an average, median or per-head amount
 # ("media veniturilor disponibile pe adult-echivalent"). SAR119E's name and
 # definition read as income amounts ("Veniturile ..."), so only its options
@@ -165,7 +182,10 @@ def classify_measure(unit_type: str | None, text: str = '',
     text = _fold(text)
     if ut in ('', 'other'):
         # Unknown unit: rates, averages, shares and indices by name are never summed.
-        return 'non_additive' if text and _UNKNOWN_UNIT_NON_ADD_RE.search(text) else 'additive'
+        if text and (_UNKNOWN_UNIT_NON_ADD_RE.search(text) or (
+                _RATE_WORD_RE.search(text) and not _CASE_COUNT_RE.search(text))):
+            return 'non_additive'
+        return 'additive'
     if ut not in NON_ADDITIVE_UNIT_TYPES:
         return 'additive'
     if ut == 'currency' and text:
@@ -318,6 +338,33 @@ def age_ranges_overlap(options) -> bool | None:
     return any(spans[i][1] >= spans[i + 1][0] for i in range(len(spans) - 1))
 
 
+_SEX_VALUES = frozenset({'masculin', 'feminin', 'masculi', 'barbati', 'femei',
+                         'male', 'female', 'males', 'females', 'men', 'women'})
+_RESIDENCE_VALUES = frozenset({'urban', 'rural'})
+
+
+def partition_kind(labels) -> str | None:
+    """'sex' | 'residence' | 'mixed' | None for a dimension's option labels.
+
+    INS sometimes puts sex and residence options in one dimension (TAV0212,
+    TGA0526: Masculin, Feminin, Urban, Rural). Each pair covers everyone, so
+    the four options count every person twice: 'mixed' is never a partition.
+    Total-like labels are ignored. None: the labels are not sex/residence only.
+    """
+    kinds = set()
+    for l in labels:
+        v = _fold(l).strip()
+        if not v or TOTAL_RE.match(v):
+            continue
+        kinds.add('sex' if v in _SEX_VALUES else
+                  'residence' if v in _RESIDENCE_VALUES else 'other')
+    if {'sex', 'residence'} <= kinds:
+        return 'mixed'
+    if kinds == {'sex'} or kinds == {'residence'}:
+        return kinds.pop()
+    return None
+
+
 def _norm(v) -> str:
     return str(v).strip()
 
@@ -362,6 +409,7 @@ class AggregationDecision:
     warnings: list = field(default_factory=list)
     weights_source: str | None = None
     blocking_dimension: str | None = None
+    source_check: dict | None = None       # set only for source_total_mismatch
 
     @property
     def available(self) -> bool:
@@ -376,6 +424,7 @@ class AggregationDecision:
             'dimensions': self.dimensions, 'warnings': self.warnings,
             'weights_source': self.weights_source,
             'blocking_dimension': self.blocking_dimension,
+            **({'source_check': self.source_check} if self.source_check else {}),
         }
 
 
@@ -575,6 +624,13 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
                 dimensions=audit, warnings=warnings)
         return _unavailable('missing_weights', None, audit, out_filters)
 
+    # ---- the INS total disagrees with our sum (E1/E2) ----
+    mismatch = _source_total_mismatch(struct, audit) if summed else None
+    if mismatch:
+        d = _unavailable('source_total_mismatch', mismatch['column'], audit, out_filters)
+        d.source_check = mismatch['source_check']
+        return d
+
     if summed:
         method = 'sum_partition'
     elif slice_like:
@@ -589,6 +645,48 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
 
 
 # --- decide() internals ------------------------------------------------------
+
+# struct key for the dataset's INS total check. dimension_structure.load() puts
+# the kpi_total_checks row there, with `dims_match`: the columns whose INS
+# parts add up to the INS total (kpi_dimension_checks status 'match').
+SOURCE_TOTAL_KEY = '__source_total__'
+
+
+def source_total_check(struct: dict | None) -> dict | None:
+    chk = (struct or {}).get(SOURCE_TOTAL_KEY)
+    return chk if isinstance(chk, dict) else None
+
+
+def _round_half_up(x: float) -> int:
+    return int(math.floor(x + 0.5))
+
+
+def _source_total_mismatch(struct, audit) -> dict | None:
+    """E1/E2: the dataset's summed headline disagrees with the INS Total, so a
+    sum over a partition that INS has not shown to add up is not a total.
+    A dimension that kpi_dimension_checks shows agreeing with INS stays valid."""
+    chk = source_total_check(struct)
+    if not chk or chk.get('status') != 'mismatch':
+        return None
+    agreeing = set(chk.get('dims_match') or ())
+    cols = [a['column'] for a in audit
+            if a['treatment'] in ('partition', 'level') and a['column'] not in agreeing]
+    if not cols:
+        return None
+    ours, ins, rel = chk.get('ours'), chk.get('ins'), chk.get('rel')
+    if rel is None and ours is not None and ins:
+        rel = (ours - ins) / ins
+    msg = f"The sum over {', '.join(cols)} does not agree with the INS total"
+    if chk.get('period'):
+        msg += f" for {chk['period']}"
+    if ours is not None and ins is not None:
+        msg += f": {_round_half_up(ours):,} against {_round_half_up(ins):,}"
+    if rel is not None:
+        msg += f" (relative error {_round_half_up(abs(rel) * 100)}%)"
+    return {'column': cols[0], 'source_check': {
+        'source': 'INS', 'period': chk.get('period'), 'value': ins, 'ours': ours,
+        'relative_diff': rel, 'message': msg + '.'}}
+
 
 def _match(eff, values):
     want = {_norm(v) for v in values}
@@ -641,6 +739,8 @@ def _metadata_overlap(dim, options) -> str | None:
     elif dtype == 'age':
         if age_ranges_overlap(options):
             return 'overlapping_levels'
+    if partition_kind(o.get('label') or '' for o in options) == 'mixed':
+        return 'overlapping_levels'     # sex and residence: two partitions
     return None
 
 
