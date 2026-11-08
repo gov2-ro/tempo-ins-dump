@@ -52,6 +52,7 @@ from app.services.tools import messages as M
 from app.services.tools import recipe as recipe_tool
 from app.services.tools import schemas as S
 from app.services.tools import units
+from app.services.tools import vintage
 from app.services.tools.contract import ToolFailure
 
 log = logging.getLogger(__name__)
@@ -496,8 +497,14 @@ def _dataset_candidates(ctx, raw: dict, parsed: dict) -> list:
     year, wanted = parsed.get("period"), parsed.get("periods")
     sel = _filters_for_call(raw.get("selection"))
     cands = []
+    newer = next((c.get("also_variants") or {} for c in cs.load_concepts() if c["id"] == raw.get("id")), {})
     for idx, (level, code) in enumerate(levels):
         filters, notes, period_call = {}, [], None
+        alt = newer.get(level)
+        if alt and vintage.prefers(conn, code, alt):
+            # the concept's newer table at the same level (F1): it replaces the older one
+            notes.append(_note("newer_vintage_preferred", M.t(lang, "discover.vintage_preferred", newer=alt, code=code)))
+            code = alt
         facts = cs.dataset_facts(conn, code, lang)
         if idx == 0 and sel.get("REF_AREA"):
             filters["REF_AREA"] = sel["REF_AREA"]

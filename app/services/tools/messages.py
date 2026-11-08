@@ -685,6 +685,10 @@ TEXT = {
                                   "'{rid}' serves the published value by area; run it.",
         "recipe.series_break": "A series break lies between {year} and the latest year {last}; "
                                "values on the two sides are not directly comparable. {text}",
+        "discover.vintage_preferred": "{newer} is the newer INS table of this concept and answers instead of {code}.",
+        "discover.vintage_newer": "{code} was updated on {own_date}; {newer}, another INS table of the same concept, "
+                         "was updated on {new_date}. The newer table can revise earlier years, so the "
+                         "same year may differ. Check {newer} before you cite a figure.",
         "recipe.preview_shortened": "The preview was shortened to fit the response budget "
                                     "(exclusion sample, aggregate cells or ranking rows); the "
                                     "exclusion counts and the canonical selection give the "
@@ -1435,6 +1439,10 @@ TEXT = {
                                   "'{rid}' servește valoarea publicată pe zone; rulează-o.",
         "recipe.series_break": "O ruptură de serie se află între {year} și ultimul an {last}; "
                                "valorile de pe cele două părți nu sunt direct comparabile. {text}",
+        "discover.vintage_preferred": "{newer} este tabelul INS mai nou al acestui concept și răspunde în locul lui {code}.",
+        "discover.vintage_newer": "{code} a fost actualizat la {own_date}; {newer}, alt tabel INS al aceluiași concept, "
+                         "a fost actualizat la {new_date}. Tabelul mai nou poate revizui anii anteriori, deci "
+                         "același an poate diferi. Verifică {newer} înainte să citezi o cifră.",
         "recipe.preview_shortened": "Previzualizarea a fost scurtată ca să încapă în bugetul "
                                     "răspunsului (eșantionul de excluderi, celulele agregate sau "
                                     "rândurile clasamentului); numărul excluderilor și selecția "

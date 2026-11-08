@@ -21,6 +21,7 @@ from app.services import generation
 from app.services.tools import messages as M
 from app.services.tools import schemas as S
 from app.services.tools import units
+from app.services.tools import vintage
 from app.services.tools.contract import (
     MAX_ARGUMENT_BYTES, MAX_RECOVERY, MAX_RESULT_BYTES, ToolContext, ToolFailure, dumps, envelope,
     failure_envelope, recovery, response_budget, shrink_rows, size)
@@ -276,6 +277,7 @@ def call_tool(name: str, arguments, *, conn=None) -> dict:
             conn = get_conn()
         ctx.conn = conn
         env = _resolve(spec.handler)(args, ctx)
+        vintage.apply(env, ctx)
     except ToolFailure as f:
         env = failure_envelope(tool, ctx, f)
     except Exception:
