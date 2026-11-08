@@ -163,5 +163,42 @@ whether to gate `describe_dataset` by scan size (MCP-04).
 
 ## 7. Remediation status
 
-_Filled in after the implementation packages were merged; see the activity log entry of
-2026-11-08 for the per-package record._
+Seven implementation packages were written by sub-agents in isolated worktrees on 2026-11-08 and
+merged into `audit/charts-mcp-2026-11`, then into `fix/ask-answer-quality`. Per-package detail and
+corpus before/after numbers are in the activity log entry of 2026-11-08. Nothing is deployed and
+the corpus is unchanged.
+
+| Finding | Status | Where |
+|---|---|---|
+| CH-01 Total stacked on parts | Fixed: composer slice excludes the Total series; stacked area, grouped bars and v1 stacks drop a Total; FOM104G stack equals the INS Total | composer, frontend |
+| CH-02 mixed sex+residence partition | Fixed: `partition_kind`; policy refuses, `_stack_ok` never stacks it | policy |
+| CH-03 prevalence additive | Fixed: rate-word rule for unknown units (TAV0212 flips) | policy |
+| CH-04 INS-contradicted sums served | Fixed in the shared verdict: `source_total_mismatch` for tiles, `/data`, insights, Ask, MCP; SCL104A_judete refuses 88,736. 126 mismatch datasets keep sums whose summed dimension INS verifies | policy, structure loader |
+| CH-05 mixed periodicity on one axis | Fixed for tiles and pins: one periodicity per temporal tile, badge shows what was left out. Insights KPIs and trend breaks still read mixed values (backlog) | composer, frontend |
+| CH-06 winner from a hidden pin | Fixed: sentence names one pin, withheld for two or more | insights |
+| CH-07 tooltip sum | Fixed: only on stacked views, Total excluded | frontend |
+| CH-08 mixed grain on axis | Disclosed: visible badge. Restricting pyramids and bars to one band set is backlog | frontend |
+| CH-09 choropleth for countries | Fixed: selector gate plus ranking-bar fallback | selector, frontend |
+| CH-10 children without time | Fixed in the selector (derived from options) and in the classifier; the stored profiles need a scoped recompute on a copied generation (backlog) | selector, pipeline |
+| CH-11 tiles `/data` refuses | Fixed: composer runs the grain guard and lists refused tiles under `suppressed` with the reason | composer |
+| CH-12 empty cross-pins | Fixed: co-occurrence check re-picks the pin | composer |
+| CH-13 v1 stacks rates | Fixed: no Area/Stacked for non-additive measures; no raw-row fallback | frontend |
+| CH-14 stale eval | Baseline rebuilt over 4,110 datasets with the diff explained; a composer-layer eval with a hand-labelled set is backlog | eval |
+| CH-15 hero from published totals | Owner: yes, next composer package (backlog) | — |
+| CH-16…CH-22 | CH-17 fixed (no raw-row fallback); CH-18 v1 yearly toggle off by default; CH-21 small geo dims are series; the rest backlog | frontend, composer |
+| MCP-01 global rate bucket | Fixed: per-client windows under the global ceiling; refused Origin/Host counts only against its client. Per-client keys behind Cloudflare need the real-IP header (owner: later) | public_mcp |
+| MCP-02 uncapped content log | Fixed: 256 MiB cap, one rotation, argument-free refusal lines, off the event loop | public_mcp |
+| MCP-03 one-shot deadline | Fixed: repeating interrupt; post-deadline answers become `query_timeout`, never cached | ask_guard, public_mcp |
+| MCP-05 cache key | Fixed: validated model, sorted keys | public_mcp |
+| MCP-06 hang-up | Fixed: disconnect cancels the token | public_mcp |
+| MCP-07 privacy notice | Wording fixed; owner keeps the access log | public_mcp |
+| MCP-04, 08, 09, 10, 11 | Backlog or accepted as is | — |
+| AQ-01 vintage | Fixed: `newer_vintage` warning; discovery prefers the newest sibling unless its grain conflicts | tools |
+| AQ-02, AQ-05 births and CPI concepts | Fixed: reviewed concepts; IPC102 reported as index (profile fix is backlog) | tools |
+| AQ-03 national unemployment | Fixed: runnable from INS's TOTAL cell | tools |
+| AQ-04 ties | Fixed: shared ranks, `tied_with`, `tie_split` | tools |
+| AQ-06 eval pin | Fixed: 062bd2b0, 144/144, 0 skipped | eval |
+| AQ-07…AQ-10, AQ-12 | Fixed except the REST empty-slice reason and EN unit labels (backlog) | tools |
+| AQ-11 `_judet` splits | Fixed in stage 12 for the next run (child skipped unless a verified roll-up exists); the four live children stay until the parents are regenerated | pipeline |
+
+Full test suite on the merged branch: 2,354 passed, 33 skipped (all pinned to another generation or a missing record), 1 failed. The failure was tests/test_fix02c_source_gate.py asserting the old headline-only scope of the INS gate; its expectation was updated to the extended rule (grouping by SEX is refused too, a full breakdown stays available) and the file passes.
