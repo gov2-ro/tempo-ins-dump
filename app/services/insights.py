@@ -46,6 +46,7 @@ T = {
         's_break': 'Schimbare de tendință în {years}.',
         's_break_many': 'Schimbări de tendință în {years}.',
         's_top_cat': '„{top}" are cea mai mare valoare ({top_val}).',
+        's_pinned': 'Pentru „{pins}": {sentence}',
     },
     'en': {
         'latest': 'Latest value',
@@ -64,6 +65,7 @@ T = {
         's_break': 'Trend change in {years}.',
         's_break_many': 'Trend changes in {years}.',
         's_top_cat': '"{top}" has the largest value ({top_val}).',
+        's_pinned': 'For "{pins}": {sentence}',
     },
 }
 
@@ -327,7 +329,16 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
                             actual_values, non_additive, struct)
         rank_decision = spec_decision(spec, dimensions, actual_values, struct,
                                       non_additive)
-        if rank_decision.available:
+        # The same rule as the 'latest' KPI (E4): a ranking of an arbitrary
+        # pinned slice must say which slice it is. One pin is named in the
+        # sentence; two or more pins make the ranking too narrow to headline.
+        rank_pins = (_pinned_labels(spec, rank_decision, dimensions, actual_values)
+                     if rank_decision.available else [])
+        if len(rank_pins) >= 2:
+            suppressed.append({'key': 'ranking', 'outcome': ap.UNAVAILABLE,
+                               'reason': 'arbitrary_pin', 'column': None})
+            rows = []
+        elif rank_decision.available:
             rows, refusal = _fetch_slice(conn, matrix_code, dimensions, spec,
                                          rank_decision.agg_func or 'SUM', schema)
             if refusal:
@@ -360,6 +371,8 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
             else:
                 s_geo = tr['s_top_cat'].format(
                     top=top[0].strip(), top_val=_fmt(top[1], lang))
+            if rank_pins:
+                s_geo = tr['s_pinned'].format(pins=rank_pins[0], sentence=s_geo)
 
     sentences = [s for s in (s_yoy, s_geo, s_break) if s]
     data = {'kpis': kpis, 'sentences': sentences[:3], 'notables': notables,
@@ -369,6 +382,23 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
         _cache.clear()
     _cache[key] = {'data': data, 'ts': now}
     return data
+
+
+def _pinned_labels(spec, decision, dimensions, actual_values) -> list[str]:
+    """Display labels of the options a decision holds at one non-aggregate
+    value (treatment 'pinned_value'), in dimension order."""
+    by_col = {d['dim_column_name']: d for d in dimensions}
+    out = []
+    for a in decision.dimensions:
+        if a['treatment'] != 'pinned_value':
+            continue
+        col = a['column']
+        value = (spec.get('filters') or {}).get(col, [None])[0]
+        label = next((o.get('label') for o, dv in _effective(by_col[col], actual_values)
+                      if dv is not None and str(dv) == str(value)), None) \
+            if col in by_col else None
+        out.append(str(label or value or '').strip())
+    return out
 
 
 def _kpi_scope(conn, matrix_code, decision, time_dim) -> dict:
