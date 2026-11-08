@@ -24,6 +24,19 @@ function resolveRoles(chartConfig) {
     };
 }
 
+/** Stacking a Total on its own parts doubles the bar (C01/E3): drop the
+ *  Total series rows, unless the Total is the only series. */
+function dropTotalSeries(data, seriesDim) {
+    if (!seriesDim || typeof isTotalLabel !== 'function') return data;
+    const si = data.columns.indexOf(seriesDim);
+    if (si === -1) return data;
+    const lbls = (data.column_labels || {})[seriesDim] || {};
+    const isTot = v => isTotalLabel(lbls[String(v)] || String(v));
+    const ids = [...new Set(data.rows.map(r => r[si]))];
+    if (ids.every(isTot)) return data;
+    return { ...data, rows: data.rows.filter(r => !isTot(r[si])) };
+}
+
 async function createChart(container, chartConfig, data, metadata) {
     const chartType = chartConfig.primary_chart;
     const roles = resolveRoles(chartConfig);
@@ -49,7 +62,7 @@ async function createChart(container, chartConfig, data, metadata) {
             // If x_axis is a category (not time), use demographic chart with stacking
             if (cfg.x_axis_dim && cfg.x_axis_dim !== cfg.time_dim) {
                 cfg._stacked = true;
-                return createDemographicChart(container, cfg, data, metadata);
+                return createDemographicChart(container, cfg, dropTotalSeries(data, cfg.series_dim), metadata);
             }
             return createStackedBarChart(container, cfg, data, metadata);
         case 'choropleth': {
@@ -140,6 +153,13 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
         // Cap high-cardinality series — keep top N by sum, and SAY so:
         // silent truncation makes the chart lie about what the data holds.
         let entries = Object.entries(groups);
+        // A Total stacked on its parts counts twice (C01); beside them in bars it dwarfs them (E3).
+        if ((isStacked || forceType === 'bar' || chartType === 'bar_vertical' || chartType === 'bar')
+                && typeof isTotalLabel === 'function') {
+            const isTot = ([id]) => isTotalLabel(seriesLabelsMap[String(id)] || String(id));
+            const parts = entries.filter(e => !isTot(e));
+            if (parts.length) entries = parts;
+        }
         const MAX_SERIES = config.max_series || 12;
         if (entries.length > MAX_SERIES) {
             truncatedFrom = entries.length;
@@ -195,7 +215,8 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
         });
     }
 
-    const showTotal = series.length > 1 && config._sumSeries === true;
+    // ∑ is meaningful only where series are stacked (Total is already dropped there).
+    const showTotal = isStacked && series.length > 1 && config._sumSeries === true;
 
     const vfmt = config._valueFormat;
     const fmtVal = v => {

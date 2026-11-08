@@ -44,6 +44,8 @@ const UI_STRINGS = {
         seasonalTooltip: 'Suprapune anii: o linie pe an, luni/trimestre pe axa X',
         perCapita: '‰',
         perCapitaTooltip: 'La 1.000 de locuitori (populația rezidentă la 1 ianuarie a aceluiași an)',
+        mixedGrain: 'niveluri amestecate',
+        mixedGrainTip: 'Axa amestecă niveluri sau intervale suprapuse (ex. regiuni și județe, 15-24 și 15-74 ani). Barele nu sunt direct comparabile.',
         perCapitaDropped: n => `${n} valori fără populație în același an`,
         perCapitaDroppedTip: 'Se împarte doar la populația din același an (județele au date din 2012); restul nu se afișează.',
         logScale: 'log',
@@ -118,6 +120,8 @@ const UI_STRINGS = {
         seasonalTooltip: 'Overlay years: one line per year, months/quarters on X',
         perCapita: '‰',
         perCapitaTooltip: 'Per 1,000 residents (resident population on 1 January of the same year)',
+        mixedGrain: 'mixed levels',
+        mixedGrainTip: 'The axis mixes levels or overlapping ranges (e.g. regions and counties, 15-24 and 15-74 years). Bars are not directly comparable.',
         perCapitaDropped: n => `${n} values without same-year population`,
         perCapitaDroppedTip: 'Divided only by the same year\'s population (county data from 2012); other values are not shown.',
         logScale: 'log',
@@ -1176,7 +1180,10 @@ class DashboardV2 {
     /** Badge for a live slice (reflects the user's filters, unlike the
      *  composition-time decision). */
     sliceBadge(data) {
-        const html = aggBadgeHTML(data?.aggregation, this.lang) + scopeNoteHTML(data?.scope, this.lang);
+        // Mixed grains stay on the axis when the dim has no verified level (C06): say so.
+        const mixed = (data?.aggregation?.warnings || []).some(w => w.code === 'mixed_grain_on_axis')
+            ? `<span class="agg-badge agg-badge-mixed" title="${_escHtml(this.ui.mixedGrainTip)}">${_escHtml(this.ui.mixedGrain)}</span>` : '';
+        const html = aggBadgeHTML(data?.aggregation, this.lang) + scopeNoteHTML(data?.scope, this.lang) + mixed;
         if (!html) return null;
         const tmp = document.createElement('template');
         tmp.innerHTML = html;
