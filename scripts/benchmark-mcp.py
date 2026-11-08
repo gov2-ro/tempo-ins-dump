@@ -80,6 +80,7 @@ PROFILE_FLAGS = {"max_scan_rows": "TEMPO_MCP_MAX_SCAN_ROWS", "max_seconds": "TEM
 # still see the one-slot gate directly (a queued call would hide whether the slot was held; memory is the
 # same, since queued calls do no work). Recorded in the report under profile.harness_overrides.
 HARNESS_OVERRIDES = {"TEMPO_MCP_MAX_CALLS_PER_MINUTE": "1000000", "TEMPO_MCP_MAX_REQUESTS_PER_MINUTE": "1000000",
+                     "TEMPO_MCP_CLIENT_CALLS_PER_MINUTE": "1000000", "TEMPO_MCP_CLIENT_REQUESTS_PER_MINUTE": "1000000",
                      "TEMPO_MCP_QUEUE_SECONDS": "0"}
 ENV_ALLOW = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "VIRTUAL_ENV", "SYSTEMROOT")
 SECRET_NAME = re.compile(r"(API_KEY|_TOKEN|SECRET|PASSWORD)$|^(ANTHROPIC|OPENAI|GEMINI|MISTRAL|DEEPSEEK|XAI|OPENROUTER)_")
