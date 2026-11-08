@@ -242,6 +242,30 @@ function unprofiledPartition(dim, eff, struct) {
     return '!unverified_structure';
 }
 
+// aggregation_policy.SOURCE_TOTAL_KEY / _source_total_mismatch (E1/E2).
+export const SOURCE_TOTAL_KEY = '__source_total__';
+const roundHalfUp = x => Math.floor(x + 0.5);
+const thousands = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+function sourceTotalMismatch(struct, audit) {
+    const chk = (struct || {})[SOURCE_TOTAL_KEY];
+    if (!chk || typeof chk !== 'object' || chk.status !== 'mismatch') return null;
+    const agreeing = new Set(chk.dims_match || []);
+    const cols = audit.filter(a => (a.treatment === 'partition' || a.treatment === 'level')
+        && !agreeing.has(a.column)).map(a => a.column);
+    if (!cols.length) return null;
+    const ours = chk.ours ?? null, ins = chk.ins ?? null;
+    let rel = chk.rel ?? null;
+    if (rel == null && ours != null && ins) rel = (ours - ins) / ins;
+    let msg = `The sum over ${cols.join(', ')} does not agree with the INS total`;
+    if (chk.period) msg += ` for ${chk.period}`;
+    if (ours != null && ins != null) msg += `: ${thousands(roundHalfUp(ours))} against ${thousands(roundHalfUp(ins))}`;
+    if (rel != null) msg += ` (relative error ${roundHalfUp(Math.abs(rel) * 100)}%)`;
+    return { column: cols[0], source_check: {
+        source: 'INS', period: chk.period ?? null, value: ins, ours, relative_diff: rel,
+        message: msg + '.' } };
+}
+
 /** aggregation_policy.decide(..., api_mode=True) as used by decide_grouped. */
 export function decide({ dimensions, effective, groupBy = [], filters = {}, struct = {},
                          measure, levels = {}, allowApproximation = false, apiMode = true }) {
@@ -362,6 +386,11 @@ export function decide({ dimensions, effective, groupBy = [], filters = {}, stru
                 levels: outLevels, dimensions: audit, warnings });
         }
         return unavailable('missing_weights', null, audit, outFilters);
+    }
+    const mismatch = summed ? sourceTotalMismatch(struct, audit) : null;
+    if (mismatch) {
+        return { ...unavailable('source_total_mismatch', mismatch.column, audit, outFilters),
+                 source_check: mismatch.source_check };
     }
     const method = summed ? 'sum_partition' : sliceLike ? 'single_row' : 'aggregate_row';
     return decision({

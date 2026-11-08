@@ -30,7 +30,12 @@ Reasons (`reason`, machine-readable)
     declared_partition_invalid  curated partition has total-like/tree labels or
                             a non-additive measure
     source_total_mismatch   INS's own options of the dimension do not add up to
-                            INS's Total (kpi_dimension_checks): never summed
+                            INS's Total (kpi_dimension_checks): never summed.
+                            Also: the dataset's summed headline disagrees with
+                            the INS Total (kpi_total_checks) and the request
+                            sums a dimension that kpi_dimension_checks does not
+                            show agreeing with INS (`source_check` names the
+                            relative error)
     ambiguous_slice         (headlines) more rows than the declared method allows
     no_data                 (headlines) slice returned nothing
     comparator_missing / comparator_zero   (changes) no usable comparison base
@@ -72,6 +77,7 @@ FIX-07 and FIX-08 consume these exact names — see `provenance()`):
 """
 from __future__ import annotations
 
+import math
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -403,6 +409,7 @@ class AggregationDecision:
     warnings: list = field(default_factory=list)
     weights_source: str | None = None
     blocking_dimension: str | None = None
+    source_check: dict | None = None       # set only for source_total_mismatch
 
     @property
     def available(self) -> bool:
@@ -417,6 +424,7 @@ class AggregationDecision:
             'dimensions': self.dimensions, 'warnings': self.warnings,
             'weights_source': self.weights_source,
             'blocking_dimension': self.blocking_dimension,
+            **({'source_check': self.source_check} if self.source_check else {}),
         }
 
 
@@ -616,6 +624,13 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
                 dimensions=audit, warnings=warnings)
         return _unavailable('missing_weights', None, audit, out_filters)
 
+    # ---- the INS total disagrees with our sum (E1/E2) ----
+    mismatch = _source_total_mismatch(struct, audit) if summed else None
+    if mismatch:
+        d = _unavailable('source_total_mismatch', mismatch['column'], audit, out_filters)
+        d.source_check = mismatch['source_check']
+        return d
+
     if summed:
         method = 'sum_partition'
     elif slice_like:
@@ -630,6 +645,48 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
 
 
 # --- decide() internals ------------------------------------------------------
+
+# struct key for the dataset's INS total check. dimension_structure.load() puts
+# the kpi_total_checks row there, with `dims_match`: the columns whose INS
+# parts add up to the INS total (kpi_dimension_checks status 'match').
+SOURCE_TOTAL_KEY = '__source_total__'
+
+
+def source_total_check(struct: dict | None) -> dict | None:
+    chk = (struct or {}).get(SOURCE_TOTAL_KEY)
+    return chk if isinstance(chk, dict) else None
+
+
+def _round_half_up(x: float) -> int:
+    return int(math.floor(x + 0.5))
+
+
+def _source_total_mismatch(struct, audit) -> dict | None:
+    """E1/E2: the dataset's summed headline disagrees with the INS Total, so a
+    sum over a partition that INS has not shown to add up is not a total.
+    A dimension that kpi_dimension_checks shows agreeing with INS stays valid."""
+    chk = source_total_check(struct)
+    if not chk or chk.get('status') != 'mismatch':
+        return None
+    agreeing = set(chk.get('dims_match') or ())
+    cols = [a['column'] for a in audit
+            if a['treatment'] in ('partition', 'level') and a['column'] not in agreeing]
+    if not cols:
+        return None
+    ours, ins, rel = chk.get('ours'), chk.get('ins'), chk.get('rel')
+    if rel is None and ours is not None and ins:
+        rel = (ours - ins) / ins
+    msg = f"The sum over {', '.join(cols)} does not agree with the INS total"
+    if chk.get('period'):
+        msg += f" for {chk['period']}"
+    if ours is not None and ins is not None:
+        msg += f": {_round_half_up(ours):,} against {_round_half_up(ins):,}"
+    if rel is not None:
+        msg += f" (relative error {_round_half_up(abs(rel) * 100)}%)"
+    return {'column': cols[0], 'source_check': {
+        'source': 'INS', 'period': chk.get('period'), 'value': ins, 'ours': ours,
+        'relative_diff': rel, 'message': msg + '.'}}
+
 
 def _match(eff, values):
     want = {_norm(v) for v in values}
