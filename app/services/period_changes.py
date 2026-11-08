@@ -28,6 +28,7 @@ Rules (docs/plans/ask-and-public-mcp/01-analytical-tools.md section 5):
 """
 from __future__ import annotations
 
+import json
 import math
 import re
 import uuid
@@ -47,6 +48,7 @@ VALUE_NOT_FINITE = "value_not_finite"
 ZERO_BASELINE = "zero_baseline"          # percent ranking only: from == 0
 NONPOSITIVE_BASELINE = "nonpositive_baseline"   # percent ranking only: from < 0
 AGGREGATE_ROW = "aggregate_row"          # a total/national row among its own parts
+SMALL_BASE = 20.0        # percent ranking: a positive base below this is flagged (`small_base`); 1 -> 46 is +4,500%
 
 
 # ------------------------------------------------------------------ pure calculator
@@ -156,6 +158,8 @@ def compute(table: dict, key_cols, intervals, metric: str = "absolute", order: s
                    "percent": percent, "rank": None}
             if note:
                 row["percent_note"] = note
+            if metric == "percent" and 0 < f < SMALL_BASE:
+                row["small_base"] = True
             ranked.append((sign * (percent if metric == "percent" else absolute), _skey(key), row))
         ranked.sort(key=lambda x: (x[0], x[1]))
         rows = [row for _, _, row in ranked]
@@ -183,8 +187,32 @@ def _unavailable(reason, message, *, rec=(), provenance=None, limits=None, warni
                        provenance=provenance, limits=limits, warnings=list(warnings))
 
 
-def _periods(conn, code: str, time_col: str, ctx: ToolContext) -> tuple[dict, tuple]:
-    """{year: actual period value} and (first, last) year, or a refusal."""
+def annual_children(conn, code: str, limit: int = 2) -> list[str]:
+    """Annual split children of `code` (or of its parent) whose file passes the grain gate."""
+    from app.services import grain_guard
+    try:
+        rows = conn.execute(
+            "SELECT sub_matrix_code, split_dimensions FROM dataset_splits "
+            "WHERE parent_matrix_code = coalesce((SELECT parent_matrix_code FROM matrices "
+            "WHERE matrix_code = ?), ?) ORDER BY sub_matrix_code", [code, code]).fetchall()
+    except Exception:
+        return []
+    out = []
+    for child, dims in rows:
+        try:
+            annual = json.loads(dims or "{}").get("TIME_PERIOD") == "anual"
+        except ValueError:
+            annual = False
+        if annual and child != code and grain_guard.file_status(child)["status"] not in ("conflicting", "duplicate_keys"):
+            out.append(child)
+    return out[:limit]
+
+
+def _periods(conn, code: str, time_col: str, ctx: ToolContext, tool: str = "compare_periods",
+             call_args: dict | None = None) -> tuple[dict, tuple]:
+    """{year: actual period value} and (first, last) year, or a refusal. `tool` and `call_args` name
+    the calling tool and its arguments, so the refusal says which tool cannot take the data and offers
+    the same call on an annual sub-dataset."""
     from app.services.data_query import QueryError, dimension_values
     from app.services.recipes import _year
     try:
@@ -207,8 +235,12 @@ def _periods(conn, code: str, time_col: str, ctx: ToolContext) -> tuple[dict, tu
             by_year.setdefault(y, []).append(v)
     if other:
         e = ", ".join(repr(x) for x in other[:3])
+        rec = [describe]
+        if call_args is not None:
+            rec = [recovery("tool_call", M.t(lang, "period.annual_child", child=child), tool,
+                            {**call_args, "dataset": child}) for child in annual_children(conn, code)] + rec
         raise _unavailable("unsupported_frequency",
-                           M.t(lang, "period.non_annual", code=code, examples=e), rec=[describe])
+                           M.t(lang, "period.non_annual", code=code, examples=e, tool=tool), rec=rec)
     multi = [y for y, vs in by_year.items() if len(vs) > 1]
     if multi:
         raise _unavailable("unsupported_frequency",
@@ -282,8 +314,9 @@ _PIN = frozenset({"overlapping_levels", "unverified_structure", "contains_aggreg
 
 
 def _native_refusal(res: dict, code: str, lang: str, prov, limits) -> ToolFailure:
+    from app.services.tools import query as query_tool
     agg = res.get("aggregation") or {}
-    reason = agg.get("reason") or "aggregation_unavailable"
+    reason = query_tool.refusal_reason(res, code) if agg.get("reason") else "aggregation_unavailable"
     col = agg.get("blocking_dimension")
     text = M.t(lang, f"period.native.{reason}" if reason in _NATIVE_REASONS else "period.native.default",
                col=col or M.t(lang, "period.a_dimension"), reason=reason)
@@ -385,12 +418,15 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
     measure = mctx.get("measure")
     if measure != "additive":
         title = (dataset_facts(conn, code, lang) or {}).get("title") or code
+        from app.services.tools import recipe as recipe_tool
+        rid = recipe_tool.published_recipe_for(conn, code)
+        routes = [recipe_tool.recipe_recovery(rid, lang, M.t(lang, "recipe.published_route", rid=rid))] if rid else []
         raise _unavailable(
             "unsupported_measure",
             M.t(lang, "period.unsupported_measure", code=code, measure=measure or M.t(lang, "period.non_additive"),
                 unit_type=mctx.get("unit_type") or M.t(lang, "period.unknown_unit_type")),
-            rec=[recovery("tool_call", M.t(lang, "period.find_recipe"),
-                          "discover_indicators", {"query": str(title)[:200], "lang": lang})])
+            rec=routes + [recovery("tool_call", M.t(lang, "period.find_recipe"),
+                                   "discover_indicators", {"query": str(title)[:200], "lang": lang})])
 
     dims = {d["dim_column_name"]: d for d in mctx["dimensions"]}
     time_cols = [c for c, d in dims.items() if d.get("dim_type") == "time"]
@@ -412,7 +448,8 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
                 QueryError(400, f"Invalid entity_columns: unknown column {c!r}"), ctx, code,
                 message=M.t(lang, "period.unknown_entity_column", col=c))
 
-    years_actual, (first, last) = _periods(conn, code, time_col, ctx)
+    years_actual, (first, last) = _periods(conn, code, time_col, ctx, "compare_periods",
+                                           args.model_dump(by_alias=True, exclude_none=True))
     wanted = sorted({y for i in args.intervals for y in (i.from_, i.to)})
     absent = [y for y in wanted if y not in years_actual]
     if absent:

@@ -51,6 +51,10 @@ def compare_periods(args, ctx):
     limits = {"returned_rows": returned, "total_rows": eligible, "preview_truncated": cut,
               "source_complete": True, "time_windowed": False, "partial_period_dropped": None}
     warnings = list(r["warnings"])
+    small = sum(1 for iv in intervals for x in iv["rows"] if x.get("small_base"))
+    if small:
+        warnings.append(contract.warning("small_base", M.t(ctx.lang, "changes.small_base", n=small,
+                                                         base=f"{period_changes.SMALL_BASE:g}")))
     for a, b, n_tie, rank in ties:
         warnings.append(contract.warning("tie_split", M.t(ctx.lang, "rank.tie_split_interval", n=n_tie, rank=rank,
                                                          a=a, b=b)))

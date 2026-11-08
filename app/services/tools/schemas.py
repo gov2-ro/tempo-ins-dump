@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import (BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt,
+from pydantic import (BaseModel, BeforeValidator, ConfigDict, Field, StrictBool, StrictFloat, StrictInt,
                       StrictStr, field_validator, model_serializer, model_validator)
 
 MAX_FILTER_COLUMNS = 16
@@ -33,7 +33,12 @@ DatasetCode = Annotated[StrictStr, Field(
 Column = Annotated[StrictStr, Field(
     min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_]+$",
     description="Dimension column name as describe_dataset lists it, e.g. REF_AREA, TIME_PERIOD")]
-Year = Annotated[StrictStr, Field(pattern=r"^\d{4}$", description="Exact four-digit year, e.g. \"2020\"")]
+def _int_year(v):
+    """A whole number is a year written without quotes (2025 -> "2025"); bool and float stay invalid."""
+    return str(v) if isinstance(v, int) and not isinstance(v, bool) else v
+
+
+Year = Annotated[StrictStr, BeforeValidator(_int_year), Field(pattern=r"^\d{4}$", description="Exact four-digit year, e.g. \"2020\"")]
 FilterValue = Union[Annotated[StrictStr, Field(max_length=500)], StrictInt,
                     Annotated[StrictFloat, Field(allow_inf_nan=False)]]
 Filters = Annotated[dict[Column, list[FilterValue]], Field(

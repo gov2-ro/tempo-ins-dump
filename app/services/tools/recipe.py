@@ -27,6 +27,8 @@ MAX_AGGREGATES = 20           # published non-county cells (country, regions)
 MAX_YEARS = 60                # most recent years listed
 MAX_RECIPE_IDS = 20
 
+NATIONAL_AREAS = frozenset({"total", "romania", "national", "tara"})   # geo_id forms of the published national cell
+
 ROW_KEYS = ("rank", "geo_id", "label", "value", "stays", "population", "intensity",
             "weight_total", "cells", "count_total", "base_total", "reconstructed")
 RECIPE_KEYS = ("id", "version", "kind", "name", "definition", "formula", "value_source", "unit",
@@ -45,6 +47,10 @@ _TX = {
         "scope_ranked": "{n} of {universe} eligible areas ranked for {year}",
         "scope_excluded": "; {k} excluded ({reasons})",
         "scope_all": ". Every area of the recipe's universe was considered.",
+        "national_ok": "Recipe {id}: INS's published national value (TOTAL) for {n} years, {first} to "
+                       "{last}; one row per year, not a ranking.",
+        "scope_national": "INS's published national cell (TOTAL) for {n} years, {first} to {last}. "
+                          "It is a published value, not a sum of counties.",
         "scope_subset": ". Requested areas only: ranks are within this selection, not a "
                         "national ranking.",
         "lim_excluded": "{k} area(s) have no value and are not ranked: {reasons}.",
@@ -96,6 +102,10 @@ _TX = {
         "scope_ranked": "{n} din {universe} zone eligibile clasate pentru {year}",
         "scope_excluded": "; {k} excluse ({reasons})",
         "scope_all": ". Au fost luate în calcul toate zonele din universul rețetei.",
+        "national_ok": "Rețeta {id}: valoarea națională publicată de INS (TOTAL) pe {n} ani, {first} "
+                       "până la {last}; un rând pe an, nu un clasament.",
+        "scope_national": "Celula națională publicată de INS (TOTAL) pe {n} ani, {first} până la "
+                          "{last}. Este o valoare publicată, nu o sumă a județelor.",
         "scope_subset": ". Doar zonele cerute: pozițiile sunt în cadrul acestei selecții, nu un "
                         "clasament național.",
         "lim_excluded": "{k} zonă(zone) nu au valoare și nu sunt clasate: {reasons}.",
@@ -152,6 +162,28 @@ def area_dataset(recipe_id: str) -> str | None:
     specs = recipes.source_specs(r)
     ratio = r.get("kind", "ratio") == "ratio" and not r.get("published")
     return specs[1]["dataset"] if ratio else specs[0]["dataset"]
+
+
+def published_recipe_for(conn, code: str) -> str | None:
+    """The reviewed recipe that serves a dataset's rate or average as INS's published value: a recipe
+    with a `published` block that names the dataset (or its parent) as its published matrix or a source.
+    Rates and averages cannot be summed or ranked from their rows; the recipe is the route (F10)."""
+    try:
+        row = conn.execute("SELECT parent_matrix_code FROM matrices WHERE matrix_code = ?", [code]).fetchone()
+    except Exception:
+        row = None
+    wanted = {code} | ({row[0]} if row and row[0] else set())
+    for rid, r in sorted(recipes.load_recipes().items()):
+        if not r.get("published"):
+            continue
+        named = {r["published"]["matrix"]} | {sp["dataset"] for sp in recipes.source_specs(r)}
+        if wanted & named:
+            return rid
+    return None
+
+
+def recipe_recovery(rid: str, lang: str, message: str) -> dict:
+    return C.recovery("tool_call", message, "run_recipe", {"recipe": rid, "lang": lang})
 
 
 def lookup_query(area: str, labels=None) -> str:
@@ -308,13 +340,63 @@ def _reasons(counts: Counter) -> str:
     return ", ".join(f"{r}: {n}" for r, n in sorted(counts.items()))
 
 
+def national_cells(conn, rid: str) -> list:
+    """[(year, cell)] of INS's published national cell (TOTAL, Romania) of a published recipe, by year;
+    empty when the recipe has none."""
+    r = recipes.load_recipes().get(rid) or {}
+    if not r.get("published"):
+        return []
+    cells = recipes._published_cells(conn, r["published"]["matrix"])
+    return sorted((y, c) for (g, y), c in cells.items() if g in NATIONAL_AREAS and c["value"] is not None)
+
+
+def _national_series(ctx, rid: str, areas):
+    """(rows, areas left) when a published recipe is asked for its national cell: one row per year
+    from INS's own cell (F3). Other requested areas stay a normal request."""
+    nat = [a for a in areas or [] if recipes.geo_id(a) in NATIONAL_AREAS]
+    series = national_cells(ctx.conn, rid) if nat else []
+    if not series:
+        return None, areas
+    rows = [{"geo_id": recipes.geo_id(c["label"]), "year": y, "label": c["label"], "value": c["value"]}
+            for y, c in series]
+    return rows, [a for a in areas if a not in nat] or None
+
+
+def _series_break_warnings(native_sources, year: str, years: list, lang: str) -> list:
+    """A `series_break` warning for each source note whose break lies between the requested year and
+    the latest year: the two ends of that comparison are not on the same basis (F13)."""
+    from app.services import dataset_notes
+    out, seen = [], set()
+    if not years or not str(year).isdigit():
+        return out
+    y, last = int(year), max(int(v) for v in years if str(v).isdigit())
+    for src in native_sources:
+        code = src.get("dataset")
+        for n in dataset_notes.for_code(code, lang) if code else []:
+            between = (n.get("data") or {}).get("between")
+            if n.get("kind") != "series_break" or not between or len(between) != 2 or n["id"] in seen:
+                continue
+            try:
+                a, b = int(str(between[0])[:4]), int(str(between[1])[:4])
+            except ValueError:
+                continue
+            if y <= a and last >= b and y != last:
+                seen.add(n["id"])
+                out.append(C.warning("series_break", M.t(lang, "recipe.series_break", year=year, last=last,
+                                                         text=n.get("text") or ""), n["id"]))
+    return out
+
+
 def run_recipe(args, ctx):
     ctx.require_present_generation("run_recipe")
     tx = _tx(ctx.lang)
+    national, areas_left = _national_series(ctx, args.recipe, args.areas)
     try:
-        res = recipes.run(ctx.conn, args.recipe, year=args.year, areas=args.areas, lang=ctx.lang)
+        res = recipes.run(ctx.conn, args.recipe, year=args.year, areas=areas_left, lang=ctx.lang)
     except recipes.RecipeError as e:
         raise _failure(e, args, ctx)
+    if national is not None and areas_left is None:
+        res = {**res, "rows": national, "excluded": [], "universe": len(national)}
     native_gen = res.get("generation") or {}
     if native_gen.get("id") != ctx.generation.get("id"):
         raise C.ToolFailure("unavailable", "generation_changed", tx["gen_changed"],
@@ -323,7 +405,8 @@ def run_recipe(args, ctx):
     info = res["recipe"]
     year = str(res["year"])
     all_rows = res["rows"]
-    rows = [{k: r[k] for k in ROW_KEYS if k in r} for r in all_rows[:C.MAX_TABLE_ROWS]]
+    keys = ROW_KEYS + ("year",) if national is not None and areas_left is None else ROW_KEYS
+    rows = [{k: r[k] for k in keys if k in r} for r in all_rows[:C.MAX_TABLE_ROWS]]
     excluded = _exclusions(res, args.areas)
     counts = Counter(e["reason"] for e in excluded)
     sample = _sample(excluded)
@@ -357,16 +440,22 @@ def run_recipe(args, ctx):
         domain_complete = True
     else:
         domain_complete = None
-    description = tx["scope_ranked"].format(n=len(all_rows), universe=universe, year=year)
-    if n_excl:
-        description += tx["scope_excluded"].format(k=n_excl, reasons=_reasons(counts))
-    description += tx["scope_subset"] if args.areas else tx["scope_all"]
+    only_national = national is not None and areas_left is None
+    if only_national:
+        description = tx["scope_national"].format(n=len(all_rows), first=all_rows[0]["year"],
+                                                  last=all_rows[-1]["year"])
+        domain_complete = True
+    else:
+        description = tx["scope_ranked"].format(n=len(all_rows), universe=universe, year=year)
+        if n_excl:
+            description += tx["scope_excluded"].format(k=n_excl, reasons=_reasons(counts))
+        description += tx["scope_subset"] if args.areas else tx["scope_all"]
     limitations = []
     if n_excl:
         limitations.append({"code": "areas_excluded", "count": n_excl,
                             "reasons": dict(sorted(counts.items())),
                             "message": tx["lim_excluded"].format(k=n_excl, reasons=_reasons(counts))})
-    if args.areas:
+    if args.areas and not only_national:
         limitations.append({"code": "areas_subset", "requested": len(args.areas),
                             "message": tx["lim_subset"].format(k=len(args.areas))})
 
@@ -392,6 +481,7 @@ def run_recipe(args, ctx):
     if info.get("value_source") == "ins_published" and len(native_sources) == 1:
         # the reconstruction could not be built for this year (e.g. a source starts later)
         warnings.append(C.warning("check_unavailable", tx["no_check"].format(year=year), args.recipe))
+    warnings += _series_break_warnings(native_sources, year, years, ctx.lang)
     if len(all_rows) > len(rows):
         warnings.append(C.warning("preview_shortened", M.t(ctx.lang, "recipe.preview_shortened")))
 
@@ -408,6 +498,10 @@ def run_recipe(args, ctx):
         status, reason = "partial", "incomplete_domain"
         message = tx["partial"].format(id=args.recipe, year=year, n=len(all_rows),
                                        universe=universe, k=n_excl)
+    elif only_national:
+        status, reason = "ok", None
+        message = tx["national_ok"].format(id=args.recipe, n=len(all_rows), first=all_rows[0]["year"],
+                                           last=all_rows[-1]["year"])
     else:
         status, reason = "ok", None
         message = tx["ok"].format(id=args.recipe, year=year, n=len(all_rows))

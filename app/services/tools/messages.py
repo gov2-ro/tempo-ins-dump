@@ -327,6 +327,12 @@ TEXT = {
         "discover.level_differs": "No queryable source at the requested level ({wanted}); this is "
                                   "the {level} source and cannot answer a question about a "
                                   "smaller area.",
+        "discover.level_aggregated": "No source at the requested level ({wanted}); this is the {level} "
+                                     "source. Its values add up to {wanted} only when the measure "
+                                     "is additive, and a summed value is not an INS {wanted} figure.",
+        "discover.national_published": "The run covers INS's published national value (TOTAL), "
+                                       "one row per year. It is a published cell, not a sum of "
+                                       "counties.",
         "discover.source_total": "Reviewed route to the county total.",
         "discover.no_verified_candidate": "No candidate is a ready data query (see each "
                                           "candidate's notes); next_call reads the first "
@@ -533,6 +539,9 @@ TEXT = {
                         "output. {scope}",
         "changes.evidence_link": "Get the link to the complete ranking and the full exclusion "
                                  "list (evidence bundle).",
+        "changes.small_base": "{n} returned rows start from a base below {base}; a small base makes a "
+                              "large percent change. Compare the absolute change before you call "
+                              "them the largest.",
         "changes.tail": "Rank is the ordinal position under the requested metric and order, not a "
                         "claim of statistical significance.",
         "changes.class_tail": "Cities are the catalogue's municipalities and towns (INS GOS102A); "
@@ -574,8 +583,9 @@ TEXT = {
         "period.too_many_periods": "{code} has more than {max} distinct period labels; only exact "
                                    "annual periods are supported.",
         "period.non_annual": "{code} has non-annual period values (e.g. {examples}); "
-                             "compare_periods supports exact annual periods only, not monthly, "
+                             "{tool} supports exact annual periods only, not monthly, "
                              "quarterly or mixed series.",
+        "period.annual_child": "Run the same request on {child}, the annual sub-dataset.",
         "period.year_two_ways": "{code} labels the year {year} in more than one way ({labels}); "
                                 "the periods cannot be matched exactly.",
         "period.no_periods": "{code} has no period values.",
@@ -671,6 +681,10 @@ TEXT = {
                                      "under several {added} values ({parents}); a name alone does "
                                      "not identify a place. Include {added} in entity_columns.",
         # ---- run_recipe
+        "recipe.published_route": "INS publishes this rate or average itself. The reviewed recipe "
+                                  "'{rid}' serves the published value by area; run it.",
+        "recipe.series_break": "A series break lies between {year} and the latest year {last}; "
+                               "values on the two sides are not directly comparable. {text}",
         "recipe.preview_shortened": "The preview was shortened to fit the response budget "
                                     "(exclusion sample, aggregate cells or ranking rows); the "
                                     "exclusion counts and the canonical selection give the "
@@ -1029,6 +1043,13 @@ TEXT = {
         "discover.level_differs": "Nicio sursă interogabilă la nivelul cerut ({wanted}); aceasta "
                                   "este sursa de nivel {level} și nu poate răspunde la o "
                                   "întrebare despre o zonă mai mică.",
+        "discover.level_aggregated": "Nicio sursă la nivelul cerut ({wanted}); aceasta este sursa "
+                                     "de nivel {level}. Valorile ei se adună la nivelul {wanted} "
+                                     "doar dacă măsura este aditivă, iar o valoare însumată nu "
+                                     "este o cifră INS de nivel {wanted}.",
+        "discover.national_published": "Rularea acoperă valoarea națională publicată de INS "
+                                       "(TOTAL), un rând pe an. Este o celulă publicată, nu o "
+                                       "sumă a județelor.",
         "discover.source_total": "Rută revizuită către totalul pe județe.",
         "discover.no_verified_candidate": "Niciun candidat nu este o interogare de date gata de "
                                           "rulat (vezi notele fiecărui candidat); next_call "
@@ -1255,6 +1276,9 @@ TEXT = {
                         "limitarea ieșirii. {scope}",
         "changes.evidence_link": "Obține linkul către clasamentul complet și lista completă a "
                                  "excluderilor (pachetul de dovezi).",
+        "changes.small_base": "{n} rânduri returnate pornesc de la o bază sub {base}; o bază mică "
+                              "dă o variație procentuală mare. Compară variația absolută înainte "
+                              "să le numești cele mai mari.",
         "changes.tail": "Poziția este rangul ordinal după metrica și ordinea cerute, nu o "
                         "afirmație de semnificație statistică.",
         "changes.class_tail": "Orașele sunt municipiile și orașele din catalog (INS GOS102A); "
@@ -1297,8 +1321,9 @@ TEXT = {
         "period.too_many_periods": "{code} are mai mult de {max} etichete de perioadă distincte; "
                                    "sunt acceptate doar perioadele anuale exacte.",
         "period.non_annual": "{code} are valori de perioadă neanuale (de ex. {examples}); "
-                             "compare_periods acceptă doar perioade anuale exacte, nu serii "
+                             "{tool} acceptă doar perioade anuale exacte, nu serii "
                              "lunare, trimestriale sau mixte.",
+        "period.annual_child": "Rulează aceeași cerere pe {child}, subsetul de date anual.",
         "period.year_two_ways": "{code} etichetează anul {year} în mai multe moduri ({labels}); "
                                 "perioadele nu pot fi potrivite exact.",
         "period.no_periods": "{code} nu are valori de perioadă.",
@@ -1406,6 +1431,10 @@ TEXT = {
                                      "un nume singur nu identifică un loc. Include {added} în "
                                      "entity_columns.",
         # ---- run_recipe
+        "recipe.published_route": "INS publică singur această rată sau medie. Rețeta revizuită "
+                                  "'{rid}' servește valoarea publicată pe zone; rulează-o.",
+        "recipe.series_break": "O ruptură de serie se află între {year} și ultimul an {last}; "
+                               "valorile de pe cele două părți nu sunt direct comparabile. {text}",
         "recipe.preview_shortened": "Previzualizarea a fost scurtată ca să încapă în bugetul "
                                     "răspunsului (eșantionul de excluderi, celulele agregate sau "
                                     "rândurile clasamentului); numărul excluderilor și selecția "

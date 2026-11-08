@@ -58,9 +58,9 @@
     "WIDEX"
    ]
   },
-  "copied-9b3e065d": {
+  "copied-062bd2b0": {
    "kind": "copied",
-   "generation_prefix": "9b3e065d",
+   "generation_prefix": "062bd2b0",
    "requires": "TEMPO_DATA_DIR=<read-only copied generation>/data; cases skip individually when it is absent or another generation"
   }
  },
@@ -1169,7 +1169,7 @@
     }
    ],
    "pinned": {
-    "fixture": "copied-9b3e065d",
+    "fixture": "copied-062bd2b0",
     "prompt": {"ro": "Câte înnoptări revin la un locuitor în Brașov, în 2025?", "en": "How many overnight stays per resident were there in Brașov in 2025?"},
     "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
     "answer": {
@@ -1264,7 +1264,7 @@
     "answer": {"allowed_numbers": [2021]}
    },
    "pinned": {
-    "fixture": "copied-9b3e065d",
+    "fixture": "copied-062bd2b0",
     "prompt": {"ro": "Care este populația curentă a județelor?", "en": "What is the current population of the counties?"},
     "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
     "answer": {
@@ -1379,7 +1379,7 @@
     }
    ],
    "pinned": {
-    "fixture": "copied-9b3e065d",
+    "fixture": "copied-062bd2b0",
     "prompt": {"ro": "populația curentă a celor mai populate 30 de orașe", "en": "current population of the top 30 cities"},
     "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
     "answer": {
@@ -1427,7 +1427,7 @@
    "id": "X03B",
    "title": "Explicit-year golden: the 2025 city ranking of the historical experiment, a year and not 'current'",
    "category": "ranking",
-   "fixture": "copied-9b3e065d",
+   "fixture": "copied-062bd2b0",
    "surfaces": ["direct"],
    "prompt": {"ro": "populația după domiciliu a celor mai populate 30 de orașe în 2025", "en": "domicile population of the top 30 cities in 2025"},
    "steps": [{"tool": "discover_indicators", "arguments": {"query": "$PROMPT"}}, {"follow": {"call": 0, "path": "/data/concepts/0/next_call"}}],
@@ -1741,7 +1741,7 @@
     }
    ],
    "pinned": {
-    "fixture": "copied-9b3e065d",
+    "fixture": "copied-062bd2b0",
     "prompt": {"ro": "Câți născuți vii au fost în 2023?", "en": "How many live births were there in 2023?"},
     "steps": [
      {"tool": "query_data", "arguments": {"dataset": "POP201E", "filters": {"TIME_PERIOD": ["2023"]}, "group_by": ["TIME_PERIOD"]}},
@@ -1835,7 +1835,7 @@
     "answer": {"allowed_numbers": [2010, 2020, 0]}
    },
    "pinned": {
-    "fixture": "copied-9b3e065d",
+    "fixture": "copied-062bd2b0",
     "prompt": {
      "ro": "Ce județe au pierdut cel mai mult din populație între 2012 și 2021?",
      "en": "Which counties lost the most population between 2012 and 2021?"

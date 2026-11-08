@@ -301,7 +301,7 @@ def test_denominators_exclude_skips_and_controls_and_refusals_are_not_unsafe_ans
     assert summary["legitimate_refusals_or_clarifications"] >= 2                                    # T05 and X04 refuse
     assert not [h for h in summary["hard_failures"] if h["kind"] == "positive"]                      # a refusal is not an unsafe answer
     assert all(h["known"] for h in summary["hard_failures"])                                        # only documented control limitations
-    assert all(r["skipped"].startswith("prerequisite_missing") and r["fixture"] == "copied-9b3e065d" for r in skipped)
+    assert all(r["skipped"].startswith("prerequisite_missing") and r["fixture"] == "copied-062bd2b0" for r in skipped)
     # only the pinned cases skipped: their synthetic counterparts and the other tasks ran
     assert {r["task_id"] for r in positives} == {"X01", "X03", "X04", "T05"}
 
@@ -313,9 +313,9 @@ def test_a_copied_generation_other_than_the_one_checked_is_a_skip_not_a_pass(tmp
     (corpus / "metadata.duckdb").write_text("")
     (corpus / "generation-manifest.json").write_text(json.dumps({"generation_id": "deadbeef" + "0" * 56}))
     monkeypatch.setattr(config, "CORPUS_DIR", corpus)
-    fixture = DOC["fixtures"]["copied-9b3e065d"]
+    fixture = DOC["fixtures"]["copied-062bd2b0"]
     assert R.copied_prerequisite(fixture).startswith("prerequisite_mismatch")
-    (corpus / "generation-manifest.json").write_text(json.dumps({"generation_id": "9b3e065d" + "0" * 56}))
+    (corpus / "generation-manifest.json").write_text(json.dumps({"generation_id": "062bd2b0" + "0" * 56}))
     assert R.copied_prerequisite(fixture) is None
     (corpus / "metadata.duckdb").unlink()
     assert R.copied_prerequisite(fixture).startswith("prerequisite_missing")
