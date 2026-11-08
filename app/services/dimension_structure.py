@@ -44,6 +44,9 @@ def _table_exists(conn) -> bool:
     return _TABLE_OK
 
 
+SOURCE_TOTAL_KEY = '__source_total__'   # same literal as aggregation_policy.SOURCE_TOTAL_KEY
+
+
 def load(conn, matrix_code: str) -> dict:
     """{dim_column: structure} for one dataset. Empty dict when unprofiled."""
     hit = _cache.get(matrix_code)
@@ -87,6 +90,10 @@ def load(conn, matrix_code: str) -> dict:
                              'discrimination': None, 'dominance': None, 'confidence': None,
                              'source': None})['source_mismatch'] = info
 
+    chk = _source_total(conn, matrix_code)
+    if chk:
+        out[SOURCE_TOTAL_KEY] = chk      # read by aggregation_policy._source_total_mismatch
+
     if len(_cache) > CACHE_MAX:
         _cache.clear()
     _cache[matrix_code] = out
@@ -102,6 +109,28 @@ def _source_mismatches(conn, matrix_code: str) -> dict:
     except Exception:                    # older generations have no such table
         return {}
     return {c: {'period': p, 'parts_sum': s, 'total': tot} for c, p, s, tot in rows}
+
+
+def _source_total(conn, matrix_code: str) -> dict | None:
+    """The dataset's kpi_total_checks row, plus `dims_match`: the columns whose
+    INS parts add up to the INS total (kpi_dimension_checks status 'match')."""
+    try:
+        row = conn.execute(
+            "SELECT status, period, ours, ins, rel FROM kpi_total_checks "
+            "WHERE matrix_code = ?", [matrix_code]).fetchone()
+    except Exception:                    # older generations have no such table
+        return None
+    if not row:
+        return None
+    status, period, ours, ins, rel = row
+    try:
+        dims_match = sorted(r[0] for r in conn.execute(
+            "SELECT dim_column FROM kpi_dimension_checks "
+            "WHERE matrix_code = ? AND status = 'match'", [matrix_code]).fetchall())
+    except Exception:
+        dims_match = []
+    return {'status': status, 'period': period, 'ours': ours, 'ins': ins,
+            'rel': rel, 'dims_match': dims_match}
 
 
 def source_mismatch(struct: dict, col: str) -> dict | None:
