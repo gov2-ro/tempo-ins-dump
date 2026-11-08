@@ -67,6 +67,7 @@ const UI = {
         yoyTooltip: 'Variație anuală %',
         yearlyMode: 'Anual',
         yearlyTooltip: 'Grupează datele pe ani',
+        incompleteYear: 'an incomplet',
         zoomPresets: ['1A', '3A', '5A', 'Tot'],
         distribution: 'Distribuție',
         aboutLink: 'Despre',
@@ -138,6 +139,7 @@ const UI = {
         yoyTooltip: 'Year-over-year %',
         yearlyMode: 'Yearly',
         yearlyTooltip: 'Group data by year',
+        incompleteYear: 'incomplete year',
         zoomPresets: ['1Y', '3Y', '5Y', 'All'],
         distribution: 'Distribution',
         aboutLink: 'About',
@@ -269,7 +271,7 @@ class LensApp {
         this._urlTChart  = params.get('tchart') || null;
         this._urlSChart  = params.get('schart') || null;
         this._urlPeriod  = params.get('period') || null;
-        this._urlTAgg    = params.get('tagg');   // '0' = yearly-agg explicitly off
+        this._urlTAgg    = params.get('tagg');   // '1' = yearly aggregation turned on
         this._urlTZoom   = params.get('tzoom') || null;  // '1y'|'3y'|'5y'|'all'
         const tmode = params.get('tmode');
         if (tmode === 'index' || tmode === 'yoy') this.timeTransform = tmode;
@@ -1332,12 +1334,13 @@ class LensApp {
             this.snapshotChartType = _snapDefault;
             this.selectedPeriodIdx = -1; // latest
 
-            // Yearly aggregation default for monthly/quarterly datasets
+            // Yearly aggregation is OFF by default: show the finest periodicity, as the
+            // composer does (C12). The user may turn it on; a partial last year is labelled.
             // time_granularity lives in meta.profile (matrix_profiles), not the view profile
             const _gran = this.metadata?.profile?.time_granularity;
             this.timeGranularity = _gran || null;
-            this.yearlyAgg = (_gran === 'monthly' || _gran === 'quarterly');
-            this.timeZoomPreset = '5y';  // default raw-monthly zoom window
+            this.yearlyAgg = false;
+            this.timeZoomPreset = 'all';  // default: the whole series
 
             // Restore URL state (first load only — consumed below)
             const setup = this.panelSetup;
@@ -1349,7 +1352,7 @@ class LensApp {
                 const pidx = setup.periods.findIndex(p => p.id === this._urlPeriod);
                 if (pidx >= 0) this.selectedPeriodIdx = pidx;
             }
-            if (this._urlTAgg !== null) this.yearlyAgg = this._urlTAgg !== '0';
+            if (this._urlTAgg !== null) this.yearlyAgg = this._urlTAgg === '1';
             if (this._urlTZoom) this.timeZoomPreset = this._urlTZoom;
             this._urlTChart = null;
             this._urlSChart = null;
@@ -2207,14 +2210,14 @@ class LensApp {
         else
             url.searchParams.delete('tmode');
 
-        // Yearly aggregation — only store when user explicitly turned it OFF (default is ON for monthly/quarterly)
-        if (this.yearlyAgg === false && (this.timeGranularity === 'monthly' || this.timeGranularity === 'quarterly'))
-            url.searchParams.set('tagg', '0');
+        // Yearly aggregation — stored only when the user turned it ON (default is OFF)
+        if (this.yearlyAgg === true && (this.timeGranularity === 'monthly' || this.timeGranularity === 'quarterly'))
+            url.searchParams.set('tagg', '1');
         else
             url.searchParams.delete('tagg');
 
-        // Zoom preset — only store when not default (5y)
-        if (!this.yearlyAgg && this.timeZoomPreset && this.timeZoomPreset !== '5y')
+        // Zoom preset — only store when not default (all)
+        if (!this.yearlyAgg && this.timeZoomPreset && this.timeZoomPreset !== 'all')
             url.searchParams.set('tzoom', this.timeZoomPreset);
         else
             url.searchParams.delete('tzoom');
@@ -2637,6 +2640,18 @@ class LensApp {
 
         const newLabels = { ...data.column_labels };
         newLabels[timeDim] = Object.fromEntries(newRows.map(r => [r[timeIdx], r[timeIdx]]));
+        // The last year may hold fewer periods than a full one: say so in its label.
+        const perYear = (this.timeGranularity === 'quarterly') ? 4 : (this.timeGranularity === 'monthly') ? 12 : 0;
+        if (perYear && newRows.length) {
+            const periodsByYear = {};
+            for (const row of data.rows) {
+                const per = String(row[timeIdx] || '');
+                (periodsByYear[per.slice(0, 4)] ||= new Set()).add(per);
+            }
+            const lastYear = Object.keys(periodsByYear).sort().pop();
+            if (lastYear && periodsByYear[lastYear].size < perYear && lastYear in newLabels[timeDim])
+                newLabels[timeDim][lastYear] = `${lastYear} (${this.ui.incompleteYear})`;
+        }
 
         return { ...data, rows: newRows, column_labels: newLabels };
     }
