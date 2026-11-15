@@ -71,3 +71,53 @@ start-up. It does not save memory.
 - The hypothesis that the 512 MB machine starves the process is not confirmed or rejected here.
   Local RSS (375 MiB cold chain, 464 MiB warm run) is close to the limit, and the DuckDB caps are not the cause.
   Python and native library memory dominate. See the brief's out-of-scope list.
+
+## 07B — period bounds without a second full scan
+
+Branch `perf/aq-07b-period-bounds`. Code: `app/services/data_query.py` (`_value_column_has_no_nulls`, `dimension_values`).
+Tests: `tests/test_aq07b_period_bounds.py`.
+
+### Change
+
+`dimension_values` already reads the distinct non-NULL periods. When the parquet footer proves the value column
+has no NULL, it now takes `min`, `max` and the count from that list. The second full-file query runs only
+when the footer shows a NULL, lacks null_count statistics, or cannot be read.
+
+Why the result is the same: with no NULL value, the old filter `value IS NOT NULL` keeps every row. Old `min`, `max`
+and `count(DISTINCT)` ignore NULL time values, and the first query also drops them. Both sides compare VARCHAR
+text (Python compares code points, DuckDB compares UTF-8 bytes; the order is the same). The count comes from the
+list before the `q` filter, so `q` does not change the bounds.
+
+### Checks
+
+- Fixture tests (8): no NULL (fast path), NULL values (current query), legacy `*_nom_id`/`value` file,
+  text order unlike numeric order (VARCHAR and numeric time column), NULL time values, empty file, all-NULL value
+  column, `q` filter. Each compares with the old SQL on the same file and asserts which path ran.
+- Real corpus, read-only, generation `062bd2b0`: 4110 matrices with a parquet file and a time column.
+  Old and new `dimension_values` output were identical for all 4110. Fast path: 4066 files. Fallback: 44 files.
+  (Old behaviour was run by forcing the fallback.)
+
+### Latency (macOS, `TEMPO_DB_THREADS` default, seconds)
+
+`describe_dataset` through `registry.call_tool`, fresh process per run, 2 runs each:
+
+| Dataset | before cold | before warm | after cold | after warm |
+|---|---|---|---|---|
+| POP107D_grupe_localitate | 0.65-0.80 | 0.14-0.16 | 0.64-0.65 | 0.12-0.16 |
+| POP107D | 1.26-1.32 | 0.64-0.75 | 1.14-1.19 | 0.53-0.64 |
+
+`dimension_values` alone (one fresh process, 1 thread):
+
+| Dataset | before cold / warm | after cold / warm |
+|---|---|---|
+| POP107D_grupe_localitate | 0.46 / 0.045 | 0.36 / 0.009 |
+| POP107D | 0.67 / 0.25 | 0.40 / 0.043 |
+
+The saving is 0.1-0.2 s cold per call and about 0.2 s warm on POP107D. It is smaller than the 1.8-2.4 s in
+the audit finding. On this Mac the file is in the page cache. `describe_dataset` has other costs.
+
+### Assumptions
+
+- `TIME_PERIOD` is the time column name used for the corpus comparison (every matrix had it).
+- "Served" means every matrix in `matrices` with a file in `corpus/parquet`.
+- `tools/static-engine` parity: synthetic cases pass; 2 real-corpus parity tests are `not_run` (no `data/` in the worktree).
