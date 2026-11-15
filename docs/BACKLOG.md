@@ -84,6 +84,13 @@ are recorded next to each item.
   15 GB volume; the UI stays on DreamHost). It has 8× the memory of the Fly machine and dedicated vCPUs.
   Needs: Docker or a venv service, TLS (Caddy), Cloudflare in front of `api-ins`, the `/logs` volume,
   backups and an update procedure. Decide after AQ-07, with its measured memory profile.
+- [ ] **P2 — Deterministic dataset cards for discovery** (owner decision 2026-11-15). One card per
+  dataset, generated from data the pipeline already holds: a split child's restriction (for example
+  "SEX = Feminin"), geo levels, first/last period, periodicity, unit and additivity, grain status, newer
+  sibling. An LLM writes only RO/EN search phrasings (synonyms, everyday questions), which feed the
+  search index and never an answer. No free-text LLM descriptions. Start only if the answer-quality eval
+  shows that finding the dataset is the main failure; measure with the search eval before and after.
+  Example: the live run of 2026-11-15 read `SAN104A_judete` as "women only" with no card saying so.
 - [x] **P3 — Local MCP test server lives in a session scratchpad.** Moved to `scripts/serve-mcp-test.sh`
   (2026-10-28): data defaults to the repo's `data/` (`TEMPO_TEST_DATA` overrides), content logs to
   `data/logs/mcp-test`; mentioned in AGENTS.md next to `mcp_probe.py`.
