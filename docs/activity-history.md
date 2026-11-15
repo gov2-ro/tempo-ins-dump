@@ -1,5 +1,14 @@
 # Activity History
 
+## 2026-11-15 — AQ-07B: period bounds without a second full scan
+
+Branch `perf/aq-07b-period-bounds`. Record: [aq-07-record.md](plans/ask-and-public-mcp/remaining/aq-07-record.md).
+Nothing deployed; no generation artifact or pipeline change.
+- `dimension_values` takes `period_bounds` from its distinct-period read when the parquet footer proves no NULL
+  value. It keeps the old second query when a NULL exists or statistics are missing.
+- Read-only check on generation 062bd2b0: old and new output identical for 4110 matrices (4066 fast, 44 fallback).
+- `describe_dataset` on POP107D: cold 1.3 s to 1.15 s, warm 0.7 s to 0.55 s. The saving is smaller than the audit estimate.
+
 ## 2026-11-15 — AQ-07A: public MCP memory budgets and first-call imports
 
 Branch `perf/aq-07-mcp-footprint`. Record: [aq-07-record.md](plans/ask-and-public-mcp/remaining/aq-07-record.md).

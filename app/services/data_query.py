@@ -542,6 +542,21 @@ def _missing_values(conn, matrix_code, filter_dict, requested, legacy_to_sdmx) -
     return out
 
 
+def _value_column_has_no_nulls(conn, path: str, value_column: str) -> bool:
+    """True when the parquet footer proves `value_column` holds no NULL (no scan).
+
+    Needs null_count statistics in every row group; anything else returns False.
+    """
+    try:
+        n_groups, n_stats, nulls = conn.execute(
+            "SELECT count(*), count(stats_null_count), coalesce(sum(stats_null_count), 0) "
+            "FROM parquet_metadata(?) WHERE path_in_schema = ?",
+            [path, value_column]).fetchone()
+    except Exception:
+        return False
+    return n_groups > 0 and n_stats == n_groups and nulls == 0
+
+
 def dimension_values(conn, matrix_code: str, column: str, q: str | None = None,
                      limit: int = 50, offset: int = 0) -> dict:
     """Searchable, paginated actual values of one dimension (PA-02a, audit A07).
@@ -587,9 +602,17 @@ def dimension_values(conn, matrix_code: str, column: str, q: str | None = None,
            "next_offset": offset + limit if offset + limit < len(values) else None,
            "truncated": offset + limit < len(values)}
     if is_time:
-        first, last, n = conn.execute(
-            f"SELECT min(CAST({col} AS VARCHAR)), max(CAST({col} AS VARCHAR)), "
-            f"count(DISTINCT {col}) FROM read_parquet(?) "
-            f"WHERE {quote_ident(schema['value_column'])} IS NOT NULL", [str(path)]).fetchone()
+        all_values = [r[0] for r in rows]
+        if _value_column_has_no_nulls(conn, str(path), schema["value_column"]):
+            # No NULL value anywhere: the value filter keeps every row, so the bounds
+            # equal min/max/count of the distinct non-NULL periods already read.
+            first, last, n = ((min(all_values), max(all_values), len(all_values))
+                              if all_values else (None, None, 0))
+        else:
+            first, last, n = conn.execute(
+                f"SELECT min(CAST({col} AS VARCHAR)), max(CAST({col} AS VARCHAR)), "
+                f"count(DISTINCT {col}) FROM read_parquet(?) "
+                f"WHERE {quote_ident(schema['value_column'])} IS NOT NULL",
+                [str(path)]).fetchone()
         out["period_bounds"] = {"first": first, "last": last, "periods_with_data": n}
     return out
