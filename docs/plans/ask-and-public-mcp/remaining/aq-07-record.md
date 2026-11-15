@@ -121,3 +121,14 @@ the audit finding. On this Mac the file is in the page cache. `describe_dataset`
 - `TIME_PERIOD` is the time column name used for the corpus comparison (every matrix had it).
 - "Served" means every matrix in `matrices` with a file in `corpus/parquet`.
 - `tools/static-engine` parity: synthetic cases pass; 2 real-corpus parity tests are `not_run` (no `data/` in the worktree).
+
+## Correction (Opus review, 2026-11-15)
+
+07A measured in the development venv, which has pandas, numpy and pyarrow. Production does not:
+they are not in `requirements.txt`, and none of its 50 resolved dependencies pulls them in. DuckDB
+imports pandas on the first parameterised query only when pandas is installed. So the 0.4 s
+first-call import and about 71 MiB of the measured RSS do not occur in the production image or the
+Hetzner venv. A realistic production peak is about 300-390 MiB, still too tight for 512 MB.
+Do not add a start-up warm-up for pandas. Measure the real peak on Linux in HZ-3.
+07B real-corpus parity (`tests/test_static_parity.py` with `data/`) passed in the main checkout
+after the merge: 18 passed together with `test_aq07b_period_bounds.py`.
