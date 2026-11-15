@@ -4,6 +4,14 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## CI — 2026-11-16
+
+- [ ] **P1 — CI runs no tests since 2026-10-28.** Collection stops on `tests/test_fetch_county_retry.py`:
+  it loads `6-fetch-csv.py`, which imports `requests` and `tqdm`; `requirements-dev.txt` has neither
+  (`requirements-pipeline.txt` pins them). Fix: add both pins to `requirements-dev.txt`, or
+  `pytest.importorskip` in that test. The run of 2026-10-05 also failed (other cause, not read). Expect
+  more failures once collection passes. Locally the full suite passes (2365, 2026-11-16).
+
 ## Repository structure — 2026-11-16
 
 - [ ] **P3 — Split the repo in two: data pipeline, and serving (API, Ask, MCP, UI)** (owner idea,
