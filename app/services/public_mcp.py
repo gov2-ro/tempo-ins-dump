@@ -148,6 +148,7 @@ class McpSettings:
     client_requests_per_minute: int = 240
     client_calls_per_minute: int = 60
     trust_forwarded: bool = False
+    on_fly: bool = False            # FLY_APP_NAME is set: Fly's proxy writes Fly-Client-IP
 
     @classmethod
     def from_env(cls, environ=None, *, base_url: str | None = None) -> "McpSettings":
@@ -183,7 +184,8 @@ class McpSettings:
             log_max_bytes=_number(env, "TEMPO_MCP_LOG_MAX_BYTES", 256 * 1024 * 1024),
             client_requests_per_minute=_number(env, "TEMPO_MCP_CLIENT_REQUESTS_PER_MINUTE", 240),
             client_calls_per_minute=_number(env, "TEMPO_MCP_CLIENT_CALLS_PER_MINUTE", 60),
-            trust_forwarded=_flag(env, "TEMPO_MCP_TRUST_FORWARDED"))
+            trust_forwarded=_flag(env, "TEMPO_MCP_TRUST_FORWARDED"),
+            on_fly=bool((env.get("FLY_APP_NAME") or "").strip()))
 
 
 def _check_base_url(base: str, local_test: bool) -> tuple[str, str]:
@@ -706,9 +708,10 @@ class McpEndpoint:
         return None
 
     def _client_key(self, scope) -> str:
-        """Who is calling: Fly's `Fly-Client-IP`, else (only with TEMPO_MCP_TRUST_FORWARDED) the first
-        `X-Forwarded-For` address, else the peer address. Used only for fair-share windows."""
-        fly = self._header(scope, b"fly-client-ip")
+        """Who is calling: Fly's `Fly-Client-IP` (only on Fly, whose proxy overwrites it; elsewhere a
+        client could forge it), else (only with TEMPO_MCP_TRUST_FORWARDED) the first `X-Forwarded-For`
+        address, else the peer address. Used only for fair-share windows."""
+        fly = self._header(scope, b"fly-client-ip") if self.s.on_fly else None
         if fly and fly.strip():
             return fly.strip()[:64]
         if self.s.trust_forwarded:

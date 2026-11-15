@@ -31,8 +31,10 @@ What `cloudflared` sends to the origin:
 Result for the app behind the tunnel:
 - With `TRUST_FORWARDED=true`, the key is the FIRST `X-Forwarded-For` entry, which the client
   writes. A client can pick any key. Do not set it.
-- `Fly-Client-IP` is not stripped by Cloudflare or `cloudflared`. A client can send it and pick any
-  key, whatever `TRUST_FORWARDED` is. This is the remaining gap.
+- `Fly-Client-IP` is not stripped by Cloudflare or `cloudflared`, so a client can send it. The app
+  reads it only on Fly (`FLY_APP_NAME` set), where Fly's proxy overwrites it. On the VPS it is
+  ignored (decision and change, Opus review 2026-11-16; test
+  `test_fly_client_ip_is_ignored_off_fly`).
 - With `TRUST_FORWARDED=false` and no `Fly-Client-IP`, the key is the peer address. The service uses
   `--proxy-headers --forwarded-allow-ips 127.0.0.1`. uvicorn then takes the right-most
   `X-Forwarded-For` entry that is not loopback (the entry `cloudflared` appended), which is the real
@@ -42,12 +44,9 @@ Result for the app behind the tunnel:
 Setting in `api.env`: `TEMPO_MCP_TRUST_FORWARDED=false`. The global request window, the
 one-operation gate and the scan cap do not depend on the client key and still apply.
 
-Proposed app change (not made; needs an Opus decision): add a setting, for example
-`TEMPO_MCP_CLIENT_IP_HEADER=cf-connecting-ip`. When it is set, `_client_key` reads only that header
-(truncated to 64 characters, as now) and ignores `Fly-Client-IP` and `X-Forwarded-For`. The origin
-listens on loopback and only `cloudflared` connects, so Cloudflare's value is trustworthy. Add a
-test with a forged `Fly-Client-IP` and `X-Forwarded-For`. Until then, an optional stop-gap in
-Cloudflare (HZ-4): a Transform Rule that removes the `Fly-Client-IP` request header.
+Not chosen: a `TEMPO_MCP_CLIENT_IP_HEADER` setting. uvicorn's right-most rule already gives the real
+visitor, so a new setting adds nothing while `TRUST_FORWARDED=false`. Never set `FLY_APP_NAME` on the
+VPS.
 
 ## First-time setup (HZ-2, as root on the VPS, owner present)
 
