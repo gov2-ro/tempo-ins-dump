@@ -19,6 +19,8 @@ home/place KPI queries still diverge from shared statistical rules. Verified
 structure is not complete; absence currently permits unsafe fallback aggregation.
 See FIX-02 before treating a derived number as a verified total.
 
+Dataset page chart choice is selector ranking, composer slices and the aggregation policy verdict per tile, which `/data` re-checks. The chart-selector eval (`data/eval/chart_selector_baseline.json`) is a drift detector against the selector's own earlier output, not a ground-truth test, and CI and `scripts/release-check.py` do not run it.
+
 ## Actual storage paths
 
 | Artifact | Current path | Purpose |

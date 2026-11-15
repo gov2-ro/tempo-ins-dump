@@ -13,13 +13,14 @@ import re
 from app.services import data_query, dataset_meta, period_changes
 from app.services.tools import contract as C
 from app.services.tools import messages as M
+from app.services.tools import recipe as recipe_tool
 
 CITY_CATALOGUE = "GOS102A"
 QUERY_PREVIEW = 100          # the query_data limit its refusal plan builds candidate calls with
 
 
-def _refuse(reason, message, provenance=None):
-    raise C.ToolFailure("unavailable", reason, message, provenance=provenance)
+def _refuse(reason, message, provenance=None, recovery=()):
+    raise C.ToolFailure("unavailable", reason, message, provenance=provenance, recovery=list(recovery))
 
 
 def city_codes(conn, lang: str = "ro") -> dict[str, str]:
@@ -84,6 +85,7 @@ def rank_entities(args, ctx):
     from app import config
     from app.services.query_builder import resolve_parquet_schema, to_sdmx_name
 
+    from app.services.tools import query as query_tool
     ctx.require_present_generation("rank_entities")
     lang = ctx.lang
     code = args.dataset
@@ -92,7 +94,9 @@ def rank_entities(args, ctx):
         raise C.query_failure(data_query.QueryError(404, f"Dataset {code} not found"), ctx, code)
     dims = {d["dim_column_name"]: d for d in actx["dimensions"]}
     if actx.get("measure") != "additive":
-        _refuse("unsupported_measure", M.t(lang, "rank.additive_only"))
+        rid = recipe_tool.published_recipe_for(ctx.conn, code)
+        _refuse("unsupported_measure", M.t(lang, "rank.additive_only"),
+                recovery=[recipe_tool.recipe_recovery(rid, lang, M.t(lang, "recipe.published_route", rid=rid))] if rid else ())
     if "TIME_PERIOD" not in dims or dims["TIME_PERIOD"].get("dim_type") != "time":
         _refuse("unsupported_frequency", M.t(lang, "rank.annual_required"))
     schema = resolve_parquet_schema(ctx.conn, code)
@@ -105,7 +109,8 @@ def rank_entities(args, ctx):
         raise C.ToolFailure("error", "invalid_input", M.t(lang, "rank.key_too_long"))
     if args.entity_class == "cities" and "REF_AREA_2" not in keys:
         raise C.ToolFailure("error", "invalid_input", M.t(lang, "rank.cities_need_locality"))
-    periods, _ = period_changes._periods(ctx.conn, code, "TIME_PERIOD", ctx)
+    periods, _ = period_changes._periods(ctx.conn, code, "TIME_PERIOD", ctx, "rank_entities",
+                                         args.model_dump(exclude_none=True))
     year = args.year or max(periods)
     if year not in periods:
         _refuse("period_unavailable", M.t(lang, "rank.no_year", year=year))
@@ -122,7 +127,6 @@ def rank_entities(args, ctx):
     agg = res.get("aggregation") or {}
     if res.get("unavailable"):
         # the same explanation and next steps query_data gives for this selection, not a bare refusal
-        from app.services.tools import query as query_tool
         try:
             why, recs = query_tool.refusal(ctx, code, query, res, QUERY_PREVIEW)
         except Exception:
@@ -131,7 +135,8 @@ def rank_entities(args, ctx):
         recs = [C.recovery("tool_call", r["message"], "rank_entities",
                            {**args.model_dump(exclude_none=True), "dataset": r["arguments"]["dataset"]})
                 if r.get("tool") == "query_data" else r for r in recs]
-        raise C.ToolFailure("unavailable", agg.get("reason") or "aggregation_unavailable",
+        raise C.ToolFailure("unavailable", (query_tool.refusal_reason(res, code) if agg.get("reason") else None)
+                            or "aggregation_unavailable",
                             M.t(lang, "rank.query_refused", why=why).strip(), recovery=recs, provenance=prov)
     if res.get("truncated") or res.get("time_windowed") or res.get("partial_period_dropped") is not None:
         _refuse("source_incomplete", M.t(lang, "rank.source_incomplete"), prov)
@@ -177,12 +182,17 @@ def rank_entities(args, ctx):
                      for k in sorted(set(catalogue) - seen_ids)]
     rows.sort(key=lambda r: ((-1 if args.order == "desc" else 1) * r["value"],
                              tuple(str(r["entity"][k]) for k in keys)))
-    for i, row in enumerate(rows, 1):
-        row["rank"] = i
+    period_changes.assign_ranks(rows, lambda r: r["value"])
     scope = prov["scope"]
     warnings = []
+    pinned = query_tool.auto_pinned_warning(agg, filters, lang)
+    if pinned:
+        warnings.append(pinned)
     if catalogue:
         warnings.append(C.warning("classification_reference", M.t(lang, "rank.classification")))
+    cut = period_changes.tie_cut(rows, args.top_k)
+    if cut:
+        warnings.append(C.warning("tie_split", M.t(lang, "rank.tie_split", n=cut, rank=rows[args.top_k - 1]["rank"])))
     if excluded:
         warnings.append(C.warning("entities_excluded", M.t(lang, "rank.entities_excluded", n=len(excluded))))
     if scope.get("domain_complete") is not True:

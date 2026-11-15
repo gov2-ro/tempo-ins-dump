@@ -49,7 +49,12 @@ def test_reviewed_phrases(places_conn, j):
         assert parsed["period"] == j["period"]
 
 
-@pytest.mark.parametrize("q", JUDGMENTS["no_concept"])
+# "inflatie" was judged "no concept" before the reviewed CPI concepts (PKG-TOOLS F5); it matches them now.
+# The judgment file under data/eval/ belongs to the search-eval owner: drop the phrase there when convenient.
+NOW_A_CONCEPT = {"inflatie"}
+
+
+@pytest.mark.parametrize("q", [q for q in JUDGMENTS["no_concept"] if q not in NOW_A_CONCEPT])
 def test_unrelated_queries_get_no_concept(places_conn, q):
     assert cs.match_concepts(cs.parse_query(q, places_conn)["text"]) == []
 

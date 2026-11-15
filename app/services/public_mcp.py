@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import hashlib
 import json
 import logging
@@ -76,11 +77,18 @@ INSTRUCTIONS = (
     "Messages and warnings follow each call's `lang` (ro default, or en): pass the user's language. "
     "The server never calls a model.")
 # Appended when TEMPO_MCP_LOG_CALLS is on, so a client (and its user) is told before any call.
-LOGGING_NOTICE = (" This is a development server: every tool call (arguments and result, no IP address or client "
-                  "identity) is recorded and may be published to improve the answers. Do not send personal or "
-                  "confidential information.")
+LOGGING_NOTICE = (" This is a development server: every accepted tool call (arguments and result) is recorded "
+                  "and may be published to improve the answers. The record holds no IP address or client "
+                  "identity, but the hosting platform's access logs may keep connection metadata for a limited "
+                  "time. Do not send personal or confidential information.")
 CALL_LOG = "mcp-calls.jsonl"               # in TEMPO_ASK_LOG_DIR, next to Ask's ask-chats.jsonl
-
+CLIENT_TABLE_KEYS = 1024                   # per-client windows kept (least recently seen are dropped)
+# A refused call whose arguments are not trusted to be small or valid: the content log keeps only
+# the tool, the reason, the argument size and a SHA-256, never the argument text.
+NO_ARGUMENT_LOG_REASONS = frozenset({"invalid_input", "unknown_tool", "busy"})
+# Set by McpEndpoint for the request being handled; the SDK's server task inherits the context.
+_CLIENT: contextvars.ContextVar = contextvars.ContextVar("mcp_client", default="-")
+_DISCONNECT: contextvars.ContextVar = contextvars.ContextVar("mcp_disconnect", default=None)
 
 # ---------------------------------------------------------------- settings
 
@@ -136,6 +144,11 @@ class McpSettings:
     allowed_hosts: tuple = ()
     allowed_origins: tuple = ()
     log_calls: bool = False
+    log_max_bytes: int = 256 * 1024 * 1024
+    client_requests_per_minute: int = 240
+    client_calls_per_minute: int = 60
+    trust_forwarded: bool = False
+    on_fly: bool = False            # FLY_APP_NAME is set: Fly's proxy writes Fly-Client-IP
 
     @classmethod
     def from_env(cls, environ=None, *, base_url: str | None = None) -> "McpSettings":
@@ -167,7 +180,12 @@ class McpSettings:
             cache_entries=_number(env, "TEMPO_MCP_CACHE_ENTRIES", 128),
             cache_ttl=_number(env, "TEMPO_MCP_CACHE_TTL_SECONDS", 300.0, cast=float),
             allowed_hosts=tuple(dict.fromkeys(hosts)), allowed_origins=tuple(dict.fromkeys(origins)),
-            log_calls=_flag(env, "TEMPO_MCP_LOG_CALLS"))
+            log_calls=_flag(env, "TEMPO_MCP_LOG_CALLS"),
+            log_max_bytes=_number(env, "TEMPO_MCP_LOG_MAX_BYTES", 256 * 1024 * 1024),
+            client_requests_per_minute=_number(env, "TEMPO_MCP_CLIENT_REQUESTS_PER_MINUTE", 240),
+            client_calls_per_minute=_number(env, "TEMPO_MCP_CLIENT_CALLS_PER_MINUTE", 60),
+            trust_forwarded=_flag(env, "TEMPO_MCP_TRUST_FORWARDED"),
+            on_fly=bool((env.get("FLY_APP_NAME") or "").strip()))
 
 
 def _check_base_url(base: str, local_test: bool) -> tuple[str, str]:
@@ -210,6 +228,56 @@ class Window:
                 return False, max(0.1, self.seconds - (now - self._hits[0]))
             self._hits.append(now)
             return True, 0.0
+
+
+class ClientWindows:
+    """One sliding window per client key, in a table bounded to `max_keys` (least recently seen
+    dropped on access). The overall ceiling stays with the global Window."""
+
+    def __init__(self, limit: int, seconds: float = 60.0, max_keys: int = CLIENT_TABLE_KEYS,
+                 clock=time.monotonic):
+        self.limit, self.seconds, self.max_keys, self.clock = limit, seconds, max_keys, clock
+        self._items: OrderedDict = OrderedDict()
+        self._lock = threading.Lock()
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+    def allow(self, key: str) -> tuple[bool, float]:
+        with self._lock:
+            w = self._items.get(key)
+            if w is None:
+                w = self._items[key] = Window(self.limit, self.seconds, clock=self.clock)
+                while len(self._items) > self.max_keys:
+                    self._items.popitem(last=False)
+            else:
+                self._items.move_to_end(key)
+        return w.allow()
+
+
+class _Disconnect:
+    """The client hanging up on one request: callbacks run (on the event loop) when it happens."""
+
+    def __init__(self):
+        self.gone = False
+        self.event = asyncio.Event()
+        self._callbacks: list = []
+
+    def on_gone(self, fn) -> None:
+        if self.gone:
+            fn()
+        else:
+            self._callbacks.append(fn)
+
+    def off(self, fn) -> None:
+        with contextlib.suppress(ValueError):
+            self._callbacks.remove(fn)
+
+    def fire(self) -> None:
+        self.gone = True
+        self.event.set()
+        for fn in list(self._callbacks):
+            fn()
 
 
 class ResultCache:
@@ -342,6 +410,7 @@ class Gate:
         self.clock = clock
         self.slots = threading.BoundedSemaphore(settings.max_concurrent)
         self.calls = Window(settings.max_calls_per_minute, clock=clock)
+        self.client_calls = ClientWindows(settings.client_calls_per_minute, clock=clock)
         self.cache = ResultCache(settings.cache_bytes, settings.cache_entries, settings.cache_ttl, clock=clock)
         self.estimator = ScanEstimator()
         self.executor = ThreadPoolExecutor(max_workers=settings.max_concurrent,
@@ -350,13 +419,19 @@ class Gate:
         self._waiting: deque = deque()            # calls queued for a slot, first come first served
         self.stats: Counter = Counter()
         self._lock = threading.Lock()
+        self._log_lock = threading.Lock()
+        self.log_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mcp-log")
 
     def close(self) -> None:
         self.executor.shutdown(wait=False, cancel_futures=True)
+        self.log_executor.shutdown(wait=False)
 
     def _key(self, name: str, arguments: dict, gen: dict):
-        lang = arguments.get("lang", "ro")
-        return (C.CONTRACT, self.s.base_url, gen.get("id"), name, lang, C.dumps(arguments), POLICY_VERSION)
+        """Keyed on the validated arguments with defaults (sorted keys), so a reordered object or an
+        omitted `lang` versus "ro" is the same selection."""
+        args = registry.TOOLS[name].args.model_validate(arguments).model_dump(mode="json")
+        norm = json.dumps(args, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
+        return (C.CONTRACT, self.s.base_url, gen.get("id"), name, args.get("lang", "ro"), norm, POLICY_VERSION)
 
     async def call(self, name: str, arguments) -> dict:
         t0 = self.clock()
@@ -368,22 +443,45 @@ class Gate:
             "tool": str(name)[:40], "status": env["status"], "reason": env.get("reason"),
             "cached": cached, "duration_ms": ms, "result_bytes": C.size(env)}))
         if self.s.log_calls:
-            self._log_call(name, arguments, env, cached, ms)
+            line = self._log_line(name, arguments, env, cached, ms)
+            await asyncio.get_running_loop().run_in_executor(self.log_executor, self._write_log, line)
         return env
 
-    def _log_call(self, name, arguments, env: dict, cached: bool, ms: int) -> None:
+    @staticmethod
+    def _log_line(name, arguments, env: dict, cached: bool, ms: int) -> str:
         """Content log (TEMPO_MCP_LOG_CALLS, disclosed in the server instructions): the call and its
-        whole result, one JSON line. Nothing about the caller: no IP, headers or client name."""
-        line = json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "tool": str(name)[:64],
-                           "arguments": ask_guard.redact(arguments) if isinstance(arguments, dict) else None,
-                           "status": env.get("status"), "reason": env.get("reason"), "cached": cached,
-                           "duration_ms": ms, "generation": (env.get("provenance") or {}).get("generation"),
-                           "result": env}, ensure_ascii=False, default=str)
+        whole result, one JSON line. Nothing about the caller: no IP, headers or client name. A
+        refusal before any work (invalid, too big, throttled, busy) keeps only the tool, the
+        reason, the argument size and a SHA-256: the arguments are never stored."""
+        head = {"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "tool": str(name)[:64],
+                "status": env.get("status"), "reason": env.get("reason"), "cached": cached, "duration_ms": ms}
+        if env.get("reason") in NO_ARGUMENT_LOG_REASONS:
+            try:
+                raw = C.dumps(arguments).encode("utf-8")
+            except (TypeError, ValueError):
+                raw = b""
+            head |= {"argument_bytes": len(raw), "arguments_sha256": hashlib.sha256(raw).hexdigest()}
+            return json.dumps(head, ensure_ascii=False)
+        head |= {"arguments": ask_guard.redact(arguments) if isinstance(arguments, dict) else None,
+                 "generation": (env.get("provenance") or {}).get("generation"), "result": env}
+        return json.dumps(head, ensure_ascii=False, default=str)
+
+    def _write_log(self, line: str) -> None:
+        """Append one line; when it would pass TEMPO_MCP_LOG_MAX_BYTES the file becomes `.1`
+        (the previous `.1` is replaced), so at most about twice the cap is kept."""
+        data = (line + "\n").encode("utf-8")
         try:
-            with self._lock:
+            with self._log_lock:
                 config.ASK_LOG_DIR.mkdir(parents=True, exist_ok=True)
-                with open(config.ASK_LOG_DIR / CALL_LOG, "a", encoding="utf-8") as f:
-                    f.write(line + "\n")
+                path = config.ASK_LOG_DIR / CALL_LOG
+                try:
+                    size = path.stat().st_size
+                except OSError:
+                    size = 0
+                if size and size + len(data) > self.s.log_max_bytes:
+                    os.replace(path, path.with_name(CALL_LOG + ".1"))
+                with open(path, "ab") as f:
+                    f.write(data)
         except Exception:                           # a full disk must not fail the call
             log.error("MCP call log write failed")
 
@@ -396,7 +494,9 @@ class Gate:
         key = self._key(name, arguments, gen) if certified else None
         if certified:
             self.cache.purge_generations_other_than(gen.get("id"))
-        ok, wait = self.calls.allow()
+        ok, wait = self.client_calls.allow(_CLIENT.get())
+        if ok:
+            ok, wait = self.calls.allow()
         if not ok:
             self.stats["throttled"] += 1
             return _gate_envelope(name, arguments, "unavailable", "busy",
@@ -432,6 +532,10 @@ class Gate:
         except BaseException:                       # the pool is shut down: give the slot back
             self._release()
             raise
+        gone = _DISCONNECT.get()
+        hangup = lambda: token.cancel("client_disconnected")        # noqa: E731
+        if gone is not None:                        # the client hung up: stop the work, free the slot when it ends
+            gone.on_gone(hangup)
         try:
             env = await asyncio.wait_for(asyncio.shield(fut), self.s.max_seconds + DEADLINE_GRACE)
         except asyncio.TimeoutError:
@@ -449,9 +553,12 @@ class Gate:
             log.exception("MCP tool failed tool=%s ref=%s", str(name)[:40], ref)
             return _gate_envelope(name, arguments, "error", "execution_failed",
                                   M.t(_lang(arguments), "registry.failed", ref=ref)), False
+        finally:
+            if gone is not None:
+                gone.off(hangup)
         if env is None:
             return self._timeout(name, arguments), False
-        if token.timed_out and env["status"] not in ("ok", "partial", "needs_clarification"):
+        if token.timed_out:                         # an answer that arrives after the deadline is not served or cached
             self.stats["timeouts"] += 1
             return self._timeout(name, arguments), False
         if key is not None and self._cacheable(env) and generation.current().get("id") == gen.get("id"):
@@ -472,7 +579,8 @@ class Gate:
         me, t0 = object(), time.monotonic()        # real time: the queue bound is wall clock
         self._waiting.append(me)
         try:
-            while time.monotonic() - t0 < self.s.queue_seconds:
+            gone = _DISCONNECT.get()
+            while time.monotonic() - t0 < self.s.queue_seconds and not (gone and gone.gone):
                 if self._waiting[0] is me and self.slots.acquire(blocking=False):
                     return time.monotonic() - t0
                 await asyncio.sleep(QUEUE_POLL_SECONDS)
@@ -499,7 +607,7 @@ class Gate:
         cursor = None
         try:
             cursor = get_conn()
-            with token.running(cursor, deadline_in=self.s.max_seconds):
+            with token.running(cursor, deadline_in=self.s.max_seconds, repeat_interrupt=True):
                 return registry.call_tool(name, arguments, conn=cursor)
         except ask_guard.Cancelled:
             return None
@@ -588,8 +696,9 @@ def build_server(gate: Gate, settings: McpSettings):
 class McpEndpoint:
     """ASGI app at /mcp: body, request-rate, Host/Origin checks in front of the SDK transport."""
 
-    def __init__(self, manager, settings: McpSettings, requests: Window):
+    def __init__(self, manager, settings: McpSettings, requests: Window, client_requests=None):
         self.manager, self.s, self.requests = manager, settings, requests
+        self.client_requests = client_requests or ClientWindows(settings.client_requests_per_minute)
 
     @staticmethod
     def _header(scope, name: bytes) -> str | None:
@@ -597,6 +706,30 @@ class McpEndpoint:
             if k.lower() == name:
                 return v.decode("latin-1")
         return None
+
+    def _client_key(self, scope) -> str:
+        """Who is calling: Fly's `Fly-Client-IP` (only on Fly, whose proxy overwrites it; elsewhere a
+        client could forge it), else (only with TEMPO_MCP_TRUST_FORWARDED) the first `X-Forwarded-For`
+        address, else the peer address. Used only for fair-share windows."""
+        fly = self._header(scope, b"fly-client-ip") if self.s.on_fly else None
+        if fly and fly.strip():
+            return fly.strip()[:64]
+        if self.s.trust_forwarded:
+            fwd = (self._header(scope, b"x-forwarded-for") or "").split(",")[0].strip()
+            if fwd:
+                return fwd[:64]
+        peer = scope.get("client")
+        return str(peer[0])[:64] if peer else "-"
+
+    def _headers_ok(self, scope) -> bool:
+        """The SDK's Host/Origin test (it will answer 421/403 itself): checked here only to keep
+        such a request out of the global window."""
+        host, origin = self._header(scope, b"host"), self._header(scope, b"origin")
+
+        def match(value, allowed):
+            return value in allowed or any(a.endswith(":*") and value.startswith(a[:-2] + ":") for a in allowed)
+        return bool(host) and match(host, self.s.allowed_hosts) \
+            and (not origin or match(origin, self.s.allowed_origins))
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -613,7 +746,13 @@ class McpEndpoint:
         if scope["method"] != "POST":                          # stateless: no sessions, no server-sent stream
             return await PlainTextResponse("Method Not Allowed", status_code=405,
                                            headers={"allow": "POST, OPTIONS"})(scope, receive, send)
-        ok, wait = self.requests.allow()
+        client = self._client_key(scope)
+        ok, wait = self.client_requests.allow(client)
+        if ok and not self._headers_ok(scope):                  # refused below by the SDK: the client's own cost only
+            _CLIENT.set(client)
+            return await self.manager.handle_request(scope, receive, send)
+        if ok:
+            ok, wait = self.requests.allow()
         if not ok:
             return await JSONResponse({"error": "too many requests"}, status_code=429,
                                       headers={"retry-after": str(max(1, round(wait)))})(scope, receive, send)
@@ -631,13 +770,20 @@ class McpEndpoint:
                 return await self._too_large(scope, receive, send)
             more = msg.get("more_body", False)
         sent = False
+        gone = _Disconnect()
+
+        async def watch():                                      # the only reader of `receive` from here on
+            while True:
+                if (await receive())["type"] == "http.disconnect":
+                    return gone.fire()
 
         async def replay():
             nonlocal sent
             if not sent:
                 sent = True
                 return {"type": "http.request", "body": bytes(body), "more_body": False}
-            return await receive()                              # then wait for the real disconnect
+            await gone.event.wait()                             # then the real disconnect
+            return {"type": "http.disconnect"}
 
         async def cors_send(message):
             if approved and message["type"] == "http.response.start":
@@ -645,12 +791,17 @@ class McpEndpoint:
                     (k.encode(), v.encode()) for k, v in self._cors(origin).items())
             await send(message)
 
+        _CLIENT.set(client)
+        _DISCONNECT.set(gone)
+        watcher = asyncio.ensure_future(watch())
         try:
             await self.manager.handle_request(scope, replay, cors_send if approved else send)
         except RuntimeError as e:                               # lifespan did not start the manager
             if "Task group is not initialized" not in str(e):
                 raise
             await PlainTextResponse("MCP server is not running", status_code=503)(scope, receive, send)
+        finally:
+            watcher.cancel()
 
     @staticmethod
     def _cors(origin: str) -> dict:
@@ -684,7 +835,8 @@ class PublicMcp:
                 enable_dns_rebinding_protection=True,
                 allowed_hosts=list(settings.allowed_hosts),
                 allowed_origins=list(settings.allowed_origins)))
-        self.endpoint = McpEndpoint(self.manager, settings, Window(settings.max_requests_per_minute))
+        self.endpoint = McpEndpoint(self.manager, settings, Window(settings.max_requests_per_minute),
+                                    ClientWindows(settings.client_requests_per_minute))
 
     @contextlib.asynccontextmanager
     async def lifespan(self):

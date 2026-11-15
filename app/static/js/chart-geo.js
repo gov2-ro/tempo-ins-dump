@@ -101,6 +101,26 @@ function detectGeoLevel(rows, geoIdx, geoDimMeta) {
 
 
 /**
+ * No map can be drawn (non-Romanian geography, or no row matches a loaded
+ * map): rank the entities in a horizontal bar chart for the latest period.
+ */
+function choroplethFallback(chart, container, config, data, metadata) {
+    try { chart.dispose(); } catch (e) { /* already gone */ }
+    const cols = data.columns;
+    const timeIdx = config.time_dim ? cols.indexOf(config.time_dim) : -1;
+    let rows = data.rows;
+    if (timeIdx !== -1) {
+        const periods = uniqueValues(rows, timeIdx);
+        const last = periods[periods.length - 1];
+        rows = rows.filter(r => r[timeIdx] === last);
+    }
+    return createHorizontalBarChart(container,
+        { ...config, x_axis_dim: config.geo_dim, series_dim: null, time_dim: null },
+        { ...data, rows }, metadata);
+}
+
+
+/**
  * Create a choropleth map chart.
  * Data shape: rows = [[geo_id, time_id, value], ...] or [[geo_id, ..., time_id, value]]
  * config.geo_dim, config.time_dim specify which columns hold geo and time IDs.
@@ -142,6 +162,9 @@ function createChoroplethChart(container, config, data, metadata) {
     }
 
     const geoLevel = detectGeoLevel(rows, geoIdx, geoDimMeta);
+    if (!['county', 'region', 'macroregion'].includes(geoLevel)) {
+        return choroplethFallback(chart, container, config, data, metadata);
+    }
     const mapName = geoLevel === 'county' ? 'Romania'
         : geoLevel === 'region' ? 'Romania-regions'
         : 'Romania-macroregions';
@@ -210,9 +233,9 @@ function createChoroplethChart(container, config, data, metadata) {
         frames[timeId] = Object.entries(map).map(([name, value]) => ({ name, value }));
     }
 
-    // If no geo data, fall back to line
+    // No row matches the loaded map: rank the entities instead of a blank map
     if (Object.keys(frames).length === 0) {
-        return createTimeSeriesChart(container, config, data, metadata);
+        return choroplethFallback(chart, container, config, data, metadata);
     }
 
     // Compute global min/max for consistent color scale

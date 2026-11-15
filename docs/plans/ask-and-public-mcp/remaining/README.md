@@ -47,6 +47,7 @@ These are not live-provider, hosted-connector or 512 MiB acceptance results.
 | [AQ-04](04-discovery-and-messages.md) | Reviewed defaults, actionable choices and bilingual messages | Ready; no new unemployment default | One subsection at a time |
 | [AQ-05](05-analytical-extensions.md) | City-change classification, then reviewed joins/derived measures | 05A ready; other steps have data/design prerequisites | Never implement the whole file in one pass |
 | [AQ-06](06-client-and-release.md) | Separate-origin integration and client/release evidence | Local code ready; exposure depends on capacity/quality gates | Code, local checks, external checks separately |
+| [AQ-07](07-mcp-footprint.md) | Smaller memory profile, no avoidable first-call imports, period bounds without a second scan | Ready (2026-11-15): 07A, then 07B | One step per session |
 
 Recommended sequence: **01A → 02A → 02B → 03A → 03B → 04A/B/C**. Then use the
 measured results for 01B and the task failures for the next product change.

@@ -23,10 +23,14 @@ def _evidence_recovery(selection: dict | None, generation_id: str | None, lang: 
 def compare_periods(args, ctx):
     r = period_changes.run(ctx.conn, args, ctx.lang, ctx=ctx)
     intervals, returned, eligible, cut = [], 0, 0, False
+    ties = []
     # top_k is per interval; the whole table stays within the model-visible row cap
     per_interval = min(args.top_k, contract.MAX_TABLE_ROWS // max(1, len(r["intervals"])))
     for iv in r["intervals"]:
         rows = iv["rows"][:per_interval]
+        n_tie = period_changes.tie_cut(iv["rows"], per_interval)
+        if n_tie:
+            ties.append((iv["from"], iv["to"], n_tie, iv["rows"][per_interval - 1]["rank"]))
         sample = iv["excluded"][:period_changes.EXCLUDED_SAMPLE]
         truncated = len(sample) < len(iv["excluded"])
         cut = cut or len(rows) < len(iv["rows"]) or truncated
@@ -46,6 +50,14 @@ def compare_periods(args, ctx):
         data.update(entity_class="cities", outside_class_count=r["outside_class_count"])
     limits = {"returned_rows": returned, "total_rows": eligible, "preview_truncated": cut,
               "source_complete": True, "time_windowed": False, "partial_period_dropped": None}
+    warnings = list(r["warnings"])
+    small = sum(1 for iv in intervals for x in iv["rows"] if x.get("small_base"))
+    if small:
+        warnings.append(contract.warning("small_base", M.t(ctx.lang, "changes.small_base", n=small,
+                                                         base=f"{period_changes.SMALL_BASE:g}")))
+    for a, b, n_tie, rank in ties:
+        warnings.append(contract.warning("tie_split", M.t(ctx.lang, "rank.tie_split_interval", n=n_tie, rank=rank,
+                                                         a=a, b=b)))
     rec = []
     if cut:
         e = _evidence_recovery(r["selection"], ctx.generation.get("id"), ctx.lang)
@@ -76,7 +88,7 @@ def compare_periods(args, ctx):
         message += " " + M.t(lang, "changes.class_tail")
     return contract.envelope(
         "compare_periods", ctx, status=r["status"], reason=r["reason"], message=message,
-        data=data, provenance=r["provenance"], limits=limits, warnings=r["warnings"],
+        data=data, provenance=r["provenance"], limits=limits, warnings=warnings,
         recovery=rec)
 
 

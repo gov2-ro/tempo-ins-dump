@@ -4,6 +4,91 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Repository structure — 2026-11-16
+
+- [ ] **P3 — Split the repo in two: data pipeline, and serving (API, Ask, MCP, UI)** (owner idea,
+  2026-11-16; not three repos, see below). The contract between them is the generation: parquet
+  files, `metadata.duckdb`, `search.duckdb`, view profiles and `generation-manifest.json`. The
+  pipeline repo produces a generation; the serving repo reads it and never writes it.
+  - **Why not a third repo for the MCP:** `public_mcp.py` is a thin adapter. The eight tools, `data_query`,
+    the grain guard and the policies are shared with Ask and REST through `registry.call_tool`, and
+    AGENTS.md forbids adapters that re-implement those rules. A separate MCP repo would need these
+    services as a versioned library, with no gain. MCP and API can already deploy separately (one
+    repo, different env). Reconsider only if the MCP needs its own release cadence or team.
+  - **Coupling to remove first (2026-11-16):** the app imports the pipeline module `sdmx_labels.py`;
+    17 pipeline-side scripts import from `app/`, including stage 12 (`12-split-datasets.py`,
+    `split_rules.py`), `build-search-index.py`, `repair-corpus.py` and `check-kpi-totals.py`. Decide
+    per module: move it, or extract a small shared package that both repos pin.
+  - **Also decide:** where the static-site build (`build-static.py`, JS engine and parity tests) goes
+    (serving: it mirrors the Python services); where eval baselines and `data/eval/` go; the dev MCP
+    (`tools/tempo-dev-mcp`, reads both sides); a written schema and version for the generation
+    contract; how `prepare-deploy-data.sh` crosses the boundary.
+  - Order: write the generation contract, remove the cross-imports in this repo, then split with
+    history (`git filter-repo`). Not before the Hetzner move and MCP promotion.
+
+## Chart selection and public MCP audit follow-ups — 2026-11-08
+
+Source: [audit report](reports/2026-11-08-charts-and-mcp-audit.md). The code fixes are on
+`audit/charts-mcp-2026-11` (merged into `fix/ask-answer-quality`). Owner decisions of 2026-11-08
+are recorded next to each item.
+
+- [ ] **P1 — Replace suppressed tiles instead of leaving the page empty.** The INS-total gate
+  (`source_total_mismatch`) and the composer's grain check now suppress tiles with a visible reason
+  (SCL104A_judete: 4 → 0 tiles; POP107D_grupe_judet, TUR105H_judet, FOM104D_judet,
+  SOM101E_anual_judet). Owner accepted the interim state ("mark them as such"). Next: offer one
+  verified level or the latest period as a replacement tile, and a corpus test that every composed
+  tile returns rows or is listed under `suppressed`.
+- [ ] **P1 — Hero tile from `published_totals`** (audit CH-15, owner: ok). FOM106E opens on
+  agriculture × men although INS publishes a Total series the app already stores. The composer's
+  default pin should use the published cell when one exists; define how a Total with no parquet row
+  is presented.
+- [ ] **P1 — Pipeline: `has_time` for split children** (CH-10, owner: "we should"). Code fix in
+  `audit/pkg-pipeline`; the stored profiles of ~350 children stay wrong until the scoped recompute
+  runs on a copied generation (command in the activity entry). Run the chart eval before publishing.
+- [ ] **P1 — Pipeline: stage-12 children that drop a key column** (AQ-11, owner: ok). AGR101B_judet,
+  POP201D_judet, POP201K_judet and SOM101E_anual_judet keep one row per locality after dropping
+  REF_AREA_2. New rule: aggregate only with a verified additive measure, otherwise skip the child.
+  Regenerate those four parents' children on a copied generation and re-run the grain audit.
+- [ ] **P2 — Newer-vintage caveat** (AQ-01, owner: ok, "we do the best with what INS offers").
+  Births 2024: POP201A 148,916 vs POP201D 157,270. Tool results warn when a sibling table in the same
+  concept is newer; discovery prefers the newest. Implemented in `audit/pkg-tools` follow-up; extend to
+  the dataset page notes.
+- [ ] **P2 — v1 yearly toggle** (CH-18, owner: ok). Default off for sub-annual data, incomplete last
+  year marked. Stock/flow detection is out of scope.
+- [ ] **P2 — Fly / Cloudflare: per-client keys and edge limits** (MCP-01, MCP-08; owner: later).
+  Behind Cloudflare `Fly-Client-IP` is the edge address, so per-client windows pool real clients;
+  use the Cloudflare real-IP header or an edge rate limit, and drop the fly.dev host from
+  `TEMPO_MCP_ALLOWED_HOSTS` once Cloudflare is the only entry.
+- [x] **Access logs** (MCP-07): owner keeps uvicorn's access log. The MCP notice now says the content
+  log holds no IP and that platform logs may keep connection metadata.
+- [ ] **P2 — Chart eval on the composer layer.** The selector eval diffs the selector against its own
+  output. Add a hand-labelled set (allowed hero types, forbidden views, expected total) run against
+  `compose_dashboard` on synthetic fixtures in CI; wire it into `release-check.py`.
+- [ ] **P2 — Gate `describe_dataset`/`discover_indicators` by scan size** (MCP-04): they read whole
+  parquets for period bounds (POP107D 2.4 s cold); read bounds from the dimension options instead.
+- [ ] **P2 — Rotate `ask-chats.jsonl`** like `mcp-calls.jsonl` (same volume); body-read timeout for
+  slow clients; replace SDK error bodies with fixed JSON-RPC errors (MCP-09).
+- [ ] **P2 — Unit type at the source for IPC102\*** (AQ-05): `tools/units.py` overrides the envelope
+  to `index`; fix the profile/classifier and drop the override. Remove "inflatie" from `no_concept` in
+  the search judgments and the `NOW_A_CONCEPT` exception in `tests/test_pa02_search.py`.
+- [ ] **P2 — Re-pin the remaining 9b3e065d probes** (test_at01_discovery, test_at01_changes,
+  test_at01_scope, test_at01_recipes_links, test_aq04b, test_aq_discovery_county_unemployment,
+  test_aq05a) so they run on 062bd2b0 instead of skipping.
+- [ ] **P2 — Pyramid and bar tiles over overlapping bands** (CH-08): `mixed_grain_on_axis` is now a
+  visible badge; the tile should restrict to one band set (AMG130M, AMG155F).
+- [ ] **P2 — Insights and `detect_trends` on one periodicity** (CH-05 remainder): the KPI change and
+  breakpoints still read mixed TIME_PERIOD values; the composer's time pin can disagree with them.
+- [ ] **P3 — Periodicity switch on the dataset page** (annual default, finest as toggle); show
+  `aggregation.source_check.message` in the UI and in the tools' text; ranking chips should carry the
+  pin label; `.agg-badge-mixed` styling.
+- [ ] **P3 — Tests with fixed ports collide** (`test_at02_browser`, `test_static_parity`,
+  benchmark child tests) when several suites run at once; `test_aqlang_browser` needs the external CDNs.
+- [ ] **P3 — `policy.js` lacks the per-dimension `kpi_dimension_checks` mismatch rule** Python applies;
+  a sum short of INS where INS's parts agree (POP201A) needs a coverage check, not a policy rule.
+- [ ] **P3 — Confirm "by domicile" wording for POP201A**; national variants for births; evidence link
+  for `run_recipe areas:["TOTAL"]`; REST `/data` empty-slice reason (AQ-12); EN messages with RO unit
+  labels; discovery noise on "medici".
+
 ## Public MCP operations — 2026-10-28
 
 - [ ] **P1 — Production `/mcp` fails on every question (Fly).** `tempo-ins-explorer.fly.dev/mcp` timed out
@@ -13,6 +98,21 @@ see also [charting-ideas.md](charting-ideas.md)
   overrun the deadline. Check the 403 is Cloudflare's Browser Integrity Check (error 1010, python-urllib UA)
   before blaming the app. Options: `min_machines_running = 1`, a longer deadline, or a different host. Owner
   decision: "we'll fix Fly or look for alternatives later".
+  2026-11-15: `min_machines_running = 1` has been deployed since 2026-10-28, so a cold machine may not be
+  the cause. Locally `discover_indicators` has a median of 47 ms. RSS reaches 375 MB after five calls, and
+  the three DuckDB caps sum to 480 MB on a 512 MB machine. Memory starvation is the new hypothesis, not
+  verified on Linux. Local reduction: [AQ-07](plans/ask-and-public-mcp/remaining/07-mcp-footprint.md).
+- [ ] **P1 — Evaluate the owner's Hetzner VPS as the API/MCP host** (2 vCPU, 4 GB RAM, 40 GB disk +
+  15 GB volume; the UI stays on DreamHost). It has 8× the memory of the Fly machine and dedicated vCPUs.
+  Needs: Docker or a venv service, TLS (Caddy), Cloudflare in front of `api-ins`, the `/logs` volume,
+  backups and an update procedure. Decide after AQ-07, with its measured memory profile.
+- [ ] **P2 — Deterministic dataset cards for discovery** (owner decision 2026-11-15). One card per
+  dataset, generated from data the pipeline already holds: a split child's restriction (for example
+  "SEX = Feminin"), geo levels, first/last period, periodicity, unit and additivity, grain status, newer
+  sibling. An LLM writes only RO/EN search phrasings (synonyms, everyday questions), which feed the
+  search index and never an answer. No free-text LLM descriptions. Start only if the answer-quality eval
+  shows that finding the dataset is the main failure; measure with the search eval before and after.
+  Example: the live run of 2026-11-15 read `SAN104A_judete` as "women only" with no card saying so.
 - [x] **P3 — Local MCP test server lives in a session scratchpad.** Moved to `scripts/serve-mcp-test.sh`
   (2026-10-28): data defaults to the repo's `data/` (`TEMPO_TEST_DATA` overrides), content logs to
   `data/logs/mcp-test`; mentioned in AGENTS.md next to `mcp_probe.py`.

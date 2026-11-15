@@ -169,6 +169,21 @@ SDMX query — all 2023 observations for a dataset:
 GET /sdmx/2.1/data/INS,ACC102B?startPeriod=2023&endPeriod=2023
 ```
 
+## Public MCP (optional)
+
+- Endpoint: `/mcp` on the app's API origin. Streamable HTTP. Read-only.
+- Disabled by default. A 404 means the endpoint is off.
+- It never calls a model. It never runs SQL or code.
+- Tools:
+  - `discover_indicators`: find indicators for a question. Concept first.
+  - `describe_dataset`: schema, scope, period bounds and quality of one dataset.
+  - `find_dimension_values`: search and page the actual values of one column.
+  - `query_data`: one validated, bounded data selection.
+  - `compare_periods`: change per entity between explicit annual endpoints, ranked.
+  - `rank_entities`: rank a complete entity set by value in one year.
+  - `run_recipe`: run a reviewed recipe, such as tourism intensity.
+  - `get_evidence_links`: exact dataset, selection, CSV and evidence links.
+
 ## Source
 
 GitHub: https://github.com/gov2-ro/tempo-ins-dump

@@ -163,7 +163,9 @@ def test_class_values_equal_the_all_entities_values_and_ranks_are_over_the_class
     in_class = [r for r in rows_all if loc_of(r) in CITY_ROWS]
     assert [(r["entity"], r["from_value"], r["to_value"], r["absolute"], r["percent"]) for r in rows_cities] == \
         [(r["entity"], r["from_value"], r["to_value"], r["absolute"], r["percent"]) for r in in_class]
-    assert [r["rank"] for r in rows_cities] == list(range(1, len(rows_cities) + 1))
+    # competition ranks over the class (PKG-TOOLS F4): equal values share the rank of the first of them
+    assert [r["rank"] for r in rows_cities] == [
+        1 + sum(1 for o in rows_cities if o["absolute"] < r["absolute"]) for r in rows_cities]
     assert rows_all[0]["rank"] == 1 and loc_of(rows_all[0]) == COMMUNE
     assert [(loc_of(r), r["absolute"]) for r in rows_cities] == expected()
     assert full_cities["intervals"][0]["eligible_count"] == len(in_class)
@@ -265,7 +267,7 @@ def test_ties_break_by_the_full_key_inside_the_class(env):
     assert [r["absolute"] for r in tied] == [-3.0] * 4
     keys = [(r["entity"]["REF_AREA"], r["entity"]["REF_AREA_2"]) for r in tied]
     assert keys == sorted(keys) == [("Alba", city(0)), ("Alba", city(2)), ("Alba", city(4)), ("Alba", city(6))]
-    assert [r["rank"] for r in rows] == [1, 2, 3, 4, 5, 6]
+    assert [r["rank"] for r in rows] == [1, 2, 3, 3, 3, 3]    # the four -3 cities share rank 3
 
 
 # ============================================================ default "all" is unchanged
@@ -296,9 +298,9 @@ def test_default_replay_links_and_bundle_keep_their_exact_shape(env):
     assert sorted(z.namelist()) == sorted([
         "manifest.json", "selection.json", "result.csv", "exclusions.csv", "inputs/endpoints.csv",
         "method.json", "attribution.json", "README.txt", "recompute.py"])
-    # recompute.py of a bundle without a class is the exact script of the baseline (955d81f)
+    # recompute.py of a bundle without a class is the baseline script (955d81f) plus competition ranks (PKG-TOOLS F4)
     assert hashlib.sha256(z.read("recompute.py")).hexdigest() == \
-        "b6ff242f22eb3b53d2eb0e649fac1463f4e4e4bdc50f6bf32fc6217533f905fe"
+        "a4651cad27a64bb5504acf0f7fd6e527131034037e9d1356ae87530fd0d03aab"
     method = json.loads(z.read("method.json"))
     assert "entity_class" not in method and "entity_class" not in json.loads(z.read("selection.json"))["normalized"]
 

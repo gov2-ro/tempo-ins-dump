@@ -102,7 +102,7 @@ BAD = [
     ("compare_periods", {"dataset": "ADDX", "entity_columns": ["CATEGORY"],
                          "intervals": [{"from": "2023", "to": "2022"}]}),
     ("compare_periods", {"dataset": "ADDX", "entity_columns": ["CATEGORY"],
-                         "intervals": [{"from": 2022, "to": 2023}]}),
+                         "intervals": [{"from": 2022.5, "to": 2023}]}),
     ("compare_periods", {"dataset": "ADDX", "entity_columns": ["CATEGORY"],
                          "intervals": [{"from": "2022", "to": "2023"}] * 2}),
     ("compare_periods", {"dataset": "ADDX", "entity_columns": ["CATEGORY"], "intervals":
@@ -115,7 +115,7 @@ BAD = [
     ("compare_periods", {"dataset": "ADDX", "entity_columns": ["CATEGORY"],
                          "intervals": [{"from": "2022", "to": "2023"}], "top_k": 0}),
     ("run_recipe", {"recipe": "tourism_intensity", "year": "24"}),
-    ("run_recipe", {"recipe": "tourism_intensity", "year": 2024}),
+    ("run_recipe", {"recipe": "tourism_intensity", "year": 2024.5}),
     ("run_recipe", {"recipe": "tourism_intensity", "areas": ["Cluj"] * 61}),
     ("run_recipe", {"recipe": "../x"}),
     ("get_evidence_links", {"selection": {"kind": "recipe", "recipe": "tourism_intensity"},

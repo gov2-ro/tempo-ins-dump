@@ -1,0 +1,13 @@
+# Install as /etc/logrotate.d/tempo. The app rotates mcp-calls.jsonl itself
+# (TEMPO_MCP_LOG_MAX_BYTES, one .1 file), so only ask-chats.jsonl is listed.
+# copytruncate: the app keeps the file open and has no reopen signal.
+/var/log/tempo/ask-chats.jsonl {
+    weekly
+    rotate 4
+    maxsize 100M
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

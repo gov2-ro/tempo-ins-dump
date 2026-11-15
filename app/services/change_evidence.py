@@ -120,9 +120,12 @@ for iv in method["intervals"]:
             continue
         ranked.append((sign * (percent if metric == "percent" else absolute), key, f, t, absolute, percent, note))
     ranked.sort(key=lambda x: (x[0], x[1]))
-    for i, (_, key, f, t, absolute, percent, note) in enumerate(ranked, 1):
-        result_rows.append([yf, yt, str(i), *key, fmt(f), fmt(t), fmt(absolute), fmt(percent), note])
-        print(f"{yf},{yt},{i},{'/'.join(key)},{absolute!r},{percent!r}")
+    rank = 0
+    for i, (score, key, f, t, absolute, percent, note) in enumerate(ranked, 1):
+        if i == 1 or score != ranked[i - 2][0]:
+            rank = i                    # equal values share the rank of the first of them (1, 1, 3)
+        result_rows.append([yf, yt, str(rank), *key, fmt(f), fmt(t), fmt(absolute), fmt(percent), note])
+        print(f"{yf},{yt},{rank},{'/'.join(key)},{absolute!r},{percent!r}")
 
 
 def read(name):
@@ -240,8 +243,8 @@ def bundle(result: dict, link: str | None = None) -> bytes:
             "ranking": {"metric": result["metric"], "order": result["order"],
                         "tie_break": "full entity key (key_columns order), ascending string "
                                      "comparison",
-                        "rank": "ordinal position over every eligible entity; not a measure of "
-                                "statistical significance",
+                        "rank": "competition rank over every eligible entity (equal values share a "
+                                "rank: 1, 1, 3); not a measure of statistical significance",
                         "top_k_in_request": result["top_k"],
                         "note": "result.csv holds every ranked entity, not only top_k"},
             "aggregate_rows": [list(k) for k in result["aggregate_keys"]],
@@ -262,7 +265,7 @@ def bundle(result: dict, link: str | None = None) -> bytes:
     files["README.txt"] = (
         f"Period changes for {code}: {src.get('metric') or code}\n\n"
         f"Metric: {result['metric']} ({result['order']}); unit: {result['unit'] or 'unknown'}.\n"
-        "Rank is an ordinal position, not a claim of statistical significance.\n\n"
+        "Rank is a position (equal values share it), not a claim of statistical significance.\n\n"
         "result.csv              every ranked entity of every interval, unrounded\n"
         "exclusions.csv          every entity that was not ranked, with the reason\n"
         "inputs/endpoints.csv    aggregated endpoints computed by the site's shared query from the\n"
