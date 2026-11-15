@@ -4,6 +4,27 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## NEXT — HZ-2 on the Hetzner VPS (owner present) — 2026-11-16
+
+- [ ] **P1 — Next move: run HZ-2 of [the Hetzner plan](plans/hosting-hetzner.md).** HZ-1 is merged
+  (`scripts/deploy/hetzner/`). The public MCP stays unpromoted until the API runs on the VPS.
+  Start a Claude session on the VPS, in an empty folder, with this prompt:
+
+  > Clone https://github.com/gov2-ro/tempo-ins-dump (branch `main`) into `~/tempo-ins-dump`. Read
+  > `AGENTS.md`, then `docs/plans/hosting-hetzner.md` (Decisions and HZ-2) and
+  > `scripts/deploy/hetzner/README.md`. Do only the read-only inventory of HZ-2 first. Report: free
+  > disk on `/` and the volume; memory used by the scrapers now and at their peak (from their
+  > schedules and logs); the firewall state (`ufw status`, and whether a Hetzner Cloud Firewall is
+  > attached); open ports (`ss -tlnp`); the Python version, and whether `python3.12-venv`, `rsync`
+  > and `curl` are installed. Install nothing, and change no settings. Stop after the report.
+
+  Then: paste the report into the Mac session for an Opus check, and do the setup steps one by one
+  with the owner (user, directories, firewall SSH-only, `cloudflared` with the owner's Cloudflare
+  login). The Mac session runs `deploy.sh` (dry run first) to rsync the release; it needs the SSH host
+  and the deploy user. Then HZ-3 (Linux memory, `MemoryMax`) and HZ-4 (DNS cutover).
+  Still to check on the VPS: that `cloudflared` appends the visitor as the last `X-Forwarded-For`
+  entry, and `systemd-analyze verify` on the service file.
+
 ## CI — 2026-11-16
 
 - [ ] **P1 — CI runs no tests since 2026-10-28.** Collection stops on `tests/test_fetch_county_retry.py`:
