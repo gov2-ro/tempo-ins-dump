@@ -1,5 +1,17 @@
 # Activity History
 
+## 2026-11-15 — AQ-07A: public MCP memory budgets and first-call imports
+
+Branch `perf/aq-07-mcp-footprint`. Record: [aq-07-record.md](plans/ask-and-public-mcp/remaining/aq-07-record.md).
+Nothing deployed; app defaults and the corpus are untouched.
+- Baseline and seven budget profiles run with `benchmark-mcp.py` (macOS, generation 062bd2b0). Results are
+  identical across profiles and no profile adds a refusal. Peak RSS does not fall measurably: the workload
+  does not fill the DuckDB caps (cold chain about 375 MiB, warm run about 464 MiB).
+- The pandas import (0.4 s, about 71 MiB) comes from DuckDB's parameter binding on the first parameterised
+  query, not from app code. No small local fix exists, so no code changed.
+- `scripts/deploy/fly/mcp-public.env` now sets `TEMPO_DB_MEMORY=128MB` and `TEMPO_SEARCH_MEMORY=64MB` as a
+  ceiling, with the numbers in a comment. Linux 512 MB check: not_run.
+
 ## 2026-11-08 — Independent audit of chart selection and the public MCP, and its remediation
 
 Owner asked for an independent audit of the automatic chart choice and the public MCP, run by
