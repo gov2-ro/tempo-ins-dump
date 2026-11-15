@@ -13,7 +13,8 @@ from app.services import public_mcp
 
 BASE = "https://mcp.example.org"
 HOST = "mcp.example.org"
-ENV = {"TEMPO_MCP_ENABLED": "true", "TEMPO_MCP_ALLOWED_HOSTS": HOST}
+ENV = {"TEMPO_MCP_ENABLED": "true", "TEMPO_MCP_ALLOWED_HOSTS": HOST,
+       "FLY_APP_NAME": "test-app"}   # tests simulate clients through Fly-Client-IP
 
 
 def make_app(tmp_path, monkeypatch, environ=None, *, extra=(), env=None):

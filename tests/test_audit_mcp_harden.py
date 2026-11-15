@@ -72,6 +72,21 @@ def test_x_forwarded_for_is_ignored_unless_trusted(tmp_path, monkeypatch):
                                base_url="https://mcp.example.org")
 
 
+def test_fly_client_ip_is_ignored_off_fly(tmp_path, monkeypatch):
+    """Off Fly (no FLY_APP_NAME) nothing overwrites Fly-Client-IP, so rotating it buys nothing."""
+    env = {}
+
+    async def codes(environ):
+        app, _ = E.make_app(tmp_path, monkeypatch, env=env.get("e"),
+                            environ={"TEMPO_MCP_CLIENT_REQUESTS_PER_MINUTE": "2", **environ})
+        env["e"] = app.state.corpus_env
+        async with E.started(app), E.http(app) as c:
+            return [(await c.post("/mcp", json=E.RPC, headers=fly(f"6.6.6.{i}"))).status_code
+                    for i in range(3)]
+    assert run(codes({"FLY_APP_NAME": ""})) == [200, 200, 429]
+    assert run(codes({})) == [200, 200, 200]                              # on Fly the header is trusted
+
+
 def test_calls_are_throttled_per_client_and_the_client_reaches_the_gate(tmp_path, monkeypatch):
     app, mcp = E.make_app(tmp_path, monkeypatch, environ={"TEMPO_MCP_CLIENT_CALLS_PER_MINUTE": "2"})
 
