@@ -4,6 +4,28 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Repository structure — 2026-11-16
+
+- [ ] **P3 — Split the repo in two: data pipeline, and serving (API, Ask, MCP, UI)** (owner idea,
+  2026-11-16; not three repos, see below). The contract between them is the generation: parquet
+  files, `metadata.duckdb`, `search.duckdb`, view profiles and `generation-manifest.json`. The
+  pipeline repo produces a generation; the serving repo reads it and never writes it.
+  - **Why not a third repo for the MCP:** `public_mcp.py` is a thin adapter. The eight tools, `data_query`,
+    the grain guard and the policies are shared with Ask and REST through `registry.call_tool`, and
+    AGENTS.md forbids adapters that re-implement those rules. A separate MCP repo would need these
+    services as a versioned library, with no gain. MCP and API can already deploy separately (one
+    repo, different env). Reconsider only if the MCP needs its own release cadence or team.
+  - **Coupling to remove first (2026-11-16):** the app imports the pipeline module `sdmx_labels.py`;
+    17 pipeline-side scripts import from `app/`, including stage 12 (`12-split-datasets.py`,
+    `split_rules.py`), `build-search-index.py`, `repair-corpus.py` and `check-kpi-totals.py`. Decide
+    per module: move it, or extract a small shared package that both repos pin.
+  - **Also decide:** where the static-site build (`build-static.py`, JS engine and parity tests) goes
+    (serving: it mirrors the Python services); where eval baselines and `data/eval/` go; the dev MCP
+    (`tools/tempo-dev-mcp`, reads both sides); a written schema and version for the generation
+    contract; how `prepare-deploy-data.sh` crosses the boundary.
+  - Order: write the generation contract, remove the cross-imports in this repo, then split with
+    history (`git filter-repo`). Not before the Hetzner move and MCP promotion.
+
 ## Chart selection and public MCP audit follow-ups — 2026-11-08
 
 Source: [audit report](reports/2026-11-08-charts-and-mcp-audit.md). The code fixes are on
