@@ -36,6 +36,9 @@ state is unknown and must be checked.
 - **Disk:** releases live on the 40 GB local disk, not the full volume: `/opt/tempo/releases/<id>`
   (code + data, about 1.5 GB each), a `current` symlink, keep two releases. Logs in `/var/log/tempo`
   (or `/opt/tempo/logs`), with rotation for `ask-chats.jsonl` (the app rotates only `mcp-calls.jsonl`).
+- **Production installs no pandas, numpy or pyarrow** (not in `requirements.txt` or its 50
+  dependencies). DuckDB imports pandas only when it is installed, so the venv must not add it:
+  AQ-07A's 0.4 s first-call import and about 71 MiB came from the development venv.
 - **Fly stays up, unchanged, until HZ-4 passes.** Rollback is a DNS switch back to Fly.
 
 ## HZ-1 — Deployment files (Sonnet, on the Mac)
@@ -52,6 +55,9 @@ Add `scripts/deploy/hetzner/`, modelled on `scripts/deploy/oracle/` (older; do n
    new release directory; create or refresh the venv; install the DuckDB `fts` extension offline
    (as the `Dockerfile` does); run the smoke against the new release on another port; then swap
    `current`, restart, re-smoke, and swap back if the smoke fails. Dry run by default; `--apply`.
+   Use `rsync --link-dest` against the previous release so unchanged data files are hard links.
+   Keep two releases; delete the oldest only after the new one passes. Refuse to start when `/`
+   has less than 5 GB free.
 5. `logrotate` config for the log directory.
 6. `README.md`: first-time setup (user, directories, venv, firewall, tunnel), deploy, rollback,
    reading logs, and how the scrapers and the API share memory.
@@ -62,7 +68,8 @@ keeps every key of the Fly profile except those named above.
 
 ## HZ-2 — Provision and deploy (VPS session, owner present)
 
-Inventory first, read-only: free disk on `/` and the volume, memory used by the scrapers (peak, not
+Inventory first, read-only: free disk on `/` (5 GB needed: about 2.5 GB in steady state, 3.7 GB
+during a deploy) and the volume, memory used by the scrapers (peak, not
 only now), firewall state (`ufw status`, Hetzner Cloud Firewall in the console), open ports. Stop
 and report before installing anything if the scrapers' peak memory plus 1 GB does not fit in 4 GB.
 Then: create the user and directories, set the firewall to SSH only, install `cloudflared` and
