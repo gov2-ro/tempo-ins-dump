@@ -76,6 +76,21 @@ are recorded next to each item.
   overrun the deadline. Check the 403 is Cloudflare's Browser Integrity Check (error 1010, python-urllib UA)
   before blaming the app. Options: `min_machines_running = 1`, a longer deadline, or a different host. Owner
   decision: "we'll fix Fly or look for alternatives later".
+  2026-11-15: `min_machines_running = 1` has been deployed since 2026-10-28, so a cold machine may not be
+  the cause. Locally `discover_indicators` has a median of 47 ms. RSS reaches 375 MB after five calls, and
+  the three DuckDB caps sum to 480 MB on a 512 MB machine. Memory starvation is the new hypothesis, not
+  verified on Linux. Local reduction: [AQ-07](plans/ask-and-public-mcp/remaining/07-mcp-footprint.md).
+- [ ] **P1 — Evaluate the owner's Hetzner VPS as the API/MCP host** (2 vCPU, 4 GB RAM, 40 GB disk +
+  15 GB volume; the UI stays on DreamHost). It has 8× the memory of the Fly machine and dedicated vCPUs.
+  Needs: Docker or a venv service, TLS (Caddy), Cloudflare in front of `api-ins`, the `/logs` volume,
+  backups and an update procedure. Decide after AQ-07, with its measured memory profile.
+- [ ] **P2 — Deterministic dataset cards for discovery** (owner decision 2026-11-15). One card per
+  dataset, generated from data the pipeline already holds: a split child's restriction (for example
+  "SEX = Feminin"), geo levels, first/last period, periodicity, unit and additivity, grain status, newer
+  sibling. An LLM writes only RO/EN search phrasings (synonyms, everyday questions), which feed the
+  search index and never an answer. No free-text LLM descriptions. Start only if the answer-quality eval
+  shows that finding the dataset is the main failure; measure with the search eval before and after.
+  Example: the live run of 2026-11-15 read `SAN104A_judete` as "women only" with no card saying so.
 - [x] **P3 — Local MCP test server lives in a session scratchpad.** Moved to `scripts/serve-mcp-test.sh`
   (2026-10-28): data defaults to the repo's `data/` (`TEMPO_TEST_DATA` overrides), content logs to
   `data/logs/mcp-test`; mentioned in AGENTS.md next to `mcp_probe.py`.
