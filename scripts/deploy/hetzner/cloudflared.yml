@@ -1,0 +1,10 @@
+# Example /etc/cloudflared/config.yml (HZ-1). Replace the two placeholders.
+# Create the tunnel with `cloudflared tunnel login` and `cloudflared tunnel create tempo-api`.
+tunnel: <TUNNEL-UUID>
+credentials-file: /etc/cloudflared/<TUNNEL-UUID>.json
+
+ingress:
+  - hostname: api-ins.gov2.ro
+    service: http://127.0.0.1:8080
+  # Required last rule: every other request gets a 404.
+  - service: http_status:404

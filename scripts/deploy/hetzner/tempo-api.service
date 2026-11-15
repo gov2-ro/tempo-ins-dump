@@ -1,0 +1,36 @@
+[Unit]
+Description=INS TEMPO Explorer API and public MCP (api-ins.gov2.ro)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tempo
+Group=tempo
+WorkingDirectory=/opt/tempo/current
+EnvironmentFile=/etc/tempo/api.env
+Environment=TEMPO_DATA_DIR=/opt/tempo/current/data
+Environment=TEMPO_DEBUG=false
+# DuckDB looks for the fts extension under $HOME/.duckdb. Each release has its own copy.
+Environment=HOME=/opt/tempo/current/home
+# One worker: the MCP gate, the caches and the measured memory profile are per worker.
+# Listen on loopback only. cloudflared is the only client.
+# --forwarded-allow-ips 127.0.0.1 (not "*"): uvicorn then takes the client address from the
+# right-most X-Forwarded-For entry that is not loopback. See README, "Client identity".
+ExecStart=/opt/tempo/current/venv/bin/python -m uvicorn app.main:app \
+    --host 127.0.0.1 --port 8080 --workers 1 \
+    --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=always
+RestartSec=5
+
+# Memory limit for the whole service. HZ-3 sets the final value (peak plus at least 50 percent).
+MemoryMax=1G
+# Hardening. The service writes only to the log directory.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/log/tempo
+
+[Install]
+WantedBy=multi-user.target

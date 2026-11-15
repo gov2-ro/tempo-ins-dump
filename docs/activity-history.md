@@ -1,5 +1,12 @@
 # Activity History
 
+## 2026-11-16 — HZ-1: Hetzner deployment files
+
+Branch `deploy/hz-1-hetzner-files`. Plan: [hosting-hetzner.md](plans/hosting-hetzner.md). Nothing deployed; no change to `app/`, the Dockerfile or the Fly/Oracle files.
+- Added `scripts/deploy/hetzner/`: service, `api.env`, `cloudflared.yml`, `tempo-logrotate`, `deploy.sh` (dry run by default, hard-linked releases, venv and fts per release, smoke on another port, swap and swap back), README.
+- Client identity: `_client_key` trusts `Fly-Client-IP` first and the first `X-Forwarded-For` entry; `cloudflared` keeps client entries and appends the visitor last. Both are forgeable. `api.env` sets `TEMPO_MCP_TRUST_FORWARDED=false`; the service uses `--forwarded-allow-ips 127.0.0.1`. An app change (read `CF-Connecting-IP`) is proposed in the README, for an Opus decision.
+- Test: `tests/test_hz1_hetzner_deploy.py`. `systemd-analyze verify`: not_run (Linux only).
+
 ## 2026-11-15 — AQ-07A: public MCP memory budgets and first-call imports
 
 Branch `perf/aq-07-mcp-footprint`. Record: [aq-07-record.md](plans/ask-and-public-mcp/remaining/aq-07-record.md).
