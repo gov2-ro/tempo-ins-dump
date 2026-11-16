@@ -97,14 +97,25 @@ Times are UTC. Sessions: `ins-local` (Mac, this repo, Opus), Sonnet agents start
 - Owner: `$V/pax` created; `nordvpnd` and `nordvpnd.socket` inactive. Free on `/`: 5.4 GB before the
   `ins-vps` clean-up (expected about 10.6 GB after).
 
+## 2026-11-16 — clean-up done (`ins-vps`)
+
+- Free on `/`: 4.0 GB → **11 GB**. Volume: 5.0 GB used (swap 2.1 GB, Postgres dump 0.2 GB, moved files
+  2.8 GB), 9.0 GB free.
+- Deleted: Claude 2.1.322 and 2.1.323 (673 MB; 2.1.325 runs); the 7 stiri snapshots (1.3 GB; folder
+  kept); `annotations.db.corrupt-20261028`; `~/.npm/_cacache` (344 MB); stale crontab backups.
+- Moved to `$V/pax` with a symlink at each old path: `audit-export-2026-10-12`, `posturi-2026-11-15.sql.gz`,
+  monitorulpreturilor `data/backups` (its Sunday script writes through the link; it aborts if the volume
+  is not mounted), `prices_ci.db`, `posturi.pre-v4.sqlite`, `schema-pre-v4*.csv`.
+- Stopped the `http.server` on :8765 (started by hand; nothing restarts it).
+- Open (owner, stiri project): `BACKUP_KEEP` defaults to 7 (`ops/preflight.py:39`), so about 1.25 GB of
+  snapshots returns to `/` within a week. Options: `BACKUP_KEEP=1`, `BACKUP_DIR` on the volume, or leave.
+
 ## Hand-over (for a new session)
 
 Read this journal, [hosting-hetzner.md](hosting-hetzner.md) and `scripts/deploy/hetzner/README.md`.
 The VPS session is `ins-vps` (Remote Control; message it by name; repo at
 `/home/pax/g2-dev/tempo-ins-dump`; it pulls `main`). SSH from the Mac: `pax@78.46.142.169`, key-based;
 `pax` needs a password for sudo, so the owner runs every sudo command. Open items:
-- `ins-vps` clean-up (deletions, moves to `$V/pax`, stop :8765): sent 2026-11-16, report not yet
-  received. Check `df -h /` and the leftovers before continuing.
 - Not yet decided by the owner: the narrow sudoers rule for `systemctl restart tempo-api`
   (without it, each deploy asks for the password).
 - Then HZ-2 setup, README "First-time setup" steps 2-4 and 6 (bind mount, user and directories,
