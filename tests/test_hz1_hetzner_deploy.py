@@ -37,3 +37,41 @@ def test_service_binds_loopback_with_one_worker():
     assert "EnvironmentFile=/etc/tempo/api.env" in text
     assert "TEMPO_DATA_DIR=/opt/tempo/current/data" in text
     assert re.search(r"^MemoryMax=", text, re.M) and "Restart=always" in text
+
+
+def test_service_spills_outside_the_read_only_release():
+    text = (HZ / "tempo-api.service").read_text()
+    assert "Environment=TEMPO_DUCKDB_TEMP_DIR=/var/cache/tempo/" in text
+    assert re.search(r"^CacheDirectory=tempo$", text, re.M)
+    rw = re.search(r"^ReadWritePaths=(.*)$", text, re.M).group(1).split()
+    assert not any(p.startswith("/opt/tempo") for p in rw)
+
+
+def test_spill_goes_to_the_configured_directory_when_the_database_dir_is_read_only(tmp_path, monkeypatch):
+    import os
+    import duckdb
+    from app import db
+
+    data = tmp_path / "data"
+    data.mkdir()
+    path = data / "x.duckdb"
+    duckdb.connect(str(path)).execute("CREATE TABLE t(a INT)").close()
+    spill = tmp_path / "spill"
+    monkeypatch.setattr(db, "TEMP_DIR", str(spill))
+    os.chmod(data, 0o555)
+    try:
+        con = duckdb.connect(str(path), read_only=True, config=db.duckdb_config(memory_limit="64MB", threads=1))
+        n = con.execute("SELECT max(r) FROM (SELECT row_number() OVER (ORDER BY random()) r FROM range(8000000))").fetchone()[0]
+        spilled = spill.is_dir()            # DuckDB removes the directory on close
+        con.close()
+    finally:
+        os.chmod(data, 0o755)
+    assert n == 8000000
+    assert spilled
+
+
+def test_duckdb_config_leaves_the_default_when_unset(monkeypatch):
+    from app import db
+
+    monkeypatch.setattr(db, "TEMP_DIR", "")
+    assert db.duckdb_config(memory_limit="1MB") == {"memory_limit": "1MB"}

@@ -112,6 +112,19 @@ Times are UTC. Sessions: `ins-local` (Mac, this repo, Opus), Sonnet agents start
   2026-11-16. No recurring off-box backup exists (backlog).
 - `ins-vps` pulled `main` (fast-forward to 771f06f).
 
+## 2026-11-17 — HZ-2 setup prepared (`ins-local`)
+
+- VPS state (read-only, over SSH): no `tempo` user, no `/opt/tempo`, `/etc/tempo` or service.
+  `python3.12-venv`, `rsync` and `curl` already installed. Free: `/` 11 GB, volume 9 GB.
+- **Owner:** narrow sudoers rule, yes: `pax` may run only `/usr/bin/systemctl restart tempo-api`
+  without a password. `deploy.sh` restarts over a non-interactive SSH session, so it needs the rule.
+- **Finding (Opus):** the service user cannot write the releases (`pax`, mode `a+rX`), and
+  `ReadWritePaths` does not grant Unix permissions. A DuckDB spill next to a database file then
+  fails (`Failed to create directory "<db>.tmp": Permission denied`, reproduced). **Owner:** new
+  app setting `TEMPO_DUCKDB_TEMP_DIR` (`app/db.py:duckdb_config`) on the main, scratch and search
+  connections. The service sets it to `/var/cache/tempo/duckdb` (`CacheDirectory=tempo`) and no
+  longer lists `/opt/tempo/releases` as writable. Tests in `tests/test_hz1_hetzner_deploy.py`.
+
 ## Hand-over (for a new session)
 
 Read this journal, [hosting-hetzner.md](hosting-hetzner.md) and `scripts/deploy/hetzner/README.md`.
