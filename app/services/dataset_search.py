@@ -80,9 +80,10 @@ def _get_search_conn():
             return None
         try:
             import duckdb
+            from app.db import duckdb_config
             conn = duckdb.connect(str(SEARCH_DB_PATH), read_only=True,
-                                   config={"memory_limit": os.environ.get("TEMPO_SEARCH_MEMORY", "192MB"),
-                                           "threads": 2})
+                                   config=duckdb_config(memory_limit=os.environ.get("TEMPO_SEARCH_MEMORY", "192MB"),
+                                                        threads=2))
             conn.execute("LOAD fts;")
             _search_conn = conn
             _set_status("fts", None)

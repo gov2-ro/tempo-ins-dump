@@ -25,6 +25,14 @@ see also [charting-ideas.md](charting-ideas.md)
   Still to check on the VPS: that `cloudflared` appends the visitor as the last `X-Forwarded-For`
   entry, and `systemd-analyze verify` on the service file.
 
+## VPS backups — 2026-11-16
+
+- [ ] **P2 — Recurring off-box backup of gov2-1** (owner's server, not only tempo). The 2026-11-16 backup
+  to the owner's external disk was one-time ([journal](plans/hosting-hetzner-journal.md)). Nothing copies
+  `prices.db`, `news.db`, `avize.db`, the posturi SQLite/Postgres data or the scraper outputs off the
+  server. Options: a weekly pull from the Mac (the backup script in the journal), Hetzner backups
+  (snapshot of the server, paid), or restic to object storage. Owner to decide.
+
 ## CI — 2026-11-16
 
 - [ ] **P1 — CI runs no tests since 2026-10-28.** Collection stops on `tests/test_fetch_county_retry.py`:

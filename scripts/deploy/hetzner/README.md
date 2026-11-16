@@ -70,11 +70,14 @@ VPS.
    chown tempo:tempo /var/log/tempo
    apt install -y python3.12-venv rsync curl
    ```
-   The service user only reads `/opt/tempo`. It writes only `/var/log/tempo`.
+   The service user only reads `/opt/tempo`. It writes only `/var/log/tempo` and `/var/cache/tempo`
+   (DuckDB spill files, `TEMPO_DUCKDB_TEMP_DIR`; systemd creates it from `CacheDirectory=`).
 3. Install the config files from the table above. Then `systemctl daemon-reload`,
    `systemctl enable tempo-api`. Do not start it before the first deploy.
 4. Allow the deploy user to restart the service:
-   `echo 'deployer ALL=(root) NOPASSWD: /bin/systemctl restart tempo-api' > /etc/sudoers.d/tempo-deploy`
+   `echo 'deployer ALL=(root) NOPASSWD: /usr/bin/systemctl restart tempo-api' > /etc/sudoers.d/tempo-deploy`,
+   then `chmod 0440 /etc/sudoers.d/tempo-deploy && visudo -c`. `deploy.sh` restarts over a
+   non-interactive SSH session, which cannot ask for a password. Owner decision 2026-11-17: yes.
 5. Firewall: allow inbound SSH only. On gov2-1 the Hetzner Cloud Firewall already does this
    (TCP 22 and ICMP inbound, outbound open), so no change. No inbound HTTP port is needed.
 6. Tunnel: install `cloudflared`, run `cloudflared tunnel login` and

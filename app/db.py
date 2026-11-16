@@ -17,6 +17,18 @@ DB_THREADS = int(os.environ.get("TEMPO_DB_THREADS", "0"))   # 0 = DuckDB's defau
 # (a 3.9M-row parquet grouped to 108k rows) failed with 8 threads and passed 16/16 with 1-2.
 # Fly's one vCPU already gives 1; this keeps a many-core dev machine inside the same budget.
 MAX_DEFAULT_THREADS = 2
+# DuckDB spills large queries to "<database>.tmp" next to the database file, or to ".tmp" in the working
+# directory for an in-memory connection. On the Hetzner VPS the service user cannot write the release,
+# so a spill there fails with a permission error. TEMPO_DUCKDB_TEMP_DIR names a directory the service
+# can write (HZ-2). Unset: DuckDB's default.
+TEMP_DIR = os.environ.get("TEMPO_DUCKDB_TEMP_DIR", "").strip()
+
+
+def duckdb_config(**cfg) -> dict:
+    """DuckDB connection config with the spill directory from TEMPO_DUCKDB_TEMP_DIR, if set."""
+    if TEMP_DIR:
+        cfg["temp_directory"] = TEMP_DIR
+    return cfg
 
 _conn = None
 
@@ -29,7 +41,7 @@ def get_conn() -> duckdb.DuckDBPyConnection:
     """
     global _conn
     if _conn is None:
-        cfg = {"memory_limit": DB_MEMORY}
+        cfg = duckdb_config(memory_limit=DB_MEMORY)
         if DB_THREADS:
             cfg["threads"] = DB_THREADS
         conn = duckdb.connect(str(DB_PATH), read_only=True, config=cfg)
@@ -41,4 +53,4 @@ def get_conn() -> duckdb.DuckDBPyConnection:
 
 def scratch_conn() -> duckdb.DuckDBPyConnection:
     """A new in-memory DuckDB connection with a bounded memory budget."""
-    return duckdb.connect(config={"memory_limit": SCRATCH_MEMORY, "threads": 2})
+    return duckdb.connect(config=duckdb_config(memory_limit=SCRATCH_MEMORY, threads=2))
