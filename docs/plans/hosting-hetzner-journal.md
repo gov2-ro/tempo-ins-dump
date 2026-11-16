@@ -134,6 +134,17 @@ Times are UTC. Sessions: `ins-local` (Mac, this repo, Opus), Sonnet agents start
   health check would "swap back" to itself (now `readlink -e`); empty `--link-dest` arrays were
   unbound under `set -u` in macOS bash 3.2. Dry run now clean.
 
+- **First deploy** (`--apply`, owner go-ahead, 01:31 local): release `20261117-013142-062bd2b0`. Smoke
+  passed (strict). Warnings as on 2026-11-15; the `registered_unemployment_county` refusal comes from
+  the smoke's 1M cap; under `api.env` (5M) the recipe answers (42 counties, 2025). Service active,
+  `/api/health` ok, MCP on with call logging, spill dir `/var/cache/tempo` owned by `tempo`.
+  Volume after: 6.2 GB used, 7.9 GB free.
+- **Live checks on the VPS** (loopback, `Host: api-ins.gov2.ro`): `initialize` 5 ms, 8 tools listed.
+  `/mcp` with `Host: 127.0.0.1` answers 421 (host guard; `mcp_probe.py` cannot set the Host, so use
+  curl or the tunnel). `discover_indicators`: new queries 0.6-3.8 s (Mac median 47 ms), repeats 8 ms
+  (cache). For HZ-3: measure warm latency; suspect first reads from the network volume.
+  cgroup memory peak 257 MiB after these calls (limit 1 GiB).
+
 ## Hand-over (for a new session)
 
 Read this journal, [hosting-hetzner.md](hosting-hetzner.md) and `scripts/deploy/hetzner/README.md`.
