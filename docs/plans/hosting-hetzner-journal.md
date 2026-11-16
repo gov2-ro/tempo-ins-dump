@@ -69,7 +69,13 @@ Times are UTC. Sessions: `ins-local` (Mac, this repo, Opus), Sonnet agents start
   alerts.sqlite (the three large ones use WAL, so the dump does not block the scrapers).
   `home-pax/`: rsync of `/home/pax` without the live databases, venvs, caches, `node_modules` and
   the Claude binaries. `volume-backup/`: the Postgres dump (gzip test passed). Cron stayed active.
-  Script: `backup-gov2-1.sh` in the session scratchpad. **Result: pending.**
+  Script: `backup-gov2-1.sh` in the session scratchpad. **Result (21:25): complete.** Dumps
+  19:35-20:12, all gzip-tested (prices.db 885 MB compressed, 33 min). rsync 20:13-21:25: 75,923 files,
+  11.5 GB, about 2.7 MB/s. Dry-run check: 9 changed entries, all logs, a lock file and the VPS Claude
+  session's own files.
+- **Owner (sudo):** 2 GB swap file on the volume (`sw,nofail` in fstab), `vm.swappiness=10`; after:
+  3.8 GB RAM, 2.2 GB available, swap unused. `nordvpnd` disabled; its socket was still active, so
+  `nordvpnd.socket` must be disabled as well.
 - **Owner decisions:**
   1. Delete the two older Claude versions (673 MB): yes.
   2. stiri snapshots (backups on the same disk): do not keep. Note: stiri's pipeline creates one
@@ -85,9 +91,8 @@ Times are UTC. Sessions: `ins-local` (Mac, this repo, Opus), Sonnet agents start
 
 ## Next
 
-1. Confirm the backup (dumps tested, rsync stats, dry-run list).
-2. `ins-vps`: deletions 1-3 and the moves; stop the :8765 server and find what starts it.
-3. Owner (sudo): `systemctl disable --now nordvpnd`; the 2 GB swap file on the volume.
+1. Owner: `sudo mkdir -p $V/pax && sudo chown pax:pax $V/pax`; `systemctl disable --now nordvpnd.socket`.
+2. `ins-vps` (go-ahead sent 21:2x): deletions 1-3, npm cache, the moves with symlinks; stop :8765.
 4. Update the plan: releases, logs and swap on the volume; `deploy.sh` checks free space on the
    release filesystem; `OOMScoreAdjust` so scrapers are killed before the API; narrow sudoers rule
    for `systemctl restart tempo-api` (owner to confirm).
