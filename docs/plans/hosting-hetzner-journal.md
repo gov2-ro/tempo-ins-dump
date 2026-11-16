@@ -125,6 +125,15 @@ Times are UTC. Sessions: `ins-local` (Mac, this repo, Opus), Sonnet agents start
   connections. The service sets it to `/var/cache/tempo/duckdb` (`CacheDirectory=tempo`) and no
   longer lists `/opt/tempo/releases` as writable. Tests in `tests/test_hz1_hetzner_deploy.py`.
 
+- **Owner** ran `hz2-root-setup.sh` (README steps 2-4): `/opt/tempo` bind-mounted from the volume
+  (`/dev/sdb[/tempo]`), `tempo` user (uid 996), service installed and enabled (not started), sudoers
+  rule parsed. Checked: `sudo -n` runs only `systemctl restart tempo-api`; all else asks for a password.
+- `deploy-data/` is current (generation `062bd2b0`, the one Fly serves); no restaging.
+- **Dry run found two first-deploy bugs in `deploy.sh`** (fixed): `readlink -f` printed
+  `/opt/tempo/current` when it did not exist, so `--apply` would fail on `--link-dest` and a failed
+  health check would "swap back" to itself (now `readlink -e`); empty `--link-dest` arrays were
+  unbound under `set -u` in macOS bash 3.2. Dry run now clean.
+
 ## Hand-over (for a new session)
 
 Read this journal, [hosting-hetzner.md](hosting-hetzner.md) and `scripts/deploy/hetzner/README.md`.
