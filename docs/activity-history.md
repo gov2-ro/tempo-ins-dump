@@ -1,5 +1,14 @@
 # Activity History
 
+## 2026-11-16 — VPS inventory, backup and clean-up before HZ-2
+
+Journal: [hosting-hetzner-journal.md](plans/hosting-hetzner-journal.md).
+- The VPS session `ins-vps` ran the read-only HZ-2 inventory: `/` had 4.0 GB free, the 15 GB volume
+  was empty, no swap, memory peak about 3.4 GiB. Both stop rules tripped; nothing was installed.
+- The Hetzner Cloud Firewall allows only SSH and ICMP inbound. The Cloudflare Tunnel needs no change.
+- The server was backed up to the owner's external disk before any clean-up: SQLite dumps, `/home/pax`
+  and a Postgres dump. The owner vacuumed the journal (1.4 GB) and approved deletions and moves.
+
 ## 2026-11-16 — HZ-1: Hetzner deployment files
 
 Branch `deploy/hz-1-hetzner-files`. Plan: [hosting-hetzner.md](plans/hosting-hetzner.md). Nothing deployed; no change to `app/`, the Dockerfile or the Fly/Oracle files.

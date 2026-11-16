@@ -52,7 +52,17 @@ VPS.
 
 1. Check first, read-only: `df -h / /mnt/*`, scraper peak memory, `ufw status`, the Hetzner Cloud
    Firewall in the console, `ss -tlnp`. Stop if scraper peak plus 1 GB does not fit in 4 GB.
-2. User and directories (replace `deployer` with the SSH user that runs `deploy.sh`):
+   On gov2-1 (2026-11-16): `/` is nearly full, so `/opt/tempo` lives on the volume; 2 GB swap is on
+   the volume; the Hetzner Cloud Firewall allows SSH and ICMP only. See `docs/plans/hosting-hetzner-journal.md`.
+2. User and directories (replace `deployer` with the SSH user that runs `deploy.sh`; on gov2-1: `pax`).
+   On gov2-1, put `/opt/tempo` on the volume with a bind mount (a real directory for systemd):
+   ```
+   V=/mnt/HC_Volume_105444571
+   mkdir -p $V/tempo /opt/tempo
+   echo "$V/tempo /opt/tempo none bind,nofail,x-systemd.requires-mounts-for=$V 0 0" >> /etc/fstab
+   systemctl daemon-reload && mount /opt/tempo && findmnt /opt/tempo
+   ```
+   Then:
    ```
    useradd --system --home-dir /opt/tempo --shell /usr/sbin/nologin tempo
    mkdir -p /opt/tempo/releases /var/log/tempo /etc/tempo
@@ -65,8 +75,8 @@ VPS.
    `systemctl enable tempo-api`. Do not start it before the first deploy.
 4. Allow the deploy user to restart the service:
    `echo 'deployer ALL=(root) NOPASSWD: /bin/systemctl restart tempo-api' > /etc/sudoers.d/tempo-deploy`
-5. Firewall: allow inbound SSH only (`ufw default deny incoming; ufw allow OpenSSH; ufw enable`),
-   and the same in the Hetzner Cloud Firewall. No inbound HTTP port is needed.
+5. Firewall: allow inbound SSH only. On gov2-1 the Hetzner Cloud Firewall already does this
+   (TCP 22 and ICMP inbound, outbound open), so no change. No inbound HTTP port is needed.
 6. Tunnel: install `cloudflared`, run `cloudflared tunnel login` and
    `cloudflared tunnel create tempo-api` (the owner logs in), fill in `cloudflared.yml`, then
    `cloudflared service install`. DNS stays on Fly until HZ-4.
@@ -79,7 +89,7 @@ bash scripts/prepare-deploy-data.sh        # stage deploy-data/ with MANIFEST.js
 bash scripts/deploy/hetzner/deploy.sh <ssh-host>            # dry run
 bash scripts/deploy/hetzner/deploy.sh --apply <ssh-host>    # deploy
 ```
-`deploy.sh` refuses to run when `/` has under 5 GB free. A release is code, a venv and data in
+`deploy.sh` refuses to run when the filesystem of `/opt/tempo` has under 5 GB free. A release is code, a venv and data in
 `/opt/tempo/releases/<date>-<generation>`. Each release has its own venv and its own `home/` with the
 DuckDB `fts` extension, so a rollback needs no network. Data files are hard-linked to the previous
 release when unchanged. Expect about 2.5 GB in steady state and 3.7 GB during a deploy.
@@ -109,9 +119,12 @@ To leave the VPS altogether, point `api-ins.gov2.ro` back to Fly in Cloudflare (
 ## Memory: scrapers and the API
 
 The VPS has 4 GB. The scrapers and the API share it. `MemoryMax=1G` in the service file limits the API
-as one cgroup; the kernel kills the API, not the scrapers, if it passes the limit. The measured
+as one cgroup; the kernel kills the API, not the scrapers, if it passes the limit. If the whole VPS
+runs out of memory, `OOMScoreAdjust=-300` makes the kernel kill a scraper first; the 2 GB swap file
+absorbs short peaks before that. The measured
 profile is 372-464 MiB on macOS. HZ-3 measures it on Linux with the scrapers running
-(`systemctl show -p MemoryPeak tempo-api`) and sets the final `MemoryMax=` (peak plus at least 50 percent).
+(`cat /sys/fs/cgroup/system.slice/tempo-api.service/memory.peak`; systemd 255 may not show
+`MemoryPeak`) and sets the final `MemoryMax=` (peak plus at least 50 percent).
 Check `systemctl status tempo-api` for restarts after any scraper run.
 
 ## Not tested yet

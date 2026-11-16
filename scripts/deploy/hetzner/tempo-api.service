@@ -25,6 +25,9 @@ RestartSec=5
 
 # Memory limit for the whole service. HZ-3 sets the final value (peak plus at least 50 percent).
 MemoryMax=1G
+# If the whole VPS runs out of memory, the kernel kills a scraper (a batch job that retries) before
+# the API. Swap (2 GB on the volume) absorbs short peaks first.
+OOMScoreAdjust=-300
 # Hardening. The service writes to the log directory and to the releases. DuckDB spills large
 # queries to "<database>.tmp" next to each database file, and an in-memory connection spills to
 # ".tmp" in the working directory. Both are inside the release, so the releases must be writable.
