@@ -63,7 +63,8 @@ say "Stage: $STAGE"
 FREE_GB="$("${SSH[@]}" "df -BG --output=avail $BASE | tail -1 | tr -dc 0-9")"
 say "Free on $BASE: ${FREE_GB:-?} GB (need $MIN_FREE_GB)"
 [ "${FREE_GB:-0}" -ge "$MIN_FREE_GB" ] || { echo "ERROR: less than $MIN_FREE_GB GB free on $BASE" >&2; exit 1; }
-PREV="$("${SSH[@]}" "readlink -f $BASE/current 2>/dev/null || true")"
+# readlink -e (not -f): print nothing unless the whole path exists. -f prints /opt/tempo/current on a first deploy.
+PREV="$("${SSH[@]}" "readlink -e $BASE/current 2>/dev/null || true")"
 say "Current release: ${PREV:-none}"
 
 # --- 3. Upload
@@ -73,11 +74,11 @@ RSYNC=(rsync -rlpt --delete -e "ssh -o BatchMode=yes")
 CODE_LINK=(); DATA_LINK=()
 if [ -n "$PREV" ]; then CODE_LINK=(--link-dest="$PREV/"); DATA_LINK=(--link-dest="$PREV/data/"); fi
 say "Uploading code..."
-( cd "$ROOT" && "${RSYNC[@]}" "${CODE_LINK[@]}" --relative --exclude='__pycache__/' --exclude='*.pyc' \
+( cd "$ROOT" && "${RSYNC[@]}" ${CODE_LINK[@]+"${CODE_LINK[@]}"} --relative --exclude='__pycache__/' --exclude='*.pyc' \
     "${CODE_DIRS[@]}" "${CODE_FILES[@]}" "$HOST:$REL/" ) \
     || [ "$APPLY" = 0 ] || exit 1
 say "Uploading data (hard links against the previous release)..."
-"${RSYNC[@]}" "${DATA_LINK[@]}" "$STAGE/" "$HOST:$REL/data/" || [ "$APPLY" = 0 ] || exit 1
+"${RSYNC[@]}" ${DATA_LINK[@]+"${DATA_LINK[@]}"} "$STAGE/" "$HOST:$REL/data/" || [ "$APPLY" = 0 ] || exit 1
 
 # --- 4. Venv, dependencies, fts extension
 say "Building the venv in $REL ..."
