@@ -5,7 +5,7 @@
 # Run it from the repository checkout, after `bash scripts/prepare-deploy-data.sh`.
 #
 # Steps (with --apply; without it the script prints them and runs only read-only checks):
-#   1. Check the local stage (deploy-data/MANIFEST.json) and the remote disk (/ needs 5 GB free).
+#   1. Check the local stage (deploy-data/MANIFEST.json) and the remote disk (the filesystem of /opt/tempo needs 5 GB free).
 #   2. rsync code, then the staged data, to /opt/tempo/releases/<id>.
 #      Both use --link-dest against the previous release: unchanged files are hard links.
 #   3. Create a venv in the release, install requirements.txt, install the DuckDB fts extension.
@@ -59,9 +59,10 @@ say "=== Deploy $REL_ID to $HOST ($([ "$APPLY" = 1 ] && echo APPLY || echo dry r
 say "Stage: $STAGE"
 
 # --- 2. Remote disk and state (read-only)
-FREE_GB="$("${SSH[@]}" "df -BG --output=avail / | tail -1 | tr -dc 0-9")"
-say "Free on /: ${FREE_GB:-?} GB (need $MIN_FREE_GB)"
-[ "${FREE_GB:-0}" -ge "$MIN_FREE_GB" ] || { echo "ERROR: less than $MIN_FREE_GB GB free on /" >&2; exit 1; }
+# Releases live on the filesystem of $BASE (on gov2-1: the volume, bind-mounted at /opt/tempo).
+FREE_GB="$("${SSH[@]}" "df -BG --output=avail $BASE | tail -1 | tr -dc 0-9")"
+say "Free on $BASE: ${FREE_GB:-?} GB (need $MIN_FREE_GB)"
+[ "${FREE_GB:-0}" -ge "$MIN_FREE_GB" ] || { echo "ERROR: less than $MIN_FREE_GB GB free on $BASE" >&2; exit 1; }
 PREV="$("${SSH[@]}" "readlink -f $BASE/current 2>/dev/null || true")"
 say "Current release: ${PREV:-none}"
 

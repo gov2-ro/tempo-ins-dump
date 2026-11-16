@@ -14,9 +14,10 @@ Only `api-ins.gov2.ro` (API, Ask, `/mcp`) moves. The UI stays on DreamHost (`ins
 
 ## The VPS (owner, 2026-11-15)
 
-Hetzner CX (x86), 2 vCPU, 4 GB RAM, 40 GB local disk, Ubuntu 24.04.4 LTS. A 15 GB volume is
-mounted but nearly full. Some scrapers run there; nothing serves the web; no Docker. The firewall
-state is unknown and must be checked.
+Hetzner CX (x86), 2 vCPU, 4 GB RAM, 40 GB local disk, Ubuntu 24.04.4 LTS. **Corrected 2026-11-16:**
+the local disk `/` was nearly full (4 GB free) and the 15 GB volume was empty. Scrapers run from cron;
+nothing serves the web; no Docker. The Hetzner Cloud Firewall allows inbound SSH and ICMP only.
+Details and the clean-up: [journal](hosting-hetzner-journal.md).
 
 ## Decisions (Opus, 2026-11-15)
 
@@ -33,9 +34,11 @@ state is unknown and must be checked.
   header `cloudflared` sends (`CF-Connecting-IP` for certain; `X-Forwarded-For` to verify) and
   whether a client can forge the value the app reads. If the app needs to read `CF-Connecting-IP`,
   that is a small app change: stop and report it for an Opus decision; do not make it.
-- **Disk:** releases live on the 40 GB local disk, not the full volume: `/opt/tempo/releases/<id>`
-  (code + data, about 1.5 GB each), a `current` symlink, keep two releases. Logs in `/var/log/tempo`
-  (or `/opt/tempo/logs`), with rotation for `ask-chats.jsonl` (the app rotates only `mcp-calls.jsonl`).
+- **Disk (revised 2026-11-16):** releases live on the volume, bind-mounted at `/opt/tempo`, so the
+  service paths stay the same: `/opt/tempo/releases/<id>` (code + data, about 1.5 GB each), a
+  `current` symlink, keep two releases. `deploy.sh` checks free space on that filesystem. Logs stay in
+  `/var/log/tempo` on `/` (small, rotated). 2 GB swap is on the volume; the service has
+  `OOMScoreAdjust=-300`, so a scraper is killed before the API if the VPS runs out of memory.
 - **Production installs no pandas, numpy or pyarrow** (not in `requirements.txt` or its 50
   dependencies). DuckDB imports pandas only when it is installed, so the venv must not add it:
   AQ-07A's 0.4 s first-call import and about 71 MiB came from the development venv.
@@ -56,8 +59,8 @@ Add `scripts/deploy/hetzner/`, modelled on `scripts/deploy/oracle/` (older; do n
    (as the `Dockerfile` does); run the smoke against the new release on another port; then swap
    `current`, restart, re-smoke, and swap back if the smoke fails. Dry run by default; `--apply`.
    Use `rsync --link-dest` against the previous release so unchanged data files are hard links.
-   Keep two releases; delete the oldest only after the new one passes. Refuse to start when `/`
-   has less than 5 GB free.
+   Keep two releases; delete the oldest only after the new one passes. Refuse to start when the
+   filesystem of `/opt/tempo` has less than 5 GB free.
 5. `logrotate` config for the log directory.
 6. `README.md`: first-time setup (user, directories, venv, firewall, tunnel), deploy, rollback,
    reading logs, and how the scrapers and the API share memory.

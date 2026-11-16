@@ -89,11 +89,31 @@ Times are UTC. Sessions: `ins-local` (Mac, this repo, Opus), Sonnet agents start
   `posturi-2026-11-15.sql.gz`, monitorulpreturilor `data/backups` (symlink back), `prices_ci.db`,
   `posturi.pre-v4.sqlite`, `schema-pre-v4*.csv`.
 
+## 2026-11-16 — plan revised for the volume
+
+- `deploy.sh` checks free space on `/opt/tempo`, not `/`. The README sets up `/opt/tempo` as a bind
+  mount of `$V/tempo` on the volume. The service has `OOMScoreAdjust=-300`. The Hetzner Cloud Firewall
+  already allows SSH only, so the README's `ufw` step is not needed on gov2-1.
+- Owner: `$V/pax` created; `nordvpnd` and `nordvpnd.socket` inactive. Free on `/`: 5.4 GB before the
+  `ins-vps` clean-up (expected about 10.6 GB after).
+
+## Hand-over (for a new session)
+
+Read this journal, [hosting-hetzner.md](hosting-hetzner.md) and `scripts/deploy/hetzner/README.md`.
+The VPS session is `ins-vps` (Remote Control; message it by name; repo at
+`/home/pax/g2-dev/tempo-ins-dump`; it pulls `main`). SSH from the Mac: `pax@78.46.142.169`, key-based;
+`pax` needs a password for sudo, so the owner runs every sudo command. Open items:
+- `ins-vps` clean-up (deletions, moves to `$V/pax`, stop :8765): sent 2026-11-16, report not yet
+  received. Check `df -h /` and the leftovers before continuing.
+- Not yet decided by the owner: the narrow sudoers rule for `systemctl restart tempo-api`
+  (without it, each deploy asks for the password).
+- Then HZ-2 setup, README "First-time setup" steps 2-4 and 6 (bind mount, user and directories,
+  config files, sudoers, `cloudflared` with the owner's Cloudflare login), then the first deploy from
+  the Mac: `prepare-deploy-data.sh`, then `deploy.sh pax@78.46.142.169` as a dry run, then `--apply`.
+
 ## Next
 
 1. Owner: `sudo mkdir -p $V/pax && sudo chown pax:pax $V/pax`; `systemctl disable --now nordvpnd.socket`.
 2. `ins-vps` (go-ahead sent 21:2x): deletions 1-3, npm cache, the moves with symlinks; stop :8765.
-4. Update the plan: releases, logs and swap on the volume; `deploy.sh` checks free space on the
-   release filesystem; `OOMScoreAdjust` so scrapers are killed before the API; narrow sudoers rule
-   for `systemctl restart tempo-api` (owner to confirm).
-5. Continue HZ-2: user, directories, `cloudflared`, first deploy (dry run first).
+4. Plan update: done (see above). Sudoers rule: owner to confirm.
+5. Continue HZ-2 in a new session (see Hand-over).
