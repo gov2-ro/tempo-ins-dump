@@ -107,8 +107,10 @@ Times are UTC. Sessions: `ins-local` (Mac, this repo, Opus), Sonnet agents start
   monitorulpreturilor `data/backups` (its Sunday script writes through the link; it aborts if the volume
   is not mounted), `prices_ci.db`, `posturi.pre-v4.sqlite`, `schema-pre-v4*.csv`.
 - Stopped the `http.server` on :8765 (started by hand; nothing restarts it).
-- Open (owner, stiri project): `BACKUP_KEEP` defaults to 7 (`ops/preflight.py:39`), so about 1.25 GB of
-  snapshots returns to `/` within a week. Options: `BACKUP_KEEP=1`, `BACKUP_DIR` on the volume, or leave.
+- stiri: owner chose `BACKUP_KEEP=1`. `ins-vps` appended it to `~/g2-dev/stiri/.env` (untracked);
+  `config()` reads 1. Its comment says "backup also kept off-box": true only for the one-time backup of
+  2026-11-16. No recurring off-box backup exists (backlog).
+- `ins-vps` pulled `main` (fast-forward to 771f06f).
 
 ## Hand-over (for a new session)
 
