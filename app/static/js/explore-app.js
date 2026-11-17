@@ -77,6 +77,16 @@ const UI = {
             <p><b>INS+</b> (n-am găsit încă altă rimă) este un explorator de date statistice oficiale ale României, construit pe baza datelor publice disponibile prin <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank" rel="noopener">INS TEMPO Online</a> — platforma Institutului Național de Statistică.</p>
             <p><b>Disclaimer</b>: proiectul este la nivelul alfa / prototip, încă n-a trecut printr-un control riguros al calității datelor. Cu alte cuvinte, mai avem câte una alta de făcut până la lansare.</p>
             <p>Aplauze, sugestii sau dojene: <a href="mailto:cancelarie@gov2.ro">cancelarie@gov2.ro</a> sau, și mai bine: github &rarr; <a href="https://github.com/gov2-ro/tempo-ins-dump/issues/new" target="_blank" rel="noopener">gov2-ro/tempo-ins-dump</a>.</p>
+            <h3>Folosește datele în asistentul tău AI (MCP)</h3>
+            <p>INS+ are un server MCP public, doar pentru citire, fără cheie: <code>https://api-ins.gov2.ro/mcp</code>. Adaugă-l ca <i>conector personalizat</i> în orice aplicație care acceptă servere MCP la distanță (Streamable HTTP):</p>
+            <ul>
+                <li><b>Claude</b> (testat): <i>Settings → Connectors → Add custom connector</i>. În Claude Code: <code>claude mcp add --transport http ins-tempo https://api-ins.gov2.ro/mcp</code>.</li>
+                <li><b>ChatGPT</b> (netestat încă): <i>Developer mode → Add custom MCP server</i>, doar pe planurile plătite.</li>
+                <li><b>Gemini</b> (netestat încă): <i>Connected apps</i>, unde este disponibil, sau Gemini CLI.</li>
+            </ul>
+            <p>Disponibilitatea conectorilor depinde de aplicație și de planul contului tău. <b>Ce înregistrăm:</b> argumentele trimise uneltelor și rezultatele lor, fără adresa IP, ca să îmbunătățim răspunsurile.</p>
+            <h3>Întreabă direct pe site</h3>
+            <p>Pe pagina <a href="ask.html">Întreabă</a> poți pune întrebări cu propria cheie (Anthropic, OpenAI, Gemini, Mistral, DeepSeek sau xAI). Cheia trece prin serverul nostru spre furnizor și nu este salvată. Întrebările și răspunsurile sunt înregistrate, fără cheie și fără adresa IP.</p>
             <img src="img/tempo-ins.png" alt="Tempo online" style="max-width:100%; border-radius:8px; margin:16px 0;"><div style="font-size: 4rem; text-align: center;">🤷🏻‍♀️ 🏋🏻‍♀️ 🧚‍♂️ ✨ </div>
         `,
     },
@@ -150,6 +160,16 @@ const UI = {
             <p><b>Disclaimer</b>: this is work in progress, the features and data have not undergone a proper quality check yet.</p>
 
          <p>Contact: <a href="mailto:cancelarie@gov2.ro">cancelarie@gov2.ro</a> or <a href="https://github.com/gov2-ro/tempo-ins-dump/" target="_blank" rel="noopener">github.com/gov2-ro/tempo-ins-dump</a>.</p>
+            <h3>Use the data in your AI assistant (MCP)</h3>
+            <p>INS+ has a public, read-only MCP server that needs no key: <code>https://api-ins.gov2.ro/mcp</code>. Add it as a <i>custom connector</i> in any app that supports remote MCP servers (Streamable HTTP):</p>
+            <ul>
+                <li><b>Claude</b> (tested): <i>Settings → Connectors → Add custom connector</i>. In Claude Code: <code>claude mcp add --transport http ins-tempo https://api-ins.gov2.ro/mcp</code>.</li>
+                <li><b>ChatGPT</b> (not yet tested): <i>Developer mode → Add custom MCP server</i>, on paid plans only.</li>
+                <li><b>Gemini</b> (not yet tested): <i>Connected apps</i>, where available, or the Gemini CLI.</li>
+            </ul>
+            <p>Whether you can add a connector depends on the app and on your plan. <b>What we log:</b> the arguments sent to the tools and their results, without your IP address, to improve the answers.</p>
+            <h3>Ask on the site</h3>
+            <p>On the <a href="ask.html">Ask</a> page you can ask questions with your own key (Anthropic, OpenAI, Gemini, Mistral, DeepSeek or xAI). The key goes through our server to the provider and is not stored. Questions and answers are logged, without the key and without your IP address.</p>
             <img src="img/tempo-ins.png" alt="Tempo online" style="max-width:100%; border-radius:8px; margin:16px 0;">
             <div style="font-size: 4rem; text-align: center;">🤷🏻‍♀️ 🏋🏻‍♀️ 🧚‍♂️ ✨ </div>
         `,

@@ -1988,6 +1988,19 @@ body.sidebar-open #app {
 }
 .about-page a { color: var(--accent); text-decoration: underline; }
 .about-page a:hover { opacity: 0.8; }
+.about-page ul {
+    font-size: 14px;
+    margin: 0 0 12px;
+    padding-left: 20px;
+}
+.about-page li { margin: 0 0 6px; }
+.about-page code {
+    font-size: 12.5px;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: var(--bg-2, rgba(127, 127, 127, 0.12));
+    overflow-wrap: anywhere;
+}
 
 .site-footer {
     margin-top: 48px;

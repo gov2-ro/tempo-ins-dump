@@ -22,6 +22,10 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   (proxied) for `api-ins`. After: scale to zero or destroy the app and volumes, delete the
   `_acme-challenge.api-ins` CNAME, mark `scripts/deploy/fly/` and the Fly parts of `release-check.py`
   and AGENTS.md as legacy or remove them. Owner decides scale-down or destroy.
+- [ ] **P3 — A split parent's dataset page is empty** (found 2026-11-17, same on the live static site
+  and in the new build). `dataset-v2.html?code=SOM101B` asks for `rec/datasets/SOM101B.ro.json.gz` (404)
+  and shows no tiles; only the children (`SOM101B_judete`, ...) are served. Redirect a parent code to its
+  children, or show a list of them.
 - [ ] **P3 — Cloudflare Page Rule → Configuration Rule.** `api-ins.gov2.ro/*` Browser Integrity Check
   Off is a legacy Page Rule (1 of 3 on the free plan). Move it when Cloudflare retires Page Rules.
 

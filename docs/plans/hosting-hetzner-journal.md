@@ -188,21 +188,19 @@ Record: [hz-3-record.md](hz-3-record.md). Nothing on the live service changed.
   Check: `memory.swap.max` 0, `memory.swap.current` 0 (223 MiB before), `memory.current` 123 MiB,
   `MemoryMax` 1G, public `/api/health` 200.
 
+## 2026-11-17 — Static site on DreamHost (`ins-local`)
+
+The site was rebuilt from `183a36f` and switched to a releases layout: `~/ins.gov2.ro/current`,
+the October build kept as `releases/20261028-8d95a7c`. Details: `docs/activity-history.md`,
+`docs/DEPLOY-STATIC.md`. Ask on `ins.gov2.ro` now calls the VPS through the tunnel.
+
 ## Hand-over (for a new session)
 
 Read this journal, [hosting-hetzner.md](hosting-hetzner.md) and `scripts/deploy/hetzner/README.md`.
-The VPS session is `ins-vps` (Remote Control; message it by name; repo at
-`/home/pax/g2-dev/tempo-ins-dump`; it pulls `main`). SSH from the Mac: `pax@78.46.142.169`, key-based;
-`pax` needs a password for sudo, so the owner runs every sudo command. Open items:
-- Not yet decided by the owner: the narrow sudoers rule for `systemctl restart tempo-api`
-  (without it, each deploy asks for the password).
-- Then HZ-2 setup, README "First-time setup" steps 2-4 and 6 (bind mount, user and directories,
-  config files, sudoers, `cloudflared` with the owner's Cloudflare login), then the first deploy from
-  the Mac: `prepare-deploy-data.sh`, then `deploy.sh pax@78.46.142.169` as a dry run, then `--apply`.
-
-## Next
-
-1. Owner: `sudo mkdir -p $V/pax && sudo chown pax:pax $V/pax`; `systemctl disable --now nordvpnd.socket`.
-2. `ins-vps` (go-ahead sent 21:2x): deletions 1-3, npm cache, the moves with symlinks; stop :8765.
-4. Plan update: done (see above). Sudoers rule: owner to confirm.
-5. Continue HZ-2 in a new session (see Hand-over).
+HZ-2, the HZ-4 cutover and HZ-3 are done; `api-ins.gov2.ro` runs on gov2-1. SSH from the Mac:
+`pax@78.46.142.169`, key-based; deploys restart the service through the narrow sudoers rule; any
+other sudo command is the owner's. Open items are in `docs/BACKLOG.md` ("NEXT — HZ-3"):
+- Observation week until about 2026-11-24: `memory.peak`, restarts, `query_timeout` in
+  `/var/log/tempo/mcp-calls.jsonl`; then set the final `MemoryMax`.
+- Retire Fly (copy its `/logs` first); Page Rule → Configuration Rule.
+- Not yet tested: a second `deploy.sh` run (hard links) and the swap-back.

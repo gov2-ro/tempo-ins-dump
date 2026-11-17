@@ -76,13 +76,22 @@ mod_rewrite and mod_headers. It:
 Upload is a separate, explicit step:
 
 ```bash
-scripts/deploy-static.sh _static user@host /home/user/ins-static          # dry run: prints the steps
-scripts/deploy-static.sh _static user@host /home/user/ins-static --go     # only with the owner's authorization
+scripts/deploy-static.sh _static            # dry run; host and root from .env (STATIC_SSH, STATIC_ROOT)
+scripts/deploy-static.sh _static --go       # only with the owner's authorization
+scripts/deploy-static.sh _static user@host <root> [--go]   # explicit host and root
 ```
+
+Keep the login in `.env` (gitignored; template `.env.example`), not in commands.
 
 Each release goes to `releases/<gen12>-<commit12>/`. `current` is then
 switched atomically. Point the document root (or the subdomain) at
-`<root>/current`. To roll back, re-point `current` at the previous release.
+`<root>/current`. The script keeps two releases, the new one and the one it
+replaced, and deletes the others. To roll back, re-point `current` at the
+previous release.
+
+Production (since 2026-11-17): DreamHost, `STATIC_ROOT=ins.gov2.ro`, web
+directory `ins.gov2.ro/current`. `.dh-diag` and `favicon.gif` at the top of
+`ins.gov2.ro/` belong to DreamHost; leave them there.
 
 ## What the static site does not have
 
