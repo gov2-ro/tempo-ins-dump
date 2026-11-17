@@ -12,6 +12,7 @@
 #   <remote-root>/releases/<gen12>-<commit12>/   one complete build per release
 #   <remote-root>/current -> releases/<…>        switched atomically (ln -sfn + mv -T)
 # Rollback: re-point `current` at the previous release directory.
+# The script keeps two releases (new + previous) and deletes the others.
 set -euo pipefail
 here=$(cd "$(dirname "$0")/.." && pwd)
 [[ -f "$here/.env" ]] && { set -a; . "$here/.env"; set +a; }
@@ -24,7 +25,14 @@ gen=$(python3 -c "import json,sys; b=json.load(open(sys.argv[1])); print(b['gene
 rel="releases/$gen"
 run() { if [[ "$go" == "--go" ]]; then echo "+ $*"; "$@"; else echo "(dry run) $*"; fi; }
 python3 scripts/release-check.py --static "$build" --skip-tests >/dev/null || { echo "release-check --static failed" >&2; exit 1; }
+prev=$(ssh "$target" "readlink '$root/current' 2>/dev/null || true")
+echo "current release: ${prev:-none}"
 run ssh "$target" "mkdir -p '$root/releases'"
 run rsync -a --delete --checksum "$build/" "$target:$root/$rel/"
 run ssh "$target" "cd '$root' && ln -sfn '$rel' current.new && mv -T current.new current && ls -l current"
+# Keep two releases: the new one and the one it replaced (the rollback target).
+# Skip when re-deploying the same release, so the older rollback target survives.
+if [[ -n "$prev" && "$prev" != "$rel" ]]; then
+    run ssh "$target" "cd '$root/releases' && for d in *; do [ \"releases/\$d\" = '$rel' ] || [ \"releases/\$d\" = '$prev' ] || rm -rf -- \"\$d\"; done; ls -1"
+fi
 [[ "$go" == "--go" ]] || echo "dry run only: add --go to upload (needs the owner's explicit authorization)"

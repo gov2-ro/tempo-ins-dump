@@ -1,5 +1,20 @@
 # Activity History
 
+## 2026-11-17 — Static site redeployed with a releases layout (DreamHost)
+
+- **What:** rebuilt the static site from `183a36f` (generation `062bd2b0`; 46,036 files, 748 MB;
+  `release-check --static` passed, API parity 1017/1017). It ships the 2026-11-08 audit frontend
+  fixes and the new About sections (MCP connectors, own-key Ask).
+- **Layout:** `~/ins.gov2.ro/releases/<id>/` plus a `current` symlink; the DreamHost web directory
+  is now `ins.gov2.ro/current`. The October build (`8d95a7c`) moved to `releases/20261028-8d95a7c/`
+  and is the rollback target. Why: an `rsync --delete` into the live folder serves a mix of old and
+  new files for minutes; the symlink switch is atomic and rollback takes one command.
+- **Script:** `deploy-static.sh` reads `STATIC_SSH`/`STATIC_ROOT` from `.env` and now keeps two
+  releases (new + previous); a re-deploy of the same release deletes nothing.
+- **Checked live:** `build.json` commit `183a36f`; About (RO/EN), home, dataset-v2, place and Ask
+  pages load with no console errors or failed requests; CORS preflight to `api-ins.gov2.ro/api/ask`
+  allows `https://ins.gov2.ro`.
+
 ## 2026-11-16 — VPS inventory, backup and clean-up before HZ-2
 
 Journal: [hosting-hetzner-journal.md](plans/hosting-hetzner-journal.md).
