@@ -4,13 +4,21 @@
 # would do. Never run without the owner's explicit authorization.
 #
 #   scripts/deploy-static.sh <build-dir> <user@host> <remote-root> [--go]
+#   scripts/deploy-static.sh <build-dir> [--go]      # host and root from .env (STATIC_SSH, STATIC_ROOT)
+#
+# .env (gitignored, repo root; see .env.example) keeps the login out of commands and history.
 #
 # Remote layout (point the site's document root at <remote-root>/current):
 #   <remote-root>/releases/<gen12>-<commit12>/   one complete build per release
 #   <remote-root>/current -> releases/<…>        switched atomically (ln -sfn + mv -T)
 # Rollback: re-point `current` at the previous release directory.
 set -euo pipefail
-build=${1:?build dir}; target=${2:?user@host}; root=${3:?remote root}; go=${4:-}
+here=$(cd "$(dirname "$0")/.." && pwd)
+[[ -f "$here/.env" ]] && { set -a; . "$here/.env"; set +a; }
+build=${1:?build dir}; shift
+if [[ $# -ge 2 && "$1" != "--go" ]]; then target=$1; root=$2; shift 2; else target=${STATIC_SSH:-}; root=${STATIC_ROOT:-}; fi
+go=${1:-}
+[[ -n "$target" && -n "$root" ]] || { echo "need <user@host> <remote-root>, or STATIC_SSH and STATIC_ROOT in .env" >&2; exit 2; }
 [[ -f "$build/static-manifest.json" ]] || { echo "no static-manifest.json: build and gate first" >&2; exit 2; }
 gen=$(python3 -c "import json,sys; b=json.load(open(sys.argv[1])); print(b['generation']['id'][:12] + '-' + str(b.get('commit') or 'nocommit')[:12])" "$build/build.json")
 rel="releases/$gen"
