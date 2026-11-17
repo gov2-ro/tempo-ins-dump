@@ -169,6 +169,21 @@ Times are UTC. Sessions: `ins-local` (Mac, this repo, Opus), Sonnet agents start
   `--forwarded-allow-ips 127.0.0.1`, uvicorn takes the right-most entry, the real visitor; the app
   ignores `Fly-Client-IP` off Fly. The MCP per-client key cannot be forged.
 
+## 2026-11-17 — HZ-3 measurements (Sonnet agent, reviewed by Opus)
+
+Record: [hz-3-record.md](hz-3-record.md). Nothing on the live service changed.
+- Benchmark on Linux with the `api.env` settings: all checks passed; peak RSS 294 MiB; live cgroup peak
+  283 MiB, 0 restarts. First `discover_indicators` in a fresh process p50 1.55 s (Mac 0.74 s); warm miss
+  p50 0.29 s (Mac 0.10 s).
+- Latency gap: mainly CPU (a Python loop is 2.8 times slower than on the Mac; iowait 1.2% during new
+  queries). The network volume adds cold-read cost; the idle service had 189 MiB in swap.
+- 10 live questions through the tunnel: no regression, no transport errors; Q01 now answers.
+- **Watch:** one `query_timeout` (10.6 s) while the benchmark started on the same two vCPUs. The 10 s
+  deadline has less headroom here than on the Mac.
+- **Opus review:** accepted. `MemoryMax` stays 1G until the end of the observation week (Ask load not
+  measured; 2.8 GB available on the host). Proposed next step for the owner: `MemorySwapMax=0` for
+  `tempo-api`, so the idle service stays in RAM.
+
 ## Hand-over (for a new session)
 
 Read this journal, [hosting-hetzner.md](hosting-hetzner.md) and `scripts/deploy/hetzner/README.md`.
