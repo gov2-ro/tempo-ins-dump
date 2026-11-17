@@ -163,7 +163,11 @@ Times are UTC. Sessions: `ins-local` (Mac, this repo, Opus), Sonnet agents start
   be proxied: false alarm, it does not recognise the Tunnel record type. After it, `mcp_probe.py
   https://api-ins.gov2.ro POP112A_grupe` passes from the Mac (8 tools, `describe_dataset` ok,
   structured == text).
-- Client IP behind the tunnel: not verified yet (no access log; needs a loopback capture with sudo).
+- **Client IP behind the tunnel: verified** (owner ran `tcpdump -i lo` while the Mac sent requests with
+  forged `X-Forwarded-For: 1.2.3.4` and `Fly-Client-IP: 5.6.7.8`). uvicorn received
+  `X-Forwarded-For: 1.2.3.4,<real IP>` and `Cf-Connecting-Ip: <real IP>`. With
+  `--forwarded-allow-ips 127.0.0.1`, uvicorn takes the right-most entry, the real visitor; the app
+  ignores `Fly-Client-IP` off Fly. The MCP per-client key cannot be forged.
 
 ## Hand-over (for a new session)
 

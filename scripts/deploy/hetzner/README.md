@@ -25,8 +25,9 @@ What `cloudflared` sends to the origin:
   end. Reported for cloudflared 2025.2.0 with this example: client sends `a,b,c`, origin gets
   `a,b,c,203.0.113.1` ([cloudflared issue 1426](https://github.com/cloudflare/cloudflared/issues/1426),
   open when read). Without a client value, it equals `CF-Connecting-IP`.
-- Not verified on a live tunnel: HZ-2 must check it (`curl -H 'X-Forwarded-For: 1.2.3.4'` and log
-  the headers).
+- Verified on gov2-1 (2026-11-17, cloudflared 2026.11.0, `tcpdump` on loopback): a request with
+  `X-Forwarded-For: 1.2.3.4` and `Fly-Client-IP: 5.6.7.8` reached uvicorn as
+  `X-Forwarded-For: 1.2.3.4,<visitor>`, `Cf-Connecting-Ip: <visitor>`, `Fly-Client-Ip: 5.6.7.8`.
 
 Result for the app behind the tunnel:
 - With `TRUST_FORWARDED=true`, the key is the FIRST `X-Forwarded-For` entry, which the client
@@ -130,7 +131,8 @@ profile is 372-464 MiB on macOS. HZ-3 measures it on Linux with the scrapers run
 `MemoryPeak`) and sets the final `MemoryMax=` (peak plus at least 50 percent).
 Check `systemctl status tempo-api` for restarts after any scraper run.
 
-## Not tested yet
+## Tested on gov2-1 (2026-11-17)
 
-`systemd-analyze verify tempo-api.service` (Linux only), the real tunnel headers, and the whole deploy
-on the VPS. `deploy.sh` was checked with `bash -n` and a dry run against fake `ssh` and `rsync`.
+`systemd-analyze verify` (only the expected warning before the first release), the tunnel headers,
+the first deploy with `--apply` and its smoke. Not yet exercised: a second deploy (hard links,
+release pruning) and the swap-back after a failed health check.
