@@ -25,6 +25,10 @@ RestartSec=5
 
 # Memory limit for the whole service. HZ-3 sets the final value (peak plus at least 50 percent).
 MemoryMax=1G
+# Keep the API in RAM. An idle service had 189 MiB in swap (HZ-3), so the first query after a quiet period
+# waited for swap-in. The peak is about 300 MiB, so this costs little. Above MemoryMax the service is killed
+# and restarted (Restart=always) instead of swapping.
+MemorySwapMax=0
 # If the whole VPS runs out of memory, the kernel kills a scraper (a batch job that retries) before
 # the API. Swap (2 GB on the volume) absorbs short peaks first.
 OOMScoreAdjust=-300

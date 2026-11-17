@@ -37,6 +37,7 @@ def test_service_binds_loopback_with_one_worker():
     assert "EnvironmentFile=/etc/tempo/api.env" in text
     assert "TEMPO_DATA_DIR=/opt/tempo/current/data" in text
     assert re.search(r"^MemoryMax=", text, re.M) and "Restart=always" in text
+    assert re.search(r"^MemorySwapMax=0$", text, re.M)
 
 
 def test_service_spills_outside_the_read_only_release():
