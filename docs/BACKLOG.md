@@ -4,26 +4,26 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
-## NEXT — HZ-2 on the Hetzner VPS (owner present) — 2026-11-16
+## NEXT — HZ-3 on the Hetzner VPS — 2026-11-17
 
-- [ ] **P1 — Next move: run HZ-2 of [the Hetzner plan](plans/hosting-hetzner.md).** HZ-1 is merged
-  (`scripts/deploy/hetzner/`). The public MCP stays unpromoted until the API runs on the VPS.
-  Start a Claude session on the VPS, in an empty folder, with this prompt:
+`api-ins.gov2.ro` (API, Ask, `/mcp`) runs on the VPS since 2026-11-16 23:50 UTC (HZ-2 and the HZ-4
+DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
 
-  > Clone https://github.com/gov2-ro/tempo-ins-dump (branch `main`) into `~/tempo-ins-dump`. Read
-  > `AGENTS.md`, then `docs/plans/hosting-hetzner.md` (Decisions and HZ-2) and
-  > `scripts/deploy/hetzner/README.md`. Do only the read-only inventory of HZ-2 first. Report: free
-  > disk on `/` and the volume; memory used by the scrapers now and at their peak (from their
-  > schedules and logs); the firewall state (`ufw status`, and whether a Hetzner Cloud Firewall is
-  > attached); open ports (`ss -tlnp`); the Python version, and whether `python3.12-venv`, `rsync`
-  > and `curl` are installed. Install nothing, and change no settings. Stop after the report.
-
-  Then: paste the report into the Mac session for an Opus check, and do the setup steps one by one
-  with the owner (user, directories, firewall SSH-only, `cloudflared` with the owner's Cloudflare
-  login). The Mac session runs `deploy.sh` (dry run first) to rsync the release; it needs the SSH host
-  and the deploy user. Then HZ-3 (Linux memory, `MemoryMax`) and HZ-4 (DNS cutover).
-  Still to check on the VPS: that `cloudflared` appends the visitor as the last `X-Forwarded-For`
-  entry, and `systemd-analyze verify` on the service file.
+- [ ] **P1 — HZ-3: measure on Linux** ([plan](plans/hosting-hetzner.md)). Benchmark with the
+  `api.env` settings, cgroup `memory.peak` over the week, final `MemoryMax=` (peak plus at least 50%),
+  and the 10 live questions of 2026-11-15 against `https://api-ins.gov2.ro/mcp`. Explain the latency
+  gap: new `discover_indicators` queries take 0.6-3.8 s on the VPS, 47 ms median on the Mac.
+- [ ] **P1 — Observation week, then promote the MCP** (until about 2026-11-24): memory, restarts
+  (`systemctl status tempo-api`) and `MCP_METRICS` in `journalctl -u tempo-api`.
+- [ ] **P2 — Retire the Fly app `tempo-ins-explorer`** after the observation week. It still runs
+  (`min_machines_running = 1`, two 1 GB volumes) but gets no traffic since the cutover. Before that:
+  copy what is wanted from its `/logs` volume (`mcp-calls.jsonl`, `ask-chats.jsonl`). Rollback until
+  then: restore the Cloudflare records A `66.241.124.71` (DNS only) and AAAA `2a09:8280:1::f3:e56d:0`
+  (proxied) for `api-ins`. After: scale to zero or destroy the app and volumes, delete the
+  `_acme-challenge.api-ins` CNAME, mark `scripts/deploy/fly/` and the Fly parts of `release-check.py`
+  and AGENTS.md as legacy or remove them. Owner decides scale-down or destroy.
+- [ ] **P3 — Cloudflare Page Rule → Configuration Rule.** `api-ins.gov2.ro/*` Browser Integrity Check
+  Off is a legacy Page Rule (1 of 3 on the free plan). Move it when Cloudflare retires Page Rules.
 
 ## VPS backups — 2026-11-16
 
@@ -128,7 +128,7 @@ are recorded next to each item.
 
 ## Public MCP operations — 2026-10-28
 
-- [ ] **P1 — Production `/mcp` fails on every question (Fly).** `tempo-ins-explorer.fly.dev/mcp` timed out
+- [x] **P1 — Production `/mcp` fails on every question (Fly).** (superseded: the API left Fly on 2026-11-16; latency follow-up in HZ-3) `tempo-ins-explorer.fly.dev/mcp` timed out
   and `api-ins.gov2.ro/mcp` returned 403 to the smoke probe. Fly logs show `discover_indicators` failing with
   `INTERRUPT Error: Interrupted!` (the 10 s deadline) and Ask logging `provider_timeout`. Suspected cause, not
   verified: `fly.toml` has `min_machines_running = 0`, so the 512 MB machine cold-starts and the first queries
@@ -139,7 +139,7 @@ are recorded next to each item.
   the cause. Locally `discover_indicators` has a median of 47 ms. RSS reaches 375 MB after five calls, and
   the three DuckDB caps sum to 480 MB on a 512 MB machine. Memory starvation is the new hypothesis, not
   verified on Linux. Local reduction: [AQ-07](plans/ask-and-public-mcp/remaining/07-mcp-footprint.md).
-- [ ] **P1 — Evaluate the owner's Hetzner VPS as the API/MCP host** (2 vCPU, 4 GB RAM, 40 GB disk +
+- [x] **P1 — Evaluate the owner's Hetzner VPS as the API/MCP host** (done: deployed 2026-11-16, see HZ-3 above) (2 vCPU, 4 GB RAM, 40 GB disk +
   15 GB volume; the UI stays on DreamHost). It has 8× the memory of the Fly machine and dedicated vCPUs.
   Needs: Docker or a venv service, TLS (Caddy), Cloudflare in front of `api-ins`, the `/logs` volume,
   backups and an update procedure. Decide after AQ-07, with its measured memory profile.
