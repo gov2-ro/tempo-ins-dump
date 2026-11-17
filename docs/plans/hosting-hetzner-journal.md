@@ -184,6 +184,10 @@ Record: [hz-3-record.md](hz-3-record.md). Nothing on the live service changed.
   measured; 2.8 GB available on the host). Proposed next step for the owner: `MemorySwapMax=0` for
   `tempo-api`, so the idle service stays in RAM.
 
+- **Owner applied `MemorySwapMax=0`** (08:45 UTC): installed the service file from `bf91fbf`, restarted.
+  Check: `memory.swap.max` 0, `memory.swap.current` 0 (223 MiB before), `memory.current` 123 MiB,
+  `MemoryMax` 1G, public `/api/health` 200.
+
 ## Hand-over (for a new session)
 
 Read this journal, [hosting-hetzner.md](hosting-hetzner.md) and `scripts/deploy/hetzner/README.md`.
