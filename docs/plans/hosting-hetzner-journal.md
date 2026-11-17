@@ -145,6 +145,26 @@ Times are UTC. Sessions: `ins-local` (Mac, this repo, Opus), Sonnet agents start
   (cache). For HZ-3: measure warm latency; suspect first reads from the network volume.
   cgroup memory peak 257 MiB after these calls (limit 1 GiB).
 
+- **Tunnel** (owner): `cloudflared` 2026.11.0 from Cloudflare's apt repo; tunnel `tempo-api`
+  `3881fb85-6ad9-4848-af0f-a86d3c065049`; `hz2-tunnel-setup.sh` installed the credentials and
+  `/etc/cloudflared/config.yml` (same as `scripts/deploy/hetzner/cloudflared.yml`) and the service;
+  4 connections registered (fra08/16/10/17, QUIC).
+- **Cutover (HZ-4) done by the owner, about 23:50 UTC on 2026-11-16**, without a test hostname
+  (owner: nobody uses the MCP yet). Owner deleted A `66.241.124.71` (DNS only) and AAAA
+  `2a09:8280:1::f3:e56d:0` (proxied) and added a proxied Tunnel record to `tempo-api`. Rollback:
+  restore those two records. The `_acme-challenge` CNAME for Fly stays.
+- **Checks from the Mac:** `/api/health` 200 via Cloudflare (no Fly headers), generation `062bd2b0`.
+  CORS preflight from `https://ins.gov2.ro` 200 with the right origin; `/api/ask/config` BYOK
+  available. MCP: the official Python SDK (httpx) lists 8 tools, `discover_indicators` 0.7-0.9 s;
+  curl and node user agents pass. **`Python-urllib` gets 403, Cloudflare error 1010** (Browser
+  Integrity Check), so `scripts/mcp_probe.py` fails from outside. Fix is in Cloudflare (owner).
+- **Owner:** Cloudflare Page Rule `api-ins.gov2.ro/*` → Browser Integrity Check: Off (legacy Page
+  Rule; a Configuration Rule is the modern equivalent). The Page Rules screen warned the host may not
+  be proxied: false alarm, it does not recognise the Tunnel record type. After it, `mcp_probe.py
+  https://api-ins.gov2.ro POP112A_grupe` passes from the Mac (8 tools, `describe_dataset` ok,
+  structured == text).
+- Client IP behind the tunnel: not verified yet (no access log; needs a loopback capture with sudo).
+
 ## Hand-over (for a new session)
 
 Read this journal, [hosting-hetzner.md](hosting-hetzner.md) and `scripts/deploy/hetzner/README.md`.
