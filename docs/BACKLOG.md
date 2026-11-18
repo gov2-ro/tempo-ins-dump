@@ -26,6 +26,19 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   and in the new build). `dataset-v2.html?code=SOM101B` asks for `rec/datasets/SOM101B.ro.json.gz` (404)
   and shows no tiles; only the children (`SOM101B_judete`, ...) are served. Redirect a parent code to its
   children, or show a list of them.
+- [ ] **P2 — Dataset note: domicile counts inflated by registrations in border counties** (2026-11-18,
+  from a live Claude Desktop MCP test). POP107D (localities by domicile): Vaslui municipiu rises
+  84,553 (2014) → 148,926 (2023) → 131,722 (2026), a steady climb, not a one-year boundary step; Huși,
+  Tecuci, Târgu Bujor and Hârlău also grow. Cause (press, not INS): Romanian citizens from the Republic
+  of Moldova registered at Vaslui addresses without living there, thousands per apartment; the 2021
+  census counted about 63,000 in the municipiu. Fall after 2023: OUG 97/2005 amendment (max. ten persons
+  per address; Senate vote Feb 2023, check the final act and date) and ID cards cancelled for fictitious
+  domicile. Sources: Adevărul 2020-12-06
+  (https://adevarul.ro/stiri-locale/vaslui/moldovenii-aproape-ca-au-triplat-populatia-2063613.html),
+  Vremea Nouă 2023-02-09 (https://www.vremeanoua.ro/lovitura-grea-pentru-combinatorii-din-vaslui-care-isi-pun-locuintele-la-dispozitia-moldovenilor/),
+  Veridica (Huși, 6,000 at one address). Claude guessed "boundary change" because no note explained it.
+  Add a public note in `app/data/dataset_notes.json` (POP107D parent, covers its split children), then
+  run `scripts/build-notes-report.py`. Prefer an official source for the law (Monitorul Oficial).
 - [ ] **P3 — About page: say "No sign-in" for the Claude connector** (2026-11-18). Claude Desktop's
   *Add custom connector* detects "No sign-in" and shows a yellow warning ("anyone with the server URL
   can use this connector"). That is expected for a public read-only server, but users may read it as a
