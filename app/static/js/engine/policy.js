@@ -162,6 +162,26 @@ const SEX_VALUES = new Set(['masculin', 'feminin', 'masculi', 'barbati', 'femei'
     'male', 'female', 'males', 'females', 'men', 'women']);
 const RESIDENCE_VALUES = new Set(['urban', 'rural']);
 
+// aggregation_policy._SUBSET_RE: a "Din care:" ("of which") option is a part of the option before it.
+const SUBSET_RE = /^[\s\-\u2013]*(din care|of which|of witch)\b/u;
+export const isSubsetLabel = l => SUBSET_RE.test(fold(l == null ? '' : String(l)));
+const isSubsetOption = (o, dv) => [dv, o.label, o.sdmx_value].some(x => x != null && isSubsetLabel(x));
+/** aggregation_policy.has_subset_option */
+export const hasSubsetOption = eff => eff.some(([o, dv]) => isSubsetOption(o, dv));
+/** aggregation_policy.subset_with_parent: a chosen subset option plus the option before it. */
+export function subsetWithParent(matched, eff) {
+    const chosen = new Set(matched.map(([o]) => o));
+    let parent = null;
+    for (const [o, dv] of eff) {
+        if (isSubsetOption(o, dv)) {
+            if (chosen.has(o) && parent !== null && chosen.has(parent)) return true;
+        } else {
+            parent = o;
+        }
+    }
+    return false;
+}
+
 /** aggregation_policy.partition_kind: 'sex' | 'residence' | 'mixed' | null. */
 export function partitionKind(labels) {
     const kinds = new Set();
@@ -187,9 +207,10 @@ function metadataOverlap(dim, options) {
     return null;
 }
 
-function explicitSetProblem(dim, matched, struct) {
+function explicitSetProblem(dim, matched, struct, eff = []) {
     const col = dim.dim_column_name;
     if (matched.some(([o, dv]) => isTotalOption(dim, o, dv, struct))) return 'contains_aggregate';
+    if (subsetWithParent(matched, eff)) return 'label_hierarchy';
     const verified = verifiedLevels(struct, col);
     if (verified.length >= 2) {
         const keys = new Set(matched.map(([o, dv]) => norm(dv != null ? dv : o.label)));
@@ -234,10 +255,11 @@ function unprofiledPartition(dim, eff, struct) {
         if (ageRangesOverlap(opts) === false) {
             return (prof && prof.confidence === 'flat') ? 'profile_flat' : 'metadata';
         }
-    } else if ((dtype === 'gender' || dtype === 'residence') && !labelHierarchyCues(labels)) {
+    } else if ((dtype === 'gender' || dtype === 'residence') && !labelHierarchyCues(labels)
+               && !hasSubsetOption(eff)) {
         return 'metadata';
     }
-    if (labelHierarchyCues(labels)) return '!label_hierarchy';
+    if (labelHierarchyCues(labels) || hasSubsetOption(eff)) return '!label_hierarchy';
     if (prof && prof.confidence === 'flat') return 'profile_flat';
     return '!unverified_structure';
 }
@@ -343,7 +365,7 @@ export function decide({ dimensions, effective, groupBy = [], filters = {}, stru
                 note(col, 'level', 'verified');
                 continue;
             }
-            const bad = explicitSetProblem(dim, matched, struct);
+            const bad = explicitSetProblem(dim, matched, struct, eff);
             if (bad) return unavailable(bad, col, audit, outFilters);
             summed = true;
             sliceLike = true;

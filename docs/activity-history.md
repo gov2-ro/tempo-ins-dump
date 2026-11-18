@@ -1,5 +1,16 @@
 # Activity History
 
+## 2026-11-18 — AQ-10: "Din care" options are never summed with their parent
+
+- **What:** `aggregation_policy` refuses a sum over a dimension that has a "Din care:" / "of which" option
+  (reason `label_hierarchy`) and refuses an explicit selection of a subset with the option before it.
+  Mirrored in `engine/policy.js` with a parity test. A refused child offers a related dataset only if that
+  dataset passes its own INS total check. Record: `docs/plans/ask-and-public-mcp/remaining/aq-10-record.md`.
+- **Why:** LOC104A summed public + private + "of which: population" (Q17: Bucuresti 18,654 instead of 13,834).
+- **Non-obvious:** 84 datasets (232 of 527 default-shape queries) change from a sum to a refusal; no curated
+  figure changes. No automatic "drop the subset" rule (owner decision). Not merged, not deployed; the API needs a
+  deploy and the static site a rebuild.
+
 ## 2026-11-18 — AQ-08: chart hints and chart links in tool results
 
 - **What:** `query_data`, `rank_entities`, `compare_periods` and `run_recipe` results carry an optional

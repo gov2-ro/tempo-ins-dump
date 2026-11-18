@@ -324,6 +324,39 @@ def label_hierarchy_cues(labels) -> bool:
             or any(_TOTAL_SUFFIX_RE.search(l.strip()) for l in labels))
 
 
+# INS marks a part of the option before it with a "Din care:" ("of which") prefix.
+# Matched on folded text, so case, diacritics, indentation and a leading dash do not matter.
+_SUBSET_RE = re.compile(r'^[\s\-\u2013]*(din care|of which|of witch)\b')
+
+
+def is_subset_label(label) -> bool:
+    return bool(_SUBSET_RE.match(_fold(str(label or ''))))
+
+
+def _is_subset_option(opt, dv) -> bool:
+    """A "Din care" option: judged on the data value, the label and the SDMX value."""
+    return any(is_subset_label(x) for x in (dv, opt.get('label'), opt.get('sdmx_value'))
+               if x is not None)
+
+
+def has_subset_option(eff) -> bool:
+    return any(_is_subset_option(o, dv) for o, dv in eff)
+
+
+def subset_with_parent(matched, eff) -> bool:
+    """A selected "Din care" option together with the option it is part of (the nearest
+    non-subset option before it, in the dimension's own order)."""
+    chosen = {id(o) for o, _ in matched}
+    parent = None
+    for o, dv in eff:
+        if _is_subset_option(o, dv):
+            if id(o) in chosen and parent is not None and id(parent) in chosen:
+                return True
+        else:
+            parent = o
+    return False
+
+
 def age_ranges_overlap(options) -> bool | None:
     """True/False from parsed age_min/age_max; None when any option lacks them."""
     spans = []
@@ -555,7 +588,7 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
                 out_levels[col] = _applied_level(struct, col, sel)
                 note(col, 'level', 'verified')
                 continue
-            bad = _explicit_set_problem(dim, matched, struct)
+            bad = _explicit_set_problem(dim, matched, struct, eff)
             if bad:
                 return _unavailable(bad, col, audit, out_filters)
             summed = True
@@ -591,7 +624,7 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
 
         if col in declared:
             labels = [dv if dv is not None else (o.get('label') or '') for o, dv in eff]
-            if non_additive or label_hierarchy_cues(labels) \
+            if non_additive or label_hierarchy_cues(labels) or has_subset_option(eff) \
                     or any(TOTAL_RE.match(_norm(l)) for l in labels):
                 return _unavailable('declared_partition_invalid', col, audit, out_filters)
             summed = True
@@ -714,10 +747,12 @@ def _applied_level(struct, col, applied):
     return None
 
 
-def _explicit_set_problem(dim, matched, struct) -> str | None:
+def _explicit_set_problem(dim, matched, struct, eff=()) -> str | None:
     col = dim['dim_column_name']
     if any(_is_total_option(dim, o, dv, struct) for o, dv in matched):
         return 'contains_aggregate'
+    if subset_with_parent(matched, eff):
+        return 'label_hierarchy'
     verified = dstruct._verified_levels(struct, col)
     if len(verified) >= 2:
         keys = [{_norm(dv if dv is not None else o.get('label')) for o, dv in matched}]
@@ -786,10 +821,11 @@ def _unprofiled_partition(dim, eff, struct):
     elif dtype == 'age':
         if age_ranges_overlap(opts) is False:
             return 'profile_flat' if prof and prof.get('confidence') == 'flat' else 'metadata'
-    elif dtype in ('gender', 'residence') and not label_hierarchy_cues(labels):
+    elif (dtype in ('gender', 'residence') and not label_hierarchy_cues(labels)
+          and not has_subset_option(eff)):
         return 'metadata'
 
-    if label_hierarchy_cues(labels):
+    if label_hierarchy_cues(labels) or has_subset_option(eff):
         return '!label_hierarchy'
     if prof and prof.get('confidence') == 'flat':
         return 'profile_flat'   # profiler examined it and found no nesting
