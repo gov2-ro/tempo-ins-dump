@@ -1,5 +1,15 @@
 # Activity History
 
+## 2026-11-19 — UX: dataset table always shown (lazy), compact front-page subcategories
+
+- **What:** the dataset v2 page drops the "Tabel" button. The raw-rows table always shows under the charts,
+  and its rows load only when it comes within 200 px of the viewport (`IntersectionObserver`). Front-page
+  subcategory lists sort by dataset count (largest first), keep each name whole (`inline-block`, the `·`
+  stays with the item before it) and use line-height 1.25. `shortName` drops the empty "()" that INS ships
+  at the end of the two "Dezvoltare durabila" category names.
+- **Why:** the table opened far below the chart after a click; loading it eagerly would cost a 1,000-row
+  request on every page open, so it loads on scroll to keep the page fast.
+
 ## 2026-11-18 — AQ-10: "Din care" options are never summed with their parent
 
 - **What:** `aggregation_policy` refuses a sum over a dimension that has a "Din care:" / "of which" option

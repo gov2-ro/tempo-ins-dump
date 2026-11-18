@@ -773,8 +773,10 @@ kbd {
 /* Subcategory list — inline flow with middot separators */
 .cat-subcats {
     margin-left: 0;
-    line-height: 1.45;
+    line-height: 1.25;
 }
+
+.cat-subcat-item { display: inline-block; }
 
 .cat-subcat {
     display: inline;

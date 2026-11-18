@@ -673,6 +673,7 @@ class LensApp {
     subcatLinks(children, trail, catIdx) {
         const wrap = document.createElement('div');
         wrap.className = 'cat-subcats';
+        children = [...children].sort((a, b) => (b.total_datasets || 0) - (a.total_datasets || 0));
         children.forEach((child, ci) => {
             const path = [...trail, child];
             const link = document.createElement('a');
@@ -685,8 +686,12 @@ class LensApp {
                 this.drillStack = path.slice(0, -1).map((cat, depth) => ({ cat, colorIdx: depth ? 0 : catIdx }));
                 this.drillCategory(child, 0);
             });
-            wrap.appendChild(link);
-            if (ci < children.length - 1) wrap.insertAdjacentHTML('beforeend', '<span class="cat-subcat-sep">·</span>');
+            // Item and separator wrap as one unit, so no line starts with '·'.
+            const item = document.createElement('span');
+            item.className = 'cat-subcat-item';
+            item.appendChild(link);
+            if (ci < children.length - 1) item.insertAdjacentHTML('beforeend', '<span class="cat-subcat-sep">·</span>');
+            wrap.appendChild(item);
         });
         return wrap;
     }
@@ -3487,7 +3492,9 @@ class LensApp {
     // --- Utilities ----------------------------------------------------------
     shortName(name) {
         // Remove numbering prefix like "1. " or "A.01 ", then title-case
-        const stripped = name.replace(/^[A-Z]?\.\d*\s*/, '').replace(/^\d+\.\s*/, '');
+        // INS ships some names with an empty "()" at the end; drop it.
+        const stripped = name.replace(/^[A-Z]?\.\d*\s*/, '').replace(/^\d+\.\s*/, '')
+            .replace(/\s*\(\s*\)\s*$/, '');
         // Title-case: first letter upper, rest lower (handles all-caps from API)
         return stripped.charAt(0).toUpperCase() + stripped.slice(1).toLowerCase();
     }

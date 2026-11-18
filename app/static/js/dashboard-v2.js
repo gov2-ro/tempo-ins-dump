@@ -34,7 +34,6 @@ const UI_STRINGS = {
         outliers: 'Valori atipice față de restul județelor',
         fillRate: 'date complete',
         since: 'din',
-        table: 'Tabel',
         tableCount: (n, cap) => `${n} rânduri${n >= cap ? ` (primele ${cap})` : ''}`,
         tableError: 'Tabelul nu a putut fi încărcat.',
         value: 'Valoare',
@@ -114,7 +113,6 @@ const UI_STRINGS = {
         outliers: 'Outliers vs. the other counties',
         fillRate: 'fill rate',
         since: 'since',
-        table: 'Table',
         tableCount: (n, cap) => `${n} rows${n >= cap ? ` (first ${cap})` : ''}`,
         tableError: 'The table could not be loaded.',
         value: 'Value',
@@ -219,7 +217,6 @@ class DashboardV2 {
         this.tileFilters = {};  // chart.id → {column → value}, per-tile controls
         this.userLevels = {};   // column → level_id, from the global filter row
         this._refreshTimer = null;
-        this.tableOpen = false;
         this.tableData = null;  // cached raw rows for the table view
         this.tableSort = null;  // {col: idx, dir: 1|-1}
         this.tileTransforms = {};  // chart.id → 'index' | 'yoy' | 'seasonal' | null
@@ -282,6 +279,7 @@ class DashboardV2 {
                 // (FIX-02): say why, keep KPIs/raw table, never an empty "no config".
                 document.getElementById('dbv2-loader').classList.add('hidden');
                 this.renderUnavailable([]);
+                this.showTable();
                 API.fetch(`/datasets/${this.code}/insights`, { lang: this.lang })
                     .then(ins => this.renderInsights(ins))
                     .catch(e => console.warn('Insights unavailable:', e));
@@ -489,7 +487,7 @@ class DashboardV2 {
         this.renderGrid(alive);
         this.renderUnavailable(alive);
         if (alive.length) await this.renderTiles(alive, slices);
-        if (this.tableOpen) this.renderTable();
+        this.showTable();
     }
 
     /** Effective filters for one tile: composed pins ⊕ tile controls ⊕ global row. */
@@ -600,7 +598,6 @@ class DashboardV2 {
                     <button class="dl-btn" id="dbv2-xlsx-btn">↓ XLSX</button>
                     <button class="dl-btn" id="dbv2-evidence-btn" title="${this.ui.evidenceTitle}">↓ ${this.ui.evidence}</button>
                     <button class="dl-btn" id="dbv2-feedback-btn" title="${this.ui.feedbackTitle}">${this.ui.feedback}</button>
-                    <button class="dl-btn" id="dbv2-table-btn">☰ ${this.ui.table}</button>
                 </div>
             </div>
             <div class="dash-meta">
@@ -624,8 +621,6 @@ class DashboardV2 {
         document.getElementById('dbv2-feedback-btn').addEventListener('click', () => openFeedback({
             title: `${m.matrix_code}: `, dataset: m.matrix_code,
             selection: this.expandedUserFilters(), lang: this.lang }));
-        document.getElementById('dbv2-table-btn').addEventListener('click',
-            () => this.toggleTable());
         // Theme & language toggles live in the site chrome topbar —
         // recreate the charts when the chrome flips the ECharts theme
         window.addEventListener('themechange', () => this.refresh());
@@ -1630,16 +1625,21 @@ class DashboardV2 {
 
     // ------------------------------------------------------------ data table
 
-    toggleTable() {
-        this.tableOpen = !this.tableOpen;
+    /** The raw-rows table always shows under the charts. Its rows load only
+     *  once it comes near the viewport, so the charts load first. */
+    showTable() {
         const el = document.getElementById('dbv2-table');
-        document.getElementById('dbv2-table-btn')?.classList.toggle('active', this.tableOpen);
-        if (!this.tableOpen) {
-            el.classList.add('hidden');
-            return;
-        }
         el.classList.remove('hidden');
-        this.renderTable();
+        if (this._tableSeen) return this.renderTable();
+        if (this._tableObs) return;  // still waiting; it reads the current filters when it loads
+        document.getElementById('dbv2-table-wrap').innerHTML = `<div class="dbv2-empty">${this.ui.loading}</div>`;
+        this._tableObs = new IntersectionObserver(entries => {
+            if (!entries.some(e => e.isIntersecting)) return;
+            this._tableObs.disconnect();
+            this._tableSeen = true;
+            this.renderTable();
+        }, { rootMargin: '200px' });
+        this._tableObs.observe(el);
     }
 
     /** Raw-rows table (respects the global filter row), sortable by column. */
