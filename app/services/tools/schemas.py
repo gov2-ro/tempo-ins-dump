@@ -29,7 +29,7 @@ Lang = Annotated[Literal["ro", "en"], Field(
 DatasetCode = Annotated[StrictStr, Field(
     min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_]+$",
     description="Exact dataset code from discover_indicators or describe_dataset, "
-                "e.g. POP107D_grupe_judet")]
+                "e.g. POP107D_grupe_localitate")]
 Column = Annotated[StrictStr, Field(
     min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_]+$",
     description="Dimension column name as describe_dataset lists it, e.g. REF_AREA, TIME_PERIOD")]

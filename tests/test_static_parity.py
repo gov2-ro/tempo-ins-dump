@@ -116,7 +116,7 @@ def test_partitioned_layout_matches_whole_file(tmp_path):
 def test_parity_on_real_sample(tmp_path):
     data_dir = Path(os.environ.get("TEMPO_DATA_DIR", ROOT / "data"))
     codes = ["POP105A_judete_grupe", "FOM106F", "SOM103A_judete", "TUR105D_judete",
-             "TUR105E_judet", "FOM106E_judete"]
+             "FOM106E_judete"]
     _parity(data_dir, tmp_path, codes, per_dataset=25)
 
 

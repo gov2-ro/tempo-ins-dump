@@ -1,5 +1,7 @@
 # Visual Smoke Test — 2026-05-07
 
+> Note (AQ-11, 2026-11-19): the `*_judet` county children named below (e.g. LOC103B_judet) are no longer written; stage 12 keeps a county child only for an additive measure with a verified roll-up. The report is kept as a record of the 2026-05 sweep.
+
 13 exemplars across 11 clusters loaded in lens; selector pick verified against rendered ECharts series type. Console: zero errors/warnings across the sweep.
 
 | # | Code | Cluster | Expected (taxonomy) | Selector primary | Rendered timeline | Rendered snapshot | Verdict |

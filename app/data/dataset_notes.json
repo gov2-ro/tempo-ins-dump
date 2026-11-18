@@ -245,25 +245,6 @@
    "evidence": "TUR105D source notes."
   },
   {
-   "id": "TUR105EH-county-split",
-   "codes": [
-    "TUR105E_judet",
-    "TUR105H_judet"
-   ],
-   "kind": "excluded",
-   "public": true,
-   "text": {
-    "ro": "Acest set pe județe a pierdut coloana localităților la prelucrare, așa că un județ apare o dată pentru fiecare localitate. Valorile nu se pot aduna pe județ și setul nu este folosit în indicatorul înnoptări pe locuitor. Problema este a noastră, nu a INS, și urmează să fie reparată.",
-    "en": "This county set lost its locality column in processing, so a county appears once per locality. Its values cannot be added up per county, and the set is not used for the stays-per-resident indicator. The problem is ours, not INS's, and is queued for repair."
-   },
-   "decided": {
-    "by": "owner",
-    "date": "2026-10-12",
-    "context": "PA-00 Q4"
-   },
-   "evidence": "Generation manifest: conflicting/duplicate grain; e.g. TUR105E_judet 37,906 rows for 8,640 keys (FIX-03 county splits that dropped locality)."
-  },
-  {
    "id": "locality-fetch-bucharest",
    "codes": [
     "AGR101B",

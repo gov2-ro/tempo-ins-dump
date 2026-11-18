@@ -42,7 +42,7 @@ REQUESTS = [
     ("query", "/api/datasets/SOM103A_judete/data?filters=" + F({"TIME_PERIOD": ["2024"]})
      + "&group_by=" + F(["REF_AREA"]), 1),
     ("query", "/api/datasets/FOM106F/data?group_by=" + F(["TIME_PERIOD", "ECON_ACTIVITY"]), 1),
-    ("query", "/api/datasets/POP107D_grupe_judet/data?filters=" + F({"REF_AREA": ["Cluj"]})
+    ("query", "/api/datasets/POP107D_grupe_localitate/data?filters=" + F({"REF_AREA": ["Cluj"]})
      + "&group_by=" + F(["TIME_PERIOD"]), 1),
     ("recipe", "/api/recipes/tourism_intensity", 2),
     ("recipe", "/api/recipes/tourism_intensity?year=2019&areas=" + F(["Cluj", "Iasi", "Municipiul București"]), 1),
