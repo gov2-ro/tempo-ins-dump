@@ -85,6 +85,18 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
 - [ ] **P3 — Cloudflare Page Rule → Configuration Rule.** `api-ins.gov2.ro/*` Browser Integrity Check
   Off is a legacy Page Rule (1 of 3 on the free plan). Move it when Cloudflare retires Page Rules.
 
+## AQ-10 follow-ups — 2026-11-18
+
+- [ ] **P1 — After merging `aq-10-din-care`: deploy the API and rebuild the static site.** The recorded `rec/`
+  answers change for about 84 datasets (LOC104-107, AGR111A-116A, AGR201A-203A, POP206, SAN102B/104A/105A and others).
+  See [aq-10-record.md](plans/ask-and-public-mcp/remaining/aq-10-record.md).
+- [ ] **P2 — Profiler: mark "Din care" options as nested.** `13-dimension-structure.py` profiles these columns
+  `flat`. A later package can store the nesting so the structure is known, not only refused by label.
+- [ ] **P2 — A refusal message for subset options.** `label_hierarchy` says "no verified structure". Name the
+  non-subset options and offer them as one explicit query. Needs `messages.py`, `utils.js` and `ask.js`.
+- [ ] **P3 — Re-run `scripts/check-kpi-totals.py` after the next refresh.** Then count how many mismatches remain
+  once "Din care" sums are refused (24 of 301 recorded mismatches are in such datasets).
+
 ## VPS backups — 2026-11-16
 
 - [ ] **P2 — Recurring off-box backup of gov2-1** (owner's server, not only tempo). The 2026-11-16 backup
