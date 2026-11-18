@@ -26,6 +26,25 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   and in the new build). `dataset-v2.html?code=SOM101B` asks for `rec/datasets/SOM101B.ro.json.gz` (404)
   and shows no tiles; only the children (`SOM101B_judete`, ...) are served. Redirect a parent code to its
   children, or show a list of them.
+- [ ] **P1 — `rank_entities` refuses to rank rates with one value per entity** (2026-11-18, live Ask
+  with DeepSeek: "top 5 județe după PIB per capita și suprafață"). On CON103H_judete (GDP per
+  inhabitant) it returned `unsupported_measure` ("additive measures only"). A one-year, county-level
+  selection has one cell per county; ranking sorts and sums nothing. Allow non-additive measures when
+  the selection proves one cell per entity (grain check), and keep the refusal when a sum is needed.
+- [ ] **P2 — Discovery finds no concept for GDP per capita by county or county area** (same chat). Six
+  `discover_indicators` calls returned 0 reviewed concepts. The model re-worded and used half of its
+  12 dispatches. Add reviewed concepts (CON103H for GDP/inhabitant; a county-area source, e.g. AGR101
+  fondul funciar total, which ends in 2014) or a discovery default.
+- [ ] **P2 — Ask hides a query table that holds the answer** (same chat). `query_data` returned the 42
+  county rows for 2022. The page hid them as "a preview that does not answer the ranking", and the final
+  text had no ranking. When the rows contain every entity of the requested ranking, show them sorted,
+  or let the model sort them.
+- [ ] **P1 — AQ-08: chart hints and chart links in tool results** (owner decision 2026-11-18). Brief:
+  [08-chart-hints.md](plans/ask-and-public-mcp/remaining/08-chart-hints.md). A `data.chart` hint for MCP
+  clients and the Ask page; the link opens dataset-v2 with the selection preselected.
+- [ ] **P3 — MCP Apps: an interactive chart inside Claude/ChatGPT** (after AQ-08). The MCP Apps
+  extension lets a server return a UI resource that the client renders. Check which clients support
+  it, then decide. No server-side image rendering (CPU on the 2-vCPU VPS).
 - [ ] **P2 — Dataset note: domicile counts inflated by registrations in border counties** (2026-11-18,
   from a live Claude Desktop MCP test). POP107D (localities by domicile): Vaslui municipiu rises
   84,553 (2014) → 148,926 (2023) → 131,722 (2026), a steady climb, not a one-year boundary step; Huși,
