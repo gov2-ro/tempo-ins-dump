@@ -10,8 +10,14 @@ State on 2026-11-19: AQ-08 (chart hints) and AQ-10 ("Din care") are merged on `f
 not deployed. AQ-11 (generation refresh) runs on the copy `~/devbox/gov2/tempo-gen-20261118/data`,
 branch `aq-11-refresh` (brief [11-generation-refresh.md](plans/ask-and-public-mcp/remaining/11-generation-refresh.md);
 owner decisions: drop the 95 `_judet` children, POP107D county variant → `_localitate`, retire the
-TUR105EH note). If its session ended before the record `aq-11-record.md` was committed, resume from the
-copy: stage 12 and the decisions above are applied; check the record or the copy before re-running.
+TUR105EH note). **AQ-11 finished 2026-11-19:** branch `aq-11-refresh` (03d59d7, pushed, not merged),
+record `aq-11-record.md` on that branch. New generation `adc6762a…` in the copy; staged deploy data in
+`~/devbox/gov2/tempo-gen-20261118/deploy-data` (991 MB). Full suite on the copy 2,408 passed, 0 failed;
+strict release check passed. Repeated-key violations 160 → 65 (the 95 `_judet` files gone); `has_time`
+fixed on 339 profiles; chart eval: 43 expected changes (all `has_time`). KPI check not run (needs INS).
+Before deploy, compare the release-check warning `run_recipe registered_unemployment_county`
+`unavailable/query_budget` (public profile) with the served generation. Owner: wait until the other
+agents finish.
 
 - [ ] **P1 — Promote and deploy**, in this order. Stop only if a check fails.
   1. Check the AQ-11 record: 0 repeated keys in county files, spot checks, full pytest and strict
