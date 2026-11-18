@@ -26,6 +26,21 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   and in the new build). `dataset-v2.html?code=SOM101B` asks for `rec/datasets/SOM101B.ro.json.gz` (404)
   and shows no tiles; only the children (`SOM101B_judete`, ...) are served. Redirect a parent code to its
   children, or show a list of them.
+- [ ] **P1 — Correctness: a parent dataset double-counts a "Din care" subset** (AQ-09C sweep Q17,
+  confirmed 2026-11-18). `rank_entities` on LOC104A (dwellings completed), 2023: București = 18,654 =
+  13,834 "Din fonduri private" + 4,820 "Din care: din fondurile populației" (a subset of the first). The
+  split child LOC104A_judete refuses correctly (`source_total_mismatch`), but its recovery proposes the
+  parent, which has no structure check and returns `partial / unverified_total` with the sum. Fix: give
+  the parent the same check (or a general "Din care" subset rule), and never offer an unchecked parent as
+  the recovery for a refused child. Look for other parents with "Din care" options.
+- [ ] **P2 — MCP usability fixes from the AQ-09C sweep** (2026-11-18; 8/20 answered correctly). Record
+  with the ranked causes and 12 proposed fixes:
+  [aq-09c-sweep-baseline.md](plans/ask-and-public-mcp/remaining/aq-09c-sweep-baseline.md). Not yet in a
+  brief: discovery text (a "per capita" measure flagged as unapplied, filler words in the family query,
+  `status: ok` on no match, tourism recipe offered for density, no warning when the asked period exceeds
+  coverage); a named city resolved to its county (Q07); more concepts (life expectancy, infant mortality,
+  dwellings, pupils, exports, EN wage aliases); INS Total cells for non-additive datasets (owner decision);
+  month-to-year sums; a municipii-only class.
 - [ ] **P1 — `rank_entities` refuses to rank rates with one value per entity** (2026-11-18, live Ask
   with DeepSeek: "top 5 județe după PIB per capita și suprafață"). On CON103H_judete (GDP per
   inhabitant) it returned `unsupported_measure` ("additive measures only"). A one-year, county-level
