@@ -153,7 +153,8 @@ are recorded next to each item.
   hierarchy parent needs the re-split, not four. The grain guard refuses every tile, so no wrong figure is
   shown, but 95 dataset pages are empty ("sursa repetă observații cu valori diferite"; owner screenshot
   of AGR101B_judet). Until the re-split: consider hiding these children from search and related lists, or
-  sending their pages to the `_localitate` sibling.
+  sending their pages to the `_localitate` sibling. Brief (with the `has_time` repair):
+  [11-generation-refresh.md](plans/ask-and-public-mcp/remaining/11-generation-refresh.md).
 - [ ] **P2 — Newer-vintage caveat** (AQ-01, owner: ok, "we do the best with what INS offers").
   Births 2024: POP201A 148,916 vs POP201D 157,270. Tool results warn when a sibling table in the same
   concept is newer; discovery prefers the newest. Implemented in `audit/pkg-tools` follow-up; extend to
