@@ -34,7 +34,8 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
 - [ ] **P2 — Discovery finds no concept for GDP per capita by county or county area** (same chat). Six
   `discover_indicators` calls returned 0 reviewed concepts. The model re-worded and used half of its
   12 dispatches. Add reviewed concepts (CON103H for GDP/inhabitant; a county-area source, e.g. AGR101
-  fondul funciar total, which ends in 2014) or a discovery default.
+  fondul funciar total, which ends in 2014) or a discovery default. Brief: AQ-09 part B (plus a
+  20-question MCP sweep, part C).
 - [ ] **P2 — Ask hides a query table that holds the answer** (same chat). `query_data` returned the 42
   county rows for 2022. The page hid them as "a preview that does not answer the ranking", and the final
   text had no ranking. When the rows contain every entity of the requested ranking, show them sorted,
