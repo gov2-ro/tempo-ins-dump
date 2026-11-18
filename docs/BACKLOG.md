@@ -25,6 +25,17 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
 - [ ] **P3 — Cloudflare Page Rule → Configuration Rule.** `api-ins.gov2.ro/*` Browser Integrity Check
   Off is a legacy Page Rule (1 of 3 on the free plan). Move it when Cloudflare retires Page Rules.
 
+## Homepage refresh follow-ups — 2026-11-18
+
+Branch `feat/homepage-refresh` (hero, county tile map, feature band).
+- [ ] **Regenerate the Open Graph image** `app/static/img/landing.png`: it shows the old homepage
+  (no hero, no county map). Referenced by `og:image` and `twitter:image` in `index.html`.
+- [ ] **Stale corpus count in the meta tags**: `index.html` `description`, `og:description` and
+  `twitter:description` say "peste 1900 de seturi"; `/api/corpus/summary` now reports about 3,400
+  datasets (split children included). Decide which count to state, or drop the number.
+- [ ] **Other pages still load `ui-rhythm.css?v=4`**: only `index.html` moved to `v=5`. Harmless now
+  (the changes are home-only), but bump them the next time a shared rule changes.
+
 ## VPS backups — 2026-11-16
 
 - [ ] **P2 — Recurring off-box backup of gov2-1** (owner's server, not only tempo). The 2026-11-16 backup

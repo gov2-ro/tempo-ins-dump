@@ -158,7 +158,8 @@ The measured profile for enabling it on the 512 MB machine is `scripts/deploy/fl
 - **Pages** (`static/`):
   - `dataset-v2.html` + `js/dashboard-v2.js` — main dataset page
   - `index.html` + `js/explore-app.js` — v1 explorer: home, catalog, legacy
-    dataset view (`/?code=`). Still served and maintained
+    dataset view (`/?code=`). Still served and maintained. The home's county tile
+    map (grid, slugs, shading steps) is `js/county-tiles.js`, tested in Node
   - `places.html`/`place.html` + `places-page.js`/`place-page.js` (KPI config
     in `static/data/place_kpi_config.json`), `compare.html` + `compare.js`,
     `ask.html` + `ask.js`, `dimensions-explorer.html` + `dims-explorer.js`

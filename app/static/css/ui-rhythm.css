@@ -310,7 +310,8 @@ button, select, input { font-family: inherit; }
 }
 /* Home: hero (heading, search, figures, county map) and feature band. Off the home view
    (a drilled category, a dataset, About) they are hidden; the topbar search returns there. */
-body:not(.landing-page) .landing-hero, body:not(.landing-page) .landing-band { display: none; }
+body:not(.landing-page) .landing-hero, body:not(.landing-page) .landing-band, body:not(.landing-page) .landing-section-title { display: none; }
+.landing-section-title { font-size: 1.35rem; font-weight: 700; letter-spacing: -.02em; color: var(--text-0); margin: 2.25rem 0 0; }
 .landing-page #search-trigger { display: none; }
 .landing-hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 2rem 3rem; align-items: center; padding: 2.5rem 0 2.25rem; }
 .landing-hero-main { min-width: 0; }

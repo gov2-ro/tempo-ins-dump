@@ -22,6 +22,8 @@ const UI = {
         residents: 'locuitori',
         mapLegend: year => `Populația rezidentă, ${year} · sursa: INS, POP105A`,
         featuresTitle: 'Ce poți face aici',
+        questionsTitle: 'Întrebări de pornire',
+        themesTitle: 'Teme',
         featPlaces: ['Profiluri de județ', 'Populație, salarii, șomaj și natalitate pentru fiecare județ.', 'Toate județele'],
         featRecipes: ['Indicatori gata calculați', 'Indicatori pe județe, cu metoda și sursele la vedere.', 'Compară două seturi'],
         featAsk: ['Întreabă (Ask)', 'Pune o întrebare în limbaj natural; răspunsul vine cu surse.', 'Deschide Ask', 'beta · poate cere propria cheie API'],
@@ -109,6 +111,8 @@ const UI = {
         residents: 'residents',
         mapLegend: year => `Resident population, ${year} · source: INS, POP105A`,
         featuresTitle: 'What you can do here',
+        questionsTitle: 'Starter questions',
+        themesTitle: 'Themes',
         featPlaces: ['County profiles', 'Population, earnings, unemployment and births for every county.', 'All counties'],
         featRecipes: ['Ready-made indicators', 'County indicators with their method and sources in view.', 'Compare two datasets'],
         featAsk: ['Ask', 'Ask a question in plain language; the answer comes with sources.', 'Open Ask', 'beta · may ask for your own API key'],
@@ -252,7 +256,6 @@ class LensApp {
         this.chartConfig = null;
         this.charts = [];       // active ECharts instances
         this.categories = null; // category tree cache
-        this.categoryTrends = null; // trend aggregates per context code
         this.drillStack = [];   // breadcrumb navigation stack
         this.searchIdx = -1;    // keyboard nav index in search results
 
@@ -436,7 +439,6 @@ class LensApp {
             this.applyLang();
             // Clear caches (names depend on lang)
             this.categories = null;
-            this.categoryTrends = null;
             this._sidebarLoaded = false;
             // Re-render sidebar tree if open
             const sidebar = document.getElementById('lens-sidebar');
@@ -492,6 +494,9 @@ class LensApp {
         if (footerNotice) footerNotice.innerHTML = this.ui.noticeText;
         const aboutLink = document.getElementById('about-link');
         if (aboutLink) aboutLink.textContent = this.ui.aboutLink;
+        document.getElementById('search-nav-hint').textContent = this.ui.navigate;
+        document.getElementById('search-open-hint').textContent = this.ui.open;
+        document.getElementById('footer-dims').textContent = this.lang === 'en' ? 'Dimensions' : 'Dimensiuni';
         // Re-render about page if currently shown
         if (!document.getElementById('about-view').classList.contains('hidden')) {
             document.getElementById('about-content').innerHTML = `<div class="about-page">${this.ui.aboutContent}</div>`;
@@ -555,14 +560,12 @@ class LensApp {
         document.getElementById('about-view').classList.add('hidden');
         document.getElementById('back-btn').classList.add('hidden');
 
-        const [catResp, trendsResp, summary] = await Promise.all([
+        const [catResp, summary] = await Promise.all([
             this.categories ? Promise.resolve(null) : API.getCategories({ lang: this.lang }),
-            this.categoryTrends ? Promise.resolve(null) : API.getCategoryTrends(),
             API.getCorpusSummary({ lang: this.lang }),
         ]);
         if (this._overviewVersion !== version) return;
         if (catResp) this.categories = catResp.tree;
-        if (trendsResp) this.categoryTrends = trendsResp.trends;
 
 
         this.headlines = summary.headlines || [];
@@ -750,6 +753,8 @@ class LensApp {
             <div class="landing-figures">${figures.map(([value, label]) =>
                 `<div class="landing-figure"><strong>${_escHtml(value)}</strong><span>${label}</span></div>`).join('')}</div>`;
         main.querySelector('.landing-search').addEventListener('click', () => this.openSearch());
+        document.getElementById('landing-questions-title').textContent = ui.questionsTitle;
+        document.getElementById('landing-themes-title').textContent = ui.themesTitle;
         this.renderCountyMap();
         this.renderCountyPicker();
         this.renderFeatures();
@@ -860,6 +865,9 @@ class LensApp {
         const theme = (this.headlines || []).find(t => t.context_code === cat?.code);
         host.innerHTML = ThemeOverviews.questions(theme?.theme || 'general', this.lang,
             cat && !theme ? ThemeOverviews.clean(cat.name).toLocaleLowerCase() : '');
+        // Home: questions, then the themes heading, nav and grid. A category keeps its nav above the questions.
+        const nav = document.getElementById('theme-nav');
+        if (cat) host.before(nav); else document.getElementById('landing-themes-title').after(nav);
         this.renderThemeNav();
     }
 
@@ -1020,26 +1028,6 @@ class LensApp {
             container.firstElementChild.replaceChildren(...cards.map(card => this.teaserCard(card)));
             container.classList.toggle('hidden', !cards.length);
         } catch { if (this._overviewVersion === version) container.classList.add('hidden'); }
-    }
-
-    _renderTrendIndicator(contextCode) {
-        const trend = this.categoryTrends?.[contextCode];
-        if (!trend || !trend.total) return '';
-        const total = trend.total;
-        const upPct = (trend.up / total * 100).toFixed(0);
-        const dnPct = (trend.down / total * 100).toFixed(0);
-        const yoy = trend.avg_yoy;
-        const yoyStr = yoy != null ? `${yoy >= 0 ? '+' : ''}${yoy.toFixed(1)}%` : '';
-        const yoyCls = yoy >= 0 ? 'up' : 'down';
-        return `
-            <div class="cat-trend">
-                <div class="cat-trend-bar">
-                    <div class="cat-trend-up" style="width:${upPct}%"></div>
-                    <div class="cat-trend-down" style="width:${dnPct}%"></div>
-                </div>
-                ${yoyStr ? `<span class="cat-trend-yoy ${yoyCls}">${yoyStr}</span>` : ''}
-            </div>
-        `;
     }
 
     /** Recursive search for a category by code in the loaded categories tree. */
