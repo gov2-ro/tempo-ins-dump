@@ -21,6 +21,12 @@ const UI = {
         countyProfiles: 'Profiluri de județ',
         residents: 'locuitori',
         mapLegend: year => `Populația rezidentă, ${year} · sursa: INS, POP105A`,
+        featuresTitle: 'Ce poți face aici',
+        featPlaces: ['Profiluri de județ', 'Populație, salarii, șomaj și natalitate pentru fiecare județ.', 'Toate județele'],
+        featRecipes: ['Indicatori gata calculați', 'Indicatori pe județe, cu metoda și sursele la vedere.', 'Compară două seturi'],
+        featAsk: ['Întreabă (Ask)', 'Pune o întrebare în limbaj natural; răspunsul vine cu surse.', 'Deschide Ask', 'beta · poate cere propria cheie API'],
+        featDev: ['Pentru dezvoltatori', 'Acces din cod și din asistenți AI.', 'Documentația API SDMX', 'Server MCP'],
+        featDims: ['Explorator de dimensiuni', 'Vezi ce dimensiuni au seturile și unde se regăsesc.', 'Deschide exploratorul'],
         noticeText: 'Versiune alfa / preview. Acesta nu este un proiect oficial al Guvernului României. Date preluate de pe <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Actualizate recent',
         otherSubcategories: 'Alte subcategorii:',
@@ -102,6 +108,12 @@ const UI = {
         countyProfiles: 'County profiles',
         residents: 'residents',
         mapLegend: year => `Resident population, ${year} · source: INS, POP105A`,
+        featuresTitle: 'What you can do here',
+        featPlaces: ['County profiles', 'Population, earnings, unemployment and births for every county.', 'All counties'],
+        featRecipes: ['Ready-made indicators', 'County indicators with their method and sources in view.', 'Compare two datasets'],
+        featAsk: ['Ask', 'Ask a question in plain language; the answer comes with sources.', 'Open Ask', 'beta · may ask for your own API key'],
+        featDev: ['For developers', 'Access from code and from AI assistants.', 'SDMX API documentation', 'MCP server'],
+        featDims: ['Dimensions explorer', 'See which dimensions the datasets have and where they recur.', 'Open the explorer'],
         noticeText: 'Alpha/preview. This is not an official Romanian Government project. Data sourced from <a href="https://insse.ro" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Recently updated',
         otherSubcategories: 'Other subcategories:',
@@ -740,6 +752,39 @@ class LensApp {
         main.querySelector('.landing-search').addEventListener('click', () => this.openSearch());
         this.renderCountyMap();
         this.renderCountyPicker();
+        this.renderFeatures();
+    }
+
+    /** Home feature band: five tiles that link the site's tools. */
+    async renderFeatures() {
+        const ui = this.ui, lang = this.lang, q = lang === 'en' ? '?lang=en' : '';
+        const icon = d => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+        const link = (href, text, extra = '') => `<a href="${href}"${extra}>${text} →</a>`;
+        const tile = (id, svg, [title, text], links) => `<article class="landing-feature" data-feature="${id}">${icon(svg)}
+            <h3>${title}</h3><p>${text}</p><div class="landing-feature-links">${links}</div></article>`;
+        const origin = String(window.TEMPO_CONFIG?.api_origin || '').replace(/\/$/, '');
+        const host = document.getElementById('landing-features');
+        host.querySelector('h2').textContent = ui.featuresTitle;
+        host.querySelector('.landing-features').innerHTML = [
+            tile('places', '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>', ui.featPlaces,
+                link(`/places${q}`, ui.featPlaces[2])),
+            tile('recipes', '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>', ui.featRecipes,
+                `<span class="landing-recipes"></span>${link(`/compare.html${q}`, ui.featRecipes[2])}`),
+            tile('ask', '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>', ui.featAsk,
+                `${link(`/ask.html${q}`, ui.featAsk[2])}<small>${ui.featAsk[3]}</small>`),
+            tile('developers', '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>', ui.featDev,
+                link('/llms.txt', 'llms.txt') + link('https://github.com/gov2-ro/tempo-ins-dump/blob/main/docs/SDMX-API.md', ui.featDev[2], ' target="_blank" rel="noopener"')
+                + (origin ? `<span>${ui.featDev[3]}: <code>${_escHtml(origin)}/mcp</code></span>` : '')),
+            tile('dimensions', '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>', ui.featDims,
+                link(`/dimensions-explorer.html${q}`, ui.featDims[2])),
+        ].join('');
+        try {
+            const { recipes = [] } = await API.fetch('/recipes', { lang });
+            const slot = host.querySelector('.landing-recipes');
+            if (this.lang !== lang || !slot) return;
+            slot.innerHTML = recipes.map(r => link(`/compare.html?recipe=${encodeURIComponent(r.id)}${lang === 'en' ? '&lang=en' : ''}`,
+                _escHtml(String(r.name || r.id).replace(/\s*\(.*\)\s*$/, '')))).join('');
+        } catch (e) { console.warn('Recipes unavailable:', e); }
     }
 
     /** County tile map: each tile links to its county profile; shaded by resident
@@ -835,10 +880,6 @@ class LensApp {
         all.href = `/${en ? '?lang=en' : ''}#category-grid`;
         all.textContent = en ? 'All themes ↓' : 'Toate temele ↓';
         nav.appendChild(all);
-        const dims = document.createElement('a');
-        dims.href = `/dimensions-explorer.html${en ? '?lang=en' : ''}`;
-        dims.textContent = en ? 'Dimensions ↗' : 'Dimensiuni ↗';
-        nav.appendChild(dims);
     }
 
     teaserCard(ind) {

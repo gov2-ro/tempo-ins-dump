@@ -344,6 +344,21 @@ body:not(.landing-page) .landing-hero, body:not(.landing-page) .landing-band { d
 .landing-legend-note { margin-top: .3rem; }
 .landing-county { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .5rem 1rem; }
 .landing-county a { font-size: .9rem; font-weight: 600; color: var(--accent); }
+/* Feature band: full-bleed --bg-1 strip (a shadow paints past the container, clip-path keeps its height). */
+.landing-band { background: var(--bg-1); box-shadow: 0 0 0 100vmax var(--bg-1); clip-path: inset(0 -100vmax); padding: 2rem 0 2.25rem; border-block: 1px solid var(--border); }
+.landing-band-title { font-size: 1.35rem; font-weight: 700; letter-spacing: -.02em; color: var(--text-0); margin: 0 0 1.25rem; }
+.landing-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 1rem; }
+.landing-feature { display: flex; flex-direction: column; gap: .5rem; min-width: 0; padding: 1.1rem 1.15rem 1.2rem; background: var(--bg-0); border: 1px solid var(--border); border-radius: var(--radius); }
+.landing-feature > svg { color: var(--accent); }
+.landing-feature h3 { margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-0); }
+.landing-feature p { margin: 0; font-size: .85rem; line-height: 1.5; color: var(--text-1); }
+.landing-feature-links { display: flex; flex-direction: column; align-items: flex-start; gap: .35rem; margin-top: auto; padding-top: .35rem; font-size: .85rem; }
+.landing-feature-links a { color: var(--accent); font-weight: 600; }
+.landing-feature-links a:hover { text-decoration: underline; text-underline-offset: .2em; }
+.landing-recipes { display: contents; }
+.landing-recipes a { font-weight: 500; }
+.landing-feature-links small, .landing-feature-links span { font-size: .75rem; color: var(--text-2); }
+.landing-feature-links code { user-select: all; overflow-wrap: anywhere; color: var(--text-1); }
 @media (max-width: 1024px) { .landing-hero { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 640px) {
     .landing-hero { padding: 1.5rem 0 1.5rem; }
