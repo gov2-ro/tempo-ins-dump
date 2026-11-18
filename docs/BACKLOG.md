@@ -26,7 +26,8 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   and in the new build). `dataset-v2.html?code=SOM101B` asks for `rec/datasets/SOM101B.ro.json.gz` (404)
   and shows no tiles; only the children (`SOM101B_judete`, ...) are served. Redirect a parent code to its
   children, or show a list of them.
-- [ ] **P1 — Correctness: a parent dataset double-counts a "Din care" subset** (AQ-09C sweep Q17,
+- [x] **P1 — Correctness: a parent dataset double-counts a "Din care" subset** (fixed by AQ-10, merged
+  2026-11-18, not deployed; [record](plans/ask-and-public-mcp/remaining/aq-10-record.md)) (AQ-09C sweep Q17,
   confirmed 2026-11-18). `rank_entities` on LOC104A (dwellings completed), 2023: București = 18,654 =
   13,834 "Din fonduri private" + 4,820 "Din care: din fondurile populației" (a subset of the first). The
   split child LOC104A_judete refuses correctly (`source_total_mismatch`), but its recovery proposes the
@@ -86,6 +87,13 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   Off is a legacy Page Rule (1 of 3 on the free plan). Move it when Cloudflare retires Page Rules.
 
 ## AQ-10 follow-ups — 2026-11-18
+
+- [ ] **P1 — Indentation cue never sees the indentation** (found in AQ-10 review, 2026-11-18).
+  `aggregation_policy.label_hierarchy_cues` and `_unprofiled_partition` judge the data value first
+  (`dv if dv is not None else label`), and the parquet values are trimmed: 60 of 60 checked datasets with
+  indented INS labels (400 dimensions have them) keep no indentation in the parquet. A label-encoded tree
+  without a verified level is then summed whole (the AGENTS.md "label-encoded hierarchies" gotcha). Fix:
+  judge the cue on the metadata label as well; run an impact report as in AQ-10 before the change.
 
 - [ ] **P1 — After merging `aq-10-din-care`: deploy the API and rebuild the static site.** The recorded `rec/`
   answers change for about 84 datasets (LOC104-107, AGR111A-116A, AGR201A-203A, POP206, SAN102B/104A/105A and others).
