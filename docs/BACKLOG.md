@@ -4,6 +4,33 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## NEXT — Promote AQ-11 and deploy AQ-08 + AQ-10 (owner: approved 2026-11-19, after the other agents finish)
+
+State on 2026-11-19: AQ-08 (chart hints) and AQ-10 ("Din care") are merged on `fix/ask-answer-quality`,
+not deployed. AQ-11 (generation refresh) runs on the copy `~/devbox/gov2/tempo-gen-20261118/data`,
+branch `aq-11-refresh` (brief [11-generation-refresh.md](plans/ask-and-public-mcp/remaining/11-generation-refresh.md);
+owner decisions: drop the 95 `_judet` children, POP107D county variant → `_localitate`, retire the
+TUR105EH note). If its session ended before the record `aq-11-record.md` was committed, resume from the
+copy: stage 12 and the decisions above are applied; check the record or the copy before re-running.
+
+- [ ] **P1 — Promote and deploy**, in this order. Stop only if a check fails.
+  1. Check the AQ-11 record: 0 repeated keys in county files, spot checks, full pytest and strict
+     `release-check.py --local --stage` passed.
+  2. Merge `aq-11-refresh` into `fix/ask-answer-quality`; push.
+  3. Move the current `data/corpus` (generation `062bd2b0`) to `data/_archive/` (rollback); put the new
+     generation in place.
+  4. API: `prepare-deploy-data.sh`, then `scripts/deploy/hetzner/deploy.sh pax@78.46.142.169` (dry run),
+     then `--apply` (smoke on a spare port, automatic swap-back). Ships AQ-08, AQ-10 and the data.
+  5. Static: `build-static.py --api-origin https://api-ins.gov2.ro`, `release-check.py --static` with
+     API cases, `deploy-static.sh _static --go` (keeps two releases).
+  6. Live checks: `mcp_probe.py https://api-ins.gov2.ro POP112A_grupe`; CON103H and LOC104A cases;
+     a chart hint in Claude Desktop; browser smoke of v1, v2, place and Ask pages.
+  - Rollback: VPS `current` → previous release; DreamHost `current` → previous release; restore the
+    archived corpus.
+- [ ] **P3 — Redirect removed `_judet` pages.** All 95 removed codes are in the served `sitemap.xml`. Old
+  `dataset-v2.html?code=X_judet` links should go to the `_localitate` sibling (static: `.htaccess` or the
+  page's missing-dataset path).
+
 ## NEXT — HZ-3 on the Hetzner VPS — 2026-11-17
 
 `api-ins.gov2.ro` (API, Ask, `/mcp`) runs on the VPS since 2026-11-16 23:50 UTC (HZ-2 and the HZ-4
