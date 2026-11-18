@@ -9,9 +9,14 @@
 // ---------------------------------------------------------------------------
 const UI = {
     ro: {
-        browseTitle: 'Date statistice România',
-        browseSub: (n, obs) => `${n} seturi de date · ${obs} observații`,
-        browseTagline: 'Tempo INS, da nițel mai drăgu\'',
+        heroTitle: 'Statistica oficială a României, mai ușor de explorat',
+        heroLead: 'Seturile de date INS Tempo, cu grafice, profiluri de județ și descărcări.',
+        heroSearch: 'Caută: populație, șomaj, salarii…',
+        heroDatasets: 'seturi de date',
+        heroObservations: 'valori',
+        heroSpan: 'ani acoperiți',
+        countyPick: 'Alege un județ',
+        countyPlaceholder: 'Județ…',
         noticeText: 'Versiune alfa / preview. Acesta nu este un proiect oficial al Guvernului României. Date preluate de pe <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Actualizate recent',
         otherSubcategories: 'Alte subcategorii:',
@@ -81,9 +86,14 @@ const UI = {
         `,
     },
     en: {
-        browseTitle: 'Romanian Statistical Data',
-        browseSub: (n, obs) => `${n} datasets · ${obs} observations`,
-        browseTagline: 'Tempo INS, but nicer',
+        heroTitle: "Romania's official statistics, easier to explore",
+        heroLead: 'The INS Tempo datasets, with charts, county profiles and downloads.',
+        heroSearch: 'Search: population, unemployment, wages…',
+        heroDatasets: 'datasets',
+        heroObservations: 'values',
+        heroSpan: 'years covered',
+        countyPick: 'Choose a county',
+        countyPlaceholder: 'County…',
         noticeText: 'Alpha/preview. This is not an official Romanian Government project. Data sourced from <a href="https://insse.ro" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Recently updated',
         otherSubcategories: 'Other subcategories:',
@@ -538,8 +548,8 @@ class LensApp {
         this.headlines = summary.headlines || [];
         this.recentlyUpdated = summary.recently_updated || [];
         this.renderNoticeBar();
-        this.renderBrowseHeader(summary.corpus);
-        this.renderEntryPoints();
+        this.renderHero(summary.corpus);
+        this.renderQuestions();
 
         document.getElementById('page-loader')?.classList.add('hidden');
         this.showCategoryGrid();
@@ -702,37 +712,48 @@ class LensApp {
         };
     }
 
-    /** General questions at home; a theme's questions live on its profile. */
-    async renderEntryPoints() {
-        const ro = this.lang !== 'en';
-        this.renderQuestions();
-        let toolbar = document.getElementById('landing-tools');
-        if (!toolbar) {
-            toolbar = document.createElement('div');
-            toolbar.id = 'landing-tools';
-            toolbar.className = 'landing-tools';
-            document.getElementById('search-trigger').after(toolbar);
-        }
-        toolbar.innerHTML = `<span class="corpus-compact" id="corpus-compact"></span>
-            <select id="entry-county" aria-label="${ro ? 'Alege un județ' : 'Choose a county'}"><option value="">${ro ? 'Județ…' : 'County…'}</option></select>
-            <a href="/dimensions-explorer.html${ro ? '' : '?lang=en'}">${ro ? 'Dimensiuni' : 'Dimensions'} ↗</a>`;
-        this.renderBrowseHeader(this.corpus);
-        const sel = document.getElementById('entry-county');
-        sel.addEventListener('change', () => {
-            if (sel.value) location.href = `/place/county/${sel.value}${ro ? '' : '?lang=en'}`;
-        });
-        try {
-            const resp = await API.fetch('/places');
-            sel.insertAdjacentHTML('beforeend', (resp.places || []).filter(p => p.type === 'county')
-                .sort((a, b) => a.name.localeCompare(b.name, 'ro')).map(p =>
-                    `<option value="${_escHtml(p.slug)}">${_escHtml(p.name)}</option>`).join(''));
-        } catch (e) { console.warn('Places unavailable:', e); }
+    /** Home hero: heading, a search field that opens the search overlay, corpus figures. */
+    renderHero(corpus) {
+        const ui = this.ui;
+        const span = corpus?.time_span;
+        const figures = corpus ? [
+            [formatNumber(corpus.datasets, 0), ui.heroDatasets],
+            [formatCompact(corpus.observations, this.lang), ui.heroObservations],
+            [span?.min && span?.max ? `${span.min}–${span.max}` : '—', ui.heroSpan],
+        ] : [];
+        const main = document.querySelector('#landing-hero .landing-hero-main');
+        main.innerHTML = `<h1 class="landing-title">${ui.heroTitle}</h1>
+            <p class="landing-lead">${ui.heroLead}</p>
+            <button type="button" class="landing-search">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>${ui.heroSearch}</span><kbd>/</kbd></button>
+            <div class="landing-figures">${figures.map(([value, label]) =>
+                `<div class="landing-figure"><strong>${_escHtml(value)}</strong><span>${label}</span></div>`).join('')}</div>`;
+        main.querySelector('.landing-search').addEventListener('click', () => this.openSearch());
+        this.renderCountyPicker();
     }
 
-    renderBrowseHeader(corpus) {
-        this.corpus = corpus;
-        const compact = document.getElementById('corpus-compact');
-        if (compact && corpus) compact.textContent = `${formatNumber(corpus.datasets, 0)} ${this.lang === 'ro' ? 'seturi' : 'datasets'} · ${formatNumber(corpus.observations, 0)} ${this.lang === 'ro' ? 'obs.' : 'rows'}`;
+    /** The places list, fetched once (names do not depend on the language). */
+    places() {
+        this._places ||= API.fetch('/places').then(r => (r.places || []).filter(p => p.type === 'county'))
+            .catch(e => { this._places = null; throw e; });
+        return this._places;
+    }
+
+    /** County picker under the map: the fallback for small screens. */
+    async renderCountyPicker() {
+        const en = this.lang === 'en';
+        const host = document.querySelector('#landing-hero .landing-county');
+        host.innerHTML = `<select aria-label="${this.ui.countyPick}"><option value="">${this.ui.countyPlaceholder}</option></select>`;
+        const sel = host.querySelector('select');
+        sel.addEventListener('change', () => {
+            if (sel.value) location.href = `/place/county/${encodeURIComponent(sel.value)}${en ? '?lang=en' : ''}`;
+        });
+        try {
+            const counties = await this.places();
+            sel.insertAdjacentHTML('beforeend', [...counties].sort((a, b) => a.name.localeCompare(b.name, 'ro'))
+                .map(p => `<option value="${_escHtml(p.slug)}">${_escHtml(p.name)}</option>`).join(''));
+        } catch (e) { console.warn('Places unavailable:', e); }
     }
 
     renderQuestions(cat = null) {

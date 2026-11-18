@@ -31,7 +31,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/explore.css?v=44">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-    <link rel="stylesheet" href="/css/ui-rhythm.css?v=4">
+    <link rel="stylesheet" href="/css/ui-rhythm.css?v=5">
     <script src="/js/ui-preferences.js?v=3" defer></script>
 </head>
 <body>
@@ -110,6 +110,13 @@
 
         <!-- Browse view -->
         <section id="browse-view" class="browse-view">
+            <!-- Home only (hidden on a drilled category): heading, search, figures, county map -->
+            <header id="landing-hero" class="landing-hero">
+                <div class="landing-hero-main"></div>
+                <div class="landing-hero-map">
+                    <div class="landing-county"></div>
+                </div>
+            </header>
             <nav class="theme-nav" id="theme-nav" aria-label="Teme"></nav>
             <div class="entry-points" id="entry-points"></div>
             <!-- Categories with their themes: chart previews, subsections, recent updates -->
@@ -205,7 +212,7 @@
     <script src="/js/chart-new-types.js?v=36"></script>
     <script src="/js/chart-geo.js?v=23"></script>
     <script src="/js/chart-demographic.js?v=26"></script>
-    <script src="/js/explore-app.js?v=107"></script>
+    <script src="/js/explore-app.js?v=108"></script>
 <style>
     #page-loader {
         display: flex;
