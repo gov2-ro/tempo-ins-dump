@@ -88,6 +88,12 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
 
 ## AQ-10 follow-ups — 2026-11-18
 
+- [ ] **P3 — Revisit the sums AQ-10 now refuses** (owner, 2026-11-18: "do as you suggest, keep it to
+  maybe revisit"). 84 datasets lost 232 default sums (whole AGR and SAN families; LOC104A/C, LOC105A,
+  LOC106A, LOC107A lose 2-3 tiles). Accepted as double counts. Options to revisit: an explicit "drop the
+  subset and sum the rest" rule (owner decision), or a refusal message that names the non-subset options
+  (`utils.js`, `ask.js`). List: [aq-10-record.md](plans/ask-and-public-mcp/remaining/aq-10-record.md).
+
 - [ ] **P1 — Indentation cue never sees the indentation** (found in AQ-10 review, 2026-11-18).
   `aggregation_policy.label_hierarchy_cues` and `_unprofiled_partition` judge the data value first
   (`dv if dv is not None else label`), and the parquet values are trimmed: 60 of 60 checked datasets with
