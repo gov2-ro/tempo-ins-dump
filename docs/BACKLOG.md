@@ -146,6 +146,14 @@ are recorded next to each item.
   POP201D_judet, POP201K_judet and SOM101E_anual_judet keep one row per locality after dropping
   REF_AREA_2. New rule: aggregate only with a verified additive measure, otherwise skip the child.
   Regenerate those four parents' children on a copied generation and re-run the grain audit.
+  **Scope is larger (scan of 2026-11-18): all 95 `*_judet` files in the served generation have
+  repeated keys** (e.g. AGR101B_judet: 2,416 repeated key groups, about 114 rows per county = one per
+  locality; also AGR108B/109B/112B/115B/201B/202B, ART1xx, FOM104D, GOS1xx, JUS105C, LOC101B/103B/104B/108B
+  …). The code fix (`94be06f`, 2026-11-08) postdates the served generation (built 2026-10-14), so every
+  hierarchy parent needs the re-split, not four. The grain guard refuses every tile, so no wrong figure is
+  shown, but 95 dataset pages are empty ("sursa repetă observații cu valori diferite"; owner screenshot
+  of AGR101B_judet). Until the re-split: consider hiding these children from search and related lists, or
+  sending their pages to the `_localitate` sibling.
 - [ ] **P2 — Newer-vintage caveat** (AQ-01, owner: ok, "we do the best with what INS offers").
   Births 2024: POP201A 148,916 vs POP201D 157,270. Tool results warn when a sibling table in the same
   concept is newer; discovery prefers the newest. Implemented in `audit/pkg-tools` follow-up; extend to
