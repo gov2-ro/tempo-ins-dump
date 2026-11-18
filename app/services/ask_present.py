@@ -7,7 +7,9 @@ one into the other and nothing else:
   ({matrix_code, columns, rows, row_count, truncated, status, aggregation, quality,
   generation, scope, warnings, links, ...}). A change ranking or a recipe is rendered as a
   bounded table of its own rows; no chart role is invented for it and two geographic series
-  are never merged (the page draws a chart only from a query_data table with a chart spec).
+  are never merged. A query_data table is charted from the dataset's chart spec; a ranking, a change
+  ranking or a recipe is charted from the result's own `data.chart` hint (AQ-08), translated here
+  into the table's column names (``table["chart"]``). The page draws nothing the hint does not say.
 * ``citations`` — datasets the turn used, each with what its queries were allowed to claim.
 * ``qualifications`` — the discovery warnings that change what the displayed numbers mean and that
   the data results do not repeat (the definition a default assumed), so the page can list them
@@ -50,7 +52,51 @@ def _warning_texts(env: dict) -> list[str]:
     return [w.get("message", "") for w in env.get("warnings") or [] if w.get("message")]
 
 
+# hint field (a dotted path in a result row) -> column of the display table, per tool
+_HINT_COLUMNS = {
+    "rank_entities": {"value": "OBS_VALUE"},
+    "compare_periods": {"percent": "PERCENT", "absolute": "ABSOLUTE"},
+    "run_recipe": {"label": "LABEL", "value": "VALUE"},
+}
+
+
+def chart_of(tool: str, env: dict, columns: list | None) -> dict | None:
+    """The result's chart hint, in the display table's column names, or None.
+
+    query_data keeps the dataset chart spec (`chart_dataset`). For the other tools the hint is the
+    only source of a chart: it is used as the tool gave it (type, sort, unit, title, link) with its
+    row fields mapped to columns that really exist in the table; a hint that cannot be mapped is
+    dropped rather than guessed."""
+    hint = (env.get("data") or {}).get("chart")
+    if tool == "query_data" or not isinstance(hint, dict) or hint.get("type") not in ("bar", "line"):
+        return None
+
+    def column(field):
+        if not isinstance(field, str):
+            return None
+        name = field[len("entity."):] if field.startswith("entity.") else _HINT_COLUMNS.get(tool, {}).get(field)
+        return name if name in (columns or []) else None
+    x, y = column(hint.get("x")), column(hint.get("y"))
+    if x is None or y is None:
+        return None
+    return {"type": hint["type"], "x": x, "y": y, "series": None, "sort": hint.get("sort"),
+            "unit": hint.get("unit"), "title": hint.get("title"), "url": hint.get("url"),
+            "url_note": hint.get("url_note")}
+
+
 def display_table(trace: list[dict], lang: str = "ro") -> dict | None:
+    """The page's `data` for the last result that returned values, or None; a ranking, change
+    ranking or recipe also carries `chart` (see `chart_of`)."""
+    table = _table(trace, lang)
+    e = last_data_entry(trace) if table is not None else None
+    if e is not None:
+        chart = chart_of(e["tool"], e["output"], table.get("columns"))
+        if chart:
+            table["chart"] = chart
+    return table
+
+
+def _table(trace: list[dict], lang: str = "ro") -> dict | None:
     """The page's `data` for the last result that returned values, or None. `lang` is the language
     of the texts this module adds (the tools' own follow the language they were called with)."""
     e = last_data_entry(trace)

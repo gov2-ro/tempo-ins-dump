@@ -39,7 +39,7 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   county rows for 2022. The page hid them as "a preview that does not answer the ranking", and the final
   text had no ranking. When the rows contain every entity of the requested ranking, show them sorted,
   or let the model sort them.
-- [ ] **P1 — AQ-08: chart hints and chart links in tool results** (owner decision 2026-11-18). Brief:
+- [x] **P1 — AQ-08: chart hints and chart links in tool results** (built on branch `aq-08-chart-hints` 2026-11-18, not merged; record `aq-08-record.md`). Brief:
   [08-chart-hints.md](plans/ask-and-public-mcp/remaining/08-chart-hints.md). A `data.chart` hint for MCP
   clients and the Ask page; the link opens dataset-v2 with the selection preselected.
 - [ ] **P3 — MCP Apps: an interactive chart inside Claude/ChatGPT** (after AQ-08). The MCP Apps

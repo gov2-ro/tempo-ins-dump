@@ -124,6 +124,16 @@ def _url(path: str, params: list[tuple[str, str]]) -> str:
     return C.public_url(f"{path}?{urlencode(params, quote_via=quote)}")
 
 
+def recipe_page_url(recipe: str, year, areas, lang: str) -> str:
+    """The recipe comparison page for a year and areas (also the chart link of `run_recipe`)."""
+    params = [("recipe", recipe), ("year", year)]
+    if areas:
+        params.append(("areas", C.dumps(areas)))
+    if lang == "en":
+        params.append(("lang", "en"))
+    return _url("/compare.html", params)
+
+
 def _link(kind: str, url: str, description: str, mode: str) -> dict:
     return {"kind": kind, "url": url, "description": description, "generation_mode": mode}
 
@@ -247,7 +257,7 @@ def _recipe(ctx, sel, gid: str):
     base = [("year", sel.year)] + ([("areas", aj)] if aj else []) + ([("lang", "en")] if lang == "en" else [])
     rid = quote(sel.recipe, safe="")
     links = [
-        _link("dataset", _url("/compare.html", [("recipe", sel.recipe), *base]),
+        _link("dataset", recipe_page_url(sel.recipe, sel.year, areas, lang),
               tx["recipe_page"], "live_rerun"),
         _link("live_selection", _url(f"/api/recipes/{rid}", base), tx["live_recipe"], "live_rerun"),
         _link("evidence", _url(f"/api/recipes/{rid}/evidence", base + [("expected_generation", gid)]),

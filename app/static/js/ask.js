@@ -655,6 +655,81 @@ function renderChart(data, chartSpec) {
     return container;
 }
 
+/** A bar chart from a tool's chart hint (AQ-08): `data.chart` names the display-table columns
+ *  (x = entity label, y = value) and the order. Nothing is computed here: the bars are the table's
+ *  own rows, sorted as the hint says, with the hint's link to the dataset page under them.
+ *  Returns null (and draws nothing) for anything but a bar hint over columns that exist. */
+function renderHintChart(data) {
+    const hint = data && data.chart;
+    if (!hint || hint.type !== 'bar' || !Array.isArray(data.columns) || !Array.isArray(data.rows)) return null;
+    const xi = data.columns.indexOf(hint.x);
+    const yi = data.columns.indexOf(hint.y);
+    if (xi === -1 || yi === -1 || data.rows.length === 0) return null;
+    let points = data.rows
+        .map(r => ({ name: String(r[xi] ?? '').trim(), value: r[yi] == null ? null : Number(r[yi]) }))
+        .filter(p => p.value !== null && Number.isFinite(p.value));
+    if (!points.length) return null;
+    if (hint.sort === 'desc') points = points.sort((a, b) => b.value - a.value);
+    else if (hint.sort === 'asc') points = points.sort((a, b) => a.value - b.value);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'chat-hint-chart';
+    if (hint.title) {
+        const title = document.createElement('div');
+        title.className = 'chat-chart-note';
+        title.textContent = hint.title;
+        wrap.appendChild(title);
+    }
+    const container = document.createElement('div');
+    container.className = 'chat-chart';
+    container.style.height = `${Math.max(240, 40 + points.length * 22)}px`;   // one readable row per bar
+    wrap.appendChild(container);
+
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+    const axis = isDark ? '#9ca3af' : '#6b7280';
+    const fmt = v => Number(v).toLocaleString(isRo() ? 'ro-RO' : 'en-US', { maximumFractionDigits: 2 });
+    const option = {
+        backgroundColor: 'transparent',
+        textStyle: { color: isDark ? '#c8ccd4' : '#374151' },
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' },
+                   valueFormatter: v => fmt(v) + (hint.unit ? ` ${hint.unit}` : '') },
+        grid: { left: 8, right: 24, top: 8, bottom: 8, containLabel: true },
+        xAxis: { type: 'value', axisLabel: { color: axis, fontSize: 11 },
+                 splitLine: { lineStyle: { color: isDark ? '#1f2937' : '#f3f4f6' } } },
+        // the first row of a sorted ranking is the top bar
+        yAxis: { type: 'category', inverse: true, data: points.map(p => p.name),
+                 axisLabel: { color: axis, fontSize: 11, width: 170, overflow: 'truncate' } },
+        series: [{ type: 'bar', data: points.map(p => p.value), color: '#818cf8' }],
+    };
+    requestAnimationFrame(() => {
+        try {
+            echarts.init(container).setOption(option);
+        } catch (e) {
+            console.warn('Chart render failed:', e);
+        }
+    });
+
+    const href = hint.url ? safeHref(hint.url) : null;
+    if (href) {
+        const links = document.createElement('div');
+        links.className = 'chat-links';
+        const a = document.createElement('a');
+        a.href = href;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = tr('Deschide în pagina setului de date', 'Open on the dataset page');
+        links.appendChild(a);
+        wrap.appendChild(links);
+        if (hint.url_note) {
+            const note = document.createElement('div');
+            note.className = 'chat-chart-note';
+            note.textContent = hint.url_note;
+            wrap.appendChild(note);
+        }
+    }
+    return wrap;
+}
+
 // ---------------------------------------------------------------------------
 // Message rendering
 // ---------------------------------------------------------------------------
@@ -771,7 +846,9 @@ function buildAssistantResponse(result) {
     if (tableEl) div.appendChild(tableEl);
 
     // Chart
-    const chartEl = renderChart(result.data, result.chart_spec);
+    // a ranking, change ranking or recipe is drawn from its own chart hint; a query_data table from
+    // the dataset's chart spec
+    const chartEl = renderHintChart(result.data) || renderChart(result.data, result.chart_spec);
     if (chartEl) div.appendChild(chartEl);
 
     // Tool trace (collapsible)
