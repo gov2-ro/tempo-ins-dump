@@ -1,7 +1,7 @@
 # Homepage refresh — handoff (2026-11-18)
 
 Spec: [plan.md](plan.md) (copied from the planning session). Branch `feat/homepage-refresh`, cut from
-`main` at `bf91fbf`. Nothing is merged, pushed or deployed. The work was started on the production
+`main` at `bf91fbf`. The branch is pushed; nothing is merged or deployed. The work was started on the production
 VPS and moved here; read "Machine-specific" before re-running anything.
 
 ## State
@@ -11,21 +11,40 @@ VPS and moved here; read "Machine-specific" before re-running anything.
 | 1. Hero: h1, lead, search field, three figures; topbar strip removed | done | `e107632` |
 | 2. County tile map (`js/county-tiles.js`), shading, legend, picker | done | `d67d45c` |
 | 3. Feature band (five tiles) | done | `49941c3` |
-| 4. Headings, order, cleanup, pre-paint theme, RO defaults, docs | code done; verification incomplete | `55ff4a3` |
+| 4. Headings, order, cleanup, pre-paint theme, RO defaults, docs | done; verified 2026-11-19 (Mac) | `55ff4a3` |
 
-Remaining (all in chunk 4):
-- **Full `pytest` run**: not completed. The run on the VPS was stopped before its summary line (it
-  ran > 12 min on 2 cores, mostly the static parity tests). Run `python -m pytest tests -q` and
-  compare any failure with `main`.
-- **`tests/browser/audit_layout.py --shots DIR`** (app on :8097): not run. Only ad-hoc Playwright
-  screenshots were taken (see "Browser checks").
-- **Static mode in a browser**: not done. A small static build was made (`build-static.py --codes
-  POP107A --api-origin http://localhost:8097`, exit 0) but never served or opened. See "Static build".
-- **Manual checks not done**: the `/` keyboard shortcut, the language and theme toggles redrawing
-  the hero and map in place, clicking a tile through to the profile, `/?q=somaj`.
-- **`docs/activity-history.md` entry**: not written. The plan says to add it last, after rebasing on
-  `main` (everyone edits that file).
+The branch is pushed (`origin/feat/homepage-refresh`). It is not merged or deployed.
+
+Remaining:
+- **Rebase on `main`**: not done, because the branch is already on `origin`. The owner decides
+  between a rebase with a force push and a merge of `main`. `main` has 6 commits after `bf91fbf`
+  (About MCP/BYOK sections, deploy-static); they touch `explore-app.js` (`UI.*.aboutHtml`) and
+  `explore.css` only.
+- **`docs/activity-history.md` entry**: not written. Add it after the rebase or merge decision
+  (everyone edits that file).
 - Copy wording is a proposal for the owner (see "Owner decisions").
+
+## Verification on the Mac (2026-11-19)
+
+- **Full suite**: `2378 passed, 34 skipped, 7 warnings in 826.26s` (exit 0).
+- **`tests/browser/audit_layout.py --shots DIR`** (app on :8097): all 8 home runs OK (320, 390, 768,
+  1440 px; RO light and EN dark). Four other runs fail, and they fail on `main` too:
+  `v1-POP107A` and `v1-long` at 320 EN dark (`.dim-picker-select` with English labels, scrollWidth 332)
+  and `v2-POP107A` at 320 (scrollWidth 321). To compare with a `main` worktree, link
+  `data/2-metas` into it: `dataset_meta._EN_METAS_DIR` reads the checkout's `data/2-metas/en`, not
+  `TEMPO_DATA_DIR`, so without it English labels fall back to Romanian.
+- **Static mode** (`build-static.py --codes POP107A --api-origin http://localhost:8097`, served by
+  `tools/static-engine/serve.py`): RO and EN, light and dark, 390 and 1440 px. Hero figures
+  3.376 / 149 mil. (149M) / 1901–2026, 42 shaded tiles with a 4-step legend, five feature tiles,
+  the MCP line, no horizontal scroll, no `/api` request. The only errors are 20 404s per load for
+  `rec/insights/*` and `rec/datasets/CON104*`: the theme cards ask for datasets that a
+  `--codes POP107A` build does not record. A full build records them.
+- **Manual checks** (server mode, Playwright): `/` opens the search overlay and focuses
+  `#search-input` (a `/` typed into another input or a select stays there). The language and theme
+  toggles redraw the hero, map and legend with no reload; the steps stay the same, the colours
+  follow the theme. Tile clicks (and Enter on a focused tile) reach `/place/county/cluj` and
+  `/place/county/municipiul-bucuresti`. `/?q=somaj` opens the overlay with the query and 15 results
+  over the hero, as on `main` (same `openSearch(q)` call).
 
 ## What was verified against code and data (the plan left these open)
 
@@ -97,7 +116,7 @@ Remaining (all in chunk 4):
 - `tests/test_county_tiles.py` (new): `9 passed, 1 skipped` without the corpus; with it
   `10 passed, 3 warnings` (FastAPI `regex` deprecation warnings, pre-existing). The corpus test
   checks tile slugs against `/api/places` and population area names (Python and JS `slugify`).
-- Full suite: **not completed** (see Remaining).
+- Full suite: passed on 2026-11-19 (see "Verification on the Mac").
 
 ## Browser checks done (Playwright, app on :8097, server mode only)
 
@@ -108,7 +127,7 @@ Remaining (all in chunk 4):
 - `/api/reference/population` and `/api/recipes` blocked: map unshaded without legend, recipes tile
   shows only the Compare link, no page error.
 - No request to `/api/categories/trends` on home.
-- Static mode: **not exercised in a browser**, only reasoned about (routes listed above).
+- Static mode: exercised on 2026-11-19 (see "Verification on the Mac").
 
 ## Owner decisions
 
