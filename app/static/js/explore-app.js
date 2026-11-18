@@ -17,6 +17,10 @@ const UI = {
         heroSpan: 'ani acoperiți',
         countyPick: 'Alege un județ',
         countyPlaceholder: 'Județ…',
+        countyProfile: 'profil de județ',
+        countyProfiles: 'Profiluri de județ',
+        residents: 'locuitori',
+        mapLegend: year => `Populația rezidentă, ${year} · sursa: INS, POP105A`,
         noticeText: 'Versiune alfa / preview. Acesta nu este un proiect oficial al Guvernului României. Date preluate de pe <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Actualizate recent',
         otherSubcategories: 'Alte subcategorii:',
@@ -94,6 +98,10 @@ const UI = {
         heroSpan: 'years covered',
         countyPick: 'Choose a county',
         countyPlaceholder: 'County…',
+        countyProfile: 'county profile',
+        countyProfiles: 'County profiles',
+        residents: 'residents',
+        mapLegend: year => `Resident population, ${year} · source: INS, POP105A`,
         noticeText: 'Alpha/preview. This is not an official Romanian Government project. Data sourced from <a href="https://insse.ro" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Recently updated',
         otherSubcategories: 'Other subcategories:',
@@ -730,7 +738,51 @@ class LensApp {
             <div class="landing-figures">${figures.map(([value, label]) =>
                 `<div class="landing-figure"><strong>${_escHtml(value)}</strong><span>${label}</span></div>`).join('')}</div>`;
         main.querySelector('.landing-search').addEventListener('click', () => this.openSearch());
+        this.renderCountyMap();
         this.renderCountyPicker();
+    }
+
+    /** County tile map: each tile links to its county profile; shaded by resident
+     *  population when every tile has a value for one common year, otherwise unshaded. */
+    async renderCountyMap() {
+        const lang = this.lang;
+        const map = document.querySelector('#landing-hero .landing-map');
+        const legend = document.querySelector('#landing-hero .landing-map-legend');
+        map.setAttribute('aria-label', this.ui.countyProfiles);
+        legend.replaceChildren();
+        let counties;
+        try { counties = await this.places(); } catch { map.replaceChildren(); return; }
+        if (this.lang !== lang) return;
+        const names = new Map(counties.map(p => [p.slug, p.name]));
+        const q = lang === 'en' ? '?lang=en' : '';
+        map.innerHTML = Object.entries(CountyTiles.TILES).filter(([, [slug]]) => names.has(slug))
+            .map(([code, [slug, col, row]]) => {
+                const label = _escHtml(`${names.get(slug)} — ${this.ui.countyProfile}`);
+                return `<a class="landing-tile" href="/place/county/${slug}${q}" data-slug="${slug}" style="grid-column:${col};grid-row:${row}" aria-label="${label}" title="${label}">${code}</a>`;
+            }).join('');
+
+        let pop;
+        try { pop = (await API.fetch('/reference/population', { level: 'county' })).population || {}; }
+        catch (e) { console.warn('Population unavailable, map left unshaded:', e); return; }
+        if (this.lang !== lang || !map.isConnected) return;
+        const bySlug = new Map(Object.entries(pop).map(([name, years]) => [CountyTiles.slugify(name), years]));
+        const tiles = [...map.querySelectorAll('.landing-tile')];
+        const years = tiles.map(t => Object.keys(bySlug.get(t.dataset.slug) || {}));
+        const year = tiles.length ? years.reduce((a, ys) => a.filter(y => ys.includes(y))).sort().at(-1) : null;
+        const values = tiles.map(t => year ? bySlug.get(t.dataset.slug)[year] : null);
+        if (!year || values.some(v => !Number.isFinite(v))) return;
+        const { breaks, stepOf } = CountyTiles.steps(values);
+        if (!breaks.length) return;
+        tiles.forEach((t, i) => {
+            t.dataset.step = stepOf(values[i]);
+            t.title += ` · ${formatNumber(values[i], 0)} ${this.ui.residents} (${year})`;
+        });
+        const edges = [null, ...breaks, null];
+        legend.innerHTML = `<div class="landing-legend-steps">${edges.slice(0, -1).map((lo, i) => {
+            const hi = edges[i + 1];
+            const text = lo == null ? `< ${formatNumber(hi, 0)}` : hi == null ? `≥ ${formatNumber(lo, 0)}` : `${formatNumber(lo, 0)}–${formatNumber(hi, 0)}`;
+            return `<span><i class="landing-swatch" data-step="${i}"></i>${text}</span>`;
+        }).join('')}</div><div class="landing-legend-note">${_escHtml(this.ui.mapLegend(year))}</div>`;
     }
 
     /** The places list, fetched once (names do not depend on the language). */
@@ -744,7 +796,8 @@ class LensApp {
     async renderCountyPicker() {
         const en = this.lang === 'en';
         const host = document.querySelector('#landing-hero .landing-county');
-        host.innerHTML = `<select aria-label="${this.ui.countyPick}"><option value="">${this.ui.countyPlaceholder}</option></select>`;
+        host.innerHTML = `<a href="/places${en ? '?lang=en' : ''}">${this.ui.countyProfiles} →</a>
+            <select aria-label="${this.ui.countyPick}"><option value="">${this.ui.countyPlaceholder}</option></select>`;
         const sel = host.querySelector('select');
         sel.addEventListener('change', () => {
             if (sel.value) location.href = `/place/county/${encodeURIComponent(sel.value)}${en ? '?lang=en' : ''}`;

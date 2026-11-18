@@ -327,6 +327,23 @@ body:not(.landing-page) .landing-hero, body:not(.landing-page) .landing-band { d
 .landing-figure span { display: block; margin-top: .2rem; font-size: .85rem; color: var(--text-2); }
 .landing-hero-map { display: flex; flex-direction: column; align-items: center; gap: .85rem; min-width: 0; }
 .landing-county select { max-width: 14rem; min-height: 2.5rem; padding: .4rem .5rem; border: 1px solid var(--border); background: var(--bg-1); color: var(--text-0); border-radius: var(--radius-sm); font-size: .85rem; }
+/* County tile map: accent at four strengths over --bg-1; the darkest step takes light-on-dark text. */
+.landing-map { display: grid; grid-template-columns: repeat(9, minmax(0, 2.75rem)); grid-auto-rows: 2.75rem; gap: 3px; max-width: 100%; }
+.landing-tile { display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 40px; border: 1px solid var(--border-hover); border-radius: var(--radius-sm); background: var(--bg-1); color: var(--text-0); font-size: .7rem; font-weight: 600; text-decoration: none; }
+.landing-tile[data-step="0"], .landing-swatch[data-step="0"] { background: color-mix(in srgb, var(--accent) 12%, var(--bg-1)); }
+.landing-tile[data-step="1"], .landing-swatch[data-step="1"] { background: color-mix(in srgb, var(--accent) 30%, var(--bg-1)); }
+.landing-tile[data-step="2"], .landing-swatch[data-step="2"] { background: color-mix(in srgb, var(--accent) 55%, var(--bg-1)); }
+.landing-tile[data-step="3"], .landing-swatch[data-step="3"] { background: var(--accent); color: var(--bg-1); }
+.landing-tile:hover { border-color: var(--text-0); }
+.landing-tile:focus-visible { position: relative; z-index: 1; outline: 2px solid var(--text-0); outline-offset: 1px; }
+.landing-map-legend { font-size: .75rem; color: var(--text-2); text-align: center; }
+.landing-map-legend:empty { display: none; }
+.landing-legend-steps { display: flex; flex-wrap: wrap; justify-content: center; gap: .25rem .85rem; color: var(--text-1); font-variant-numeric: tabular-nums; }
+.landing-legend-steps span { display: inline-flex; align-items: center; gap: .35rem; }
+.landing-swatch { display: inline-block; width: .85rem; height: .85rem; border: 1px solid var(--border-hover); border-radius: 3px; }
+.landing-legend-note { margin-top: .3rem; }
+.landing-county { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .5rem 1rem; }
+.landing-county a { font-size: .9rem; font-weight: 600; color: var(--accent); }
 @media (max-width: 1024px) { .landing-hero { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 640px) {
     .landing-hero { padding: 1.5rem 0 1.5rem; }
