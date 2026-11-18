@@ -722,6 +722,17 @@ TEXT = {
                                 "result.",
         "present.pairs_excluded": "{n} entity-interval pair(s) were excluded from the ranking "
                                   "(see the evidence link for the list).",
+        # ---- chart hints (AQ-08)
+        "chart.title_rank": "{metric}, {year}: top {k} of {n}",
+        "chart.title_changes": "{metric}: {what}, {a} to {b}",
+        "chart.what_percent": "percent change",
+        "chart.what_absolute": "absolute change",
+        "chart.title_recipe": "{name}, {year}",
+        "chart.link_year": "Dataset page with this selection's filters. It shows the values for {year}.",
+        "chart.link_changes": "Dataset page with this selection's filters. It shows the values for {year}, "
+                              "not the computed change.",
+        "chart.link_query": "Dataset page with this selection's filters.",
+        "chart.link_recipe": "Recipe comparison page for {year}, with the same areas.",
     },
     "ro": {
         # ---- contract / registry / gate
@@ -1478,5 +1489,16 @@ TEXT = {
                                 "rezultatul citat.",
         "present.pairs_excluded": "{n} perechi entitate–interval au fost excluse din clasament "
                                   "(vezi linkul de dovezi pentru listă).",
+        # ---- chart hints (AQ-08)
+        "chart.title_rank": "{metric}, {year}: primele {k} din {n}",
+        "chart.title_changes": "{metric}: {what}, {a} până la {b}",
+        "chart.what_percent": "variație procentuală",
+        "chart.what_absolute": "variație absolută",
+        "chart.title_recipe": "{name}, anul {year}",
+        "chart.link_year": "Pagina setului de date cu filtrele acestei selecții. Arată valorile pentru {year}.",
+        "chart.link_changes": "Pagina setului de date cu filtrele acestei selecții. Arată valorile pentru "
+                              "{year}, nu variația calculată.",
+        "chart.link_query": "Pagina setului de date cu filtrele acestei selecții.",
+        "chart.link_recipe": "Pagina de comparare a rețetei pentru {year}, cu aceleași zone.",
     },
 }

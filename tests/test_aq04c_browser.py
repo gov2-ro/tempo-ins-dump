@@ -150,7 +150,7 @@ def test_a_city_change_ranking_keeps_its_caveats_and_is_captioned_as_a_ranking(s
             assert "2 outside the class (communes, totals), not ranked" in meta
             assert "not a ranking" not in meta and "Preview" not in meta
             assert "the complete ranking" in footer and "Limited preview" not in footer
-        assert msg.locator(".chat-table th").count() == 8 and msg.locator(".chat-chart").count() == 0   # 2 key columns + 6
+        assert msg.locator(".chat-table th").count() == 8 and msg.locator(".chat-chart").count() == 1   # 2 key columns + 6; AQ-08: one bar chart from the hint
         hrefs = msg.locator(".chat-links a").evaluate_all("els => els.map(e => e.href)")
         assert len(hrefs) >= 2 and all(h.startswith(URL + "/") or h.startswith("https://") for h in hrefs)
         no_sideways_scroll(pg)

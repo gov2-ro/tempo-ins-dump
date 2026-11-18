@@ -1,5 +1,15 @@
 # Activity History
 
+## 2026-11-18 — AQ-08: chart hints and chart links in tool results
+
+- **What:** `query_data`, `rank_entities`, `compare_periods` and `run_recipe` results carry an optional
+  `data.chart` hint (type, row path, x, y, series, sort, unit, title, dataset-page link). The Ask page draws
+  a bar chart for a ranking, a change ranking or a recipe from it. Record: `docs/plans/ask-and-public-mcp/remaining/aq-08-record.md`.
+- **Why:** MCP clients and the Ask page had numbers and no chart; the server never renders images.
+- **Non-obvious:** additive, no contract bump. The hint names fields and never copies rows. No chart for
+  several intervals, a key without one label, a cut preview, an approximation or repeated keys. The link
+  carries filters, period and levels only: dataset-v2 has no stable bar preset. Not deployed or merged.
+
 ## 2026-11-17 — Static site redeployed with a releases layout (DreamHost)
 
 - **What:** rebuilt the static site from `183a36f` (generation `062bd2b0`; 46,036 files, 748 MB;

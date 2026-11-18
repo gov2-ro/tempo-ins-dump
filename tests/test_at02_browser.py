@@ -159,6 +159,29 @@ def test_a_change_ranking_and_a_recipe_are_plain_tables_without_a_chart(page):
     no_sideways_scroll(page)
 
 
+def test_a_ranking_with_a_chart_hint_gets_a_bar_chart_with_its_dataset_link(page):
+    """AQ-08: the chart comes from `data.chart` (here echarts itself is stubbed, so the container
+    and the link are what is checked); an unsafe link is not rendered."""
+    srv = Server(page)
+    chart = {"type": "bar", "x": "REF_AREA_2", "y": "OBS_VALUE", "series": None, "sort": "desc",
+             "unit": "Numar persoane", "title": "Populatie, 2026: primele 2 din 319",
+             "url": "/dataset-v2.html?code=POPC&f=%7B%7D", "url_note": "Arată valorile pentru 2026."}
+    data = table(["RANK", "REF_AREA_2", "TIME_PERIOD", "OBS_VALUE"],
+                 [[1, "1 MUNICIPIUL A", "2026", 20.0], [2, "2 ORAS B", "2026", 10.0]],
+                 tool="rank_entities", status="partial", ranked=True, chart=chart)
+    msg = ask(page, srv, "Cele mai mari orașe?", result(answer="A, apoi B.", data=data))
+    box = msg.locator(".chat-hint-chart")
+    assert box.count() == 1 and box.locator(".chat-chart").count() == 1
+    assert "primele 2 din 319" in box.locator(".chat-chart-note").first.inner_text()
+    href = box.locator(".chat-links a").get_attribute("href")
+    assert href.endswith("/dataset-v2.html?code=POPC&f=%7B%7D")
+    assert "2026" in box.locator(".chat-chart-note").last.inner_text()
+    unsafe = ask(page, srv, "Din nou?", result(answer="x", data={**data, "chart": {**chart, "url": "javascript:alert(1)"}}))
+    assert unsafe.locator(".chat-hint-chart").count() == 1 and unsafe.locator(".chat-hint-chart a").count() == 0
+    no_sideways_scroll(page)
+    assert page.problems == []
+
+
 def test_follow_up_context_is_sent_back_and_cleared_by_reset(page):
     srv = Server(page)
     ctx = [{"tool": "query_data", "generation": "gen-1",
