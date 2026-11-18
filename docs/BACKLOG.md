@@ -26,6 +26,12 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   and in the new build). `dataset-v2.html?code=SOM101B` asks for `rec/datasets/SOM101B.ro.json.gz` (404)
   and shows no tiles; only the children (`SOM101B_judete`, ...) are served. Redirect a parent code to its
   children, or show a list of them.
+- [ ] **P3 — About page: say "No sign-in" for the Claude connector** (2026-11-18). Claude Desktop's
+  *Add custom connector* detects "No sign-in" and shows a yellow warning ("anyone with the server URL
+  can use this connector"). That is expected for a public read-only server, but users may read it as a
+  problem. In the Claude line of the MCP section (RO and EN, `app/static/js/explore-app.js`), add:
+  choose *No sign-in*, leave request headers empty, the warning is normal. Ship it with the next
+  static build.
 - [ ] **P3 — Cloudflare Page Rule → Configuration Rule.** `api-ins.gov2.ro/*` Browser Integrity Check
   Off is a legacy Page Rule (1 of 3 on the free plan). Move it when Cloudflare retires Page Rules.
 
