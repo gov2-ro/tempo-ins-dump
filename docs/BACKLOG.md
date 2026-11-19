@@ -99,6 +99,11 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   coverage); a named city resolved to its county (Q07); more concepts (life expectancy, infant mortality,
   dwellings, pupils, exports, EN wage aliases); INS Total cells for non-additive datasets (owner decision);
   month-to-year sums; a municipii-only class.
+- [ ] **P2 — AQ-13: INS published Total cells for non-additive indicators** (owner decision 2026-11-19,
+  sweep fix #7; phase 1 curated: life expectancy, infant mortality, CPI, average wage, unemployment rates,
+  GDP per inhabitant). Brief ready: [13-published-totals.md](plans/ask-and-public-mcp/remaining/13-published-totals.md).
+  Start after AQ-09 is merged. Phase 2 (fetch totals for all ~580 rate/percentage datasets) is decided
+  after the observation week, from live MCP refusal counts.
 - [ ] **P1 — `rank_entities` refuses to rank rates with one value per entity** (2026-11-18, live Ask
   with DeepSeek: "top 5 județe după PIB per capita și suprafață"). On CON103H_judete (GDP per
   inhabitant) it returned `unsupported_measure` ("additive measures only"). A one-year, county-level
