@@ -81,6 +81,42 @@ def members_of(classes: dict) -> dict:
     return {k: s for k, (s, c) in classes.items() if c == "member"}
 
 
+def _published_ranking(ctx, code: str, keys: list, filters: dict, res: dict):
+    """INS's published Total cells for a one-year ranking the shared query refused only because the
+    Total option is not in the download (AQ-13); None otherwise. The entities are the labels the
+    dataset itself has, and every value is INS's own cell: nothing from the data file is mixed in."""
+    from app.services import recipes
+    from app.services.tools import query as query_tool
+    if keys != ["REF_AREA"] or query_tool.refusal_reason(res, code) not in query_tool.PUBLISHED_REFUSALS:
+        return None
+    if recipe_tool.published_recipe_for(ctx.conn, code):
+        return None                       # a reviewed recipe already serves this dataset's published values
+    try:
+        universe = data_query.dimension_values(ctx.conn, code, "REF_AREA", limit=500)["values"]
+        return recipes.published_selection(ctx.conn, code, filters, ["REF_AREA", "TIME_PERIOD"], universe=universe)
+    except Exception:
+        return None
+
+
+def _published_national(ctx, code: str, keys: list, filters: dict, year: str) -> list:
+    """The national value INS publishes for the ranked selection (`aggregates`), or []. It exists
+    only when the request pins nothing but the breakdown the cells carry (sex)."""
+    from app.services import recipes
+    if keys != ["REF_AREA"]:
+        return []
+    f = {c: v for c, v in filters.items() if c != "REF_AREA"}
+    try:
+        sel = recipes.published_selection(ctx.conn, code, f, ["TIME_PERIOD"])
+    except Exception:
+        return []
+    if not sel:
+        return []
+    fetch = (sel["sources"] or [{}])[0]
+    return [{"entity": {"REF_AREA": c["area"]}, "year": c["period"], "value": c["value"], "unit": c["unit"],
+             "value_source": "ins_published", "query_id": fetch.get("query_id"),
+             "ins_updated": fetch.get("ins_updated")} for c in sel["cells"] if c["period"] == year]
+
+
 def rank_entities(args, ctx):
     from app import config
     from app.services.query_builder import resolve_parquet_schema, to_sdmx_name
@@ -118,9 +154,23 @@ def rank_entities(args, ctx):
         res = data_query.run_query(ctx.conn, code, filters, query["group_by"], config.MAX_DATA_ROWS)
     except data_query.QueryError as e:
         raise C.query_failure(e, ctx, code)
+    published = _published_ranking(ctx, code, keys, filters, res) if res.get("unavailable") else None
+    if published:
+        # the rest of the tool reads this result like any other; its values are INS's cells
+        res = {"columns": ["REF_AREA", "TIME_PERIOD", "OBS_VALUE"],
+               "rows": [[c["area"], c["period"], c["value"]] for c in published["cells"]],
+               "aggregation": {"outcome": "available", "reason": None, "method": "single_row",
+                               "source": "ins_published_total", "warnings": []}, "quality": {}}
     prov = C.query_provenance(ctx, code, query, res)
     selection = {**args.model_dump(), "year": year, "kind": "entity_ranking"}
     prov.update(selection=selection, source_query=query)
+    if published:
+        src = query_tool.published_source(published)
+        universe_n = len(data_query.dimension_values(ctx.conn, code, "REF_AREA", limit=500)["values"])
+        prov["scope"] = {**query_tool.published_scope(lang, published),
+                         "domain_complete": len(published["cells"]) == universe_n}
+        prov["sources"][0]["published_total"] = src
+        prov["effective_selection"]["published_total"] = src
     agg = res.get("aggregation") or {}
     if res.get("unavailable"):
         # the same explanation and next steps query_data gives for this selection, not a bare refusal
@@ -190,6 +240,11 @@ def rank_entities(args, ctx):
     pinned = query_tool.auto_pinned_warning(agg, filters, lang)
     if pinned:
         warnings.append(pinned)
+    aggregates = _published_national(ctx, code, keys, filters, year)
+    if published:
+        warnings.append(query_tool.published_total_warning(lang, published))
+    if aggregates:
+        warnings.append(C.warning("published_total", M.t(lang, "rank.published_national"), "national"))
     if catalogue:
         warnings.append(C.warning("classification_reference", M.t(lang, "rank.classification")))
     cut = period_changes.tie_cut(rows, args.top_k)
@@ -210,9 +265,14 @@ def rank_entities(args, ctx):
             "order": args.order, "top_k": args.top_k, "rows": rows[:args.top_k],
             "eligible_count": len(rows), "excluded_count": len(excluded), "excluded": excluded[:20],
             "exclusions_truncated": len(excluded) > 20, "outside_class_count": outside_class}
+    if aggregates:
+        data["aggregates"] = aggregates
+    if published:
+        data["value_source"] = "ins_published"
     return C.envelope("rank_entities", ctx, status=status, reason=reason,
-                      message=M.t(lang, "rank.message", k=min(args.top_k, len(rows)), n=len(rows), year=year,
-                                  scope=scope.get("description", "")),
+                      message=M.t(lang, "rank.published_message", n=len(rows), year=year) if published
+                      else M.t(lang, "rank.message", k=min(args.top_k, len(rows)), n=len(rows), year=year,
+                               scope=scope.get("description", "")),
                       data=data, provenance=prov, warnings=warnings,
                       limits={"returned_rows": len(data["rows"]), "total_rows": len(rows),
                               "source_complete": True, "preview_truncated": False})

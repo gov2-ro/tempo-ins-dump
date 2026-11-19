@@ -211,6 +211,17 @@ TEXT = {
                                 "verified answer.",
         "query.choose_one_level": "List the exact {col} values and choose ONE level (never all "
                                   "levels together).",
+        "query.published_warning": "These are INS's own published Total cells, not a calculation: matrix {matrix}, fetched {fetched}, INS updated {updated}. The data file does not hold these rows. They come from a separate table and are never mixed with the rows of the data file.",
+        "query.published_scope": "INS published Total cells (matrix {matrix}); nothing was summed or averaged.",
+        "query.published_one": "INS published total: 1 value ({first}), matrix {matrix}. The data file has no Total row for this selection, and a rate, index or average cannot be summed. This value is INS's own.",
+        "query.published_many": "INS published total: {n} values, {span}, matrix {matrix}. The data file has no Total row for this selection, and a rate, index or average cannot be summed. These values are INS's own.",
+        "rank.published_message": "Ranking of INS's published Total values for {n} entities, {year}. The data file has no Total row for this selection. Every value is INS's own published cell; none comes from the data file.",
+        "rank.published_national": "The national value in `aggregates` is INS's published Total cell for this selection. It is not a sum or an average of the ranked entities.",
+        "changes.published_national": "The national values in `aggregates` are INS's published Total cells for this selection. They are not a sum or an average of the ranked entities.",
+        "describe.published": "INS also publishes Total values that the data file lacks: matrix {matrix}, {first} to {last}, {where}{by}. query_data returns them as \"INS published total\" when a rate, index or average cannot be summed.",
+        "describe.published_national": "national value and {n} areas",
+        "describe.published_areas": "{n} areas",
+        "describe.published_by": "; breakdown {name}: {labels}",
         "query.weights": "This measure is a rate, index or average: values of different "
                          "categories cannot be added, and no aligned weights exist for a weighted "
                          "mean. Nothing was combined. A labelled unweighted mean is available "
@@ -955,6 +966,17 @@ TEXT = {
                                 "Candidat, nu un răspuns verificat.",
         "query.choose_one_level": "Listează valorile exacte ale {col} și alege UN SINGUR nivel "
                                   "(niciodată toate nivelurile împreună).",
+        "query.published_warning": "Acestea sunt celulele Total publicate de INS, nu un calcul: matricea {matrix}, preluate {fetched}, actualizată de INS {updated}. Fișierul de date nu conține aceste rânduri. Ele vin dintr-un tabel separat și nu se amestecă niciodată cu rândurile fișierului de date.",
+        "query.published_scope": "Celule Total publicate de INS (matricea {matrix}); nimic nu a fost însumat sau mediat.",
+        "query.published_one": "Total publicat de INS: 1 valoare ({first}), matricea {matrix}. Fișierul de date nu are un rând Total pentru această selecție, iar o rată, un indice sau o medie nu pot fi adunate. Valoarea este a INS.",
+        "query.published_many": "Total publicat de INS: {n} valori, {span}, matricea {matrix}. Fișierul de date nu are un rând Total pentru această selecție, iar o rată, un indice sau o medie nu pot fi adunate. Valorile sunt ale INS.",
+        "rank.published_message": "Clasament al valorilor Total publicate de INS pentru {n} entități, {year}. Fișierul de date nu are un rând Total pentru această selecție. Fiecare valoare este celula publicată de INS; niciuna nu vine din fișierul de date.",
+        "rank.published_national": "Valoarea națională din `aggregates` este celula Total publicată de INS pentru această selecție. Nu este o sumă sau o medie a entităților clasate.",
+        "changes.published_national": "Valorile naționale din `aggregates` sunt celulele Total publicate de INS pentru această selecție. Nu sunt o sumă sau o medie a entităților clasate.",
+        "describe.published": "INS publică și valori Total pe care fișierul de date nu le are: matricea {matrix}, {first} – {last}, {where}{by}. query_data le returnează ca „total publicat de INS” când o rată, un indice sau o medie nu pot fi adunate.",
+        "describe.published_national": "valoare națională și {n} zone",
+        "describe.published_areas": "{n} zone",
+        "describe.published_by": "; defalcare {name}: {labels}",
         "query.weights": "Această măsură este o rată, un indice sau o medie: valorile unor "
                          "categorii diferite nu pot fi adunate și nu există ponderi "
                          "corespunzătoare pentru o medie ponderată. Nu s-a combinat nimic. O "

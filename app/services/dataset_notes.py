@@ -118,6 +118,17 @@ def _published_matrices() -> set:
     return {q["matrix"] for q in spec.get("queries", [])}
 
 
+def _loaded(conn, matrix: str) -> bool:
+    """True when the spec lists the matrix and this generation holds its published cells."""
+    if matrix not in _published_matrices():
+        return False
+    try:
+        return bool(conn.execute("SELECT 1 FROM published_totals WHERE matrix_code = ? LIMIT 1",
+                                 [matrix]).fetchone())
+    except Exception:           # a generation without the table
+        return False
+
+
 def source_totals_note(conn, code: str, measure: str | None, lang: str = "ro") -> dict | None:
     """Generated note for a non-additive dataset whose INS matrix publishes "Total"
     options (kept in dimension_options from the metadata) that the fetch dropped:
@@ -146,13 +157,15 @@ def source_totals_note(conn, code: str, measure: str | None, lang: str = "ro") -
         text = (f"INS also publishes the total ('Total' option) for {names}; our download does not "
                 "include it. For an average, a rate or an index the total is not the sum of the "
                 "values, so the site does not compute it.")
-        if parent in _published_matrices():
-            text += " INS's own totals for the main indicator are shown on the comparison and county pages."
+        if _loaded(conn, parent):
+            text += (" The site holds INS's own published Total cells for this matrix; the analytical tools "
+                     "return them as \"INS published total\".")
     else:
         text = (f"INS publică și valoarea totală (opțiunea „Total”) pentru {names}; descărcarea noastră "
                 "nu o conține. La o medie, o rată sau un indice totalul nu este suma valorilor, așa că "
                 "site-ul nu îl calculează.")
-        if parent in _published_matrices():
-            text += " Totalurile publicate de INS pentru indicatorul principal apar în pagina de comparație și pe paginile județelor."
+        if _loaded(conn, parent):
+            text += (" Site-ul păstrează celulele Total publicate de INS pentru această matrice; "
+                     "instrumentele analitice le returnează ca „total publicat de INS”.")
     return {"id": "source-totals-not-downloaded", "kind": "caveat", "text": text,
             "data": {"matrix": parent, "dimensions": [d.strip() for d in dims]}}
