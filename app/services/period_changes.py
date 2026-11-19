@@ -115,7 +115,8 @@ def rate_values_combined(mctx: dict, agg: dict) -> bool:
     several source cells. Only a query that combined no values (method `single_row` or
     `aggregate_row`) returns the source's own cell per entity, which a ranking or a change may
     use. `weighted_mean` is a real value but is not accepted yet (open owner question, AQ-09 A)."""
-    return mctx.get("measure") == "non_additive" and agg.get("method") not in ("single_row", "aggregate_row")
+    # Anything not proven additive counts as a rate here (the old gate refused the same set).
+    return mctx.get("measure") != "additive" and agg.get("method") not in ("single_row", "aggregate_row")
 
 
 def compute(table: dict, key_cols, intervals, metric: str = "absolute", order: str = "asc",
