@@ -74,10 +74,10 @@ def query_data(args, ctx):
         raise C.query_failure(e, ctx, code)
     aid = _Aid(ctx, code, request, res, args.limit)
     if res.get("unavailable"):
-        return _refused(aid, warnings)
+        return _published_answer(aid, warnings) or _refused(aid, warnings)
     sel = res.get("selection")
     if sel and sel.get("empty"):
-        return _empty_selection(aid, warnings)
+        return _published_answer(aid, warnings) or _empty_selection(aid, warnings)
     return _answer(aid, warnings)
 
 
@@ -244,6 +244,97 @@ def _result_warnings(aid: "_Aid", rows: list, columns: list, grouped: bool) -> l
                     "no_rows_for_value", M.t(lang, "query.no_rows_for_value", col=name, absent=_short(absent, lang)),
                     subject=name))
     return out
+
+
+# ================================================================== INS published Total cells (AQ-13)
+
+# reasons a rate, index or average is refused for when its Total option is not in the data file
+PUBLISHED_REFUSALS = ("missing_weights", "non_additive_measure", "unverified_structure")
+
+
+def published_total_warning(lang: str, sel: dict, *, national_only: bool = False) -> dict:
+    """The `published_total` warning: where the values come from. The source's own text, never a calculation."""
+    src = (sel.get("sources") or [{}])[0]
+    return C.warning("published_total", M.t(
+        lang, "query.published_warning", matrix=sel["matrix"], fetched=str(src.get("fetched_at") or "?")[:10],
+        updated=src.get("ins_updated") or "?"), subject=sel["matrix"])
+
+
+def published_source(sel: dict) -> dict:
+    """What provenance and `data` say about the cells: matrix, breakdown columns and where each
+    query's cells came from (query id, fetch time, file hash, INS update date)."""
+    return {"value_source": "ins_published", "matrix": sel["matrix"],
+            "breakdown_columns": sel["breakdown_columns"], "fetches": sel["sources"]}
+
+
+def published_scope(lang: str, sel: dict) -> dict:
+    return {"description": M.t(lang, "query.published_scope", matrix=sel["matrix"]),
+            "domain_complete": True, "limitations": []}
+
+
+def _published_answer(aid: "_Aid", warnings: list):
+    """INS's published Total instead of a refusal, or None to keep the refusal. Only when the shared
+    policy refused a rate, index or average because the Total option is not in the download (or the
+    request names that Total on a non-additive measure) and INS's own cell exists for the cut."""
+    from app.services import recipes
+    res, ctx = aid.res, aid.ctx
+    empty = not res.get("unavailable")
+    if empty:
+        missing = (res.get("selection") or {}).get("missing_values") or {}
+        if not any(aid.is_total_value(c, v, meta=True) for c, vs in missing.items() for v in vs):
+            return None
+    elif refusal_reason(res, aid.code) not in PUBLISHED_REFUSALS:
+        return None
+    actx = aid.agg_ctx()
+    if not actx or actx.get("measure") == "additive":
+        return None
+    filters, gb = aid.canon_filters(), aid.canon_group_by()
+    try:
+        raw_dims = [] if gb else [d["dim_column_name"] for d in actx["dimensions"]
+                                  if d["dim_column_name"] not in ("REF_AREA", "TIME_PERIOD", "UNIT_MEASURE")
+                                  and d.get("dim_type") != "unit"]
+        universe = None
+        if "REF_AREA" in gb and "REF_AREA" not in filters:
+            universe = dq.dimension_values(ctx.conn, aid.code, "REF_AREA", limit=500)["values"]
+        sel = recipes.published_selection(ctx.conn, aid.code, filters, gb, universe=universe,
+                                          require_pinned=raw_dims)
+    except Exception:
+        log.exception("published cells unavailable code=%s", aid.code)
+        return None
+    if not sel:
+        return None
+    return _published_envelope(aid, warnings, sel)
+
+
+def _published_envelope(aid: "_Aid", warnings: list, sel: dict) -> dict:
+    ctx, lang, request = aid.ctx, aid.lang, aid.request
+    rows = sel["rows"][:aid.limit][:C.MAX_TABLE_ROWS]
+    src = published_source(sel)
+    source = {**C.source_entry(ctx.conn, aid.code, lang), "published_total": src}
+    prov = {"sources": [source],
+            "selection": {"kind": "dataset", "dataset": aid.code, "filters": request.get("filters") or {},
+                          "group_by": list(request.get("group_by") or []), "approximate": False},
+            "effective_selection": {"filters": request.get("filters") or {}, "levels": {}, "published_total": src},
+            "aggregation": {"outcome": "available", "reason": None, "method": "single_row",
+                            "verification": None, "approximation": False, "source": "ins_published_total",
+                            "dimensions": [], "warnings": []},
+            "quality": {}, "scope": published_scope(lang, sel)}
+    cut = len(rows) < len(sel["rows"]) or sel["truncated"]
+    limits = {"returned_rows": len(rows), "total_rows": None if sel["truncated"] else len(sel["rows"]),
+              "preview_truncated": cut, "source_complete": not sel["truncated"], "time_windowed": False,
+              "partial_period_dropped": None}
+    n = len(sel["rows"])
+    first, last = sel["periods"][0], sel["periods"][-1]
+    message = M.t(lang, "query.published_one" if n == 1 else "query.published_many", n=n, first=first,
+                  span=first if first == last else f"{first}–{last}", matrix=sel["matrix"])
+    if cut:
+        message += M.t(lang, "query.preview_tail")
+    data = {"columns": sel["columns"], "rows": rows, "column_labels": {}, "selection": None,
+            "value_source": "ins_published", "published_total": src}
+    return C.envelope("query_data", ctx, status="ok", reason=None, message=message, data=data,
+                      provenance=prov, limits=limits,
+                      warnings=warnings + [published_total_warning(lang, sel)],
+                      recovery=[aid.narrowing_rec()] if cut else [])
 
 
 # ================================================================== empty selection

@@ -19,6 +19,10 @@ matrix dimension, in dimension order:
   {"pick": "years", "from": Y1, "to": Y2} "Anul Y" options in that range
   {"pick": "years", "from": Y1}           every "Anul Y" from Y1 that the metadata lists
 
+A query may also carry `"breakdown": {NAME: position}` (a dimension that keeps non-Total options,
+for example sex) and `"area": position | false` (where the area dimension is; the default is the
+dimension just before the period). Both go to manifest.json for scripts/load-published-totals.py.
+
 Option ids come from the retained metadata (--meta-dir). INS's answer echoes labels,
 so `labels_ok` in the manifest records whether every returned row names a requested
 option: a renumbered option shows up there instead of silently answering another cell.
@@ -171,6 +175,7 @@ def main(argv=None) -> int:
         info = summarize(text, labels)
         manifest["fetches"][q["id"]] = {
             "matrix": q["matrix"], "select": q["select"], "payload": payload,
+            **{k: q[k] for k in ("breakdown", "area") if k in q},
             "url": PIVOT_URL, "fetched_at": fetched_at, "http_status": r.status_code,
             "file": f"{q['id']}.csv", "sha256": hashlib.sha256(r.content).hexdigest(),
             "meta_file": str(meta_file), "meta_sha256": hashlib.sha256(meta_bytes).hexdigest(),

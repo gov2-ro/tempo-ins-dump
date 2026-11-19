@@ -248,6 +248,25 @@ def _note(code: str, message: str) -> dict:
     return {"code": code, "message": message}
 
 
+def published_info(conn, code: str, lang: str):
+    """(coverage, sentence) for INS's published Total cells of a dataset (AQ-13), or (None, None):
+    which periods, whether a national value exists, how many areas, and the breakdowns."""
+    try:
+        cov = recipes.published_coverage(conn, code)
+    except Exception:
+        log.exception("published coverage unavailable code=%s", code)
+        cov = None
+    if not cov:
+        return None, None
+    where = M.t(lang, "describe.published_national" if cov["national"] else "describe.published_areas",
+                n=cov["areas"] - (1 if cov["national"] else 0))
+    by = "".join(M.t(lang, "describe.published_by", name=n, labels=", ".join(v))
+                 for n, v in cov["breakdowns"].items())
+    text = M.t(lang, "describe.published", matrix=cov["matrix"], first=cov["first"], last=cov["last"],
+               where=where, by=by)
+    return cov, text
+
+
 def _card_notes(raw: dict, lang: str) -> list:
     """concept_search's place notes; its period note is re-derived per candidate
     (a monthly dataset has a year without having it as one period)."""
@@ -698,6 +717,13 @@ def _concept_card(ctx, raw: dict, by_id: dict, parsed: dict, query: str) -> dict
     # preferred first, the rest in discovery order
     cands.sort(key=lambda c: not c["preferred"])
     card["candidates"] = cands
+    if not is_recipe:                  # INS's own Total cells, when the generation holds them (AQ-13)
+        for _, ds in _level_pairs(raw):
+            cov, text = published_info(ctx.conn, ds, ctx.lang)
+            if cov:
+                card["published_total"] = cov
+                card["notes"].append(_note("published_total", text))
+                break
     pref = next((c for c in cands if c["preferred"]), None)
     if pref:
         card["preferred"] = pref["dataset"] or pref.get("recipe")
@@ -1466,6 +1492,9 @@ def describe_dataset(args, ctx):
     definition, cut = C._short(meta.get("definitie"))
     profile = meta.get("profile") or {}
     unit_types = (meta.get("chart_config") or {}).get("unit_types") or []
+    published, published_text = published_info(conn, code, lang) if has_file else (None, None)
+    if published:
+        notes.append({"id": "published_total", "kind": "interpretation", "text": published_text})
     data = {
         "dataset": code, "name": meta.get("matrix_name"), "definition": definition,
         "definition_truncated": cut, "definition_url": C.dataset_page(code, lang),
@@ -1479,7 +1508,7 @@ def describe_dataset(args, ctx):
                     "next_call": _call("describe_dataset", dataset=parent["matrix_code"], lang=lang)}
                    if parent else None),
         "splits": splits, "splits_total": n_splits, "grain": grain, "domain": domain,
-        "notes": notes,
+        "notes": notes, **({"published_total": published} if published else {}),
         "examples_note": M.t(lang, "describe.examples_note")}
 
     warnings = _generation_warnings(ctx)

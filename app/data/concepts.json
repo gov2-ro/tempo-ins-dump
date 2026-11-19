@@ -530,8 +530,8 @@
     "en": "Consumer price index, against the previous month"
    },
    "note": {
-    "ro": "indice lunar (luna anterioară = 100): 100,32 înseamnă +0,32% față de luna precedentă; fără celulă pentru total, doar categorii mari",
-    "en": "monthly index (previous month = 100): 100.32 means +0.32% on the previous month; no overall Total cell, only the main categories"
+    "ro": "indice lunar (luna anterioară = 100): 100,32 înseamnă +0,32% față de luna precedentă; fișierul de date are doar categoriile mari; totalul INS se returnează ca „total publicat de INS” când generația îl conține",
+    "en": "monthly index (previous month = 100): 100.32 means +0.32% on the previous month; the data file has the main categories only; INS's overall Total is returned as \"INS published total\" when the generation holds it"
    },
    "aliases": {
     "ro": [
@@ -584,8 +584,8 @@
     "en": "Consumer price index, against December of the previous year"
    },
    "note": {
-    "ro": "indice lunar cumulat (decembrie anul precedent = 100): creșterea prețurilor de la începutul anului; fără celulă pentru total, doar categorii mari",
-    "en": "cumulative monthly index (December of the previous year = 100): price growth since the start of the year; no overall Total cell, only the main categories"
+    "ro": "indice lunar cumulat (decembrie anul precedent = 100): creșterea prețurilor de la începutul anului; fișierul de date are doar categoriile mari; totalul INS se returnează ca „total publicat de INS” când generația îl conține",
+    "en": "cumulative monthly index (December of the previous year = 100): price growth since the start of the year; the data file has the main categories only; INS's overall Total is returned as \"INS published total\" when the generation holds it"
    },
    "aliases": {
     "ro": [
@@ -721,8 +721,8 @@
     "en": "Life expectancy at birth"
    },
    "note": {
-    "ro": "numărul mediu de ani de trăit al unui nou-născut, pe sexe, 2008–2023, pentru județe, regiuni și macroregiuni. Descărcarea nu conține valoarea INS pentru ambele sexe și nici valoarea națională: o medie a județelor nu este speranța de viață a țării. Pe medii de reședință (urban/rural, până în 2024): POP217A; pe vârste, doar regiuni: POP217B",
-    "en": "average years a newborn is expected to live, by sex, 2008–2023, for counties, regions and macroregions. The download holds neither the INS both-sexes value nor the national value: an average of counties is not the life expectancy of the country. By urban/rural area (to 2024): POP217A; by age, regions only: POP217B"
+    "ro": "numărul mediu de ani de trăit al unui nou-născut, pe sexe, 2008–2023, pentru județe, regiuni și macroregiuni. Fișierul de date nu conține valoarea INS pentru ambele sexe și nici valoarea națională (o medie a județelor nu este speranța de viață a țării); INS le publică, iar instrumentele le returnează ca „total publicat de INS” când generația le conține. Pe medii de reședință (urban/rural, până în 2024): POP217A; pe vârste, doar regiuni: POP217B",
+    "en": "average years a newborn is expected to live, by sex, 2008–2023, for counties, regions and macroregions. The data file holds neither the INS both-sexes value nor the national value (an average of counties is not the life expectancy of the country). INS publishes them, and the tools return them as \"INS published total\" when the generation holds them. By urban/rural area (to 2024): POP217A; by age, regions only: POP217B"
    },
    "aliases": {
     "ro": [
@@ -755,8 +755,8 @@
     "en": "Infant mortality rate"
    },
    "note": {
-    "ro": "decese sub 1 an la 1000 născuți vii, după reședința obișnuită, 2012–2024, pe județe, regiuni și macroregiuni. Descărcarea are doar urban și rural, fără totalul INS și fără valoarea națională: un clasament cere fixarea mediului de reședință. Seria după domiciliu (POP209A) începe în 1990",
-    "en": "deaths under 1 year per 1,000 live births, by usual residence, 2012–2024, by county, region and macroregion. The download has urban and rural only, without the INS total and without the national value: a ranking needs one residence area. The domicile series (POP209A) starts in 1990"
+    "ro": "decese sub 1 an la 1000 născuți vii, după reședința obișnuită, 2012–2024, pe județe, regiuni și macroregiuni. Fișierul de date are doar urban și rural, fără totalul INS și fără valoarea națională; INS le publică, iar instrumentele le returnează ca „total publicat de INS” când generația le conține. Un clasament pe medii cere fixarea mediului de reședință. Seria după domiciliu (POP209A) începe în 1990",
+    "en": "deaths under 1 year per 1,000 live births, by usual residence, 2012–2024, by county, region and macroregion. The data file has urban and rural only, without the INS total and without the national value. INS publishes them, and the tools return them as \"INS published total\" when the generation holds them. A ranking by area needs one residence area. The domicile series (POP209A) starts in 1990"
    },
    "aliases": {
     "ro": [
@@ -793,8 +793,8 @@
     "en": "Infant mortality rate, by domicile"
    },
    "note": {
-    "ro": "decese sub 1 an la 1000 născuți vii, seria mai lungă (1990–2024), pe județe, regiuni și macroregiuni; doar urban și rural, fără total. Seria după reședința obișnuită (POP209B) începe în 2012",
-    "en": "deaths under 1 year per 1,000 live births, the longer series (1990–2024), by county, region and macroregion; urban and rural only, no total. The usual-residence series (POP209B) starts in 2012"
+    "ro": "decese sub 1 an la 1000 născuți vii, seria mai lungă (1990–2024), pe județe, regiuni și macroregiuni; doar urban și rural în fișierul de date; totalul INS se returnează ca „total publicat de INS” când generația îl conține. Seria după reședința obișnuită (POP209B) începe în 2012",
+    "en": "deaths under 1 year per 1,000 live births, the longer series (1990–2024), by county, region and macroregion; urban and rural only in the data file; the INS total is returned as \"INS published total\" when the generation holds it. The usual-residence series (POP209B) starts in 2012"
    },
    "aliases": {
     "ro": [

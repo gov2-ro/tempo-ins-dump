@@ -20,6 +20,34 @@ def _evidence_recovery(selection: dict | None, generation_id: str | None, lang: 
                     "get_evidence_links", {"selection": selection, "generation_id": generation_id})
 
 
+def _published_national(args, ctx, r: dict) -> list:
+    """INS's published national values at the endpoints of each interval (`aggregates`), or [].
+    They exist only when the entities are areas and the request pins nothing but the breakdown the
+    cells carry (sex). They sit beside the ranked entities and are never ranked with them."""
+    from app.services import recipes
+    if r["key_columns"] != ["REF_AREA"]:
+        return []
+    f = {c: list(v) for c, v in args.filters.items() if v and c != "REF_AREA"}
+    f[r["time_column"]] = sorted(r["periods"].values())
+    try:
+        sel = recipes.published_selection(ctx.conn, args.dataset, f, [r["time_column"]])
+    except Exception:
+        return []
+    if not sel:
+        return []
+    value = {c["period"]: c for c in sel["cells"]}
+    fetch = (sel["sources"] or [{}])[0]
+    out = []
+    for iv in r["intervals"]:
+        a, b = value.get(r["periods"].get(iv["from"])), value.get(r["periods"].get(iv["to"]))
+        if a and b:
+            out.append({"entity": {"REF_AREA": a["area"]}, "from": iv["from"], "to": iv["to"],
+                        "from_value": a["value"], "to_value": b["value"], "unit": a["unit"],
+                        "value_source": "ins_published", "query_id": fetch.get("query_id"),
+                        "ins_updated": fetch.get("ins_updated")})
+    return out
+
+
 def compare_periods(args, ctx):
     r = period_changes.run(ctx.conn, args, ctx.lang, ctx=ctx)
     intervals, returned, eligible, cut = [], 0, 0, False
@@ -45,12 +73,17 @@ def compare_periods(args, ctx):
             "key_columns": r["key_columns"], "period_column": r["time_column"],
             "metric": r["metric"], "order": r["order"], "top_k": r["top_k"],
             "unit": r["unit"], "intervals": intervals}
+    aggregates = _published_national(args, ctx, r)
+    if aggregates:
+        data["aggregates"] = aggregates
     cities = r.get("entity_class") == "cities"
     if cities:       # present only for the class, so the default result keeps its exact shape
         data.update(entity_class="cities", outside_class_count=r["outside_class_count"])
     limits = {"returned_rows": returned, "total_rows": eligible, "preview_truncated": cut,
               "source_complete": True, "time_windowed": False, "partial_period_dropped": None}
     warnings = list(r["warnings"])
+    if aggregates:
+        warnings.append(contract.warning("published_total", M.t(ctx.lang, "changes.published_national"), "national"))
     small = sum(1 for iv in intervals for x in iv["rows"] if x.get("small_base"))
     if small:
         warnings.append(contract.warning("small_base", M.t(ctx.lang, "changes.small_base", n=small,
