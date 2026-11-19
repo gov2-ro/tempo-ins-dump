@@ -1,7 +1,7 @@
 {
  "about": "Reviewed concepts for search (PA-02a). Each entry points at an existing INS dataset family; titles, definitions, units and coverage come from the corpus metadata and data, not from here. `note` is only the plain-language distinction between concepts that users confuse. Aliases are matched accent- and case-insensitively on word boundaries; `generic` aliases make the match ambiguous, so the alternatives are shown with it.",
  "version": 1,
- "reviewed": "2026-10-11",
+ "reviewed": "2026-11-19",
  "concepts": [
   {
    "id": "resident_population",
@@ -164,7 +164,14 @@
      "net salary",
      "net wage",
      "net wages",
-     "take-home pay"
+     "take-home pay",
+     "average net monthly wage",
+     "average net monthly salary",
+     "average net monthly earnings",
+     "net monthly wage",
+     "net monthly salary",
+     "net monthly earnings",
+     "average net wage"
     ]
    },
    "generic": {
@@ -184,7 +191,14 @@
      "salary",
      "salaries",
      "wages",
-     "earnings"
+     "earnings",
+     "wage",
+     "monthly wage",
+     "monthly salary",
+     "monthly earnings",
+     "average monthly wage",
+     "average monthly salary",
+     "average monthly earnings"
     ]
    },
    "alternatives": [
@@ -224,7 +238,15 @@
      "gross earnings",
      "gross salary",
      "gross wage",
-     "gross wages"
+     "gross wages",
+     "average gross monthly wage",
+     "average gross monthly salary",
+     "average gross monthly earnings",
+     "gross monthly wage",
+     "gross monthly salary",
+     "gross monthly earnings",
+     "average gross wage",
+     "average gross salary"
     ]
    },
    "alternatives": [
@@ -586,6 +608,336 @@
    ],
    "variants": {
     "national": "IPC102B"
+   }
+  },
+  {
+   "id": "gdp_per_inhabitant",
+   "question": "AQ-09",
+   "family": "CON103H",
+   "variants": {
+    "county": "CON103H_judete",
+    "region": "CON103H_regiuni",
+    "macroregion": "CON103H_macroregiuni"
+   },
+   "name": {
+    "ro": "PIB regional pe locuitor",
+    "en": "Regional GDP per inhabitant"
+   },
+   "note": {
+    "ro": "produsul intern brut pe locuitor, în lei, prețuri curente, calculat conform CAEN Rev.2 și SEC 2010; județe, regiuni și macroregiuni, 2000–2022. Seria veche CAEN Rev.1 (CON103B, doar regiuni, 1993–2008) nu este comparabilă cu aceasta",
+    "en": "gross domestic product per inhabitant, in lei, current prices, calculated under NACE Rev.2 and ESA 2010; counties, regions and macroregions, 2000–2022. The older NACE Rev.1 series (CON103B, regions only, 1993–2008) is not comparable with it"
+   },
+   "aliases": {
+    "ro": [
+     "pib pe locuitor",
+     "pib per capita",
+     "pib pe cap de locuitor",
+     "pib regional pe locuitor",
+     "produsul intern brut pe locuitor",
+     "produs intern brut pe locuitor",
+     "produsul intern brut regional pe locuitor",
+     "pib locuitor"
+    ],
+    "en": [
+     "gdp per capita",
+     "gdp per inhabitant",
+     "gdp per head",
+     "regional gdp per capita",
+     "regional gdp per inhabitant",
+     "gross domestic product per capita",
+     "gross domestic product per inhabitant"
+    ]
+   },
+   "alternatives": [
+    "gdp_regional"
+   ]
+  },
+  {
+   "id": "gdp_regional",
+   "question": "AQ-09",
+   "family": "CON103I",
+   "variants": {
+    "county": "CON103I_judete",
+    "region": "CON103I_regiuni",
+    "macroregion": "CON103I_macroregiuni"
+   },
+   "name": {
+    "ro": "PIB regional total",
+    "en": "Regional GDP, total"
+   },
+   "note": {
+    "ro": "produsul intern brut, în milioane lei, prețuri curente, calculat conform CAEN Rev.2 și SEC 2010; județe, regiuni și macroregiuni, 2000–2022. Pe ramuri de activitate: CON103J (până în 2023). Seria veche CAEN Rev.1 (CON103A, CON103C, până în 2008) nu este comparabilă",
+    "en": "gross domestic product, in million lei, current prices, calculated under NACE Rev.2 and ESA 2010; counties, regions and macroregions, 2000–2022. By branch of activity: CON103J (to 2023). The older NACE Rev.1 series (CON103A, CON103C, to 2008) is not comparable"
+   },
+   "aliases": {
+    "ro": [
+     "pib total",
+     "pib regional total",
+     "pib regional",
+     "valoarea pib",
+     "pib in milioane lei",
+     "produsul intern brut total",
+     "produsul intern brut regional",
+     "produs intern brut regional"
+    ],
+    "en": [
+     "total gdp",
+     "regional gdp",
+     "regional gdp total",
+     "gdp in million lei",
+     "gdp by county",
+     "gdp by region",
+     "regional gross domestic product",
+     "gross domestic product by county"
+    ]
+   },
+   "generic": {
+    "ro": [
+     "pib",
+     "produsul intern brut",
+     "produs intern brut",
+     "pib pe judete"
+    ],
+    "en": [
+     "gdp",
+     "gross domestic product"
+    ]
+   },
+   "alternatives": [
+    "gdp_per_inhabitant"
+   ]
+  },
+  {
+   "id": "life_expectancy",
+   "question": "AQ-09",
+   "family": "TCP0341",
+   "variants": {
+    "county": "TCP0341_judete",
+    "region": "TCP0341_regiuni",
+    "macroregion": "TCP0341_macroregiuni"
+   },
+   "name": {
+    "ro": "Speranța de viață la naștere",
+    "en": "Life expectancy at birth"
+   },
+   "note": {
+    "ro": "numărul mediu de ani de trăit al unui nou-născut, pe sexe, 2008–2023, pentru județe, regiuni și macroregiuni. Descărcarea nu conține valoarea INS pentru ambele sexe și nici valoarea națională: o medie a județelor nu este speranța de viață a țării. Pe medii de reședință (urban/rural, până în 2024): POP217A; pe vârste, doar regiuni: POP217B",
+    "en": "average years a newborn is expected to live, by sex, 2008–2023, for counties, regions and macroregions. The download holds neither the INS both-sexes value nor the national value: an average of counties is not the life expectancy of the country. By urban/rural area (to 2024): POP217A; by age, regions only: POP217B"
+   },
+   "aliases": {
+    "ro": [
+     "speranta de viata",
+     "speranta de viata la nastere",
+     "speranta medie de viata",
+     "durata medie a vietii",
+     "durata de viata"
+    ],
+    "en": [
+     "life expectancy",
+     "life expectancy at birth",
+     "average life expectancy",
+     "expected lifespan",
+     "average lifespan"
+    ]
+   }
+  },
+  {
+   "id": "infant_mortality_rate",
+   "question": "AQ-09",
+   "family": "POP209B",
+   "variants": {
+    "county": "POP209B_judete",
+    "region": "POP209B_regiuni",
+    "macroregion": "POP209B_macroregiuni"
+   },
+   "name": {
+    "ro": "Rata mortalității infantile",
+    "en": "Infant mortality rate"
+   },
+   "note": {
+    "ro": "decese sub 1 an la 1000 născuți vii, după reședința obișnuită, 2012–2024, pe județe, regiuni și macroregiuni. Descărcarea are doar urban și rural, fără totalul INS și fără valoarea națională: un clasament cere fixarea mediului de reședință. Seria după domiciliu (POP209A) începe în 1990",
+    "en": "deaths under 1 year per 1,000 live births, by usual residence, 2012–2024, by county, region and macroregion. The download has urban and rural only, without the INS total and without the national value: a ranking needs one residence area. The domicile series (POP209A) starts in 1990"
+   },
+   "aliases": {
+    "ro": [
+     "rata mortalitatii infantile",
+     "mortalitatea infantila",
+     "mortalitate infantila",
+     "mortalitatii infantile",
+     "decese sub 1 an",
+     "decese infantile"
+    ],
+    "en": [
+     "infant mortality rate",
+     "infant mortality",
+     "infantile mortality rate",
+     "infantile mortality",
+     "infant deaths"
+    ]
+   },
+   "alternatives": [
+    "infant_mortality_domicile"
+   ]
+  },
+  {
+   "id": "infant_mortality_domicile",
+   "question": "AQ-09",
+   "family": "POP209A",
+   "variants": {
+    "county": "POP209A_judete",
+    "region": "POP209A_regiuni",
+    "macroregion": "POP209A_macroregiuni"
+   },
+   "name": {
+    "ro": "Rata mortalității infantile, după domiciliu",
+    "en": "Infant mortality rate, by domicile"
+   },
+   "note": {
+    "ro": "decese sub 1 an la 1000 născuți vii, seria mai lungă (1990–2024), pe județe, regiuni și macroregiuni; doar urban și rural, fără total. Seria după reședința obișnuită (POP209B) începe în 2012",
+    "en": "deaths under 1 year per 1,000 live births, the longer series (1990–2024), by county, region and macroregion; urban and rural only, no total. The usual-residence series (POP209B) starts in 2012"
+   },
+   "aliases": {
+    "ro": [
+     "mortalitatea infantila dupa domiciliu",
+     "rata mortalitatii infantile dupa domiciliu",
+     "mortalitatea infantila din 1990",
+     "mortalitatea infantila pe ani lungi"
+    ],
+    "en": [
+     "infant mortality by domicile",
+     "infant mortality rate by domicile",
+     "infant mortality since 1990",
+     "long infant mortality series"
+    ]
+   },
+   "alternatives": [
+    "infant_mortality_rate"
+   ]
+  },
+  {
+   "id": "dwellings_completed",
+   "question": "AQ-09",
+   "family": "LOC104A",
+   "variants": {
+    "county": "LOC104A_judete",
+    "region": "LOC104A_regiuni",
+    "macroregion": "LOC104A_macroregiuni"
+   },
+   "name": {
+    "ro": "Locuințe terminate",
+    "en": "Dwellings completed"
+   },
+   "note": {
+    "ro": "locuințe terminate în cursul anului, după sursa de finanțare și mediul de reședință, 1990–2025, pe județe, regiuni și macroregiuni. „Din care: din fondurile populației” face parte din „Din fonduri private”: nu se adună cu ele. Descărcarea nu are totalul INS pe surse, deci fixează o singură sursă (publice sau private)",
+    "en": "dwellings completed in the year, by source of funding and residence area, 1990–2025, by county, region and macroregion. “Of which: from household funds” is part of “From private funds”: never add them together. The download lacks the INS total across sources, so pin one source (public or private)"
+   },
+   "aliases": {
+    "ro": [
+     "locuinte terminate",
+     "locuintele terminate",
+     "locuinte noi terminate",
+     "locuinte noi",
+     "locuinte finalizate",
+     "locuinte construite"
+    ],
+    "en": [
+     "dwellings completed",
+     "completed dwellings",
+     "finished dwellings",
+     "new dwellings",
+     "new homes completed",
+     "housing completions"
+    ]
+   }
+  },
+  {
+   "id": "pupils_by_education_level",
+   "question": "AQ-09",
+   "family": "SCL103F",
+   "variants": {
+    "county": "SCL103F_judete",
+    "region": "SCL103F_regiuni",
+    "macroregion": "SCL103F_macroregiuni"
+   },
+   "name": {
+    "ro": "Populația școlară pe niveluri de educație",
+    "en": "Enrolled pupils by education level"
+   },
+   "note": {
+    "ro": "elevi și studenți înscriși, pe niveluri de educație și sexe, 1990–2024, pe județe, regiuni și macroregiuni. Nivelurile se suprapun: alege unul singur. Fără suprapunere: creșe, grădinițe, învățământ primar și gimnazial, liceal („secundar ciclul 2”), profesional, postliceal și de maiștri, universitar. Totalurile „preuniversitar” și „liceal și profesional” conțin celelalte niveluri",
+    "en": "enrolled pupils and students, by education level and sex, 1990–2024, by county, region and macroregion. The levels overlap: choose exactly one. Without overlap: nurseries, kindergartens, primary and lower secondary, upper secondary general (“liceal”), vocational, post-secondary and foremen, tertiary. The totals “pre-university” and “upper secondary general and vocational” contain the other levels"
+   },
+   "aliases": {
+    "ro": [
+     "populatia scolara",
+     "elevi inscrisi",
+     "numarul de elevi",
+     "numar de elevi",
+     "numarul elevilor",
+     "elevi pe niveluri de educatie",
+     "elevii inscrisi",
+     "elevi in invatamantul liceal"
+    ],
+    "en": [
+     "enrolled pupils",
+     "number of pupils",
+     "school population",
+     "pupils by education level",
+     "pupils enrolled",
+     "school enrolment"
+    ]
+   },
+   "generic": {
+    "ro": [
+     "elevi",
+     "elevii",
+     "invatamant liceal",
+     "invatamantul liceal",
+     "invatamant primar",
+     "invatamant gimnazial"
+    ],
+    "en": [
+     "pupils",
+     "students",
+     "enrolment",
+     "enrollment"
+    ]
+   }
+  },
+  {
+   "id": "exports_annual",
+   "question": "AQ-09",
+   "family": "EXP101G",
+   "variants": {
+    "national": "EXP101G_milioane_euro"
+   },
+   "name": {
+    "ro": "Exporturi anuale (FOB)",
+    "en": "Annual exports (FOB)"
+   },
+   "note": {
+    "ro": "valoarea exporturilor FOB pe cele 10 secțiuni CSCI Rev.4, în milioane euro, anual, 2006–2024; totalul anual este suma secțiunilor (neverificată față de totalul INS, pe care descărcarea nu îl conține). Același tabel în dolari SUA: EXP101G_milioane_dolari_usd. Lunar, din 2013: EXP101I",
+    "en": "export value (FOB) by the 10 SITC Rev.4 sections, in million euro, yearly, 2006–2024; the yearly total is the sum of the sections (unchecked against the INS total, which the download does not hold). The same table in US dollars: EXP101G_milioane_dolari_usd. Monthly, from 2013: EXP101I"
+   },
+   "aliases": {
+    "ro": [
+     "exporturi anuale",
+     "exporturile anuale",
+     "exporturi totale",
+     "total exporturi",
+     "valoarea exporturilor",
+     "exporturile romaniei",
+     "exporturi pe ani"
+    ],
+    "en": [
+     "annual exports",
+     "total exports",
+     "exports by year",
+     "yearly exports",
+     "export value",
+     "romania exports",
+     "exports of romania"
+    ]
    }
   }
  ]
