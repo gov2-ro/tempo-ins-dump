@@ -96,3 +96,14 @@ def test_con103h_counties_rank_in_both_orders(real):
                  order=order, top_k=5, lang="ro")
         assert r["status"] in ("ok", "partial"), r["message"]
         assert len(r["data"]["rows"]) == 5 and first in r["data"]["rows"][0]["entity"]["REF_AREA"]
+
+
+@pytest.mark.corpus
+@pytest.mark.parametrize("code,recipe", [("FOM106E_judete", "net_earnings_county"),
+                                         ("SOM103A_judete", "registered_unemployment_county")])
+def test_corpus_rates_that_need_a_combined_value_still_route_to_the_recipe(real, code, recipe):
+    r = call("rank_entities", dataset=code, entity_columns=["REF_AREA"], year="2024", lang="en")
+    assert r["status"] == "unavailable" and r["recovery"][0]["arguments"]["recipe"] == recipe
+    c = call("compare_periods", dataset=code, entity_columns=["REF_AREA"],
+             intervals=[{"from": "2020", "to": "2024"}], lang="en")
+    assert c["status"] == "unavailable" and c["recovery"][0]["arguments"]["recipe"] == recipe

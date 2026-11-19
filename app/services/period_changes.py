@@ -322,7 +322,12 @@ _PIN = frozenset({"overlapping_levels", "unverified_structure", "contains_aggreg
                   "mixed_units", "slice_value_missing"})
 
 
-def _native_refusal(res: dict, code: str, lang: str, prov, limits) -> ToolFailure:
+def recovery_for_recipe(rid: str, lang: str) -> dict:
+    from app.services.tools import recipe as recipe_tool
+    return recipe_tool.recipe_recovery(rid, lang, M.t(lang, "recipe.published_route", rid=rid))
+
+
+def _native_refusal(res: dict, code: str, lang: str, prov, limits, rate_recipe=None) -> ToolFailure:
     from app.services.tools import query as query_tool
     agg = res.get("aggregation") or {}
     reason = query_tool.refusal_reason(res, code) if agg.get("reason") else "aggregation_unavailable"
@@ -330,6 +335,8 @@ def _native_refusal(res: dict, code: str, lang: str, prov, limits) -> ToolFailur
     text = M.t(lang, f"period.native.{reason}" if reason in _NATIVE_REASONS else "period.native.default",
                col=col or M.t(lang, "period.a_dimension"), reason=reason)
     rec = []
+    if rate_recipe:         # a rate that needs a combined value: the reviewed recipe comes first
+        rec.append(recovery_for_recipe(rate_recipe, lang))
     if reason in _PIN and col:
         rec.append(recovery("tool_call", M.t(lang, "period.list_pin", col=col),
                             "find_dimension_values", {"dataset": code, "column": col, "limit": 20}))
@@ -483,7 +490,11 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
     prov["source_query"] = source_query
     agg = res.get("aggregation") or {}
     if res.get("unavailable"):
-        raise _native_refusal(res, code, lang, prov, contract.query_limits(res, 0))
+        rid = None
+        if mctx.get("measure") == "non_additive":
+            from app.services.tools import recipe as recipe_tool
+            rid = recipe_tool.published_recipe_for(conn, code)
+        raise _native_refusal(res, code, lang, prov, contract.query_limits(res, 0), rid)
     if res.get("truncated") or res.get("time_windowed") or res.get("partial_period_dropped") \
             is not None:
         raise _unavailable(
