@@ -9,3 +9,4 @@ requests==2.33.1      # tests load the fetch scripts (6-fetch-csv.py); same pin 
 tqdm==4.66.5          # same
 pandas==2.1.3         # tests load update-pipeline.py; never in requirements.txt (the VPS venv refuses it)
 numpy==1.26.4         # pandas' pin from requirements-pipeline.txt
+pyarrow==22.0.0       # export tests build parquet fixtures; same pin as requirements-pipeline.txt
