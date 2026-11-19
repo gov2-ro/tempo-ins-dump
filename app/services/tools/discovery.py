@@ -432,6 +432,31 @@ def _attach_breaks(ctx, cards: list):
             cand["notes"] += [{**_note("series_break", b["text"]), "subject": b["id"]} for b in breaks]
 
 
+_CURRENCY_UNIT = {"eur": re.compile(r"\b(euro|eur)\b"), "ron": re.compile(r"\b(lei|leu|ron)\b")}
+
+
+def _unit_is(unit, currency: str) -> bool:
+    """Is a unit text (card unit, file value, published cell) in this currency ("eur" | "ron")?"""
+    return bool(_CURRENCY_UNIT[currency].search(cs.fold(unit)))
+
+
+def _published_national(ctx, code: str, filters: dict, parsed: dict, period_call) -> bool:
+    """Does INS publish the national cell that answers this national question for `code`? Only a cell
+    for the asked periods, and only when no qualifier needs a breakdown the cell lacks (a currency
+    the cell is stated in is fine; residence or a locality is not)."""
+    if parsed.get("level") != "national" or parsed.get("places") or period_call or "REF_AREA" in filters:
+        return False
+    try:
+        cov = recipes.published_coverage(ctx.conn, code)
+    except Exception:
+        log.exception("published coverage unavailable code=%s", code)
+        return False
+    if not cov or not cov["national"] or any(not cov["first"] <= t <= cov["last"] for t in filters.get("TIME_PERIOD", [])):
+        return False
+    return all(q["kind"] == "currency" and q["value"] and _unit_is(cov.get("unit"), q["value"])
+               for q in parsed.get("qualifiers") or [])
+
+
 def _candidate(ctx, code: str, level, filters: dict, parsed: dict, relation: str,
                extra_notes=(), period_call: dict | None = None) -> dict:
     """One candidate dataset with its grain quality, domain and the next call.
@@ -455,6 +480,10 @@ def _candidate(ctx, code: str, level, filters: dict, parsed: dict, relation: str
     if domain["complete"] is False:
         problems.append(_note("domain_incomplete", M.t(lang, "discover.domain_incomplete", desc=domain["description"])))
     pre = None if problems else _preflight(actx, group_by, filters)
+    if pre and relation == "primary" and _published_national(ctx, code, filters, parsed, period_call):
+        # the shared policy cannot collapse this source, but INS publishes the national cell that query_data serves
+        pre = None
+        notes.append(_note("national_published", M.t(lang, "discover.national_published")))
     if pre:
         reason, col = pre
         problems.append(_note("aggregation_unavailable", M.t(
@@ -640,15 +669,26 @@ def _recipe_candidate(ctx, rid: str, parsed: dict, coverage: dict | None, relati
             "next_call": next_call}
 
 
+def _groups_area(cand: dict) -> bool:
+    """Regional rows: a sub-national source grouped by all its areas (no named area)."""
+    args = (cand.get("next_call") or {}).get("arguments") or {}
+    return cand.get("level") != "national" and "REF_AREA" in args.get("group_by", ()) \
+        and "REF_AREA" not in (args.get("filters") or {})
+
+
 def _choose(cands: list, wanted_level, lang: str) -> dict | None:
     ok = [c for c in cands if c["queryable"] and c["next_call"]]
+    if wanted_level == "national":      # regional rows never stand in for a national question
+        ok = [c for c in ok if not _groups_area(c)]
     pick = next((c for c in ok if wanted_level and c["level"] == wanted_level), None) \
         or (ok[0] if ok else None)
     if pick is not None:
         pick["preferred"] = True
         if wanted_level and pick["level"] != wanted_level:
             level = pick["level"] or M.t(lang, "discover.parent_level")
-            if LEVEL_ORDER.get(wanted_level, 0) > LEVEL_ORDER.get(pick["level"], 9):
+            if any(n["code"] == "national_published" for n in pick["notes"]):
+                pass            # INS's own national cell, not a sum
+            elif LEVEL_ORDER.get(wanted_level, 0) > LEVEL_ORDER.get(pick["level"], 9):
                 # a larger area than the source's: its values can be summed (F8); not a place blocker
                 pick["notes"].append(_note("level_aggregated", M.t(
                     lang, "discover.level_aggregated", wanted=wanted_level, level=level)))
@@ -714,6 +754,11 @@ def _concept_card(ctx, raw: dict, by_id: dict, parsed: dict, query: str) -> dict
         card["notes"] += [n for n in first["notes"] if n["code"] in PERIOD_NOTES + RANGE_NOTES]
     wanted = parsed.get("level") or (first["level"] if first else None)
     _choose(cands, wanted, ctx.lang)
+    # a national question whose only queryable candidates give regional rows: say so, offer none as the answer
+    regional_only = wanted == "national" and not any(c["preferred"] for c in cands) \
+        and any(c["queryable"] and c["next_call"] for c in cands)
+    if regional_only:
+        card["notes"].append(_note("national_unavailable", M.t(ctx.lang, "discover.national_unavailable")))
     # preferred first, the rest in discovery order
     cands.sort(key=lambda c: not c["preferred"])
     card["candidates"] = cands
@@ -729,7 +774,8 @@ def _concept_card(ctx, raw: dict, by_id: dict, parsed: dict, query: str) -> dict
         card["preferred"] = pref["dataset"] or pref.get("recipe")
         card["next_call"] = pref["next_call"]
     else:
-        card["notes"].append(_note("no_verified_candidate", M.t(ctx.lang, "discover.no_verified_candidate")))
+        if not regional_only:
+            card["notes"].append(_note("no_verified_candidate", M.t(ctx.lang, "discover.no_verified_candidate")))
         card["next_call"] = next((c["next_call"] for c in cands if c["next_call"]), None)
     base = _base_query(query, raw.get("matched"))
     card["alternatives"] = [_alternative(ctx, a, by_id, base) for a in raw.get("alternatives") or []]
@@ -920,20 +966,160 @@ def _locality_card(conn, lang: str, plan, parsed: dict, by_id: dict) -> dict:
 _CALL_TOOLS = ("query_data", "rank_entities", "run_recipe")
 
 
+def _withhold(cand: dict, lang: str):
+    """No data call for this candidate: a dataset points at describe_dataset (explicit values can be
+    filtered there), a recipe offers no call."""
+    cand["next_call"] = _call("describe_dataset", dataset=cand["dataset"], lang=lang) if cand.get("dataset") else None
+    cand["notes"].append(_note("constraint_not_applied", M.t(lang, "discover.constraint_withheld") + " " + M.t(
+        lang, "discover.constraint_filter" if cand["next_call"] else "discover.constraint_recipe")))
+
+
 def _withhold_calls(cards: list, lang: str):
     """A constraint discovery cannot apply (sex, age, a denominator, a county around a city
-    ranking) must not hide behind a data call that ignores it: a dataset candidate points at
-    describe_dataset (explicit values can be filtered there), a recipe candidate offers no call."""
+    ranking) must not hide behind a data call that ignores it."""
     for card in cards:
         for cand in card["candidates"]:
-            if (cand.get("next_call") or {}).get("tool") not in _CALL_TOOLS:
-                continue
-            cand["next_call"] = _call("describe_dataset", dataset=cand["dataset"], lang=lang) \
-                if cand.get("dataset") else None
-            cand["notes"].append(_note("constraint_not_applied", M.t(lang, "discover.constraint_withheld") + " " + M.t(
-                lang, "discover.constraint_filter" if cand["next_call"] else "discover.constraint_recipe")))
+            if (cand.get("next_call") or {}).get("tool") in _CALL_TOOLS:
+                _withhold(cand, lang)
         pref = next((c for c in card["candidates"] if c.get("preferred")), None)
         card["next_call"] = pref.get("next_call") if pref else None
+
+
+# --- qualifiers: residence, a named locality, a currency ----------------------------------------
+# Each is applied as an exact filter read from the candidate's own data file, offered as an exact value
+# lookup, or reported. A candidate that cannot apply one gets no data call.
+
+_SIRUTA = re.compile(r"^\d+\s")
+KIND_OF = {"locality": "geography"}         # the kind a qualifier is reported under when nothing applies it
+
+
+def _values(ctx, code: str, column: str, q: str | None = None, limit: int = 500) -> dict | None:
+    try:
+        return data_query.dimension_values(ctx.conn, code, column, q=q, limit=limit)
+    except data_query.QueryError:
+        return None
+
+
+def _residence_outcome(ctx, code: str, q: dict):
+    res = _values(ctx, code, "RESIDENCE")
+    if res is None or not q["value"] or res["total"] > len(res["values"]):
+        return None
+    hit = [v for v in res["values"] if any(w.startswith(q["value"]) for w in cs.fold(v).split())]
+    return {"filter": ("RESIDENCE", hit[0])} if len(hit) == 1 else None
+
+
+def _locality_outcome(ctx, code: str, actx, q: dict):
+    """The locality column is read from the data: a geography column whose values start with a SIRUTA code."""
+    for col in sorted(d["dim_column_name"] for d in (actx or {}).get("dimensions", ())
+                      if d["dim_column_name"].startswith("REF_AREA_")):
+        probe = _values(ctx, code, col, limit=5)
+        if not probe or not probe["values"] or not all(_SIRUTA.match(v) for v in probe["values"]):
+            continue
+        res = _values(ctx, code, col, q=q["value"], limit=20)
+        if res is None or not res["total"]:
+            return None
+        if res["total"] == 1:
+            return {"filter": (col, res["values"][0])}
+        call = _call("find_dimension_values", dataset=code, column=col, query=q["value"], limit=20)
+        return {"lookup": (col, call)} if call else None
+    return None
+
+
+def _currency_outcome(ctx, code: str, unit, q: dict):
+    """{} when the dataset is in that currency already; a UNIT_MEASURE filter when one value of several is."""
+    if not q["value"]:
+        return None
+    res = _values(ctx, code, "UNIT_MEASURE")
+    if res is None:         # no unit column: the card's unit is the file's
+        return {} if unit and _unit_is(unit, q["value"]) else None
+    if res["total"] > len(res["values"]):
+        return None
+    hit = [v for v in res["values"] if _unit_is(v, q["value"])]
+    if len(res["values"]) == 1:
+        return {} if hit else None
+    return {"filter": ("UNIT_MEASURE", hit[0])} if len(hit) == 1 else None
+
+
+def _qualifier_outcome(ctx, cand: dict, unit, q: dict):
+    """{"filter": (column, value)} | {"lookup": (column, call)} | {} (met by the dataset itself) | None (cannot)."""
+    code, actx = cand["dataset"], _actx(ctx.conn, cand["dataset"])
+    if q["kind"] == "residence":
+        return _residence_outcome(ctx, code, q)
+    if q["kind"] == "locality":
+        return _locality_outcome(ctx, code, actx, q)
+    return _currency_outcome(ctx, code, unit, q)
+
+
+def _apply_qualifiers(ctx, cards: list, qualifiers: list, lang: str) -> tuple:
+    """(unapplied constraints, warnings). Per candidate with a data call: every qualifier applies (its
+    filter joins the call, disclosed), or one needs an exact lookup first (the call becomes that lookup),
+    or one cannot be applied (no data call). A qualifier that no candidate can apply is unapplied."""
+    served, seen, warnings = set(), set(), []
+    if not qualifiers:
+        return [], warnings
+    for card in cards:
+        moved = False
+        for cand in card["candidates"]:
+            call = cand.get("next_call") or {}
+            if call.get("tool") not in _CALL_TOOLS:
+                continue
+            if cand.get("kind") != "dataset":
+                _withhold(cand, lang)
+                moved = moved or cand["preferred"]
+                continue
+            outs = [(q, _qualifier_outcome(ctx, cand, card.get("unit"), q)) for q in qualifiers]
+            served |= {q["kind"] for q, o in outs if o is not None}
+            if any(o is None for _, o in outs):
+                _withhold(cand, lang)
+                moved = moved or cand["preferred"]
+                continue
+            args, lookup = dict(call["arguments"]), None
+            for q, o in outs:
+                word = M.tx(lang).get(f"discover.kind.{q['kind']}", q["kind"])
+                if "lookup" in o:
+                    lookup = lookup or o["lookup"]
+                    text = M.t(lang, "discover.qualifier_lookup", kind=word, words=q["text"], column=o["lookup"][0])
+                    cand["notes"].append(_note("qualifier_lookup", text))
+                    if ("lookup", o["lookup"][0]) not in seen:
+                        seen.add(("lookup", o["lookup"][0]))
+                        warnings.append(C.warning("qualifier_lookup", text, o["lookup"][0]))
+                elif "filter" in o:
+                    col, val = o["filter"]
+                    args["filters"] = {**args.get("filters", {}), col: [val]}
+                    if q["kind"] == "locality":     # the locality is the grouped axis: one row for it
+                        gb = [c for c in args.get("group_by", []) if c != col]
+                        args["group_by"] = gb[:-1] + [col] + gb[-1:] if gb and gb[-1] == "TIME_PERIOD" else gb + [col]
+                    text = M.t(lang, "discover.qualifier_applied", kind=word, words=q["text"], column=col, value=val)
+                    cand["notes"].append(_note("qualifier_applied", text))
+                    if (col, val) not in seen:
+                        seen.add((col, val))
+                        warnings.append(C.warning("qualifier_applied", text, col))
+            new = lookup[1] if lookup else _call(call["tool"], **args)
+            if new is not None and not lookup and new["tool"] == "query_data" and args != call["arguments"] and _preflight(
+                    _actx(ctx.conn, cand["dataset"]), args.get("group_by", []), args.get("filters", {})):
+                new = None          # the shared policy refuses this selection
+            if new is None:
+                _withhold(cand, lang)
+                moved = moved or cand["preferred"]
+                continue
+            cand["next_call"] = new
+            if new["tool"] == "query_data" and new["arguments"].get("filters"):
+                cand["url"] = C.dataset_page(cand["dataset"], lang, new["arguments"]["filters"])
+            moved = moved or (bool(lookup) and cand["preferred"])
+        pref = next((c for c in card["candidates"] if c["preferred"]), None)
+        if moved and pref and (pref.get("next_call") or {}).get("tool") not in _CALL_TOOLS:
+            # the preferred candidate cannot answer; the first that has a data call does
+            alt = next((c for c in card["candidates"] if (c.get("next_call") or {}).get("tool") in _CALL_TOOLS), None)
+            if alt:
+                pref["preferred"], alt["preferred"] = False, True
+                card["candidates"].sort(key=lambda c: not c["preferred"])
+                card["preferred"] = alt["dataset"] or alt.get("recipe")
+        pref = next((c for c in card["candidates"] if c["preferred"]), None)
+        if pref and card["next_call"] is not None:
+            card["next_call"] = pref["next_call"]
+    unapplied = [{"kind": KIND_OF.get(q["kind"], q["kind"]), "text": q["text"]}
+                 for q in qualifiers if q["kind"] not in served]
+    return unapplied, warnings
 
 
 # --- AQ-05A: the one supported city change (policy: discovery_policy.city_change) ---------------
@@ -1116,6 +1302,7 @@ def discover_indicators(args, ctx):
     res = cs.search(plan.query, conn, lang=lang, limit=max(args.limit, LEVEL_POOL))
     parsed = res["interpretation"]
     parsed["latest"] = parsed.get("latest") or intent["latest"]
+    parsed["qualifiers"] = intent["qualifiers"]
     parsed["period_range"] = rng = intent["period_range"]
     # every year asked for when there is more than one: a span, or years listed one by one
     parsed["periods"] = list(range(rng["from"], rng["to"] + 1)) if rng else (
@@ -1142,8 +1329,19 @@ def discover_indicators(args, ctx):
         place = _place_filter(ctx, plan, geo, unapplied)
         if place is None:
             unapplied.append({"kind": "geography", "text": ", ".join([p["name"] for p in geo.places] + list(geo.regions))})
+    named_q = [q for q in intent["qualifiers"] if not set(cs.fold(q["text"]).split()) <= named]
+    q_unapplied, q_warnings = _apply_qualifiers(ctx, cards, named_q, lang)
+    unapplied += q_unapplied
+    if any(n["code"] == "national_unavailable" for c in cards for n in c["notes"]):
+        unapplied.append({"kind": "geography", "text": M.t(lang, "discover.national_word")})
+    if any(q["kind"] == "locality" for q in named_q) and not any(c["kind"] == "geography" for c in q_unapplied):
+        places = [p for p in places if p.get("note") != "city_not_county"]     # the cue names the city
     if unapplied:
         _withhold_calls(cards, lang)
+        q_warnings = []                     # no call carries those filters now
+        for card in cards:
+            for cand in card["candidates"]:
+                cand["notes"] = [n for n in cand["notes"] if n["code"] not in ("qualifier_applied", "qualifier_lookup")]
     elif plan.change:
         _change_calls(cards, plan, intent, lang, place)
     elif intent["operation"] == "rank" or intent["cities"]:
@@ -1169,7 +1367,7 @@ def discover_indicators(args, ctx):
                         else _assumed_warning(by_id.get(assumed, {}), assumed, lang, intent["cities"]))
     if place:
         warnings.append(_disclose_place_filter(cards, place, lang))
-    warnings += _constraint_warnings(unapplied, lang)
+    warnings += q_warnings + _constraint_warnings(unapplied, lang)
     if plan.change and not unapplied:
         warnings.append(C.warning("classification_reference", M.t(lang, "policy.city_change_note")))
     for card in cards:

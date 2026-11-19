@@ -29,6 +29,50 @@ _DASH = re.compile(rf'\b{_Y}\s*[-–—]\s*{_Y}\b')
 _DENOMINATOR = re.compile(r'\b((?:pe|per|la(?: un)?) locuitor|per (?:resident|inhabitant|capita)|pe cap de locuitor|'
                           r'mia de locuitori|(?:1000|1 000|100 000) (?:de )?(?:locuitori|residents|inhabitants))\b')
 
+# Qualifiers discovery applies as exact filters, or reports (never ignores): residence, a named locality, a
+# currency. They are read here and resolved against each candidate's own data file in `discovery`.
+_RESIDENCE = re.compile(r'\b(rural[ae]?|rurali|urban[ae]?|urbani)\b')
+_LOCALITY_CUE = re.compile(r'\b(?:(?:municipiul|municipiului|orasul|orasului|comuna|comunei|localitatea|localitatii|satul|satului)'
+                           r'|(?:city|town|municipality|commune|village|locality)\s+of)\s+([a-z]+(?:\s+[a-z]+){0,3})')
+_LOCALITY_STOP = frozenset(
+    'in din la pe pentru si sau de a al cu for by from and or at on with during between over since per vs versus the '
+    'was is este anul year years county judetul judet dupa according ordered sorted ranked'.split())
+_EURO = re.compile(r'\b(euro|euros|eur)\b')
+_LEI = re.compile(r'\b(lei|leu|ron)\b')
+
+
+def locality_name(folded: str) -> str | None:
+    """The 1-3 words after a locality cue ("municipiul", "city of"), up to a stop word or a year; None without a cue."""
+    m = _LOCALITY_CUE.search(folded)
+    if not m:
+        return None
+    words = []
+    for w in m[1].split():
+        if w in _LOCALITY_STOP:
+            break
+        words.append(w)
+    return " ".join(words[:3]) or None
+
+
+def qualifiers(query: str, folded: str) -> list:
+    """[{kind, text, value}] for residence (value: "rural"/"urban", None when both are named), a named
+    locality (value: its folded name) and a currency (value: "eur"/"ron", None when both are named)."""
+    out = []
+    words = [m[0] for m in _RESIDENCE.finditer(folded)]
+    if words:
+        stems = {w[:5] for w in words}
+        out.append({"kind": "residence", "text": ", ".join(dict.fromkeys(words)),
+                    "value": next(iter(stems)) if len(stems) == 1 else None})
+    name = locality_name(folded)
+    if name:
+        out.append({"kind": "locality", "text": name, "value": name})
+    euro = _EURO.findall(folded) + (["€"] if "€" in str(query) else [])
+    lei = _LEI.findall(folded)
+    if euro or lei:
+        out.append({"kind": "currency", "text": ", ".join(dict.fromkeys(euro + lei)),
+                    "value": None if euro and lei else "eur" if euro else "ron"})
+    return out
+
 
 def period_range(query: str) -> dict | None:
     """{"from", "to"} for a span of years the question names, earliest first; None otherwise."""
@@ -82,5 +126,7 @@ def interpret(query: str) -> dict:
             'period_range': period_range(query),
             'last_years': last_years(query),
             'years': sorted({int(y) for y in re.findall(_Y, t)}),
+            # a city ranking keeps its own county handling (discovery_policy.county_filter), so no locality is read
+            'qualifiers': [q for q in qualifiers(query, t) if not (cities and q['kind'] == 'locality')],
             'population': bool(re.search(r'\b(populati\w*|population|populate|populated)\b', t)),
             'constraints': constraints}
