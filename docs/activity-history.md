@@ -1,5 +1,20 @@
 # Activity History
 
+## 2026-11-19 — AQ-09 MCP usability (merged, not deployed)
+
+- **What:** `rank_entities` and `compare_periods` accept a rate when each entity is one source cell
+  (method `single_row` or `aggregate_row`); the up-front gates were redundant for safety. Eight reviewed
+  concepts (GDP per inhabitant, total GDP, life expectancy, infant mortality in two series, dwellings
+  completed, pupils, annual exports) plus EN wage aliases. Discovery: no false "per capita" warning,
+  filler words dropped, `no_close_match`, longer-series and "last N years" warnings, density searched
+  before any refusal. Period bounds come from parquet footer statistics when they equal the scan.
+- **Why:** the AQ-09C sweep answered 8/20; now 9/20 with 70 → 56 calls. The DeepSeek GDP question takes
+  3 dispatches instead of 12.
+- **Non-obvious:** EXP101A in our download holds only private ownership; the annual export total is EXP101G
+  (equals the sum of monthly EXP101I). Review hardening: the post-query check treats any measure not proven
+  additive as a rate. Built by a Sonnet agent from brief 09 (revised), reviewed by Opus; record
+  `docs/plans/ask-and-public-mcp/remaining/aq-09-record.md`.
+
 ## 2026-11-19 — insseption review; TEMPO decoding, error envelope and data probe
 
 - **What:** reviewed csaladenes/insseption (live TEMPO proxy + chat agent, MIT); report in

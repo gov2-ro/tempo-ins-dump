@@ -90,7 +90,9 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   the recovery for a refused child. Look for other parents with "Din care" options. Cause: the policy's
   `label_hierarchy_cues` does not know "Din care" (364 datasets have such an option). Brief:
   [10-din-care-subsets.md](plans/ask-and-public-mcp/remaining/10-din-care-subsets.md).
-- [ ] **P2 — MCP usability fixes from the AQ-09C sweep** (fixes #1, #2, #3, #5 + MCP-04: brief
+- [ ] **P2 — MCP usability fixes from the AQ-09C sweep** (fixes #1, #2, #3, #5 + MCP-04 **done in AQ-09**, merged
+  2026-11-19 `e6c7005`, not deployed; sweep 8/20 → 9/20, calls 70 → 56; record `aq-09-record.md`. Open: #6, #7 (AQ-13),
+  #9, #10, #11, #12. Brief
   [09-mcp-usability.md](plans/ask-and-public-mcp/remaining/09-mcp-usability.md), revised 2026-11-19, Sonnet agent) (2026-11-18; 8/20 answered correctly). Record
   with the ranked causes and 12 proposed fixes:
   [aq-09c-sweep-baseline.md](plans/ask-and-public-mcp/remaining/aq-09c-sweep-baseline.md). Not yet in a
@@ -99,17 +101,32 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   coverage); a named city resolved to its county (Q07); more concepts (life expectancy, infant mortality,
   dwellings, pupils, exports, EN wage aliases); INS Total cells for non-additive datasets (owner decision);
   month-to-year sums; a municipii-only class.
+- [ ] **P1 — Deploy AQ-09** (merged `e6c7005`). Code only, same generation `be715608`: VPS `deploy.sh`, and a static
+  rebuild (discovery messages and concepts reach the static site through recorded answers).
+- [ ] **Owner (core-assets) — County area, km².** No usable source in the corpus (AGR101A holds private ownership
+  only and ends 2014; TAZ0221 is registered land; core-assets polygons have no area attribute). Proposal: a small
+  reviewed km² table owned by core-assets; then area and density concepts here. Do not derive area from
+  simplified polygons.
+- [ ] **P2 — Named city → the locality dataset** (sweep fix #6): resolve a named city to POP107D's locality
+  level, fix the `city_not_county` message (Q07).
+- [ ] **P2 — Tourism arrivals vs nights as a choice (Q09); hint for overlapping education levels** (fix #10).
+- [ ] **P3 — Measure the cold period scan on the VPS** before and after AQ-09 E (the 1.8–2.4 s of the 2026-11-08
+  audit did not reproduce on the Mac).
+- [ ] **P3 — Rebuild `data/eval/agent_search_baseline.json`** for `be715608` (17 top-set changes predate AQ-09;
+  review the diff first).
+- Owner decisions recorded 2026-11-19 (AQ-09): `weighted_mean` stays refused in rankings; a percent change of a
+  percentage stays refused (use percentage points).
 - [ ] **P2 — AQ-13: INS published Total cells for non-additive indicators** (owner decision 2026-11-19,
   sweep fix #7; phase 1 curated: life expectancy, infant mortality, CPI, average wage, unemployment rates,
   GDP per inhabitant). Brief ready: [13-published-totals.md](plans/ask-and-public-mcp/remaining/13-published-totals.md).
   Start after AQ-09 is merged. Phase 2 (fetch totals for all ~580 rate/percentage datasets) is decided
   after the observation week, from live MCP refusal counts.
-- [ ] **P1 — `rank_entities` refuses to rank rates with one value per entity** (2026-11-18, live Ask
+- [x] **P1 — `rank_entities` refuses to rank rates with one value per entity** (done AQ-09, merged 2026-11-19, not deployed) (2026-11-18, live Ask
   with DeepSeek: "top 5 județe după PIB per capita și suprafață"). On CON103H_judete (GDP per
   inhabitant) it returned `unsupported_measure` ("additive measures only"). A one-year, county-level
   selection has one cell per county; ranking sorts and sums nothing. Allow non-additive measures when
   the selection proves one cell per entity (grain check), and keep the refusal when a sum is needed.
-- [ ] **P2 — Discovery finds no concept for GDP per capita by county or county area** (same chat). Six
+- [x] **P2 — Discovery finds no concept for GDP per capita by county or county area** (GDP done AQ-09; county area: see the core-assets item) (same chat). Six
   `discover_indicators` calls returned 0 reviewed concepts. The model re-worded and used half of its
   12 dispatches. Add reviewed concepts (CON103H for GDP/inhabitant; a county-area source, e.g. AGR101
   fondul funciar total, which ends in 2014) or a discovery default. Brief: AQ-09 part B (plus a
@@ -282,7 +299,7 @@ are recorded next to each item.
 - [ ] **P2 — Chart eval on the composer layer.** The selector eval diffs the selector against its own
   output. Add a hand-labelled set (allowed hero types, forbidden views, expected total) run against
   `compose_dashboard` on synthetic fixtures in CI; wire it into `release-check.py`.
-- [ ] **P2 — Gate `describe_dataset`/`discover_indicators` by scan size** (MCP-04): they read whole
+- [x] **P2 — Gate `describe_dataset`/`discover_indicators` by scan size** (MCP-04; done AQ-09 E: bounds from parquet footers): they read whole
   parquets for period bounds (POP107D 2.4 s cold); read bounds from the dimension options instead.
 - [ ] **P2 — Rotate `ask-chats.jsonl`** like `mcp-calls.jsonl` (same volume); body-read timeout for
   slow clients; replace SDK error bodies with fixed JSON-RPC errors (MCP-09).
