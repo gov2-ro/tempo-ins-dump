@@ -62,6 +62,32 @@ def test_parity_on_synthetic_corpus(tmp_path):
     assert stale and all(a["reason"] == "schema_mismatch" for a in stale)
 
 
+def test_parity_for_din_care_subset_options(tmp_path):
+    """AQ-10: a "Din care" option is a part of the option before it. The engine refuses the same
+    sums as Python: the whole dimension, and a subset together with its parent."""
+    from fix02b_corpus import build_corpus
+    from at01_fixtures import add_dataset
+    corpus = build_corpus(tmp_path / "data")
+    years = [(str(y), {"year": y}) for y in (2022, 2023)]
+    for code, subset in (("DCX", "Din care: din Beta"), ("DCY", "  - of which: in Beta")):
+        labels = ["Alfa", "Beta", subset]
+        add_dataset(corpus, code, [("CATEGORY", "Categorie", None, [(l, {}) for l in labels]),
+                                   ("TIME_PERIOD", "Ani", "time", years)],
+                    [(l, y, v) for y, _ in years for l, v in zip(labels, (10.0, 30.0, 8.0))])
+    s = _parity(tmp_path / "data", tmp_path / "out", ["DCX", "DCY"], per_dataset=120)
+    assert s["ok"] == s["cases"]
+    cases = [json.loads(l) for l in (tmp_path / "out" / "cases.jsonl").read_text().splitlines()]
+    reasons = {(c["code"], (c["response"].get("aggregation") or {}).get("reason"))
+               for c in cases if "response" in c}
+    assert {("DCX", "label_hierarchy"), ("DCY", "label_hierarchy")} <= reasons
+    # a summing query that selects the subset with its parent is refused; on the axis it is not summed
+    summed = [c for c in cases if c["code"] == "DCX" and "response" in c
+              and isinstance(c["request"]["filters"], dict)
+              and {"Beta", "Din care: din Beta"} <= set(c["request"]["filters"].get("CATEGORY") or [])
+              and isinstance(c["request"]["group_by"], list) and "CATEGORY" not in c["request"]["group_by"]]
+    assert summed and {(c["response"].get("aggregation") or {}).get("reason") for c in summed} == {"label_hierarchy"}
+
+
 def test_partitioned_layout_matches_whole_file(tmp_path):
     """The same synthetic dataset forced into partitions gives identical answers."""
     from fix02b_corpus import build_corpus
@@ -90,7 +116,7 @@ def test_partitioned_layout_matches_whole_file(tmp_path):
 def test_parity_on_real_sample(tmp_path):
     data_dir = Path(os.environ.get("TEMPO_DATA_DIR", ROOT / "data"))
     codes = ["POP105A_judete_grupe", "FOM106F", "SOM103A_judete", "TUR105D_judete",
-             "TUR105E_judet", "FOM106E_judete"]
+             "FOM106E_judete"]
     _parity(data_dir, tmp_path, codes, per_dataset=25)
 
 

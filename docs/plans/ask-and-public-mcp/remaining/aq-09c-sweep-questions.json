@@ -1,0 +1,26 @@
+{
+ "schema": "aq-09c-questions/1",
+ "about": "AQ-09C question sweep. Run each question as a careful model would: discover_indicators with the full question first, follow action/recovery, at most 12 dispatches. Record calls, outcome, correctness, first misleading response. Baseline: aq-09c-sweep-baseline.md. Generation 062bd2b0.",
+ "questions": [
+  {"id": "Q01", "lang": "ro", "kind": "ranking", "text": "top cele mai mari și cele mai mici 5 judete cu venituri/PIB per capita, și pe suprafata daca poti", "note": "Ask/DeepSeek failure 2026-11-18"},
+  {"id": "Q02", "lang": "ro", "kind": "change ranking, cities", "text": "Care municipii au crescut și care au scăzut cel mai mult ca populație între 2016 și 2026?", "note": "Claude Desktop answered 2026-11-18"},
+  {"id": "Q03", "lang": "en", "kind": "fact, county", "text": "What is the unemployment rate in Cluj county?"},
+  {"id": "Q04", "lang": "ro", "kind": "time series, national", "text": "Cum a evoluat populația României în ultimii 30 de ani?"},
+  {"id": "Q05", "lang": "en", "kind": "ranking, county", "text": "Which 10 counties have the highest average gross monthly wage?"},
+  {"id": "Q06", "lang": "ro", "kind": "fact, county, ambiguous definition", "text": "Câți născuți vii au fost în București în 2023?"},
+  {"id": "Q07", "lang": "en", "kind": "comparison, cities", "text": "Compare the population of Cluj-Napoca and Iași in 2021"},
+  {"id": "Q08", "lang": "ro", "kind": "ranking, cities", "text": "Top 10 cele mai mari orașe din România după populație"},
+  {"id": "Q09", "lang": "en", "kind": "fact, county, ambiguous definition", "text": "How many tourists stayed overnight in Brașov county in 2023?"},
+  {"id": "Q10", "lang": "ro", "kind": "time series, national, monthly", "text": "Cum a evoluat rata inflației lunar în 2024?"},
+  {"id": "Q11", "lang": "ro", "kind": "ranking, rate", "text": "Care județ are cea mai mare rată a mortalității infantile?"},
+  {"id": "Q12", "lang": "en", "kind": "time series, national, by sex", "text": "Average life expectancy in Romania by sex over time"},
+  {"id": "Q13", "lang": "ro", "kind": "fact, county", "text": "Câți elevi sunt în învățământul liceal în județul Iași în 2022?"},
+  {"id": "Q14", "lang": "en", "kind": "change ranking, counties", "text": "Which counties lost the most population since 2011?"},
+  {"id": "Q15", "lang": "ro", "kind": "no data", "text": "Prețul mediu al apartamentelor în București în 2024"},
+  {"id": "Q16", "lang": "en", "kind": "no data", "text": "How many crimes were reported in Cluj county in 2023?"},
+  {"id": "Q17", "lang": "ro", "kind": "ranking, county", "text": "Top 5 județe după numărul de locuințe noi terminate în 2023"},
+  {"id": "Q18", "lang": "en", "kind": "time series, national", "text": "Romania total exports by year"},
+  {"id": "Q19", "lang": "ro", "kind": "comparison, county vs national", "text": "Care este câștigul salarial mediu net în Timiș față de media pe țară?"},
+  {"id": "Q20", "lang": "en", "kind": "no data, derived", "text": "Which county has the highest population density?"}
+ ]
+}

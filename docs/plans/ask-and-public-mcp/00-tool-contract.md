@@ -105,6 +105,7 @@ additional fields are allowed within the budget.
 | `compare_periods` | `dataset`, `entity_columns`, `metric`, `order`, `intervals` (from/to/rows/eligible_count/excluded_count/excluded/exclusions_truncated); rows use entity/from_value/to_value/absolute/percent/rank |
 | `run_recipe` | `recipe` (id/version/name/definition/formula/value_source), actual `year`, bounded `rows`, `excluded`, `exclusion_counts`, `exclusions_truncated`, bounded `check`; no raw inputs |
 | `get_evidence_links` | normalized `selection`, `links` (kind/url/description/generation_mode), with `generation_mode=live_rerun|expected_generation` |
+| `data.chart` (optional, AQ-08) | On an `ok`/`partial` result of `query_data`, `rank_entities`, `compare_periods` and `run_recipe`: `type` (bar/line), `rows` (path to the rows), `row_format` (object/array), `x`, `y`, `series`, `sort`, `unit`, `title`, `url` (dataset page, nullable), `url_note`. Absent when no honest chart exists. Additive: no contract bump. See `remaining/aq-08-record.md` |
 
 Arrays may be empty on a refusal. Optional unknown facts use null, not guessed
 defaults. Exact JSON/Python output models and representative fixtures are an

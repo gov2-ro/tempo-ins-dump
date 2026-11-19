@@ -29,7 +29,6 @@ How totals, averages and rates are computed: [METHODOLOGY](../METHODOLOGY.md).
 - **FOM106E-SOM103A-published-totals** [decision] (`FOM106E`, `SOM103A`): Our download lacks the Total rows (all activities × both sexes in FOM106E; both sexes in SOM103A). INS's published totals, fetched separately, are served; the weighted reconstruction stays as a cross-check (it differs by at most one unit, from rounding). Decided by owner, 2026-10-12 (PA-00 Q2/Q3).
 - **SOM103A-registered-not-ilo** [definition] (`SOM103A`, `SOM103B`): Registered unemployment rate: unemployed people registered with the employment agencies (ANOFM) relative to the civilian active population. It is not the ILO unemployment rate from the labour force survey. Decided by owner, 2026-10-12 (PA-00 Q3).
 - **TUR105D-coverage** [coverage] (`TUR105D`, `TUR105E`, `TUR105H`): Covers only accommodation establishments with at least 5 bed-places; Romanian and foreign tourists. Decided by owner, 2026-10-12 (PA-00 Q4).
-- **TUR105EH-county-split** [excluded] (`TUR105E_judet`, `TUR105H_judet`): This county set lost its locality column in processing, so a county appears once per locality. Its values cannot be added up per county, and the set is not used for the stays-per-resident indicator. The problem is ours, not INS's, and is queued for repair. Decided by owner, 2026-10-12 (PA-00 Q4).
 - **locality-fetch-bucharest** [source_issue] (`AGR101B`, `AGR108B`, `AGR109B`, `AGR112B`, `AGR115B`, `AGR201B`, `AGR202B`, `ART101B` and 61 more): Bucharest's rows were missing from the locality-level downloads (our fetch error, not INS's): the SIRUTA file says 'Bucuresti', INS says 'Municipiul Bucuresti'. New or merged localities were lost the same way. Fixed and re-fetched on 2026-10-12. Decided by owner, 2026-10-12 (re-fetch of the 69 affected matrices).
 - **totals-not-in-download** [decision] (`FOM106E`, `SOM103A`, `POP105A`, `TUR105D`): Our download omits the 'Total' options; the totals shown are computed (exact sums for counts) or fetched separately from INS (means and rates). See docs/METHODOLOGY.md. Decided by owner, 2026-10-12.
 
@@ -70,12 +69,6 @@ How totals, averages and rates are computed: [METHODOLOGY](../METHODOLOGY.md).
 | POP105A-single-ages | `POP105A_judete_varste`, `POP105A_regiuni_varste`, `POP105A_macroregiuni_varste` | yes | This set has single years of age from 0 to 84, without the 85-and-over group. Its sum is not the total population; use the age-group set for totals. |
 | FOM106E-tax-facilities | `FOM106E` | yes | Between 2019 and 2024 some categories of employees had tax and contribution relief. Their net earnings are closer to gross, which affects comparisons between activities and counties. |
 | SOM101B-women-only | `SOM101B` | yes | The set covers women only (the source has just the Total and Feminin options). Do not use it as the total number of unemployed. |
-
-### excluded
-
-| Note | Datasets | Public | Text (en) |
-|---|---|---|---|
-| TUR105EH-county-split | `TUR105E_judet`, `TUR105H_judet` | yes | This county set lost its locality column in processing, so a county appears once per locality. Its values cannot be added up per county, and the set is not used for the stays-per-resident indicator. The problem is ours, not INS's, and is queued for repair. |
 
 ### decision
 

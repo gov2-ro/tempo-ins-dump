@@ -25,11 +25,11 @@ from app.services.tools import registry as R
 from at01_fixtures import call, make_env
 
 APP = Path(__file__).resolve().parent.parent / "app"
-KEY = re.compile(r"^(?:contract|registry|gate|query|discover|describe|values|policy|rank|changes|period|agent|present|recipe)"
+KEY = re.compile(r"^(?:contract|registry|gate|query|discover|describe|values|policy|rank|changes|period|agent|present|recipe|chart)"
                  r"\.[a-z_]+(?:\.[a-z_]+)*$")
 # keys chosen at run time: f"query.{rows|raw_rows}_{one|many}", f"discover.note.{code}", ...
 DYNAMIC = ("query.rows_", "query.raw_rows_", "discover.note.", "discover.freq.", "discover.kind.",
-           "period.native.", "describe.grain_", "agent.limit.")
+           "period.native.", "describe.grain_", "agent.limit.", "chart.what_")
 PLACEHOLDER = re.compile(r"\{(\w+)")
 
 
@@ -181,7 +181,7 @@ def mask(node, path=()):
                 out[k] = "<lang>"
             elif k == "query" and "lang" in node and "dataset" not in node and isinstance(v, str):
                 out[k] = "<prose>"                      # a discover_indicators restatement uses the language's own aliases
-            elif k in RECIPE_TEXT and (path[-2:] == ("data", "recipe") or node.get("kind") == "recipe") \
+            elif k in RECIPE_TEXT and (path[-2:] in (("data", "recipe"), ("data", "chart")) or node.get("kind") == "recipe") \
                     and isinstance(v, str):
                 out[k] = "<prose>"                      # a recipe describes itself in the request's language
             elif k.endswith("url") and isinstance(v, str):

@@ -1029,13 +1029,12 @@ def test_real_pop107a_overlap_is_refused_with_a_compatible_complete_child():
 
 
 @pytest.mark.corpus
-def test_real_tur105e_conflicting_child_names_unique_alternatives():
+def test_real_conflicting_county_set_is_refused():
+    # TUR105E_judet is no longer written (AQ-11); SCL104A_judete still has repeated keys
     _pinned()
-    e = call("query_data", dataset="TUR105E_judet", group_by=["TIME_PERIOD"],
+    e = call("query_data", dataset="SCL104A_judete", group_by=["TIME_PERIOD"],
              filters={"REF_AREA": ["Cluj"]})
     assert e["status"] == "unavailable" and e["reason"] == "conflicting_grain"
-    targets = [r["arguments"]["dataset"] for r in recs(e, "query_data")]
-    assert targets and set(targets) <= {"TUR105E", "TUR105E_localitate"}
     assert e["data"]["rows"] == []
 
 
@@ -1053,7 +1052,7 @@ def test_real_single_age_localitate_child_is_partial_with_a_complete_alternative
     assert full["status"] == "partial" and full["reason"] == "unverified_total"
     assert full["data"]["rows"] == [["2026", 21646220.0]]
     assert 21646220.0 - 21179764.0 == 466456.0                  # exactly the aged 85 and over
-    # the county-level child of this generation is refused outright
+    # the county-level child is refused outright (062bd2b0) or no longer written (AQ-11 generation)
     refused = call("query_data", dataset="POP107D_varste_judet", group_by=["TIME_PERIOD"])
-    assert refused["status"] == "unavailable"
-    assert refused["reason"] in ("source_total_unchecked", "conflicting_grain")
+    assert refused["status"] in ("unavailable", "error")
+    assert refused["reason"] in ("source_total_unchecked", "conflicting_grain", "unknown_dataset")

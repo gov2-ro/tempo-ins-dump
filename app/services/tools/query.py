@@ -478,7 +478,9 @@ def _plan_source_total(aid, reason, col):
     if rid:
         recs.append(C.recovery("tool_call", aid.t("query.total_recipe", rid=rid), "run_recipe",
                                aid.recipe_args(rid)))
-    alts = aid.verified_alternatives(limit=1)       # related dataset whose own checks pass
+    # A related dataset is offered only if its own INS total check passes (AQ-10): never an
+    # unchecked parent that merely is not refused at once.
+    alts = aid.verified_alternatives(limit=1, source_checked=True)
     recs += [aid.query_rec(aid.t("query.total_alternative", alt=a), a) for a in alts]
     recs.append(C.recovery("narrow", aid.t("query.explicit_slice")))
     recs.append(aid.describe_rec())
@@ -787,13 +789,13 @@ class _Aid:
             log.exception("candidate context failed cand=%s", cand)
             return None
 
-    def _policy_ok(self, cand: str) -> bool:
+    def _policy_ok(self, cand: str, source_checked: bool = False) -> bool:
         """Would the shared aggregation policy accept this selection on `cand`?
         A pure evaluation over cached metadata (no SQL, nothing aggregated), mirroring
         run_query's own checks, so a candidate that the policy would refuse at once is
         not offered. The grain of the slice is still checked when the call runs."""
         gb, flt = self.canon_group_by(), self.canon_filters()
-        if not gb:
+        if not gb and not source_checked:
             return True
         cctx = self._context_of(cand)
         if not cctx:
@@ -804,7 +806,9 @@ class _Aid:
                 return False
             time_cols = {d["dim_column_name"] for d in cctx["dimensions"]
                          if d.get("dim_type") == "time"}
-            if not flt and len(gb) == 1 and gb[0] in time_cols:
+            if source_checked or (not flt and len(gb) == 1 and gb[0] in time_cols):
+                # source_checked: the candidate's own kpi_total_checks row decides, with no
+                # inheritance from a child (a row exists only where INS was compared)
                 reason, _ = source_total_gate(self.conn, cand, decision)
                 if reason:
                     return False
@@ -822,11 +826,11 @@ class _Aid:
         return all(c not in restricted and scope_mod.dimension_coverage(cctx, c) is not None
                    for c in cols)
 
-    def _alternatives(self, kinds, need: set, limit: int, cols=()) -> list:
+    def _alternatives(self, kinds, need: set, limit: int, cols=(), source_checked: bool = False) -> list:
         out = []
         for cand in self._candidates(kinds):
             try:
-                if (self._usable(cand, need) and self._policy_ok(cand)
+                if (self._usable(cand, need) and self._policy_ok(cand, source_checked)
                         and (not cols or self._complete_for(cand, list(cols)))
                         and self._values_exist(cand)):
                     out.append(cand)
@@ -836,10 +840,12 @@ class _Aid:
                 break
         return out
 
-    def verified_alternatives(self, limit: int) -> list:
+    def verified_alternatives(self, limit: int, source_checked: bool = False) -> list:
         """Parent/sibling datasets with certified unique keys that can express this
-        selection and that the policy does not refuse at once."""
-        return self._alternatives(("parent", "siblings"), self._need_columns(), limit)
+        selection and that the policy does not refuse at once. With `source_checked`, the
+        candidate's own INS total check must also pass (source_total_gate)."""
+        return self._alternatives(("parent", "siblings"), self._need_columns(), limit,
+                                  source_checked=source_checked)
 
     def complete_alternatives(self, cols: list, limit: int) -> list:
         """Parent/sibling datasets whose domain on `cols` is verified complete."""

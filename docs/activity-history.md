@@ -1,5 +1,49 @@
 # Activity History
 
+## 2026-11-19 — UX: dataset table always shown (lazy), compact front-page subcategories
+
+- **What:** the dataset v2 page drops the "Tabel" button. The raw-rows table always shows under the charts,
+  and its rows load only when it comes within 200 px of the viewport (`IntersectionObserver`). Front-page
+  subcategory lists sort by dataset count (largest first), keep each name whole (`inline-block`, the `·`
+  stays with the item before it) and use line-height 1.25. `shortName` drops the empty "()" that INS ships
+  at the end of the two "Dezvoltare durabila" category names.
+- **Why:** the table opened far below the chart after a click; loading it eagerly would cost a 1,000-row
+  request on every page open, so it loads on scroll to keep the page fast.
+
+## 2026-11-19 — AQ-11: generation refresh on a copy (not promoted)
+
+- **What:** copy `~/devbox/gov2/tempo-gen-20261118` of generation 062bd2b0, now `adc6762a`. Stage 12 re-run on 81 parents
+  removed all 95 `_judet` children (no `REF_AREA_2` structure is verified additive, so the strict rule never keeps one;
+  owner chose to accept that). `has_time` repaired on 339 profiles. Search index and manifest rebuilt; staged in
+  `deploy-data` there; strict `release-check --local` passes. Tests: 2,408 passed, 63 skipped.
+- **Why:** the served `_judet` children had repeated keys, so 95 dataset pages were empty.
+- **Non-obvious:** stage 12 does not delete a removed child's rows in six profile tables nor its view profile and index
+  entry; done by hand on the copy (backlog). `concepts.json` county variant of `domicile_population` is now
+  `POP107D_grupe_localitate`; note `TUR105EH-county-split` retired. Chart eval: 43 codes change, all from the `has_time`
+  repair. Agent search baseline was already stale on the served generation. KPI check not run (needs INS).
+  Record: `docs/plans/ask-and-public-mcp/remaining/aq-11-record.md`.
+
+## 2026-11-18 — AQ-10: "Din care" options are never summed with their parent
+
+- **What:** `aggregation_policy` refuses a sum over a dimension that has a "Din care:" / "of which" option
+  (reason `label_hierarchy`) and refuses an explicit selection of a subset with the option before it.
+  Mirrored in `engine/policy.js` with a parity test. A refused child offers a related dataset only if that
+  dataset passes its own INS total check. Record: `docs/plans/ask-and-public-mcp/remaining/aq-10-record.md`.
+- **Why:** LOC104A summed public + private + "of which: population" (Q17: Bucuresti 18,654 instead of 13,834).
+- **Non-obvious:** 84 datasets (232 of 527 default-shape queries) change from a sum to a refusal; no curated
+  figure changes. No automatic "drop the subset" rule (owner decision). Not merged, not deployed; the API needs a
+  deploy and the static site a rebuild.
+
+## 2026-11-18 — AQ-08: chart hints and chart links in tool results
+
+- **What:** `query_data`, `rank_entities`, `compare_periods` and `run_recipe` results carry an optional
+  `data.chart` hint (type, row path, x, y, series, sort, unit, title, dataset-page link). The Ask page draws
+  a bar chart for a ranking, a change ranking or a recipe from it. Record: `docs/plans/ask-and-public-mcp/remaining/aq-08-record.md`.
+- **Why:** MCP clients and the Ask page had numbers and no chart; the server never renders images.
+- **Non-obvious:** additive, no contract bump. The hint names fields and never copies rows. No chart for
+  several intervals, a key without one label, a cut preview, an approximation or repeated keys. The link
+  carries filters, period and levels only: dataset-v2 has no stable bar preset. Not deployed or merged.
+
 ## 2026-11-17 — Static site redeployed with a releases layout (DreamHost)
 
 - **What:** rebuilt the static site from `183a36f` (generation `062bd2b0`; 46,036 files, 748 MB;

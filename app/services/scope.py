@@ -1,7 +1,7 @@
 """Shared scope disclosure (AT-01b).
 
 A grouped total can be statistically valid (a disjoint partition, summed once)
-and still describe only part of the population: `POP107D_varste_judet` holds
+and still describe only part of the population: `POP107D_varste_localitate` holds
 ages 0-84, "85 ani si peste" lives in the `_grupe_` sibling, yet its summed
 headline is `valid_total`. Disjointness does not prove exhaustive coverage, so
 this module answers the other question, from metadata and the values actually in

@@ -29,7 +29,7 @@ Lang = Annotated[Literal["ro", "en"], Field(
 DatasetCode = Annotated[StrictStr, Field(
     min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_]+$",
     description="Exact dataset code from discover_indicators or describe_dataset, "
-                "e.g. POP107D_grupe_judet")]
+                "e.g. POP107D_grupe_localitate")]
 Column = Annotated[StrictStr, Field(
     min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_]+$",
     description="Dimension column name as describe_dataset lists it, e.g. REF_AREA, TIME_PERIOD")]
@@ -445,6 +445,7 @@ class QueryData(_Open):
     rows: list[list[Any]]
     column_labels: dict[str, dict[str, Any]]
     selection: dict[str, Any] | None
+    chart: dict[str, Any] | None = None   # AQ-08 chart hint; absent when no honest chart exists
 
 
 class ChangeRow(_Open):
@@ -475,6 +476,7 @@ class CompareData(_Open):
     # only present when entity_class="cities": the class and how many source entities it left out
     entity_class: Literal["cities"] | None = None
     outside_class_count: int | None = None
+    chart: dict[str, Any] | None = None   # AQ-08 chart hint; absent when no honest chart exists
 
 
 class RankingData(_Open):
@@ -485,6 +487,7 @@ class RankingData(_Open):
     rows: list[dict[str, Any]]
     eligible_count: int
     excluded_count: int
+    chart: dict[str, Any] | None = None   # AQ-08 chart hint; absent when no honest chart exists
 
 
 class RecipeInfo(_Open):
@@ -504,6 +507,7 @@ class RecipeData(_Open):
     exclusion_counts: dict[str, int]
     exclusions_truncated: bool
     check: dict[str, Any] | None
+    chart: dict[str, Any] | None = None   # AQ-08 chart hint; absent when no honest chart exists
 
 
 class LinkItem(_Closed):

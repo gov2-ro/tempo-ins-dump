@@ -494,6 +494,3 @@ def test_real_single_age_child_is_disclosed_as_zero_to_84():
     assert band["rows"] == [["2026", 466456.0]]
     assert band["scope"]["restrictions"][0]["requested"] is True
     assert child["rows"][0][1] + band["rows"][0][1] == sib["rows"][0][1]
-    # the county child is not served as a total at all in this generation
-    county = run_query(conn, "POP107D_varste_judet", {}, ["TIME_PERIOD"])
-    assert county.get("unavailable") or county["scope"]["domain_complete"] is False

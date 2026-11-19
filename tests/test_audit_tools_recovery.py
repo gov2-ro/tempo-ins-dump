@@ -61,12 +61,12 @@ def test_missing_weights_routes_to_the_recipe_and_compare_too(real):
 
 @pytest.mark.corpus
 def test_conflicting_grain_is_reported_the_same_by_every_tool(real):
-    q = call("query_data", dataset="AGR101B_judet", group_by=["TIME_PERIOD"], lang="en")
-    r = call("rank_entities", dataset="AGR101B_judet", entity_columns=["REF_AREA"], lang="en")
-    c = call("compare_periods", dataset="AGR101B_judet", entity_columns=["REF_AREA"],
+    q = call("query_data", dataset="SCL104A_judete", group_by=["TIME_PERIOD"], lang="en")
+    r = call("rank_entities", dataset="SCL104A_judete", entity_columns=["REF_AREA"], lang="en")
+    c = call("compare_periods", dataset="SCL104A_judete", entity_columns=["REF_AREA"],
              intervals=[{"from": "2010", "to": "2014"}], lang="en")
     assert q["reason"] == r["reason"] == c["reason"] == "conflicting_grain"
-    raw = call("query_data", dataset="AGR101B_judet", filters={"TIME_PERIOD": ["2014"], "REF_AREA": ["Cluj"]},
+    raw = call("query_data", dataset="SCL104A_judete", filters={"TIME_PERIOD": ["2014"], "REF_AREA": ["Cluj"]},
                limit=5, lang="en")
     assert raw["status"] == "partial" and raw["reason"] == "conflicting_grain"
     assert "data_quality" in [w["code"] for w in raw["warnings"]]

@@ -4,6 +4,39 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## NEXT — Promote AQ-11 and deploy AQ-08 + AQ-10 (owner: approved 2026-11-19, after the other agents finish)
+
+State on 2026-11-19: AQ-08 (chart hints) and AQ-10 ("Din care") are merged on `fix/ask-answer-quality`,
+not deployed. AQ-11 (generation refresh) runs on the copy `~/devbox/gov2/tempo-gen-20261118/data`,
+branch `aq-11-refresh` (brief [11-generation-refresh.md](plans/ask-and-public-mcp/remaining/11-generation-refresh.md);
+owner decisions: drop the 95 `_judet` children, POP107D county variant → `_localitate`, retire the
+TUR105EH note). **AQ-11 finished 2026-11-19:** branch `aq-11-refresh` (03d59d7, pushed, not merged),
+record `aq-11-record.md` on that branch. New generation `adc6762a…` in the copy; staged deploy data in
+`~/devbox/gov2/tempo-gen-20261118/deploy-data` (991 MB). Full suite on the copy 2,408 passed, 0 failed;
+strict release check passed. Repeated-key violations 160 → 65 (the 95 `_judet` files gone); `has_time`
+fixed on 339 profiles; chart eval: 43 expected changes (all `has_time`). KPI check not run (needs INS).
+Before deploy, compare the release-check warning `run_recipe registered_unemployment_county`
+`unavailable/query_budget` (public profile) with the served generation. Owner: wait until the other
+agents finish.
+
+- [ ] **P1 — Promote and deploy**, in this order. Stop only if a check fails.
+  1. Check the AQ-11 record: 0 repeated keys in county files, spot checks, full pytest and strict
+     `release-check.py --local --stage` passed.
+  2. Merge `aq-11-refresh` into `fix/ask-answer-quality`; push.
+  3. Move the current `data/corpus` (generation `062bd2b0`) to `data/_archive/` (rollback); put the new
+     generation in place.
+  4. API: `prepare-deploy-data.sh`, then `scripts/deploy/hetzner/deploy.sh pax@78.46.142.169` (dry run),
+     then `--apply` (smoke on a spare port, automatic swap-back). Ships AQ-08, AQ-10 and the data.
+  5. Static: `build-static.py --api-origin https://api-ins.gov2.ro`, `release-check.py --static` with
+     API cases, `deploy-static.sh _static --go` (keeps two releases).
+  6. Live checks: `mcp_probe.py https://api-ins.gov2.ro POP112A_grupe`; CON103H and LOC104A cases;
+     a chart hint in Claude Desktop; browser smoke of v1, v2, place and Ask pages.
+  - Rollback: VPS `current` → previous release; DreamHost `current` → previous release; restore the
+    archived corpus.
+- [ ] **P3 — Redirect removed `_judet` pages.** All 95 removed codes are in the served `sitemap.xml`. Old
+  `dataset-v2.html?code=X_judet` links should go to the `_localitate` sibling (static: `.htaccess` or the
+  page's missing-dataset path).
+
 ## NEXT — HZ-3 on the Hetzner VPS — 2026-11-17
 
 `api-ins.gov2.ro` (API, Ask, `/mcp`) runs on the VPS since 2026-11-16 23:50 UTC (HZ-2 and the HZ-4
@@ -26,6 +59,63 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   and in the new build). `dataset-v2.html?code=SOM101B` asks for `rec/datasets/SOM101B.ro.json.gz` (404)
   and shows no tiles; only the children (`SOM101B_judete`, ...) are served. Redirect a parent code to its
   children, or show a list of them.
+- [x] **P1 — Correctness: a parent dataset double-counts a "Din care" subset** (fixed by AQ-10, merged
+  2026-11-18, not deployed; [record](plans/ask-and-public-mcp/remaining/aq-10-record.md)) (AQ-09C sweep Q17,
+  confirmed 2026-11-18). `rank_entities` on LOC104A (dwellings completed), 2023: București = 18,654 =
+  13,834 "Din fonduri private" + 4,820 "Din care: din fondurile populației" (a subset of the first). The
+  split child LOC104A_judete refuses correctly (`source_total_mismatch`), but its recovery proposes the
+  parent, which has no structure check and returns `partial / unverified_total` with the sum. Fix: give
+  the parent the same check (or a general "Din care" subset rule), and never offer an unchecked parent as
+  the recovery for a refused child. Look for other parents with "Din care" options. Cause: the policy's
+  `label_hierarchy_cues` does not know "Din care" (364 datasets have such an option). Brief:
+  [10-din-care-subsets.md](plans/ask-and-public-mcp/remaining/10-din-care-subsets.md).
+- [ ] **P2 — MCP usability fixes from the AQ-09C sweep** (2026-11-18; 8/20 answered correctly). Record
+  with the ranked causes and 12 proposed fixes:
+  [aq-09c-sweep-baseline.md](plans/ask-and-public-mcp/remaining/aq-09c-sweep-baseline.md). Not yet in a
+  brief: discovery text (a "per capita" measure flagged as unapplied, filler words in the family query,
+  `status: ok` on no match, tourism recipe offered for density, no warning when the asked period exceeds
+  coverage); a named city resolved to its county (Q07); more concepts (life expectancy, infant mortality,
+  dwellings, pupils, exports, EN wage aliases); INS Total cells for non-additive datasets (owner decision);
+  month-to-year sums; a municipii-only class.
+- [ ] **P1 — `rank_entities` refuses to rank rates with one value per entity** (2026-11-18, live Ask
+  with DeepSeek: "top 5 județe după PIB per capita și suprafață"). On CON103H_judete (GDP per
+  inhabitant) it returned `unsupported_measure` ("additive measures only"). A one-year, county-level
+  selection has one cell per county; ranking sorts and sums nothing. Allow non-additive measures when
+  the selection proves one cell per entity (grain check), and keep the refusal when a sum is needed.
+- [ ] **P2 — Discovery finds no concept for GDP per capita by county or county area** (same chat). Six
+  `discover_indicators` calls returned 0 reviewed concepts. The model re-worded and used half of its
+  12 dispatches. Add reviewed concepts (CON103H for GDP/inhabitant; a county-area source, e.g. AGR101
+  fondul funciar total, which ends in 2014) or a discovery default. Brief: AQ-09 part B (plus a
+  20-question MCP sweep, part C).
+- [ ] **P2 — Ask hides a query table that holds the answer** (same chat). `query_data` returned the 42
+  county rows for 2022. The page hid them as "a preview that does not answer the ranking", and the final
+  text had no ranking. When the rows contain every entity of the requested ranking, show them sorted,
+  or let the model sort them.
+- [x] **P1 — AQ-08: chart hints and chart links in tool results** (built on branch `aq-08-chart-hints` 2026-11-18, not merged; record `aq-08-record.md`). Brief:
+  [08-chart-hints.md](plans/ask-and-public-mcp/remaining/08-chart-hints.md). A `data.chart` hint for MCP
+  clients and the Ask page; the link opens dataset-v2 with the selection preselected.
+- [ ] **P3 — MCP Apps: an interactive chart inside Claude/ChatGPT** (after AQ-08). The MCP Apps
+  extension lets a server return a UI resource that the client renders. Check which clients support
+  it, then decide. No server-side image rendering (CPU on the 2-vCPU VPS).
+- [ ] **P2 — Dataset note: domicile counts inflated by registrations in border counties** (2026-11-18,
+  from a live Claude Desktop MCP test). POP107D (localities by domicile): Vaslui municipiu rises
+  84,553 (2014) → 148,926 (2023) → 131,722 (2026), a steady climb, not a one-year boundary step; Huși,
+  Tecuci, Târgu Bujor and Hârlău also grow. Cause (press, not INS): Romanian citizens from the Republic
+  of Moldova registered at Vaslui addresses without living there, thousands per apartment; the 2021
+  census counted about 63,000 in the municipiu. Fall after 2023: OUG 97/2005 amendment (max. ten persons
+  per address; Senate vote Feb 2023, check the final act and date) and ID cards cancelled for fictitious
+  domicile. Sources: Adevărul 2020-12-06
+  (https://adevarul.ro/stiri-locale/vaslui/moldovenii-aproape-ca-au-triplat-populatia-2063613.html),
+  Vremea Nouă 2023-02-09 (https://www.vremeanoua.ro/lovitura-grea-pentru-combinatorii-din-vaslui-care-isi-pun-locuintele-la-dispozitia-moldovenilor/),
+  Veridica (Huși, 6,000 at one address). Claude guessed "boundary change" because no note explained it.
+  Add a public note in `app/data/dataset_notes.json` (POP107D parent, covers its split children), then
+  run `scripts/build-notes-report.py`. Prefer an official source for the law (Monitorul Oficial).
+- [ ] **P3 — About page: say "No sign-in" for the Claude connector** (2026-11-18). Claude Desktop's
+  *Add custom connector* detects "No sign-in" and shows a yellow warning ("anyone with the server URL
+  can use this connector"). That is expected for a public read-only server, but users may read it as a
+  problem. In the Claude line of the MCP section (RO and EN, `app/static/js/explore-app.js`), add:
+  choose *No sign-in*, leave request headers empty, the warning is normal. Ship it with the next
+  static build.
 - [ ] **P3 — Cloudflare Page Rule → Configuration Rule.** `api-ins.gov2.ro/*` Browser Integrity Check
   Off is a legacy Page Rule (1 of 3 on the free plan). Move it when Cloudflare retires Page Rules.
 
@@ -39,6 +129,31 @@ Branch `feat/homepage-refresh` (hero, county tile map, feature band).
   datasets (split children included). Decide which count to state, or drop the number.
 - [ ] **Other pages still load `ui-rhythm.css?v=4`**: only `index.html` moved to `v=5`. Harmless now
   (the changes are home-only), but bump them the next time a shared rule changes.
+
+## AQ-10 follow-ups — 2026-11-18
+
+- [ ] **P3 — Revisit the sums AQ-10 now refuses** (owner, 2026-11-18: "do as you suggest, keep it to
+  maybe revisit"). 84 datasets lost 232 default sums (whole AGR and SAN families; LOC104A/C, LOC105A,
+  LOC106A, LOC107A lose 2-3 tiles). Accepted as double counts. Options to revisit: an explicit "drop the
+  subset and sum the rest" rule (owner decision), or a refusal message that names the non-subset options
+  (`utils.js`, `ask.js`). List: [aq-10-record.md](plans/ask-and-public-mcp/remaining/aq-10-record.md).
+
+- [ ] **P1 — Indentation cue never sees the indentation** (found in AQ-10 review, 2026-11-18).
+  `aggregation_policy.label_hierarchy_cues` and `_unprofiled_partition` judge the data value first
+  (`dv if dv is not None else label`), and the parquet values are trimmed: 60 of 60 checked datasets with
+  indented INS labels (400 dimensions have them) keep no indentation in the parquet. A label-encoded tree
+  without a verified level is then summed whole (the AGENTS.md "label-encoded hierarchies" gotcha). Fix:
+  judge the cue on the metadata label as well; run an impact report as in AQ-10 before the change.
+
+- [ ] **P1 — After merging `aq-10-din-care`: deploy the API and rebuild the static site.** The recorded `rec/`
+  answers change for about 84 datasets (LOC104-107, AGR111A-116A, AGR201A-203A, POP206, SAN102B/104A/105A and others).
+  See [aq-10-record.md](plans/ask-and-public-mcp/remaining/aq-10-record.md).
+- [ ] **P2 — Profiler: mark "Din care" options as nested.** `13-dimension-structure.py` profiles these columns
+  `flat`. A later package can store the nesting so the structure is known, not only refused by label.
+- [ ] **P2 — A refusal message for subset options.** `label_hierarchy` says "no verified structure". Name the
+  non-subset options and offer them as one explicit query. Needs `messages.py`, `utils.js` and `ask.js`.
+- [ ] **P3 — Re-run `scripts/check-kpi-totals.py` after the next refresh.** Then count how many mismatches remain
+  once "Din care" sums are refused (24 of 301 recorded mismatches are in such datasets).
 
 ## VPS backups — 2026-11-16
 
@@ -94,13 +209,37 @@ are recorded next to each item.
   agriculture × men although INS publishes a Total series the app already stores. The composer's
   default pin should use the published cell when one exists; define how a Total with no parquet row
   is presented.
-- [ ] **P1 — Pipeline: `has_time` for split children** (CH-10, owner: "we should"). Code fix in
-  `audit/pkg-pipeline`; the stored profiles of ~350 children stay wrong until the scoped recompute
-  runs on a copied generation (command in the activity entry). Run the chart eval before publishing.
-- [ ] **P1 — Pipeline: stage-12 children that drop a key column** (AQ-11, owner: ok). AGR101B_judet,
+- [x] **P1 — Pipeline: `has_time` for split children** (CH-10). Done on the copy
+  `~/devbox/gov2/tempo-gen-20261118` (AQ-11, 2026-11-19): 339 profiles repaired, 0 left; the 11 other of the
+  350 were `_judet` children that no longer exist. Not promoted yet; record `aq-11-record.md`.
+- [ ] **P2 — Stage 12 and the orchestrator leave profile rows and view profiles of a removed child**
+  (found in AQ-11). Stage 12 deletes the child's `matrices`, `dimensions` and `dataset_splits` rows and file,
+  but not its rows in `matrix_profiles`, `dataset_trends`, `dataset_value_profiles`, `dimension_structure`,
+  `dataset_coverage`, `kpi_total_checks`, nor its `view-profiles/*.json` and its `_index.json` entry
+  (`generate_view_profiles.py --matrix` merges into the old index). AQ-11 deleted them by hand on the copy.
+  Fix: let `swap_children` delete them, and test it.
+- [ ] **P2 — Redirect old `/dataset-v2.html?code=X_judet` links** (AQ-11). The served `sitemap.xml` lists all 95
+  removed `_judet` codes. Send each to its `_localitate` sibling (or the parent) in the static build and
+  the app; drop the codes from the sitemap.
+- [ ] **P3 — `data/eval/agent_search_baseline.json` is stale** (found in AQ-11). All 17 questions already
+  differ from the served generation 062bd2b0; only the three removed `_judet` entries were dropped. Rebuild it
+  after the next generation is promoted (`scripts/build_agent_search_baseline.py`), and review the diff.
+- [x] **P1 — Pipeline: stage-12 children that drop a key column** (AQ-11, owner: ok). Done on the copy
+  (2026-11-19, not promoted): stage 12 now writes no `_judet` child unless the roll-up is verified. None is,
+  so all 95 are gone and the grain audit lists no `_judet` file. The owner accepted that county figures
+  come from the `_localitate` children. Original note: AGR101B_judet,
   POP201D_judet, POP201K_judet and SOM101E_anual_judet keep one row per locality after dropping
   REF_AREA_2. New rule: aggregate only with a verified additive measure, otherwise skip the child.
   Regenerate those four parents' children on a copied generation and re-run the grain audit.
+  **Scope is larger (scan of 2026-11-18): all 95 `*_judet` files in the served generation have
+  repeated keys** (e.g. AGR101B_judet: 2,416 repeated key groups, about 114 rows per county = one per
+  locality; also AGR108B/109B/112B/115B/201B/202B, ART1xx, FOM104D, GOS1xx, JUS105C, LOC101B/103B/104B/108B
+  …). The code fix (`94be06f`, 2026-11-08) postdates the served generation (built 2026-10-14), so every
+  hierarchy parent needs the re-split, not four. The grain guard refuses every tile, so no wrong figure is
+  shown, but 95 dataset pages are empty ("sursa repetă observații cu valori diferite"; owner screenshot
+  of AGR101B_judet). Until the re-split: consider hiding these children from search and related lists, or
+  sending their pages to the `_localitate` sibling. Brief (with the `has_time` repair):
+  [11-generation-refresh.md](plans/ask-and-public-mcp/remaining/11-generation-refresh.md).
 - [ ] **P2 — Newer-vintage caveat** (AQ-01, owner: ok, "we do the best with what INS offers").
   Births 2024: POP201A 148,916 vs POP201D 157,270. Tool results warn when a sibling table in the same
   concept is newer; discovery prefers the newest. Implemented in `audit/pkg-tools` follow-up; extend to

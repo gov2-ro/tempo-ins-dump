@@ -201,10 +201,12 @@ def public_url(path: str) -> str:
     return f"{base}{path}" if base else path
 
 
-def dataset_page(code: str, lang: str, filters: dict | None = None) -> str:
+def dataset_page(code: str, lang: str, filters: dict | None = None, levels: dict | None = None) -> str:
     q = {"code": code}
     if filters:
         q["f"] = dumps(filters)
+    if levels:                      # the page's `g=`: {column: level_id}
+        q["g"] = dumps(levels)
     if lang == "en":
         q["lang"] = "en"
     return public_url("/dataset-v2.html?" + urlencode(q, quote_via=quote))

@@ -19,6 +19,7 @@ from pydantic import BaseModel, ValidationError, create_model
 
 from app.services import generation
 from app.services.tools import messages as M
+from app.services.tools import chart
 from app.services.tools import schemas as S
 from app.services.tools import units
 from app.services.tools import vintage
@@ -277,6 +278,7 @@ def call_tool(name: str, arguments, *, conn=None) -> dict:
             conn = get_conn()
         ctx.conn = conn
         env = _resolve(spec.handler)(args, ctx)
+        chart.apply(env, ctx)
         vintage.apply(env, ctx)
     except ToolFailure as f:
         env = failure_envelope(tool, ctx, f)
