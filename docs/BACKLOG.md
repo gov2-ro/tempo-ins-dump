@@ -8,18 +8,15 @@ see also [charting-ideas.md](charting-ideas.md)
 
 - [x] **Lossy decoding in the metadata fetchers** (code fixed 2026-11-19: `tempo_http.decode_body`
   in `3-fetch-metas.py` and `update-pipeline.fetch_meta`; confirmed live: JUS109B sends raw 0xE2).
-- [ ] **Deploy generation `be715608` (UTF-8 repair).** Promoted locally 2026-11-19: `data/corpus` is
-  `be715608`, old corpus in `data/_archive/corpus-adc6762a`, damaged metas in
-  `data/_archive/metas-fffd-20261119`, evidence `data/_archive/repair-utf8-be715608-*`. Full suite
-  (alone) 2,435 passed / 63 skipped (old-generation pins only); `deploy-data/` staged; strict
-  `release-check.py --local --stage` passed. Next: steps 4–6 of P1 (VPS, static, live checks).
-  Original note: Built 2026-11-19 on the APFS clone
-  `~/devbox/gov2/tempo-gen-20261119-utf8/data`: 13 metas patched (only the U+FFFD runs, lost
-  characters taken from a fresh fetch; INS has changed those metas since, so they were not replaced),
-  24 metadata DB values fixed by SQL (evidence `repair-utf8-evidence.json`, scripts in `repair/`),
-  search index rebuilt (only ASS113F, JUS109B docs differ). Parquets and view profiles byte-identical
-  to `adc6762a`. To do: copy the 13 patched metas into `data/2-metas`, swap the corpus (old one to
-  `data/_archive/`), stage, release check, deploy. `audit-corpus.py` now flags U+FFFD (`damaged_text`).
+- [x] **Generation `be715608` (UTF-8 repair) deployed 2026-11-19.** API release
+  `20261119-195536-be715608` on the VPS (previous `20261119-162844-adc6762a` kept); static release
+  `be715608390e-3eefaead00b6` on DreamHost (previous `adc6762a4aed-33b01d1c1155` kept); rollback corpus
+  `data/_archive/corpus-adc6762a`. Gates: full suite 2,435 passed / 63 skipped, strict local release
+  check, VPS smoke, static check (537/537 API parity), `mcp_probe.py` live, headless smoke of 7 live
+  pages (0 console errors, 0 failed requests, no U+FFFD). Copy folders `tempo-gen-20261118` and
+  `tempo-gen-20261119-utf8` deleted; AQ-11 evidence kept in `data/_archive/gen-20261118-aq11-evidence`.
+- [ ] **Re-pin generation-bound tests.** 27 probes are pinned to `062bd2b0` and 31 to `9b3e065d`; they all
+  skip on `be715608`, so the generation-specific numbers are untested. Re-pin them to the served generation.
 - [x] **TEMPO error envelope (HTTP 200)** (fixed 2026-11-19 in `6-fetch-csv.py`: exit 1, retried; a
   failed Totals-retry request is also exit 1 now, not exit 3). Not yet seen from `/pivot` in practice.
 - [x] **Data-path probe before `update-pipeline.py`** (done 2026-11-19: `probe_tempo_data`).
