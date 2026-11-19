@@ -530,8 +530,8 @@
     "en": "Consumer price index, against the previous month"
    },
    "note": {
-    "ro": "indice lunar (luna anterioară = 100): 100,32 înseamnă +0,32% față de luna precedentă; fără celulă pentru total, doar categorii mari",
-    "en": "monthly index (previous month = 100): 100.32 means +0.32% on the previous month; no overall Total cell, only the main categories"
+    "ro": "indice lunar (luna anterioară = 100): 100,32 înseamnă +0,32% față de luna precedentă; fișierul de date are doar categoriile mari; totalul INS se returnează ca „total publicat de INS” când generația îl conține",
+    "en": "monthly index (previous month = 100): 100.32 means +0.32% on the previous month; the data file has the main categories only; INS's overall Total is returned as \"INS published total\" when the generation holds it"
    },
    "aliases": {
     "ro": [
@@ -584,8 +584,8 @@
     "en": "Consumer price index, against December of the previous year"
    },
    "note": {
-    "ro": "indice lunar cumulat (decembrie anul precedent = 100): creșterea prețurilor de la începutul anului; fără celulă pentru total, doar categorii mari",
-    "en": "cumulative monthly index (December of the previous year = 100): price growth since the start of the year; no overall Total cell, only the main categories"
+    "ro": "indice lunar cumulat (decembrie anul precedent = 100): creșterea prețurilor de la începutul anului; fișierul de date are doar categoriile mari; totalul INS se returnează ca „total publicat de INS” când generația îl conține",
+    "en": "cumulative monthly index (December of the previous year = 100): price growth since the start of the year; the data file has the main categories only; INS's overall Total is returned as \"INS published total\" when the generation holds it"
    },
    "aliases": {
     "ro": [
