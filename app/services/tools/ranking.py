@@ -93,10 +93,7 @@ def rank_entities(args, ctx):
     if actx is None:
         raise C.query_failure(data_query.QueryError(404, f"Dataset {code} not found"), ctx, code)
     dims = {d["dim_column_name"]: d for d in actx["dimensions"]}
-    if actx.get("measure") != "additive":
-        rid = recipe_tool.published_recipe_for(ctx.conn, code)
-        _refuse("unsupported_measure", M.t(lang, "rank.additive_only"),
-                recovery=[recipe_tool.recipe_recovery(rid, lang, M.t(lang, "recipe.published_route", rid=rid))] if rid else ())
+    # A rate is ranked only when each entity is one source cell (checked after the query).
     if "TIME_PERIOD" not in dims or dims["TIME_PERIOD"].get("dim_type") != "time":
         _refuse("unsupported_frequency", M.t(lang, "rank.annual_required"))
     schema = resolve_parquet_schema(ctx.conn, code)
@@ -142,6 +139,11 @@ def rank_entities(args, ctx):
         _refuse("source_incomplete", M.t(lang, "rank.source_incomplete"), prov)
     if agg.get("outcome") == "approximation":
         _refuse("unsupported_measure", M.t(lang, "rank.approximation"), prov)
+    if period_changes.rate_values_combined(actx, agg):
+        rid = recipe_tool.published_recipe_for(ctx.conn, code)
+        _refuse("unsupported_measure", M.t(lang, "rank.additive_only"), prov,
+                recovery=[recipe_tool.recipe_recovery(rid, lang, M.t(lang, "recipe.published_route", rid=rid))] if rid
+                else [C.recovery("narrow", M.t(lang, "rank.rate_recovery"))])
     if any(w.get("code") == "mixed_grain_on_axis" for w in agg.get("warnings") or []):
         _refuse("overlapping_levels", M.t(lang, "rank.mixed_levels"), prov)
     cols = res["columns"]

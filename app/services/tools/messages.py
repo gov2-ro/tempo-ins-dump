@@ -509,8 +509,11 @@ TEXT = {
         "rank.siruta_required": "Locality values must carry exact SIRUTA keys; names are not "
                                 "joined.",
         "rank.siruta_repeated": "One city SIRUTA key appears under multiple entities.",
-        "rank.additive_only": "This ranking supports additive measures only; use a reviewed "
-                              "recipe for rates.",
+        "rank.additive_only": "This ranking would combine several values of a rate, average or "
+                              "per-capita measure. Such values cannot be summed or averaged. "
+                              "A rate is ranked only when each entity is one source cell.",
+        "rank.rate_recovery": "Fix every other dimension to one value or to its total, so that "
+                              "each entity is one source cell, and ask again.",
         "rank.annual_required": "An annual observation period is required.",
         "rank.use_year": "Use year instead of a time filter.",
         "rank.entity_columns": "entity_columns must name existing non-time dimensions.",
@@ -642,6 +645,9 @@ TEXT = {
                                       "{unit_type}): rates, means, indices and unknown units are "
                                       "not compared here, because the change of such a value has "
                                       "no single definition. A reviewed recipe may exist.",
+        "period.percent_of_rate": "{code} is a percentage or rate. A percent change of a "
+                                  "percentage is a percent of a percent and is not computed.",
+        "period.use_absolute": "Use metric absolute: the change is in percentage points.",
         "period.non_additive": "non-additive",
         "period.unknown_unit_type": "unknown",
         "period.find_recipe": "Look for a reviewed recipe or indicator for this measure.",
@@ -1258,8 +1264,13 @@ TEXT = {
         "rank.siruta_required": "Valorile localităților trebuie să poarte chei SIRUTA exacte; "
                                 "numele nu se asociază.",
         "rank.siruta_repeated": "O cheie SIRUTA de oraș apare la mai multe entități.",
-        "rank.additive_only": "Acest clasament acceptă doar măsuri aditive; folosește o rețetă "
-                              "revizuită pentru rate.",
+        "rank.additive_only": "Acest clasament ar combina mai multe valori ale unei rate, medii "
+                              "sau măsuri pe locuitor. Astfel de valori nu se pot aduna sau media. "
+                              "O rată se clasifică doar când fiecare entitate este o singură "
+                              "celulă din sursă.",
+        "rank.rate_recovery": "Fixează fiecare altă dimensiune la o valoare sau la totalul ei, "
+                              "astfel încât fiecare entitate să fie o singură celulă din sursă, "
+                              "și întreabă din nou.",
         "rank.annual_required": "Este necesară o perioadă anuală de observație.",
         "rank.use_year": "Folosește year în loc de un filtru de timp.",
         "rank.entity_columns": "entity_columns trebuie să numească dimensiuni existente, care nu "
@@ -1403,6 +1414,10 @@ TEXT = {
                                       "necunoscute nu sunt comparate aici, deoarece schimbarea "
                                       "unei astfel de valori nu are o definiție unică. Poate "
                                       "exista o rețetă revizuită.",
+        "period.percent_of_rate": "{code} este un procent sau o rată. Schimbarea procentuală a "
+                                  "unui procent este un procent dintr-un procent și nu se "
+                                  "calculează.",
+        "period.use_absolute": "Folosește metric absolute: schimbarea este în puncte procentuale.",
         "period.non_additive": "neaditivă",
         "period.unknown_unit_type": "necunoscut",
         "period.find_recipe": "Caută o rețetă sau un indicator revizuit pentru această măsură.",

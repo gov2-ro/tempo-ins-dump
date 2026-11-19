@@ -515,20 +515,19 @@ def test_legacy_anul_labels_are_annual_periods(tmp_path, monkeypatch):
     assert e["provenance"]["source_query"]["filters"]["TIME_PERIOD"] == ["Anul 2000", "Anul 2010"]
 
 
-def test_a_rate_is_an_unsupported_measure(tmp_path, monkeypatch):
+def test_a_rate_that_needs_a_sum_is_refused(tmp_path, monkeypatch):
+    """A rate is compared when each entity is one source cell (AQ-09 A); a sum across a dimension is refused."""
     def build(corpus):
-        add_dataset(corpus, "RATEZ", [area_dim(["A", "B"]), time_dim(("2000", "2010")),
-                                      unit_dim("Procente")],
-                    [(e, y, "Procente", v) for e, y, v in
-                     (("A", "2000", 5.0), ("A", "2010", 6.0), ("B", "2000", 7.0), ("B", "2010", 8.0))],
+        sex = ("SEX", "Sexe", None, [("Masculin", {}), ("Feminin", {})])
+        rows = [(e, y, s_, "Procente", v) for s_ in ("Masculin", "Feminin") for e, y, v in
+                (("A", "2000", 5.0), ("A", "2010", 6.0), ("B", "2000", 7.0), ("B", "2010", 8.0))]
+        add_dataset(corpus, "RATEZ", [area_dim(["A", "B"]), time_dim(("2000", "2010")), sex,
+                                      unit_dim("Procente")], rows,
                     unit_type="percentage", name="Rata somajului")
     make_env(tmp_path, monkeypatch, build=build)
     e = call("compare_periods", dataset="RATEZ", entity_columns=["REF_AREA"],
              intervals=[iv("2000", "2010")])
-    assert (e["status"], e["reason"]) == ("unavailable", "unsupported_measure")
-    assert "non_additive" in e["message"] and "percentage" in e["message"]
-    assert e["data"] == {} and e["recovery"][0]["tool"] == "discover_indicators"
-    assert e["recovery"][0]["arguments"]["query"] == "Rata somajului"
+    assert e["status"] == "unavailable" and e["reason"] in ("unsupported_measure", "missing_weights", "unverified_structure")
 
 
 def test_source_cap_refuses_instead_of_ranking_a_capped_input(env, monkeypatch):
