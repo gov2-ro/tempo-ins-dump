@@ -91,11 +91,26 @@ def _published_ranking(ctx, code: str, keys: list, filters: dict, res: dict):
         return None
     if recipe_tool.published_recipe_for(ctx.conn, code):
         return None                       # a reviewed recipe already serves this dataset's published values
+    if len(_area_levels(ctx.conn, code)) > 1:
+        return None                       # counties, regions and macroregions never share one ranking
     try:
         universe = data_query.dimension_values(ctx.conn, code, "REF_AREA", limit=500)["values"]
         return recipes.published_selection(ctx.conn, code, filters, ["REF_AREA", "TIME_PERIOD"], universe=universe)
     except Exception:
         return None
+
+
+def _area_levels(conn, code: str) -> set:
+    """Parsed geographic levels of the dataset's REF_AREA options, without the country (it goes
+    to `aggregates`). A split parent holds several; its split children hold one each."""
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT p.geo_level FROM dimensions d JOIN dimension_options o USING (dimension_id) "
+            "JOIN dimension_options_parsed p USING (nom_item_id) "
+            "WHERE d.matrix_code = ? AND d.dim_column_name = 'REF_AREA' AND p.geo_level IS NOT NULL", [code]).fetchall()
+    except Exception:
+        return {"unknown", "levels"}      # cannot prove one level: keep the refusal
+    return {r[0] for r in rows} - {"national"}
 
 
 def _published_national(ctx, code: str, keys: list, filters: dict, year: str) -> list:

@@ -260,3 +260,15 @@ def test_describe_says_which_periods_areas_and_breakdowns_are_published(env):
     note = [n for n in d["notes"] if n["id"] == "published_total"][0]["text"]
     assert "SEXPUB" in note and "2021" in note and "SEX" in note
     assert "published_total" not in call("describe_dataset", dataset="RATENONE")["data"]
+
+
+def test_a_published_ranking_never_mixes_geographic_levels(env, monkeypatch):
+    """Review fix: a split parent lists counties, regions and macroregions; its published cells must
+    not be ranked together (FOM107E ranked 'Regiunea BUCURESTI - ILFOV' beside counties)."""
+    from app.services.tools import ranking
+    monkeypatch.setattr(ranking, "_area_levels", lambda conn, code: {"county", "region"})
+    r = call("rank_entities", dataset="RATEPUB", entity_columns=["REF_AREA"], year="2022", top_k=3, lang="en")
+    assert r["status"] != "ok" and r["data"].get("value_source") != "ins_published"
+    monkeypatch.setattr(ranking, "_area_levels", lambda conn, code: {"county"})
+    r = call("rank_entities", dataset="RATEPUB", entity_columns=["REF_AREA"], year="2022", top_k=3, lang="en")
+    assert r["status"] == "ok" and r["data"]["value_source"] == "ins_published"
