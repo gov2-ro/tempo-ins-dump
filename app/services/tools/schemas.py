@@ -239,6 +239,8 @@ class DatasetSelection(_Args):
     filters: Filters = Field(default_factory=dict)
     group_by: list[Column] = Field(default_factory=list, max_length=MAX_GROUP_COLUMNS)
     approximate: StrictBool = False
+    value_source: Literal["ins_published"] | None = Field(
+        None, description="Set when the answer is INS's own published Total cell, not a parquet result")
 
     @field_validator("filters")
     @classmethod
@@ -249,6 +251,14 @@ class DatasetSelection(_Args):
     @classmethod
     def v_group_by(cls, v):
         return _check_columns(v, "group_by")
+
+    @model_serializer(mode="wrap")
+    def _omit_unset_source(self, handler):
+        # A selection from a data file keeps its exact shape: no `value_source` key.
+        out = handler(self)
+        if out.get("value_source") is None:
+            out.pop("value_source", None)
+        return out
 
 
 class RecipeSelection(_Args):

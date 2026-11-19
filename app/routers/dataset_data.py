@@ -18,6 +18,30 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
+VALUE_SOURCE_PATTERN = "^ins_published$"
+
+
+def _published_result(conn, code: str, f, g, limit: int) -> dict:
+    """The `/data` answer for `value_source=ins_published`: INS's published Total cells, found by
+    the lookup the tools use (`recipes.published_answer`). 404 when the dataset has none for this cut."""
+    from app.services import data_query as dq, recipes
+    from app.services.tools.query import published_aggregation, published_source
+    try:
+        sel = recipes.published_answer(conn, code, f or {}, g or [])
+    except Exception:
+        log.exception("published cells unavailable code=%s", code)
+        sel = None
+    if not sel:
+        raise HTTPException(404, f"INS published cells are not available for dataset {code} "
+                                 "with this selection.")
+    rows = sel["rows"][:limit]
+    return {"columns": sel["columns"], "column_labels": {}, "rows": rows,
+            "total_rows": None if sel["truncated"] else len(sel["rows"]), "returned_rows": len(rows),
+            "truncated": sel["truncated"] or len(rows) < len(sel["rows"]), "unavailable": False,
+            "value_source": "ins_published", "published_total": published_source(sel),
+            "aggregation": published_aggregation(), **dq._envelope(code)}
+
+
 @router.get("/datasets/{matrix_code}/insights")
 def get_dataset_insights(
     matrix_code: str,
@@ -88,6 +112,8 @@ def get_dataset_data(
                           "allows it (see `aggregation` in the response). Empty = raw rows."),
     approximate: int = Query(0, ge=0, le=1, description="1 = allow an explicitly labelled unweighted "
                              "mean when a non-additive measure must be collapsed"),
+    value_source: str = Query(None, pattern=VALUE_SOURCE_PATTERN, description="`ins_published`: answer with INS's own "
+                              "published Total cells (a tool citation); 404 when the dataset has none for this cut"),
 ):
     """Query dataset parquet with dimension filters.
 
@@ -118,6 +144,8 @@ def get_dataset_data(
         raise HTTPException(400, str(e))
     conn = get_conn()
     try:
+        if value_source:
+            return _published_result(conn, matrix_code, f, g, limit)
         return run_query(conn, matrix_code, f, g, limit, approximate=bool(approximate))
     except QueryError as e:
         raise HTTPException(e.status, e.message)
@@ -161,13 +189,14 @@ def get_dataset_evidence(
         None, max_length=128, pattern=r"^[A-Za-z0-9._-]+$",
         description="Refuse (409 generation_changed) unless the served data generation is "
                     "this one, before the bundle is built and again before it is sent."),
+    value_source: str = Query(None, pattern=VALUE_SOURCE_PATTERN, description="as for /data"),
 ):
     """ZIP evidence bundle for one /data selection (PA-03a): unrounded result,
     the raw observations behind an aggregation, the decision, definition,
     source and a manifest with hashes. Complete or 413, never cut."""
     from urllib.parse import urlencode
     from app.services import export as ex, generation
-    from app.services.evidence import EvidenceError, dataset_bundle
+    from app.services.evidence import EvidenceError, dataset_bundle, published_bundle
     from app.services.request_validation import InvalidRequest, parse_json_param
     try:
         f = parse_json_param(filters, "filters")
@@ -188,7 +217,11 @@ def get_dataset_evidence(
         if lang != "ro":
             q["lang"] = lang
         link = f"{str(request.base_url).rstrip('/')}/dataset-v2.html?{urlencode(q)}"
-        data = dataset_bundle(conn, matrix_code, f, g, bool(approximate), lang, link)
+        if value_source:
+            res = _published_result(conn, matrix_code, f, g, MAX_DATA_ROWS)
+            data = published_bundle(conn, matrix_code, f, g, lang, link, res)
+        else:
+            data = dataset_bundle(conn, matrix_code, f, g, bool(approximate), lang, link)
         stale = generation.precondition(expected_generation)    # swapped while building
         if stale:
             raise HTTPException(409, stale)

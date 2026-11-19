@@ -80,6 +80,8 @@ Never serialize NaN/Infinity. JSON null means unavailable, never zero.
 }
 ```
 
+A dataset selection has one optional field, `value_source: "ins_published"`. The tool sets it when the answer is INS's own published Total cell. The `live_selection` and `evidence` links then carry it, and the routes serve the same cells. A selection from a data file has no `value_source` key.
+
 `provenance` is present with empty sources/null selection when the tool has no
 data source yet (e.g. invalid input). Describe the generation as missing/stale
 when that is the actual state; do not invent an id or claim certification.

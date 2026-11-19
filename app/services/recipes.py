@@ -525,6 +525,29 @@ def published_selection(conn, code: str, filters: dict, group_by, *, universe=No
             "sources": list(sources.values()), "truncated": truncated}
 
 
+def published_answer(conn, code: str, filters: dict, group_by, actx: dict | None = None) -> dict | None:
+    """The published cells for a request as the user typed it, or None. The one lookup the tools
+    and the `value_source=ins_published` routes share: it renames columns to the file's canonical
+    names, asks the cells for every dimension a raw request leaves open, and limits an area grouping
+    to the areas the dataset has. `actx` is the dataset's aggregation context when the caller has it."""
+    from app.services import data_query as dq
+    from app.services.dataset_meta import get_aggregation_context
+    from app.services.query_builder import resolve_parquet_schema, to_sdmx_name
+    schema = resolve_parquet_schema(conn, code)
+    filters = {to_sdmx_name(schema, c): list(v) for c, v in (filters or {}).items()}
+    gb = [to_sdmx_name(schema, c) for c in (group_by or [])]
+    actx = actx or get_aggregation_context(conn, code)
+    if not actx:
+        return None
+    raw_dims = [] if gb else [d["dim_column_name"] for d in actx["dimensions"]
+                              if d["dim_column_name"] not in ("REF_AREA", "TIME_PERIOD", "UNIT_MEASURE")
+                              and d.get("dim_type") != "unit"]
+    universe = None
+    if "REF_AREA" in gb and "REF_AREA" not in filters:
+        universe = dq.dimension_values(conn, code, "REF_AREA", limit=500)["values"]
+    return published_selection(conn, code, filters, gb, universe=universe, require_pinned=raw_dims)
+
+
 def _county_ids(conn, code: str) -> set:
     from app.services.data_query import QueryError, dimension_values
     try:
