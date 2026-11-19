@@ -557,6 +557,78 @@ def _value_column_has_no_nulls(conn, path: str, value_column: str) -> bool:
     return n_groups > 0 and n_stats == n_groups and nulls == 0
 
 
+def _footer_period_bounds(conn, path: str, time_file_col: str, value_column: str):
+    """(first, last) of the non-NULL periods read from the parquet footer, or None.
+
+    Valid only when the footer proves the file holds no NULL value (so the "has a value"
+    filter keeps every row) and the period column is text (footer min/max compare as text,
+    as the scan's CAST AS VARCHAR does). Anything else returns None: the caller scans.
+    """
+    if not _value_column_has_no_nulls(conn, path, value_column):
+        return None
+    try:
+        n_groups, n_stats, lo, hi, kinds, widest = conn.execute(
+            "SELECT count(*), count(stats_min_value), min(stats_min_value), max(stats_max_value), "
+            "count(DISTINCT type), max(length(stats_max_value)) "
+            "FROM parquet_metadata(?) WHERE path_in_schema = ?",
+            [path, time_file_col]).fetchone()
+        kind = conn.execute("SELECT min(type) FROM parquet_metadata(?) WHERE path_in_schema = ?",
+                            [path, time_file_col]).fetchone()[0]
+    except Exception:
+        return None
+    if kind != "BYTE_ARRAY" or kinds != 1 or n_groups == 0 or lo is None or hi is None \
+            or (widest or 0) > 32:
+        return None
+    # A row group with no periods at all has no statistics; the others give the bounds.
+    return str(lo), str(hi)
+
+
+def period_bounds(conn, matrix_code: str, column: str = "TIME_PERIOD") -> dict:
+    """First and last period with a value, and how many periods have one (AQ-09 E).
+
+    `first` and `last` come from the parquet footer when it proves no NULL value, else from a
+    scan. The count comes from `dataset_coverage` when its year range agrees with the bounds
+    (annual series), else from one read of the period column. The answer equals the scan's:
+    `dimension_values(...)["period_bounds"]` (a corpus test compares them).
+    Raises QueryError like `dimension_values` for an unknown dataset, file or column.
+    """
+    if not conn.execute("SELECT 1 FROM matrices WHERE matrix_code = ?", [matrix_code]).fetchone():
+        raise QueryError(404, f"Dataset {matrix_code} not found")
+    path = PARQUET_DIR / f"{matrix_code}.parquet"
+    if not path.exists():
+        raise QueryError(404, f"Dataset {matrix_code} has no data file — it may be "
+                              f"published as sub-datasets.")
+    schema = resolve_parquet_schema(conn, matrix_code)
+    file_col = (schema.get("to_file") or {}).get(column, column)
+    if file_col not in (schema.get("columns") or [file_col]) or file_col in (schema["value_column"], "OBS_VALUE"):
+        raise QueryError(400, f"Invalid column: unknown column {column!r}")
+    if (schema.get("to_sdmx") or {}).get(file_col, file_col) != "TIME_PERIOD":
+        return dimension_values(conn, matrix_code, column, limit=1)["period_bounds"]
+    bounds = _footer_period_bounds(conn, str(path), file_col, schema["value_column"])
+    if bounds is None:
+        return dimension_values(conn, matrix_code, column, limit=1)["period_bounds"]
+    first, last = bounds
+    n = _coverage_period_count(conn, matrix_code, first, last)
+    if n is None:
+        col = quote_ident(file_col)
+        n = conn.execute(f"SELECT count(DISTINCT {col}) FROM read_parquet(?)", [str(path)]).fetchone()[0]
+    return {"first": first, "last": last, "periods_with_data": n}
+
+
+def _coverage_period_count(conn, code: str, first: str, last: str):
+    """Number of periods from `dataset_coverage` for an annual series whose years match the bounds."""
+    if not (re.fullmatch(r"\d{4}", first) and re.fullmatch(r"\d{4}", last)):
+        return None
+    try:
+        row = conn.execute("SELECT time_min_year, time_max_year, time_year_count, time_granularity "
+                           "FROM dataset_coverage WHERE matrix_code = ?", [code]).fetchone()
+    except Exception:
+        return None
+    if row and row[3] == "annual" and row[0] == int(first) and row[1] == int(last) and row[2]:
+        return int(row[2])
+    return None
+
+
 def dimension_values(conn, matrix_code: str, column: str, q: str | None = None,
                      limit: int = 50, offset: int = 0) -> dict:
     """Searchable, paginated actual values of one dimension (PA-02a, audit A07).

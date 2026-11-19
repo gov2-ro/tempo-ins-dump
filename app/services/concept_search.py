@@ -218,9 +218,14 @@ def dataset_facts(conn, code: str, lang: str = "ro") -> dict | None:
     cols = [r[0] for r in conn.execute("DESCRIBE SELECT * FROM read_parquet(?)", [str(path)]).fetchall()]
     coverage = None
     if "TIME_PERIOD" in cols:
-        first, last, n = conn.execute(
-            "SELECT min(TIME_PERIOD), max(TIME_PERIOD), count(DISTINCT TIME_PERIOD) "
-            "FROM read_parquet(?) WHERE OBS_VALUE IS NOT NULL", [str(path)]).fetchone()
+        from app.services import data_query
+        try:
+            pb = data_query.period_bounds(conn, code, "TIME_PERIOD")
+            first, last, n = pb["first"], pb["last"], pb["periods_with_data"]
+        except (data_query.QueryError, KeyError):
+            first, last, n = conn.execute(
+                "SELECT min(TIME_PERIOD), max(TIME_PERIOD), count(DISTINCT TIME_PERIOD) "
+                "FROM read_parquet(?) WHERE OBS_VALUE IS NOT NULL", [str(path)]).fetchone()
         coverage = {"first": first, "last": last, "periods": n,
                     "frequency": "monthly" if last and len(str(last)) == 7 and "-" in str(last)
                     and "Q" not in str(last) else

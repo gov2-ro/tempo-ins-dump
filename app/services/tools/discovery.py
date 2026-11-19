@@ -1279,11 +1279,10 @@ def _time_block(ctx, code: str, time_dim: dict | None, has_file: bool) -> tuple[
         notes.append(_note("no_period_data", M.t(ctx.lang, "describe.no_period_file")))
         return t, notes
     try:
-        res = data_query.dimension_values(ctx.conn, code, col, limit=1)
+        pb = data_query.period_bounds(ctx.conn, code, col) or {}
     except data_query.QueryError:
         notes.append(_note("no_period_data", M.t(ctx.lang, "describe.period_unreadable")))
         return t, notes
-    pb = res.get("period_bounds") or {}
     t.update(first=pb.get("first"), last=pb.get("last"), periods_with_data=pb.get("periods_with_data"),
              frequency=_frequency(pb.get("last")))
     mr = t["metadata_range"]
