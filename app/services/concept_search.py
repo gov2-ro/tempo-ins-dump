@@ -108,6 +108,8 @@ sa se si sau spre toate tot un una unei unui despre fata evoluat evolutia evolue
 compara comparatie compar comparati arata vreau vezi date datele statistica statistici
 what which how has have had the an of in on at for by to is are was were most highest lowest
 per changed change compare comparison and or with do does show me tell between over across
+top bottom daca poti mici many much list give find there when where who can could please would should
+reported lista spune afla
 """.split())
 
 

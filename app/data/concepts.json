@@ -828,8 +828,8 @@
     "en": "Dwellings completed"
    },
    "note": {
-    "ro": "locuințe terminate în cursul anului, după sursa de finanțare și mediul de reședință, 1990–2025, pe județe, regiuni și macroregiuni. „Din care: din fondurile populației” face parte din „Din fonduri private”: nu se adună cu ele. Descărcarea nu are totalul INS pe surse, deci fixează o singură sursă (publice sau private)",
-    "en": "dwellings completed in the year, by source of funding and residence area, 1990–2025, by county, region and macroregion. “Of which: from household funds” is part of “From private funds”: never add them together. The download lacks the INS total across sources, so pin one source (public or private)"
+    "ro": "locuințe terminate în cursul anului, după sursa de finanțare și mediul de reședință, 1990–2025, pe județe, regiuni și macroregiuni. „Din care: din fondurile populației” face parte din „Din fonduri private”: nu se adună cu ele. Descărcarea nu are totalul INS nici pe surse, nici pe medii, deci fixează o singură sursă (publice sau private) și un singur mediu (urban sau rural)",
+    "en": "dwellings completed in the year, by source of funding and residence area, 1990–2025, by county, region and macroregion. “Of which: from household funds” is part of “From private funds”: never add them together. The download lacks the INS total across sources and across residence areas, so pin one source (public or private) and one area (urban or rural)"
    },
    "aliases": {
     "ro": [

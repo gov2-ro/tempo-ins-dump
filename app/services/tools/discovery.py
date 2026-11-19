@@ -996,6 +996,89 @@ def _assumed_warning(cdef: dict, cid: str, lang: str, cities: bool) -> dict:
     return C.warning("assumed_definition", M.t(lang, "discover.assumed", label=label), cid)
 
 
+def _own_denominator(cards: list, by_id: dict) -> bool:
+    """True when a matched concept's own name carries the denominator ("PIB pe locuitor"): it is part
+    of the measure, not a constraint discovery failed to apply (AQ-09 D1)."""
+    from app.services.tools.intent import _DENOMINATOR
+    return any(_DENOMINATOR.search(cs.fold(n)) for c in cards
+               for n in ((by_id.get(c["id"]) or {}).get("name") or {}).values())
+
+
+def _title_words(conn, code: str) -> list:
+    row = conn.execute("SELECT matrix_name, matrix_name_en FROM matrices WHERE matrix_code = ?", [code]).fetchone()
+    return cs.fold(" ".join(x for x in (row or ()) if x)).split()
+
+
+def _close_family(conn, fts: str, families: list) -> bool:
+    """Does any family title fit the question's content words (AQ-09 D3)? The family search matches any
+    one word, so a hit may share a single filler word. A family is close when its title (RO or EN)
+    holds the longest content word (by its first five letters) and at least half of all content words."""
+    words = [w for w in fts.split() if len(w) >= 4]
+    if not words:
+        return True                                  # nothing to judge
+    key, need = max(words, key=len), (len(words) + 1) // 2
+    for f in families:
+        title = _title_words(conn, f["code"])
+        has = lambda w: any(t.startswith(w[:5]) for t in title)
+        if has(key) and sum(has(w) for w in words) >= need:
+            return True
+    return False
+
+
+def _asked_span(parsed: dict, intent: dict, last: int):
+    """(first year, last year) the question asks for, or None."""
+    rng, periods = parsed.get("period_range"), parsed.get("periods")
+    if rng:
+        return rng["from"], rng["to"]
+    if periods:
+        return min(periods), max(periods)
+    if parsed.get("period"):
+        return int(parsed["period"]), int(parsed["period"])
+    if intent.get("last_years"):
+        return last - intent["last_years"] + 1, last
+    return None
+
+
+def _period_gap(cards: list, parsed: dict, intent: dict, lang: str) -> tuple:
+    """(warnings, recovery) when the asked period is outside a concept's coverage and a longer series
+    exists in its alternatives (AQ-09 D4). A span given as "the last N years" has no other warning,
+    so it also says when no longer series was found."""
+    warnings, recovery = [], []
+    for c in cards:
+        cov = c.get("coverage") or {}
+        try:
+            first, last = int(str(cov["first"])[:4]), int(str(cov["last"])[:4])
+        except (KeyError, TypeError, ValueError):
+            continue
+        span = _asked_span(parsed, intent, last)
+        if not span or (first <= span[0] and span[1] <= last):
+            continue
+        a, b = span
+        asked = str(a) if a == b else f"{a}–{b}"
+
+        def covers(alt):
+            ac = alt.get("coverage") or {}
+            try:
+                # "the last N years" ends at the latest year of the series, whichever the series is
+                return int(str(ac["first"])[:4]) <= a <= int(str(ac["last"])[:4]) and (
+                    bool(intent.get("last_years")) or b <= int(str(ac["last"])[:4]))
+            except (KeyError, TypeError, ValueError):
+                return False
+        alt = next((x for x in c["alternatives"] if covers(x)), None)
+        if alt:
+            ac = alt["coverage"]
+            warnings.append(C.warning("longer_series_available", M.t(
+                lang, "discover.longer_series", asked=asked, name=c["name"], first=first, last=last, alt=alt["name"],
+                afirst=str(ac["first"])[:4], alast=str(ac["last"])[:4], code=alt.get("dataset") or alt["id"]), alt["id"]))
+            if (alt.get("next_call") or {}).get("tool") == "discover_indicators":
+                recovery.append(C.recovery("tool_call", M.t(lang, "discover.use_longer", alt=alt["name"]),
+                                           "discover_indicators", alt["next_call"]["arguments"]))
+        elif intent.get("last_years"):
+            warnings.append(C.warning("period_beyond_coverage", M.t(
+                lang, "discover.beyond_coverage", asked=asked, name=c["name"], first=first, last=last), c["id"]))
+    return warnings, recovery
+
+
 def discover_indicators(args, ctx):
     conn, lang = ctx.conn, ctx.lang
     from app.services.tools.intent import interpret
@@ -1024,6 +1107,8 @@ def discover_indicators(args, ctx):
     named = {w for c in cards for w in cs.fold(c.get("matched") or "").split()}
     # a constraint inside the matched concept's own alias ("population by age") is that concept
     unapplied = [c for c in plan.unapplied if not set(cs.fold(c["text"]).split()) <= named]
+    if _own_denominator(cards, by_id):          # "per capita" of a per-inhabitant measure is the measure itself
+        unapplied = [c for c in unapplied if c["kind"] != "denominator"]
     place = None
     if plan.locality and (geo.places or geo.regions):
         # one county can narrow the city ranking (policy); anything else the question names around it
@@ -1125,6 +1210,20 @@ def discover_indicators(args, ctx):
         "note": M.t(lang, "discover.families_note")}
     if fam["search_mode"] != "fts" and dataset_search.search_status()["mode"] == "fallback":
         warnings.append(C.warning("search_degraded", M.t(lang, "discover.search_degraded")))
+    if plan.density:            # a density question: refuse only when no density series was found (AQ-09 D5)
+        found = any("densit" in " ".join(_title_words(conn, f["code"])) for f in families) or \
+            any("densit" in cs.fold(c.get("name") or "") for c in cards)
+        if not found:
+            raise C.ToolFailure("unavailable", "unsupported_operation", M.t(lang, "policy.no_density"),
+                                recovery=[C.recovery("tool_call", M.t(lang, "discover.no_density_population"),
+                                                     "discover_indicators",
+                                                     {"query": "populația județelor" if lang == "ro" else "population by county",
+                                                      "lang": lang})])
+    close = not families or bool(cards) or _close_family(conn, parsed.get("fts") or "", families)
+    if not close:
+        warnings.append(C.warning("no_close_match", M.t(lang, "discover.no_close_match")))
+    gap_warnings, gap_recovery = _period_gap(cards, parsed, intent, lang)
+    warnings += gap_warnings
 
     interp = {"places": places, "level": parsed.get("level"), "period": parsed.get("period"),
               "period_range": parsed.get("period_range"), "periods": parsed.get("periods"),
@@ -1152,7 +1251,10 @@ def discover_indicators(args, ctx):
         message = M.t(lang, "discover.msg_ok", n=len(cards), m=len(families)) + (
             M.t(lang, "discover.msg_unapplied",
                 items=", ".join(f"{c['kind']} ({c['text']!r})" for c in unapplied)) if unapplied else "")
-        recovery = []
+        recovery = list(gap_recovery)
+        if not close:
+            message = M.t(lang, "discover.no_close_match")
+            recovery.append(C.recovery("clarify", M.t(lang, "discover.rephrase_close")))
 
     def build():
         return C.envelope("discover_indicators", ctx, status=status, reason=reason, message=message,

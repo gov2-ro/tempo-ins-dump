@@ -39,6 +39,15 @@ def period_range(query: str) -> dict | None:
     return {"from": a, "to": b} if a < b else None
 
 
+_LAST_N = re.compile(r'\b(?:ultimii|ultimele|last|past|previous)\s+(\d{1,3})\s+(?:de\s+)?(?:ani|years?)\b')
+
+
+def last_years(query: str) -> int | None:
+    """N for "ultimii 30 de ani" / "the last 30 years" (1..200), else None."""
+    m = _LAST_N.search(fold(query))
+    return int(m[1]) if m and 1 <= int(m[1]) <= 200 else None
+
+
 def interpret(query: str) -> dict:
     t = fold(query)
     cities = bool(re.search(r'\b(orase|orasele|oraselor|municipii|municipiile|municipiilor|cities|towns)\b', t))
@@ -54,7 +63,8 @@ def interpret(query: str) -> dict:
     thousands = bool(re.search(r'\b(mia de locuitori|(?:1000|1 000) (?:de )?(?:locuitori|residents|inhabitants))\b', t))
     stays = bool(re.search(r'\b(innoptari(?:le)?|overnight stays|nights|stays)\b', t))
     arrivals = bool(re.search(r'\b(turisti|sosiri|arrivals|tourists)\b', t)) and not stays
-    density = bool(re.search(r'\b(densitat\w*|density|correlat\w*|corelat\w*)\b', t))
+    density = bool(re.search(r'\b(densitat\w*|density)\b', t))
+    correlation = bool(re.search(r'\b(correlat\w*|corelat\w*)\b', t))
     tourism_ratio = stays and per_resident and not thousands
     constraints = [{'kind': kind, 'text': m[0]} for kind, rx in (('sex', _SEX), ('age', _AGE), ('denominator', _DENOMINATOR))
                    if (m := rx.search(t)) and not (kind == 'denominator' and tourism_ratio)]
@@ -62,8 +72,15 @@ def interpret(query: str) -> dict:
             'operation': 'change' if change else 'rank' if rank or k else None,
             'top_k': int(k) if k else 30, 'order': 'asc' if bottom else 'desc',
             'tourism_ratio': tourism_ratio,
-            'unsupported_measure': density or (stays and thousands) or (arrivals and per_resident),
+            # refused at once: a tourism ratio other than stays per resident, a correlation, a density of cities
+            'unsupported_measure': (stays and thousands) or (arrivals and per_resident) or correlation
+                                   or (density and cities),
+            'tourism_unsupported': (stays and thousands) or (arrivals and per_resident),
+            'correlation': correlation,
+            # a density question is searched first (AQ-09 D5): refused only when no series exists
+            'density': density,
             'period_range': period_range(query),
+            'last_years': last_years(query),
             'years': sorted({int(y) for y in re.findall(_Y, t)}),
             'population': bool(re.search(r'\b(populati\w*|population|populate|populated)\b', t)),
             'constraints': constraints}
