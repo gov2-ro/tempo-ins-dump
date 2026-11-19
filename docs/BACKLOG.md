@@ -4,7 +4,7 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
-## NEXT — Promote AQ-11 and deploy AQ-08 + AQ-10 (owner: approved 2026-11-19, after the other agents finish)
+## DONE 2026-11-19 — AQ-11 promoted; AQ-08, AQ-10 and the homepage refresh deployed
 
 State on 2026-11-19: AQ-08 (chart hints) and AQ-10 ("Din care") are merged on `fix/ask-answer-quality`,
 not deployed. AQ-11 (generation refresh) runs on the copy `~/devbox/gov2/tempo-gen-20261118/data`,
@@ -19,7 +19,11 @@ Before deploy, compare the release-check warning `run_recipe registered_unemploy
 `unavailable/query_budget` (public profile) with the served generation. Owner: wait until the other
 agents finish.
 
-- [ ] **P1 — Promote and deploy**, in this order. Stop only if a check fails.
+- [x] **P1 — Promote and deploy** (done 2026-11-19; all merged into `main`; API release
+  `20261119-…-adc6762a` on the VPS, static release `adc6762a4aed-33b01d1c1155` on DreamHost; rollback:
+  previous releases on both hosts and `data/_archive/corpus-062bd2b0`). Still open from step 6:
+  `mcp_probe.py https://api-ins.gov2.ro POP112A_grupe`, the CON103H and LOC104A cases, a chart hint in
+  Claude Desktop. The steps were:
   1. Check the AQ-11 record: 0 repeated keys in county files, spot checks, full pytest and strict
      `release-check.py --local --stage` passed.
   2. Merge `aq-11-refresh` into `fix/ask-answer-quality`; push.

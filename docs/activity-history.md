@@ -18,7 +18,10 @@
   code and `tests/test_county_tiles.py` stay, without a caller. The static site reads the summary
   from a recorded answer, so the updates line needs a static build. Details:
   `docs/plans/homepage-refresh/handoff.md`.
-- **Not done here:** the API deploy to the VPS and the static upload (owner runs or confirms them).
+- **Deployed (owner, 2026-11-19):** API on the VPS and the static site on DreamHost, both on
+  generation `adc6762a`, static commit `33b01d1`. Static gate: 1,017 of 1,017 API parity cases.
+  Live smoke: home (RO/EN), a category, About, FOM106F on v1 and v2, places, a county profile, Ask
+  and a recipe page load without console errors; `/api/health` reports the new generation.
 
 ## 2026-11-19 — UX: dataset table always shown (lazy), compact front-page subcategories
 
