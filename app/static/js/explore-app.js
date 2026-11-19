@@ -9,9 +9,27 @@
 // ---------------------------------------------------------------------------
 const UI = {
     ro: {
-        browseTitle: 'Date statistice România',
-        browseSub: (n, obs) => `${n} seturi de date · ${obs} observații`,
-        browseTagline: 'Tempo INS, da nițel mai drăgu\'',
+        heroTitle: 'Statistica oficială a României, mai ușor de explorat',
+        heroLead: 'Seturile de date INS Tempo, cu grafice, profiluri de județ și descărcări.',
+        heroSearch: 'Caută: populație, șomaj, salarii…',
+        heroDatasets: 'seturi de date',
+        heroObservations: 'valori',
+        heroSpan: 'ani acoperiți',
+        countyPick: 'Alege un județ',
+        countyPlaceholder: 'Județ…',
+        countyProfile: 'profil de județ',
+        countyProfiles: 'Profiluri de județ',
+        residents: 'locuitori',
+        mapLegend: year => `Populația rezidentă, ${year} · sursa: INS, POP105A`,
+        keyFigures: 'Cifre-cheie',
+        toolsLabel: 'Instrumente',
+        questionsTitle: 'Întrebări de pornire',
+        themesTitle: 'Teme',
+        featPlaces: ['Profiluri de județ', 'Populație, salarii, șomaj și natalitate pentru fiecare județ.', 'Toate județele'],
+        featRecipes: ['Indicatori gata calculați', 'Indicatori pe județe, cu metoda și sursele la vedere.', 'Compară două seturi'],
+        featAsk: ['Întreabă (Ask)', 'Pune o întrebare în limbaj natural; răspunsul vine cu surse. Aceleași date se pot folosi în Claude și în alți asistenți AI, prin conectorul MCP.', 'Deschide Ask', 'beta · poate cere propria cheie API', 'Conectorul MCP'],
+        featDev: ['Pentru dezvoltatori', 'Acces din cod și din asistenți AI.', 'Documentația API SDMX', 'Server MCP'],
+        featDims: ['Explorator de dimensiuni', 'Vezi ce dimensiuni au seturile și unde se regăsesc.', 'Deschide exploratorul'],
         noticeText: 'Versiune alfa / preview. Acesta nu este un proiect oficial al Guvernului României. Date preluate de pe <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Actualizate recent',
         otherSubcategories: 'Alte subcategorii:',
@@ -91,9 +109,27 @@ const UI = {
         `,
     },
     en: {
-        browseTitle: 'Romanian Statistical Data',
-        browseSub: (n, obs) => `${n} datasets · ${obs} observations`,
-        browseTagline: 'Tempo INS, but nicer',
+        heroTitle: "Romania's official statistics, easier to explore",
+        heroLead: 'The INS Tempo datasets, with charts, county profiles and downloads.',
+        heroSearch: 'Search: population, unemployment, wages…',
+        heroDatasets: 'datasets',
+        heroObservations: 'values',
+        heroSpan: 'years covered',
+        countyPick: 'Choose a county',
+        countyPlaceholder: 'County…',
+        countyProfile: 'county profile',
+        countyProfiles: 'County profiles',
+        residents: 'residents',
+        mapLegend: year => `Resident population, ${year} · source: INS, POP105A`,
+        keyFigures: 'Key figures',
+        toolsLabel: 'Tools',
+        questionsTitle: 'Starter questions',
+        themesTitle: 'Themes',
+        featPlaces: ['County profiles', 'Population, earnings, unemployment and births for every county.', 'All counties'],
+        featRecipes: ['Ready-made indicators', 'County indicators with their method and sources in view.', 'Compare two datasets'],
+        featAsk: ['Ask', 'Ask a question in plain language; the answer comes with sources. The same data works in Claude and other AI assistants through the MCP connector.', 'Open Ask', 'beta · may ask for your own API key', 'The MCP connector'],
+        featDev: ['For developers', 'Access from code and from AI assistants.', 'SDMX API documentation', 'MCP server'],
+        featDims: ['Dimensions explorer', 'See which dimensions the datasets have and where they recur.', 'Open the explorer'],
         noticeText: 'Alpha/preview. This is not an official Romanian Government project. Data sourced from <a href="https://insse.ro" target="_blank">insse.ro</a>.',
         recentlyUpdated: 'Recently updated',
         otherSubcategories: 'Other subcategories:',
@@ -242,7 +278,6 @@ class LensApp {
         this.chartConfig = null;
         this.charts = [];       // active ECharts instances
         this.categories = null; // category tree cache
-        this.categoryTrends = null; // trend aggregates per context code
         this.drillStack = [];   // breadcrumb navigation stack
         this.searchIdx = -1;    // keyboard nav index in search results
 
@@ -426,7 +461,6 @@ class LensApp {
             this.applyLang();
             // Clear caches (names depend on lang)
             this.categories = null;
-            this.categoryTrends = null;
             this._sidebarLoaded = false;
             // Re-render sidebar tree if open
             const sidebar = document.getElementById('lens-sidebar');
@@ -482,6 +516,9 @@ class LensApp {
         if (footerNotice) footerNotice.innerHTML = this.ui.noticeText;
         const aboutLink = document.getElementById('about-link');
         if (aboutLink) aboutLink.textContent = this.ui.aboutLink;
+        document.getElementById('search-nav-hint').textContent = this.ui.navigate;
+        document.getElementById('search-open-hint').textContent = this.ui.open;
+        document.getElementById('footer-dims').textContent = this.lang === 'en' ? 'Dimensions' : 'Dimensiuni';
         // Re-render about page if currently shown
         if (!document.getElementById('about-view').classList.contains('hidden')) {
             document.getElementById('about-content').innerHTML = `<div class="about-page">${this.ui.aboutContent}</div>`;
@@ -545,21 +582,20 @@ class LensApp {
         document.getElementById('about-view').classList.add('hidden');
         document.getElementById('back-btn').classList.add('hidden');
 
-        const [catResp, trendsResp, summary] = await Promise.all([
+        const [catResp, summary] = await Promise.all([
             this.categories ? Promise.resolve(null) : API.getCategories({ lang: this.lang }),
-            this.categoryTrends ? Promise.resolve(null) : API.getCategoryTrends(),
             API.getCorpusSummary({ lang: this.lang }),
         ]);
         if (this._overviewVersion !== version) return;
         if (catResp) this.categories = catResp.tree;
-        if (trendsResp) this.categoryTrends = trendsResp.trends;
 
 
         this.headlines = summary.headlines || [];
         this.recentlyUpdated = summary.recently_updated || [];
+        this.latestUpdates = summary.latest_updates || [];
         this.renderNoticeBar();
-        this.renderBrowseHeader(summary.corpus);
-        this.renderEntryPoints();
+        this.renderHero();
+        this.renderQuestions();
 
         document.getElementById('page-loader')?.classList.add('hidden');
         this.showCategoryGrid();
@@ -616,11 +652,11 @@ class LensApp {
         const header = document.createElement('div');
         header.className = 'cat-section-header';
         header.innerHTML = `
+            ${imgTag}
             <div class="cat-section-title">
                 <span class="cat-section-name">${this.shortName(cat.name)}</span>
                 <span class="cat-section-meta"><strong>${cat.total_datasets || 0}</strong> ${this.ui.datasets} · <strong>${cat.children.length}</strong> ${this.ui.subcategories}</span>
             </div>
-            ${imgTag}
         `;
         header.addEventListener('click', () => this.drillCategory(cat, i));
         section.appendChild(header);
@@ -673,6 +709,7 @@ class LensApp {
     subcatLinks(children, trail, catIdx) {
         const wrap = document.createElement('div');
         wrap.className = 'cat-subcats';
+        children = [...children].sort((a, b) => (b.total_datasets || 0) - (a.total_datasets || 0));
         children.forEach((child, ci) => {
             const path = [...trail, child];
             const link = document.createElement('a');
@@ -685,8 +722,12 @@ class LensApp {
                 this.drillStack = path.slice(0, -1).map((cat, depth) => ({ cat, colorIdx: depth ? 0 : catIdx }));
                 this.drillCategory(child, 0);
             });
-            wrap.appendChild(link);
-            if (ci < children.length - 1) wrap.insertAdjacentHTML('beforeend', '<span class="cat-subcat-sep">·</span>');
+            // Item and separator wrap as one unit, so no line starts with '·'.
+            const item = document.createElement('span');
+            item.className = 'cat-subcat-item';
+            item.appendChild(link);
+            if (ci < children.length - 1) item.insertAdjacentHTML('beforeend', '<span class="cat-subcat-sep">·</span>');
+            wrap.appendChild(item);
         });
         return wrap;
     }
@@ -722,37 +763,125 @@ class LensApp {
         };
     }
 
-    /** General questions at home; a theme's questions live on its profile. */
-    async renderEntryPoints() {
-        const ro = this.lang !== 'en';
-        this.renderQuestions();
-        let toolbar = document.getElementById('landing-tools');
-        if (!toolbar) {
-            toolbar = document.createElement('div');
-            toolbar.id = 'landing-tools';
-            toolbar.className = 'landing-tools';
-            document.getElementById('search-trigger').after(toolbar);
-        }
-        toolbar.innerHTML = `<span class="corpus-compact" id="corpus-compact"></span>
-            <select id="entry-county" aria-label="${ro ? 'Alege un județ' : 'Choose a county'}"><option value="">${ro ? 'Județ…' : 'County…'}</option></select>
-            <a href="/dimensions-explorer.html${ro ? '' : '?lang=en'}">${ro ? 'Dimensiuni' : 'Dimensions'} ↗</a>`;
-        this.renderBrowseHeader(this.corpus);
-        const sel = document.getElementById('entry-county');
-        sel.addEventListener('change', () => {
-            if (sel.value) location.href = `/place/county/${sel.value}${ro ? '' : '?lang=en'}`;
-        });
-        try {
-            const resp = await API.fetch('/places');
-            sel.insertAdjacentHTML('beforeend', (resp.places || []).filter(p => p.type === 'county')
-                .sort((a, b) => a.name.localeCompare(b.name, 'ro')).map(p =>
-                    `<option value="${_escHtml(p.slug)}">${_escHtml(p.name)}</option>`).join(''));
-        } catch (e) { console.warn('Places unavailable:', e); }
+    static KEY_FIGURES = ['FOM106F', 'AMG130M', 'POP201A_judete', 'TUR104G'];
+
+    /** Home hero: a short heading and a search field that opens the search overlay.
+     *  The corpus figures, the county map and the county picker are off the home for now
+     *  (renderCountyMap and renderCountyPicker stay, without a caller). */
+    renderHero() {
+        const ui = this.ui;
+        const hero = document.getElementById('landing-hero');
+        hero.innerHTML = `<h1 class="landing-title">${ui.heroTitle}</h1>
+            <button type="button" class="landing-search">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>${ui.heroSearch}</span><kbd>/</kbd></button>`;
+        hero.querySelector('.landing-search').addEventListener('click', () => this.openSearch());
+        document.getElementById('landing-questions-title').textContent = ui.questionsTitle;
+        document.getElementById('landing-themes-title').textContent = ui.themesTitle;
+        this.renderKeyFigures();
+        this.renderLatestUpdates();
+        this.renderTools();
     }
 
-    renderBrowseHeader(corpus) {
-        this.corpus = corpus;
-        const compact = document.getElementById('corpus-compact');
-        if (compact && corpus) compact.textContent = `${formatNumber(corpus.datasets, 0)} ${this.lang === 'ro' ? 'seturi' : 'datasets'} · ${formatNumber(corpus.observations, 0)} ${this.lang === 'ro' ? 'obs.' : 'rows'}`;
+    /** Home key figures: four of the summary's headline indicators, by dataset code. */
+    renderKeyFigures() {
+        const host = document.getElementById('landing-figures');
+        const all = (this.headlines || []).flatMap(t => t.indicators || []);
+        const picks = LensApp.KEY_FIGURES.map(code => all.find(ind => ind.code === code)).filter(Boolean);
+        host.hidden = !picks.length;
+        host.querySelector('h2').textContent = this.ui.keyFigures;
+        host.querySelector('.headline-cards').replaceChildren(...picks.map(ind => this.teaserCard(ind)));
+    }
+
+    /** Home: the two datasets INS updated last, whatever their age. */
+    renderLatestUpdates() {
+        const host = document.getElementById('landing-updates');
+        const q = this.lang === 'en' ? '?lang=en' : '';
+        host.hidden = !this.latestUpdates?.length;
+        host.innerHTML = `<span class="landing-line-label">${this.ui.recentlyUpdated}</span>` + (this.latestUpdates || []).map(ds =>
+            `<a href="/dataset/${encodeURIComponent(ds.matrix_code)}${q}" title="${_escHtml(ds.matrix_name)}"><span class="landing-update-name">${_escHtml(ds.matrix_name)}</span>
+                <span class="landing-update-meta">${_escHtml(ds.matrix_code)} · ${_escHtml(ds.ultima_actualizare || '')}</span></a>`).join('');
+    }
+
+    /** Home: one line of links to the site's tools. */
+    renderTools() {
+        const ui = this.ui, en = this.lang === 'en', q = en ? '?lang=en' : '';
+        const host = document.getElementById('landing-tools');
+        host.setAttribute('aria-label', ui.toolsLabel);
+        host.innerHTML = [
+            [`/places${q}`, ui.featPlaces[0], ui.featPlaces[1]],
+            [`/compare.html${q}`, ui.featRecipes[0], ui.featRecipes[1]],
+            [`/ask.html${q}`, ui.featAsk[0], ui.featAsk[1]],
+            [`/?page=about${en ? '&lang=en' : ''}`, ui.featAsk[4], ui.featAsk[1]],
+            [`/dimensions-explorer.html${q}`, ui.featDims[0], ui.featDims[1]],
+        ].map(([href, text, title]) => `<a href="${href}" title="${_escHtml(title)}">${text} →</a>`).join('');
+    }
+
+    /** County tile map: each tile links to its county profile; shaded by resident
+     *  population when every tile has a value for one common year, otherwise unshaded. */
+    async renderCountyMap() {
+        const lang = this.lang;
+        const map = document.querySelector('#landing-hero .landing-map');
+        const legend = document.querySelector('#landing-hero .landing-map-legend');
+        map.setAttribute('aria-label', this.ui.countyProfiles);
+        legend.replaceChildren();
+        let counties;
+        try { counties = await this.places(); } catch { map.replaceChildren(); return; }
+        if (this.lang !== lang) return;
+        const names = new Map(counties.map(p => [p.slug, p.name]));
+        const q = lang === 'en' ? '?lang=en' : '';
+        map.innerHTML = Object.entries(CountyTiles.TILES).filter(([, [slug]]) => names.has(slug))
+            .map(([code, [slug, col, row]]) => {
+                const label = _escHtml(`${names.get(slug)} — ${this.ui.countyProfile}`);
+                return `<a class="landing-tile" href="/place/county/${slug}${q}" data-slug="${slug}" style="grid-column:${col};grid-row:${row}" aria-label="${label}" title="${label}">${code}</a>`;
+            }).join('');
+
+        let pop;
+        try { pop = (await API.fetch('/reference/population', { level: 'county' })).population || {}; }
+        catch (e) { console.warn('Population unavailable, map left unshaded:', e); return; }
+        if (this.lang !== lang || !map.isConnected) return;
+        const bySlug = new Map(Object.entries(pop).map(([name, years]) => [CountyTiles.slugify(name), years]));
+        const tiles = [...map.querySelectorAll('.landing-tile')];
+        const years = tiles.map(t => Object.keys(bySlug.get(t.dataset.slug) || {}));
+        const year = tiles.length ? years.reduce((a, ys) => a.filter(y => ys.includes(y))).sort().at(-1) : null;
+        const values = tiles.map(t => year ? bySlug.get(t.dataset.slug)[year] : null);
+        if (!year || values.some(v => !Number.isFinite(v))) return;
+        const { breaks, stepOf } = CountyTiles.steps(values);
+        if (!breaks.length) return;
+        tiles.forEach((t, i) => {
+            t.dataset.step = stepOf(values[i]);
+            t.title += ` · ${formatNumber(values[i], 0)} ${this.ui.residents} (${year})`;
+        });
+        const edges = [null, ...breaks, null];
+        legend.innerHTML = `<div class="landing-legend-steps">${edges.slice(0, -1).map((lo, i) => {
+            const hi = edges[i + 1];
+            const text = lo == null ? `< ${formatNumber(hi, 0)}` : hi == null ? `≥ ${formatNumber(lo, 0)}` : `${formatNumber(lo, 0)}–${formatNumber(hi, 0)}`;
+            return `<span><i class="landing-swatch" data-step="${i}"></i>${text}</span>`;
+        }).join('')}</div><div class="landing-legend-note">${_escHtml(this.ui.mapLegend(year))}</div>`;
+    }
+
+    /** The places list, fetched once (names do not depend on the language). */
+    places() {
+        this._places ||= API.fetch('/places').then(r => (r.places || []).filter(p => p.type === 'county'))
+            .catch(e => { this._places = null; throw e; });
+        return this._places;
+    }
+
+    /** County picker under the map: the fallback for small screens. */
+    async renderCountyPicker() {
+        const en = this.lang === 'en';
+        const host = document.querySelector('#landing-hero .landing-county');
+        host.innerHTML = `<a href="/places${en ? '?lang=en' : ''}">${this.ui.countyProfiles} →</a>
+            <select aria-label="${this.ui.countyPick}"><option value="">${this.ui.countyPlaceholder}</option></select>`;
+        const sel = host.querySelector('select');
+        sel.addEventListener('change', () => {
+            if (sel.value) location.href = `/place/county/${encodeURIComponent(sel.value)}${en ? '?lang=en' : ''}`;
+        });
+        try {
+            const counties = await this.places();
+            sel.insertAdjacentHTML('beforeend', [...counties].sort((a, b) => a.name.localeCompare(b.name, 'ro'))
+                .map(p => `<option value="${_escHtml(p.slug)}">${_escHtml(p.name)}</option>`).join(''));
+        } catch (e) { console.warn('Places unavailable:', e); }
     }
 
     renderQuestions(cat = null) {
@@ -773,7 +902,7 @@ class LensApp {
         for (const theme of this.headlines || []) {
             const a = document.createElement('a');
             a.href = `/?cat=${theme.context_code}${en ? '&lang=en' : ''}`;
-            a.textContent = theme.theme_label;
+            a.innerHTML = `<span class="theme-nav-icon" aria-hidden="true">${THEME_ICONS[theme.icon] || '📊'}</span>${_escHtml(theme.theme_label)}`;
             if (active && (active.code === theme.context_code || this.drillStack.some(c => c.cat.code === theme.context_code))) a.setAttribute('aria-current','page');
             nav.appendChild(a);
         }
@@ -781,10 +910,6 @@ class LensApp {
         all.href = `/${en ? '?lang=en' : ''}#category-grid`;
         all.textContent = en ? 'All themes ↓' : 'Toate temele ↓';
         nav.appendChild(all);
-        const dims = document.createElement('a');
-        dims.href = `/dimensions-explorer.html${en ? '?lang=en' : ''}`;
-        dims.textContent = en ? 'Dimensions ↗' : 'Dimensiuni ↗';
-        nav.appendChild(dims);
     }
 
     teaserCard(ind) {
@@ -925,26 +1050,6 @@ class LensApp {
             container.firstElementChild.replaceChildren(...cards.map(card => this.teaserCard(card)));
             container.classList.toggle('hidden', !cards.length);
         } catch { if (this._overviewVersion === version) container.classList.add('hidden'); }
-    }
-
-    _renderTrendIndicator(contextCode) {
-        const trend = this.categoryTrends?.[contextCode];
-        if (!trend || !trend.total) return '';
-        const total = trend.total;
-        const upPct = (trend.up / total * 100).toFixed(0);
-        const dnPct = (trend.down / total * 100).toFixed(0);
-        const yoy = trend.avg_yoy;
-        const yoyStr = yoy != null ? `${yoy >= 0 ? '+' : ''}${yoy.toFixed(1)}%` : '';
-        const yoyCls = yoy >= 0 ? 'up' : 'down';
-        return `
-            <div class="cat-trend">
-                <div class="cat-trend-bar">
-                    <div class="cat-trend-up" style="width:${upPct}%"></div>
-                    <div class="cat-trend-down" style="width:${dnPct}%"></div>
-                </div>
-                ${yoyStr ? `<span class="cat-trend-yoy ${yoyCls}">${yoyStr}</span>` : ''}
-            </div>
-        `;
     }
 
     /** Recursive search for a category by code in the loaded categories tree. */
@@ -3487,7 +3592,9 @@ class LensApp {
     // --- Utilities ----------------------------------------------------------
     shortName(name) {
         // Remove numbering prefix like "1. " or "A.01 ", then title-case
-        const stripped = name.replace(/^[A-Z]?\.\d*\s*/, '').replace(/^\d+\.\s*/, '');
+        // INS ships some names with an empty "()" at the end; drop it.
+        const stripped = name.replace(/^[A-Z]?\.\d*\s*/, '').replace(/^\d+\.\s*/, '')
+            .replace(/\s*\(\s*\)\s*$/, '');
         // Title-case: first letter upper, rest lower (handles all-caps from API)
         return stripped.charAt(0).toUpperCase() + stripped.slice(1).toLowerCase();
     }

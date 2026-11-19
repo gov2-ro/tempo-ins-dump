@@ -29,9 +29,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/explore.css?v=44">
+    <link rel="stylesheet" href="/css/explore.css?v=46">
+    <script>
+        // Theme before first paint (as explore-app.js decides it), so light-theme visitors see no dark flash.
+        (function(){
+            var t; try { t = localStorage.getItem('lens_theme'); } catch (e) {}
+            t = t || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', t);
+        })();
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-    <link rel="stylesheet" href="/css/ui-rhythm.css?v=4">
+    <link rel="stylesheet" href="/css/ui-rhythm.css?v=7">
     <script src="/js/ui-preferences.js?v=3" defer></script>
 </head>
 <body>
@@ -45,26 +53,26 @@
     <!-- Top bar -->
     <nav class="topbar tb-compact" id="topbar">
         <div class="topbar-left">
-            <button class="sidebar-toggle" id="sidebar-toggle" title="Quick navigate" aria-label="Quick navigate" aria-controls="lens-sidebar" aria-expanded="false">
+            <button class="sidebar-toggle" id="sidebar-toggle" title="Navigare rapidă" aria-label="Navigare rapidă" aria-controls="lens-sidebar" aria-expanded="false">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             </button>
             <a id="zelogo" href="/" class="logo"><span class="logo-dot"></span>INS<span style="margin: -1ex 0 0 -1ex;">+</span></a>
-            <button class="back-btn hidden" id="back-btn">&larr; Explore</button>
+            <button class="back-btn hidden" id="back-btn">&larr; Explorare</button>
         </div>
-        <button class="search-trigger" id="search-trigger" aria-label="Search datasets">
+        <button class="search-trigger" id="search-trigger" aria-label="Caută seturi de date">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <span>Search datasets...</span>
+            <span>Caută seturi de date...</span>
             <kbd>&hairsp;/&hairsp;</kbd>
         </button>
         <div class="topbar-right">
             <a href="/places" class="toggle-btn" aria-label="Locuri" style="text-decoration:none;font-size:0.8rem;padding:0 10px;display:flex;align-items:center;gap:5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><span class="tb-label">Locuri</span></a>
-            <a href="/ask.html" class="toggle-btn" title="Ask AI – NL2SQL" aria-label="Ask AI" style="text-decoration:none;font-size:0.8rem;padding:0 10px;display:flex;align-items:center;gap:5px;">                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="tb-label">Ask</span></a>
-            <button class="toggle-btn about-btn" id="about-btn" title="About" aria-label="About">?</button>
-            <button class="toggle-btn" id="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle light/dark theme">
+            <a href="/ask.html" class="toggle-btn" title="Întreabă AI" aria-label="Întreabă AI" style="text-decoration:none;font-size:0.8rem;padding:0 10px;display:flex;align-items:center;gap:5px;">                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="tb-label">Ask</span></a>
+            <button class="toggle-btn about-btn" id="about-btn" title="Despre" aria-label="Despre">?</button>
+            <button class="toggle-btn" id="theme-toggle" title="Schimbă tema luminoasă/întunecată" aria-label="Schimbă tema luminoasă/întunecată">
                 <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
                 <svg id="theme-icon-moon" class="hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
             </button>
-            <button class="toggle-btn lang-toggle" id="lang-toggle" title="Switch language" aria-label="Switch language">
+            <button class="toggle-btn lang-toggle" id="lang-toggle" title="Schimbă limba" aria-label="Schimbă limba">
                 <img id="lang-flag" class="lang-flag" src="" alt="">
                 <span id="lang-label">EN</span>
             </button>
@@ -77,13 +85,13 @@
         <div class="search-modal">
             <div class="search-input-row">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" id="search-input" placeholder="Search datasets, indicators, codes..." spellcheck="false">
+                <input type="text" id="search-input" placeholder="Caută seturi de date, indicatori, coduri..." spellcheck="false">
                 <kbd>esc</kbd>
             </div>
             <div id="search-results" class="search-results"></div>
             <div class="search-footer">
-                <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> navigate</span>
-                <span><kbd>&crarr;</kbd> open</span>
+                <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> <span id="search-nav-hint">navighează</span></span>
+                <span><kbd>&crarr;</kbd> <span id="search-open-hint">deschide</span></span>
             </div>
         </div>
     </div>
@@ -91,11 +99,11 @@
     <!-- Sidebar -->
     <aside class="lens-sidebar hidden" id="lens-sidebar">
         <div class="sidebar-header">
-            <span class="sidebar-title" id="sidebar-title">Navigate</span>
-            <button class="sidebar-close" id="sidebar-close" aria-label="Close">&times;</button>
+            <span class="sidebar-title" id="sidebar-title">Navigare</span>
+            <button class="sidebar-close" id="sidebar-close" aria-label="Închide">&times;</button>
         </div>
         <div class="sidebar-search">
-            <input type="text" id="sidebar-search-input" placeholder="Filter datasets..." spellcheck="false" autocomplete="off">
+            <input type="text" id="sidebar-search-input" placeholder="Filtrează seturi de date..." spellcheck="false" autocomplete="off">
         </div>
         <div id="sidebar-tree" class="sidebar-tree"></div>
     </aside>
@@ -110,8 +118,23 @@
 
         <!-- Browse view -->
         <section id="browse-view" class="browse-view">
+            <!-- Home only (hidden on a drilled category): heading and search -->
+            <header id="landing-hero" class="landing-hero"></header>
             <nav class="theme-nav" id="theme-nav" aria-label="Teme"></nav>
-            <div class="entry-points" id="entry-points"></div>
+            <!-- First screen: questions beside the key figures, then the latest updates and the tool links -->
+            <div class="landing-first">
+                <div class="landing-first-col">
+                    <h2 id="landing-questions-title" class="landing-section-title">Întrebări de pornire</h2>
+                    <div class="entry-points" id="entry-points"></div>
+                </div>
+                <section id="landing-figures" class="landing-first-col landing-home" aria-labelledby="landing-figures-title">
+                    <h2 id="landing-figures-title" class="landing-section-title">Cifre-cheie</h2>
+                    <div class="headline-cards"></div>
+                </section>
+            </div>
+            <div id="landing-updates" class="landing-line landing-home"></div>
+            <nav id="landing-tools" class="landing-line landing-home" aria-label="Instrumente"></nav>
+            <h2 id="landing-themes-title" class="landing-section-title landing-themes-title">Teme</h2>
             <!-- Categories with their themes: chart previews, subsections, recent updates -->
             <div class="category-grid" id="category-grid"></div>
             <div class="dataset-panel hidden" id="dataset-panel">
@@ -185,7 +208,7 @@
             <span class="footer-notice" id="footer-notice"></span>
             <div class="footer-links">
                 <a href="?page=about" class="footer-link" id="about-link"></a>
-                <a href="/dimensions-explorer.html" class="footer-link">Dimensions</a>
+                <a href="/dimensions-explorer.html" class="footer-link" id="footer-dims">Dimensiuni</a>
                 <!-- <a href="https://gov2.ro/" target="_blank" rel="noopener" class="footer-link">gov2.ro</a> -->
                 <a href="https://github.com/gov2-ro/tempo-ins-dump/" target="_blank" rel="noopener" class="footer-link footer-link-github">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
@@ -200,12 +223,13 @@
     <script src="/js/utils.js?v=33"></script>
     <script src="/js/api.js?v=31"></script>
     <script src="/js/theme-overviews.js?v=2"></script>
+    <script src="/js/county-tiles.js?v=1"></script>
     <script src="/js/echarts-theme.js?v=3"></script>
     <script src="/js/chart-factory.js?v=36"></script>
     <script src="/js/chart-new-types.js?v=36"></script>
     <script src="/js/chart-geo.js?v=23"></script>
     <script src="/js/chart-demographic.js?v=26"></script>
-    <script src="/js/explore-app.js?v=107"></script>
+    <script src="/js/explore-app.js?v=111"></script>
 <style>
     #page-loader {
         display: flex;

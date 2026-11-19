@@ -40,3 +40,26 @@ def test_recent_updates_keep_30_days_and_three_per_category_with_context(tmp_pat
     assert [(r["matrix_code"], r["context_code"]) for r in recent] == [
         ("P1", "1012"), ("P2", "1012"), ("P3", "10"), ("T1", "6025"), ("T2", "6025")]
     assert recent[0]["ultima_actualizare"] == str(TODAY)
+
+
+def test_latest_updates_are_the_two_newest_whatever_their_age(tmp_path, monkeypatch):
+    def old_corpus(corpus):
+        build(corpus)
+        db = duckdb.connect(str(corpus / "metadata.duckdb"))
+        # every update is older than the 30-day window; P1 is not canonical; P2 and its child count once
+        db.execute("UPDATE matrices SET ultima_actualizare = CAST(CAST(ultima_actualizare AS DATE) - 100 AS VARCHAR)")
+        db.execute("UPDATE matrices SET is_canonical = FALSE WHERE matrix_code = 'P1'")
+        db.execute("UPDATE matrices SET parent_matrix_code = 'P2' WHERE matrix_code = 'P3'")   # a split child of P2
+        db.execute("UPDATE matrices SET matrix_name_en = 'Second (EN)' WHERE matrix_code = 'P2'")
+        db.execute("ALTER TABLE matrices ADD COLUMN IF NOT EXISTS definitie_en VARCHAR")   # the English summary reads it
+        db.close()
+
+    env = make_env(tmp_path, monkeypatch, build=old_corpus)
+    import app.routers.categories as categories
+    monkeypatch.setattr(categories, "compute_headlines", lambda *a, **k: [])
+    summary = env.client.get("/api/corpus/summary").json()
+    assert summary["recently_updated"] == []
+    assert [(r["matrix_code"], r["ultima_actualizare"]) for r in summary["latest_updates"]] == [
+        ("P2", str(TODAY - timedelta(days=101))), ("P4", str(TODAY - timedelta(days=103)))]
+    english = env.client.get("/api/corpus/summary", params={"lang": "en"}).json()["latest_updates"]
+    assert english[0]["matrix_name"] == "Second (EN)"

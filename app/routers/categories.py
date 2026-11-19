@@ -8,6 +8,7 @@ router = APIRouter()
 
 RECENT_DAYS = 30            # landing "recently updated": update window
 RECENT_PER_SECTION = 3      # and how many each landing section lists
+LATEST_UPDATES = 2          # home "latest updates" line: no age window
 
 
 @router.get("/categories")
@@ -169,10 +170,27 @@ def get_corpus_summary(lang: str = Query("ro", regex="^(ro|en)$")):
             'context_code': r[8],
         })
 
+    # The home's "latest updates" line: the newest updates whatever their age, so
+    # the line is never empty between INS refreshes. A split dataset counts once:
+    # its parent when that is canonical, otherwise its first canonical child.
+    latest_updates = [
+        {'matrix_code': r[0], 'matrix_name': r[1], 'ultima_actualizare': str(r[2])}
+        for r in conn.execute(f"""
+            SELECT m.matrix_code, {name_col} AS matrix_name, m.ultima_actualizare
+            FROM matrices m
+            WHERE m.is_canonical = TRUE AND TRY_CAST(m.ultima_actualizare AS DATE) IS NOT NULL
+            QUALIFY row_number() OVER (
+                PARTITION BY COALESCE(m.parent_matrix_code, m.matrix_code)
+                ORDER BY m.parent_matrix_code IS NOT NULL, m.matrix_code) = 1
+            ORDER BY TRY_CAST(m.ultima_actualizare AS DATE) DESC, m.matrix_code
+            LIMIT {LATEST_UPDATES}
+        """).fetchall()]
+
     return {
         'corpus': corpus,
         'headlines': headlines,
         'recently_updated': recently_updated,
+        'latest_updates': latest_updates,
     }
 
 
