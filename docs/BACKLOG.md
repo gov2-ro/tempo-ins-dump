@@ -208,6 +208,12 @@ Branch `feat/homepage-refresh` (hero, county tile map, feature band).
 
 ## CI — 2026-11-16
 
+- [ ] **P1 — Check the last CI run** (added 2026-11-20). Run 44625642756 for `3f5752d` (the AQ-09 + AQ-13 push)
+  failed the same way as below: `ModuleNotFoundError: No module named 'requests'` while collecting
+  `tests/test_fetch_county_retry.py`, so CI ran no tests. After the fix below, re-run CI
+  (`gh run rerun 44625642756` or a new push), check that collection passes, and triage the failures that
+  appear. Check with `gh run list --branch main --limit 3`.
+
 - [ ] **P1 — CI runs no tests since 2026-10-28.** Collection stops on `tests/test_fetch_county_retry.py`:
   it loads `6-fetch-csv.py`, which imports `requests` and `tqdm`; `requirements-dev.txt` has neither
   (`requirements-pipeline.txt` pins them). Fix: add both pins to `requirements-dev.txt`, or
