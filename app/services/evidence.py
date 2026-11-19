@@ -154,6 +154,54 @@ def dataset_bundle(conn, code: str, filters, group_by, approximate: bool, lang: 
                                  {"dataset": code}))
 
 
+def published_bundle(conn, code: str, filters, group_by, lang: str, link: str, res: dict) -> bytes:
+    """Bundle for a `value_source=ins_published` selection: INS's own Total cells as the route
+    answers them (`res`: columns, rows, published_total, aggregation, truncated, contract,
+    generation). There is no aggregation and no raw input: the cells are the source."""
+    from app.services.concept_search import dataset_facts
+    if res.get("truncated"):
+        raise EvidenceError(413, "The published cells are more than an evidence bundle can hold "
+                                 "completely. Narrow the selection (period or area) and try again.")
+    pt = res["published_total"]
+    matrix = pt["matrix"]
+    facts = dataset_facts(conn, code, lang) or {"title": code}
+    updated = max((f.get("ins_updated") or "" for f in pt["fetches"]), default="") or None
+    sources = [{"dataset": code, **facts}]
+    if matrix != code:
+        sources.append({"dataset": matrix, **(dataset_facts(conn, matrix, lang) or {"title": matrix}),
+                        "source_updated": updated})
+    else:
+        sources[0]["source_updated"] = updated
+    cols = res["columns"]
+    files = {
+        "selection.json": _json({
+            "dataset": code, "link": link, "lang": lang,
+            "requested": {"filters": filters, "group_by": group_by, "value_source": "ins_published"},
+            "periods_in_result": sorted({str(r[cols.index("TIME_PERIOD")]) for r in res["rows"]})
+            if "TIME_PERIOD" in cols else None,
+        }),
+        "method.json": _json({
+            "kind": "ins_published", "value_source": "ins_published", "published_total": pt,
+            "decision": res.get("aggregation"),
+            "definition": facts.get("definition"), "unit": facts.get("unit"),
+            "rounding": "values are unrounded; the site rounds only for display",
+        }),
+        "attribution.json": _json(_attribution(sources)),
+        "result.csv": _csv(cols, res["rows"]),
+    }
+    files["README.txt"] = (
+        f"Evidence for {code}: {facts.get('title')}\n\n"
+        f"The values are INS's own published Total cells of matrix {matrix}, not a calculation.\n\n"
+        "result.csv           the published cells, unrounded\n"
+        "selection.json       what was asked\n"
+        "method.json          value source, query ids, fetch times, file hashes, INS update dates,\n"
+        "                     definition, unit\n"
+        "attribution.json     source, update date and a citation\n"
+        "manifest.json        versions, generation id and sha256 of each file\n\n" + README_LIVE)
+    return _zip(files, _manifest("dataset", res.get("generation"), res.get("contract"),
+                                 {"dataset": code, "value_source": "ins_published"}))
+
+
 # ------------------------------------------------------------------ recipe
 
 RECOMPUTE_PY = '''"""Recompute result.csv from the bundled inputs, offline, standard library only.
