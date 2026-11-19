@@ -22,7 +22,9 @@ Metadata-only entries (matrices / dataset_splits rows without a parquet file)
 Per-file checks (readable files): schema shape (sdmx | legacy | unknown), NULL
 dimension values, TIME_PERIOD validity, grain uniqueness (repeated dimension keys,
 and keys repeated with *differing* values), registration consistency (path / row
-count), mapping and profile coverage. Findings are listed per code, not hidden
+count), mapping and profile coverage. Metadata text check: no U+FFFD in any
+text column of the metadata DB (a lossy decode of a TEMPO response; violation
+`damaged_text`, listed as matrix codes or `table.column`). Findings are listed per code, not hidden
 behind numeric allowlists; judging them against the serving contract is a
 separate step.
 
@@ -75,7 +77,7 @@ def sha256(path: Path) -> str:
 # --------------------------------------------------------------------------- DB
 def load_db(db_file: Path, warnings: list):
     """Return dict of registration/coverage sets read from the metadata DB."""
-    out = {"matrices": {}, "splits": [], "coverage": {k: set() for k in PROFILE_TABLES}}
+    out = {"matrices": {}, "splits": [], "coverage": {k: set() for k in PROFILE_TABLES}, "damaged_text": []}
     if not db_file.exists():
         warnings.append(f"metadata DB not found: {db_file}")
         return out
@@ -106,6 +108,7 @@ def load_db(db_file: Path, warnings: list):
                 "FROM dataset_splits ORDER BY sub_matrix_code, parent_matrix_code").fetchall()
         else:
             warnings.append("table dataset_splits missing")
+        out["damaged_text"] = damaged_text(conn)
         for key, t in PROFILE_TABLES.items():
             if t in tables:
                 out["coverage"][key] = {r[0] for r in conn.execute(
@@ -115,6 +118,26 @@ def load_db(db_file: Path, warnings: list):
     finally:
         conn.close()
     return out
+
+
+def damaged_text(conn) -> list[str]:
+    """Matrix codes (or `table.column` when the table has no matrix_code) whose text
+    holds U+FFFD. TEMPO mixes Windows-1250 bytes into UTF-8; a lossy decode stores U+FFFD."""
+    cols = conn.execute(
+        "SELECT c.table_name, c.column_name FROM information_schema.columns c "
+        "JOIN information_schema.tables t USING (table_schema, table_name) "
+        "WHERE c.table_schema='main' AND t.table_type='BASE TABLE' AND c.data_type='VARCHAR' "
+        "ORDER BY 1, 2").fetchall()
+    with_code = {t for t, c in cols if c == "matrix_code"}
+    hits = set()
+    for t, c in cols:
+        cond = f"strpos({q(c)}, chr(65533)) > 0"
+        if t in with_code:
+            hits.update(r[0] for r in conn.execute(
+                f"SELECT DISTINCT matrix_code FROM {q(t)} WHERE {cond}").fetchall())
+        elif conn.execute(f"SELECT count(*) FROM {q(t)} WHERE {cond}").fetchone()[0]:
+            hits.add(f"{t}.{c}")
+    return sorted(hits)
 
 
 # ------------------------------------------------------------------ per file
@@ -325,6 +348,7 @@ def audit(data_dir: Path, do_grain=True, do_hashes=False, limit=None) -> dict:
         "time_invalid_gt_20pct": [c for c in findings["time_invalid_gt_20pct"] if c in served],
         "conflicting_grain": [c for c in findings["conflicting_grain"] if c in served],
         "metadata_only_should_be_served": sorted(c for c, v in meta_only.items() if v["category"] == "invalid"),
+        "damaged_text": db["damaged_text"],
     }
 
     summary = {

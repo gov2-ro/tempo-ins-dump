@@ -9,6 +9,8 @@ from tqdm import tqdm
 import argparse
 import sys
 
+from tempo_http import decode_body
+
 BASE_URL = 'http://statistici.insse.ro:8077/tempo-ins/matrix/'
 
 HEADERS = {
@@ -66,10 +68,11 @@ def fetch_metas() -> int:
         try:
             response = requests.get(url, headers=HEADERS)
             response.raise_for_status()  # Raise an exception for bad status codes
-            json.loads(response.text)  # never persist a non-JSON body as metadata
+            text = decode_body(response.content)  # TEMPO mixes cp1250 bytes into UTF-8
+            json.loads(text)  # never persist a non-JSON body as metadata
 
             with open(output_filepath, 'w', encoding='utf-8') as outfile:
-                outfile.write(response.text)
+                outfile.write(text)
 
             # Random wait to be nice to the server
             time.sleep(random.uniform(0.4, 1.2))

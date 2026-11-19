@@ -4,6 +4,21 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## From the insseption review (2026-11-19) — [report](reports/2026-11-19-insseption-review.md)
+
+- [x] **Lossy decoding in the metadata fetchers** (code fixed 2026-11-19: `tempo_http.decode_body`
+  in `3-fetch-metas.py` and `update-pipeline.fetch_meta`; confirmed live: JUS109B sends raw 0xE2).
+- [ ] **Promote the UTF-8 repair (generation `be715608`).** Built 2026-11-19 on the APFS clone
+  `~/devbox/gov2/tempo-gen-20261119-utf8/data`: 13 metas patched (only the U+FFFD runs, lost
+  characters taken from a fresh fetch; INS has changed those metas since, so they were not replaced),
+  24 metadata DB values fixed by SQL (evidence `repair-utf8-evidence.json`, scripts in `repair/`),
+  search index rebuilt (only ASS113F, JUS109B docs differ). Parquets and view profiles byte-identical
+  to `adc6762a`. To do: copy the 13 patched metas into `data/2-metas`, swap the corpus (old one to
+  `data/_archive/`), stage, release check, deploy. `audit-corpus.py` now flags U+FFFD (`damaged_text`).
+- [x] **TEMPO error envelope (HTTP 200)** (fixed 2026-11-19 in `6-fetch-csv.py`: exit 1, retried; a
+  failed Totals-retry request is also exit 1 now, not exit 3). Not yet seen from `/pivot` in practice.
+- [x] **Data-path probe before `update-pipeline.py`** (done 2026-11-19: `probe_tempo_data`).
+
 ## DONE 2026-11-19 — AQ-11 promoted; AQ-08, AQ-10 and the homepage refresh deployed
 
 State on 2026-11-19: AQ-08 (chart hints) and AQ-10 ("Din care") are merged on `fix/ask-answer-quality`,

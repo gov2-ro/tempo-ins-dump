@@ -73,6 +73,8 @@ import duckdb
 import pandas as pd
 import requests
 
+from tempo_http import decode_body, is_error_envelope
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -90,6 +92,8 @@ def data_dir() -> Path:
 NEWS_CSV = data_dir() / "insse_news.csv"
 NEWS_URL = "http://statistici.insse.ro:8077/tempo-ins/news/"
 META_BASE_URL = "http://statistici.insse.ro:8077/tempo-ins/matrix/"
+PIVOT_URL = "http://statistici.insse.ro:8077/tempo-ins/pivot"
+PROBE_MATRIX = "POP107A"  # small, always published; any one cell will do
 LOG_DIR = data_dir() / "logs"
 LAST_RUN_FILE = LOG_DIR / "last-pipeline-run.txt"   # legacy mirror of the watermark
 STATE_FILE = LOG_DIR / "update-pipeline-state.json"  # outcomes, retry set, watermark
@@ -490,13 +494,50 @@ def fetch_meta(code: str, lang: str, force: bool) -> bool:
     try:
         resp = requests.get(url, headers=META_HEADERS, timeout=30)
         resp.raise_for_status()
-        json.loads(resp.text)  # validate before writing — a bad code can 200 with an empty/non-JSON body
-        output_path.write_text(resp.text, encoding="utf-8")
+        text = decode_body(resp.content)  # TEMPO mixes cp1250 bytes into UTF-8
+        json.loads(text)  # validate before writing — a bad code can 200 with an empty/non-JSON body
+        output_path.write_text(text, encoding="utf-8")
         time.sleep(random.uniform(0.4, 1.2))
         return True
     except Exception as e:
         log.error(f"Meta fetch failed for {code}: {e}")
         return False
+
+
+def probe_tempo_data(lang: str) -> str | None:
+    """Ask TEMPO for one cell. Return None when data queries work, else the reason.
+
+    TEMPO's metadata endpoints can answer while its data queries fail. A run in
+    that state would record every matrix as failed or empty, so the caller stops
+    before it changes any state.
+    """
+    meta_path = data_dir() / "2-metas" / lang / f"{PROBE_MATRIX}.json"
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        details = meta["details"]
+        payload = {
+            "language": lang,
+            "encQuery": ":".join(str(d["options"][0]["nomItemId"]) for d in meta["dimensionsMap"]),
+            "matCode": PROBE_MATRIX,
+            "matMaxDim": details["matMaxDim"],
+            "matUMSpec": details["matUMSpec"],
+            "matRegJ": details.get("matRegJ", 0),
+        }
+    except (OSError, ValueError, KeyError, IndexError, TypeError) as e:
+        return f"cannot build the probe from {meta_path}: {type(e).__name__}: {e}"
+    headers = {**META_HEADERS, "Content-Type": "application/json",
+               "Origin": "http://statistici.insse.ro:8077"}
+    try:
+        resp = requests.post(PIVOT_URL, json=payload, headers=headers, timeout=(30, 120))
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        return f"{type(e).__name__}: {e}"
+    text = decode_body(resp.content)
+    if is_error_envelope(text):
+        return f"TEMPO answered with its error message: {text.strip()[:200]}"
+    if not any(line.strip() for line in text.splitlines()[1:]):
+        return "TEMPO answered without a data row"
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -873,6 +914,17 @@ def _run_pipeline(args, lang: str, started: str, dry: bool) -> int:
     if not work:
         log.info("No matrices to process. Done.")
         return EXIT_OK
+
+    # ---- 2b. TEMPO data-path probe (prerequisite: abort before any state change) ----
+    if dry:
+        log.info("[DRY-RUN] probe_tempo_data()")
+    else:
+        reason = probe_tempo_data(lang)
+        if reason:
+            log.error(f"TEMPO data probe failed ({reason}); aborting "
+                      "(watermark and retry set untouched)")
+            return EXIT_FAILED
+        log.info("TEMPO data probe ok")
 
     # ---- 3. Optional context + index refresh (prerequisite: abort on failure) ----
     if args.fetch_context:

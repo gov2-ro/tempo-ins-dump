@@ -169,3 +169,17 @@ def test_strict_exit_code_and_human_summary(audit_mod, corpus, capsys):
 def test_missing_data_dir_does_not_crash(audit_mod, tmp_path):
     rep = audit_mod.audit(tmp_path / "nope")
     assert rep["summary"]["parquet_files"] == 0 and rep["warnings"]
+
+
+def test_damaged_text_flags_replacement_characters(audit_mod, corpus):
+    """A lossy decode of a TEMPO response stores U+FFFD (JUS109B, 2026-11-19)."""
+    assert audit_mod.audit(corpus)["violations"]["damaged_text"] == []
+    c = duckdb.connect(str(corpus / "corpus" / "metadata.duckdb"))
+    c.execute("CREATE TABLE dimension_options (matrix_code VARCHAR, option_label VARCHAR)")
+    c.execute("INSERT INTO dimension_options VALUES ('GOOD1', 'viol sav�rsit'), ('PARENT', 'ok')")
+    c.execute("CREATE TABLE sdmx_codes (nom_item_id INTEGER, sdmx_value VARCHAR)")
+    c.execute("INSERT INTO sdmx_codes VALUES (1, 'viol sav�rsit')")
+    c.execute("CREATE VIEW v AS SELECT * FROM sdmx_codes")   # views are not scanned twice
+    c.close()
+    v = audit_mod.audit(corpus)["violations"]
+    assert v["damaged_text"] == ["GOOD1", "sdmx_codes.sdmx_value"]

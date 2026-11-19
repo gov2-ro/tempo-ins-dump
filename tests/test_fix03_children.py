@@ -30,6 +30,7 @@ def run_fetch_metas(tmp_path, mode):
     """Run a copy of 3-fetch-metas.py in tmp_path with requests.get faked."""
     script = tmp_path / "3-fetch-metas.py"
     script.write_text((ROOT / "3-fetch-metas.py").read_text())
+    (tmp_path / "tempo_http.py").write_text((ROOT / "tempo_http.py").read_text())
     runner = tmp_path / "runner.py"
     runner.write_text(textwrap.dedent(f"""
         import runpy, sys, types, requests
@@ -39,6 +40,7 @@ def run_fetch_metas(tmp_path, mode):
                 raise requests.exceptions.ConnectionError("down")
             r = types.SimpleNamespace()
             r.text = "<html>not json</html>" if mode == "html" else '{{"ok": 1}}'
+            r.content = r.text.encode("utf-8")
             r.raise_for_status = lambda: None
             return r
         requests.get = fake_get

@@ -80,7 +80,11 @@ Read-only corpus audit: `python scripts/audit-corpus.py --data-dir data`.
 
 **Shared pipeline modules:** `duckdb_config.py` (paths, `TEMPO_LANG`),
 `sdmx_labels.py` (`norm_label`/`parse_time_period`, shared by stages 9 and 11 so
-their label matching agrees), `split_rules.py` (split-rule engine for stage 12).
+their label matching agrees), `split_rules.py` (split-rule engine for stage 12),
+`tempo_http.py` (TEMPO response rules for the fetchers: UTF-8 with a cp1250 fallback, and the
+HTTP-200 "could not be returned" error envelope, which is a retryable failure, not an empty dataset).
+`update-pipeline.py` runs a one-cell data probe (POP107A) first and exits 1 before any state change
+when it fails.
 
 Other root scripts: `generate_sdmx_yaml.py`, `build-geo-regions.py`,
 `duckdb-browser.py` (Flask DB/parquet explorer, :5000),

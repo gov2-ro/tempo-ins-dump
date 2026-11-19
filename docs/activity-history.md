@@ -1,5 +1,24 @@
 # Activity History
 
+## 2026-11-19 — insseption review; TEMPO decoding, error envelope and data probe
+
+- **What:** reviewed csaladenes/insseption (live TEMPO proxy + chat agent, MIT); report in
+  `docs/reports/2026-11-19-insseption-review.md`. Took three of its fetch rules into a new shared
+  module `tempo_http.py`: UTF-8 with a cp1250 fallback (metadata fetchers), detection of TEMPO's
+  HTTP-200 "could not be returned" envelope (stage 6), and a one-cell data probe that
+  `update-pipeline.py` runs before it changes any state.
+- **Why:** TEMPO declares UTF-8 but sends raw cp1250 bytes (JUS109B: 0xE2). 13 stored metas hold
+  U+FFFD and two option labels reached the served DB. An envelope saved as a CSV would end as exit 3
+  ("empty", never retried).
+- **Corpus repair (not promoted):** generation `be715608` on the APFS clone
+  `~/devbox/gov2/tempo-gen-20261119-utf8`. Surgical: only damaged strings changed (24 DB values in
+  `dimension_options`, `dimension_options_parsed`, `sdmx_codes`, `labels_i18n`, `dataset_tags`,
+  `matrices.observatii`), then the search index rebuilt. Stage 10 was not re-run on purpose: it would
+  also import unrelated drift (SAN102B `Anul 2025`, stale `file_size_bytes`). The damage was functional:
+  the JUS109B/ASS113F parquet labels did not match `sdmx_codes`. New audit rule `damaged_text`.
+- **Non-obvious:** a failed request on stage 6's Totals retry used to fall through to exit 3 too; it
+  is now exit 1 (retryable). The corpus repair is not done (backlog). Tests: `tests/test_tempo_http.py`.
+
 ## 2026-11-19 — Homepage refresh, everything merged into main, generation adc6762a in place
 
 - **What:** the home starts with a one-line title and search, the theme nav, starter questions

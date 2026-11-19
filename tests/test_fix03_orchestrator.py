@@ -74,6 +74,8 @@ def pipe(tmp_path, monkeypatch):
     monkeypatch.setattr(mod.subprocess, "run", fake_run)
     monkeypatch.setattr(mod, "fetch_meta", fake_meta)
     monkeypatch.setattr(mod, "sync_ultima_actualizare", fake_sync)
+    ctl.probe_fail = None    # reason string = TEMPO data probe fails
+    monkeypatch.setattr(mod, "probe_tempo_data", lambda lang: ctl.probe_fail)
 
     def feed(rows):
         """rows: [(DD.MM.YYYY, CODE)]"""

@@ -49,6 +49,8 @@ from tqdm import tqdm
 import csv
 import copy
 
+from tempo_http import decode_body, is_error_envelope
+
 # Suppress only the single InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
@@ -431,6 +433,8 @@ def fetch_by_judet_split(matrix_code: str, matrix_def: Dict, output_dir: str,
                     response.raise_for_status()
                     if not response.content.strip():
                         raise RuntimeError("empty answer from INS")
+                    if is_error_envelope(decode_body(response.content)):
+                        raise RuntimeError("INS error message instead of data")
                     break
                 except (requests.Timeout, requests.ConnectionError, RuntimeError) as e:
                     if wait is None:
@@ -605,6 +609,8 @@ def fetch_by_generic_chunks(matrix_code: str, matrix_def: Dict, output_dir: str,
             response = requests.post(url, json=payload, headers=headers, verify=False, timeout=60)
             response.raise_for_status()
             text = response.content.decode('utf-8', errors='ignore')
+            if is_error_envelope(decode_body(response.content)):
+                raise RuntimeError("INS error message instead of data")
         except Exception as e:
             logger.error(f"{matrix_code} chunk {i} - request error: {e}")
             tqdm.write(f"GENERIC-CHUNK FAILED: {matrix_code} chunk {i}: {e}")
@@ -780,6 +786,14 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
             # Don't save the error response as a CSV file
             raise FetchIncomplete(error_msg)
 
+        # A failed query answers 200 with one sentence. Never save it: it would read as
+        # a header-only CSV and end as "empty dataset" (exit 3, never retried).
+        if is_error_envelope(decode_body(response.content)):
+            error_msg = f"FAILED: {matrix_code} - INS returned its error message instead of data"
+            tqdm.write(error_msg)
+            logger.warning(f"{matrix_code}.csv - {error_msg} | Response: {response_text[:300]}")
+            raise FetchIncomplete(error_msg)
+
         # Save CSV response
         with open(output_file, 'wb') as f:
             f.write(response.content)
@@ -870,6 +884,8 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
 
                 # Check for cell limit error on retry
                 retry_text = retry_response.content.decode('utf-8', errors='ignore')
+                if is_error_envelope(decode_body(retry_response.content)):
+                    raise FetchIncomplete(f"{matrix_code}: INS returned its error message on the Totals retry")
                 if ('celule' in retry_text.lower() and '30000' in retry_text) or \
                    ('pragul' in retry_text.lower() and 'celule' in retry_text.lower()):
                     error_msg = f"RETRY FAILED: {matrix_code} - Query with Totals exceeds INS API cell limit (30,000 cells)"
@@ -903,9 +919,13 @@ def fetch_insse_pivot_data(matrix_code: str, matrix_def: Dict, output_dir: str, 
                         except Exception as e:
                             tqdm.write(f"Failed to fetch diagnostic Excel/HTML: {e}")
 
+            except FetchIncomplete:
+                raise
             except Exception as e:
                 tqdm.write(f"RETRY EXCEPTION: Failed to retry {matrix_code} with Totals: {e}")
                 logger.error(f"{matrix_code}.csv - Retry with Totals failed: {e}")
+                # A failed request proves nothing about the dataset: retryable, not "empty".
+                raise FetchIncomplete(f"{matrix_code}: Totals retry failed: {e}") from e
 
             raise EmptyDataset(f"{matrix_code}: no data rows after all retries")
 
