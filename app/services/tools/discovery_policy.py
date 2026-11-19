@@ -91,6 +91,7 @@ class Plan:
     change: dict | None = None              # the one supported city change: intervals, metric, order
     place_rule: dict | None = None          # how one named county narrows a city ranking (config), or None
     assumed_level: dict | None = None       # {"level", "missing"} when a level default produced `assumed`
+    density: bool = False                   # a density question: discovery searches first, then refuses if none exists
 
 
 # ------------------------------------------------------------------ validation
@@ -542,7 +543,10 @@ def plan(intent: dict, query: str, by_id: dict, lang: str, policy: Policy | None
     if intent["cities"] and ("change" if change else intent["operation"] or "rank") not in cities["operations"]:
         _refuse("unavailable", "unsupported_operation", M.t(lang, "policy.city_change_unsupported"))
     if intent["unsupported_measure"]:
-        _refuse("unavailable", "unsupported_operation", M.t(lang, "policy.unsupported_measure"))
+        key = ("policy.unsupported_measure" if intent.get("tourism_unsupported")
+               else "policy.unsupported_correlation" if intent.get("correlation") else "policy.no_density")
+        _refuse("unavailable", "unsupported_operation", M.t(lang, key))
+    out.density = bool(intent.get("density"))
     named = named_definitions(query, lang, pol)
     if intent["cities"]:
         if not intent["population"]:

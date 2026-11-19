@@ -34,6 +34,7 @@ import re
 import uuid
 
 from app.services import generation
+from app.services.aggregation_policy import POINT_CHANGE_UNIT_TYPES
 from app.services.tools import contract
 from app.services.tools import messages as M
 from app.services.tools.contract import ToolContext, ToolFailure, recovery
@@ -107,6 +108,15 @@ def _endpoint(table: dict, key: tuple, year: str):
     if not math.isfinite(f):
         return VALUE_NOT_FINITE, None
     return None, f
+
+
+def rate_values_combined(mctx: dict, agg: dict) -> bool:
+    """True when a non-additive measure (a rate, an average, a per-capita value) was built from
+    several source cells. Only a query that combined no values (method `single_row` or
+    `aggregate_row`) returns the source's own cell per entity, which a ranking or a change may
+    use. `weighted_mean` is a real value but is not accepted yet (open owner question, AQ-09 A)."""
+    # Anything not proven additive counts as a rate here (the old gate refused the same set).
+    return mctx.get("measure") != "additive" and agg.get("method") not in ("single_row", "aggregate_row")
 
 
 def compute(table: dict, key_cols, intervals, metric: str = "absolute", order: str = "asc",
@@ -313,7 +323,12 @@ _PIN = frozenset({"overlapping_levels", "unverified_structure", "contains_aggreg
                   "mixed_units", "slice_value_missing"})
 
 
-def _native_refusal(res: dict, code: str, lang: str, prov, limits) -> ToolFailure:
+def recovery_for_recipe(rid: str, lang: str) -> dict:
+    from app.services.tools import recipe as recipe_tool
+    return recipe_tool.recipe_recovery(rid, lang, M.t(lang, "recipe.published_route", rid=rid))
+
+
+def _native_refusal(res: dict, code: str, lang: str, prov, limits, rate_recipe=None) -> ToolFailure:
     from app.services.tools import query as query_tool
     agg = res.get("aggregation") or {}
     reason = query_tool.refusal_reason(res, code) if agg.get("reason") else "aggregation_unavailable"
@@ -321,6 +336,8 @@ def _native_refusal(res: dict, code: str, lang: str, prov, limits) -> ToolFailur
     text = M.t(lang, f"period.native.{reason}" if reason in _NATIVE_REASONS else "period.native.default",
                col=col or M.t(lang, "period.a_dimension"), reason=reason)
     rec = []
+    if rate_recipe:         # a rate that needs a combined value: the reviewed recipe comes first
+        rec.append(recovery_for_recipe(rate_recipe, lang))
     if reason in _PIN and col:
         rec.append(recovery("tool_call", M.t(lang, "period.list_pin", col=col),
                             "find_dimension_values", {"dataset": code, "column": col, "limit": 20}))
@@ -414,19 +431,13 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
     if mctx is None:
         raise contract.query_failure(QueryError(404, f"Dataset {code} not found"), ctx, code)
 
-    # additive count/amount measures only: no invented rate-change policy
+    # A rate (non-additive) is compared only when each entity is one source cell: the query
+    # must combine no values (checked after it runs). A percent change of a percentage
+    # measure is a percent of a percent; it is refused (AQ-09 A, open owner question).
     measure = mctx.get("measure")
-    if measure != "additive":
-        title = (dataset_facts(conn, code, lang) or {}).get("title") or code
-        from app.services.tools import recipe as recipe_tool
-        rid = recipe_tool.published_recipe_for(conn, code)
-        routes = [recipe_tool.recipe_recovery(rid, lang, M.t(lang, "recipe.published_route", rid=rid))] if rid else []
-        raise _unavailable(
-            "unsupported_measure",
-            M.t(lang, "period.unsupported_measure", code=code, measure=measure or M.t(lang, "period.non_additive"),
-                unit_type=mctx.get("unit_type") or M.t(lang, "period.unknown_unit_type")),
-            rec=routes + [recovery("tool_call", M.t(lang, "period.find_recipe"),
-                                   "discover_indicators", {"query": str(title)[:200], "lang": lang})])
+    if measure == "non_additive" and args.metric == "percent" and mctx.get("unit_type") in POINT_CHANGE_UNIT_TYPES:
+        raise _unavailable("unsupported_measure", M.t(lang, "period.percent_of_rate", code=code),
+                           rec=[recovery("narrow", M.t(lang, "period.use_absolute"))])
 
     dims = {d["dim_column_name"]: d for d in mctx["dimensions"]}
     time_cols = [c for c, d in dims.items() if d.get("dim_type") == "time"]
@@ -480,7 +491,11 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
     prov["source_query"] = source_query
     agg = res.get("aggregation") or {}
     if res.get("unavailable"):
-        raise _native_refusal(res, code, lang, prov, contract.query_limits(res, 0))
+        rid = None
+        if mctx.get("measure") == "non_additive":
+            from app.services.tools import recipe as recipe_tool
+            rid = recipe_tool.published_recipe_for(conn, code)
+        raise _native_refusal(res, code, lang, prov, contract.query_limits(res, 0), rid)
     if res.get("truncated") or res.get("time_windowed") or res.get("partial_period_dropped") \
             is not None:
         raise _unavailable(
@@ -490,6 +505,18 @@ def run(conn, args, lang: str = "ro", *, ctx: ToolContext | None = None) -> dict
     if agg.get("outcome") == "approximation":
         raise _unavailable("unsupported_measure", M.t(lang, "period.approximation"),
                            provenance=prov, limits=contract.query_limits(res, 0))
+    if rate_values_combined(mctx, agg):
+        from app.services.tools import recipe as recipe_tool
+        title = (dataset_facts(conn, code, lang) or {}).get("title") or code
+        rid = recipe_tool.published_recipe_for(conn, code)
+        routes = [recipe_tool.recipe_recovery(rid, lang, M.t(lang, "recipe.published_route", rid=rid))] if rid else []
+        raise _unavailable(
+            "unsupported_measure",
+            M.t(lang, "period.unsupported_measure", code=code, measure=measure or M.t(lang, "period.non_additive"),
+                unit_type=mctx.get("unit_type") or M.t(lang, "period.unknown_unit_type")),
+            rec=routes + [recovery("tool_call", M.t(lang, "period.find_recipe"),
+                                   "discover_indicators", {"query": str(title)[:200], "lang": lang})],
+            provenance=prov, limits=contract.query_limits(res, 0))
     mixed = [w.get("column") for w in agg.get("warnings") or []
              if w.get("code") == "mixed_grain_on_axis" and w.get("column") in key_cols]
     if mixed:

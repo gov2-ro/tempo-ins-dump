@@ -108,6 +108,8 @@ sa se si sau spre toate tot un una unei unui despre fata evoluat evolutia evolue
 compara comparatie compar comparati arata vreau vezi date datele statistica statistici
 what which how has have had the an of in on at for by to is are was were most highest lowest
 per changed change compare comparison and or with do does show me tell between over across
+top bottom daca poti mici many much list give find there when where who can could please would should
+reported lista spune afla
 """.split())
 
 
@@ -218,9 +220,14 @@ def dataset_facts(conn, code: str, lang: str = "ro") -> dict | None:
     cols = [r[0] for r in conn.execute("DESCRIBE SELECT * FROM read_parquet(?)", [str(path)]).fetchall()]
     coverage = None
     if "TIME_PERIOD" in cols:
-        first, last, n = conn.execute(
-            "SELECT min(TIME_PERIOD), max(TIME_PERIOD), count(DISTINCT TIME_PERIOD) "
-            "FROM read_parquet(?) WHERE OBS_VALUE IS NOT NULL", [str(path)]).fetchone()
+        from app.services import data_query
+        try:
+            pb = data_query.period_bounds(conn, code, "TIME_PERIOD")
+            first, last, n = pb["first"], pb["last"], pb["periods_with_data"]
+        except (data_query.QueryError, KeyError):
+            first, last, n = conn.execute(
+                "SELECT min(TIME_PERIOD), max(TIME_PERIOD), count(DISTINCT TIME_PERIOD) "
+                "FROM read_parquet(?) WHERE OBS_VALUE IS NOT NULL", [str(path)]).fetchone()
         coverage = {"first": first, "last": last, "periods": n,
                     "frequency": "monthly" if last and len(str(last)) == 7 and "-" in str(last)
                     and "Q" not in str(last) else

@@ -45,7 +45,7 @@ def test_non_annual_refusal_names_the_calling_tool_and_offers_the_annual_child(r
                                          ("SOM103A_judete", "registered_unemployment_county")])
 def test_rate_refusals_route_to_the_published_recipe(real, code, recipe):
     r = call("rank_entities", dataset=code, entity_columns=["REF_AREA"], year="2024", lang="en")
-    assert r["reason"] == "unsupported_measure"
+    assert r["reason"] in ("unsupported_measure", "missing_weights")      # AQ-09 A: the query now refuses it
     assert r["recovery"][0]["tool"] == "run_recipe" and r["recovery"][0]["arguments"]["recipe"] == recipe
 
 

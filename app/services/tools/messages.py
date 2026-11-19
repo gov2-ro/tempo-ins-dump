@@ -465,10 +465,27 @@ TEXT = {
         "policy.city_change_unsupported": "City-only change rankings are not yet supported. "
                                           "Specify a county change comparison or a city "
                                           "population ranking for one year.",
-        "policy.unsupported_measure": "This question needs a different denominator, density or "
-                                      "correlation operation. No count or built-up-area ratio was "
-                                      "substituted. Ask separately for the population ranking or "
-                                      "the reviewed overnight-stays-per-resident recipe.",
+        "policy.unsupported_measure": "This question needs a different tourism denominator. No "
+                                      "count was substituted. Ask separately for the overnight "
+                                      "stays count or the reviewed overnight-stays-per-resident "
+                                      "recipe.",
+        "policy.unsupported_correlation": "This question needs a correlation. The tools do not "
+                                          "compute one. Ask for each series separately.",
+        "policy.no_density": "No published population density series exists for this question, so "
+                             "none was computed. No count or area ratio was substituted. Ask "
+                             "separately for the population ranking.",
+        "discover.no_density_population": "Rank the population instead.",
+        "discover.no_close_match": "No reviewed concept and no close dataset family matches the "
+                                   "query. The families listed share only single words with it. "
+                                   "Treat them as unrelated unless a title fits.",
+        "discover.rephrase_close": "Rephrase with the measure and the place, or tell the user that "
+                                   "the corpus holds no such series.",
+        "discover.longer_series": "{asked} is outside the {name} series ({first}–{last}). A longer "
+                                  "series exists: {alt} ({afirst}–{alast}, dataset {code}). It has "
+                                  "its own definition: read its note before you use it.",
+        "discover.beyond_coverage": "{asked} is outside the {name} series ({first}–{last}). No "
+                                    "longer series was found for this indicator.",
+        "discover.use_longer": "Ask for the longer series: {alt}.",
         "policy.city_not_population": "No reviewed city-level series answers this question: the "
                                       "only one is the annual population by legal domicile, as a "
                                       "ranking. County data was not substituted.",
@@ -509,8 +526,11 @@ TEXT = {
         "rank.siruta_required": "Locality values must carry exact SIRUTA keys; names are not "
                                 "joined.",
         "rank.siruta_repeated": "One city SIRUTA key appears under multiple entities.",
-        "rank.additive_only": "This ranking supports additive measures only; use a reviewed "
-                              "recipe for rates.",
+        "rank.additive_only": "This ranking would combine several values of a rate, average or "
+                              "per-capita measure. Such values cannot be summed or averaged. "
+                              "A rate is ranked only when each entity is one source cell.",
+        "rank.rate_recovery": "Fix every other dimension to one value or to its total, so that "
+                              "each entity is one source cell, and ask again.",
         "rank.annual_required": "An annual observation period is required.",
         "rank.use_year": "Use year instead of a time filter.",
         "rank.entity_columns": "entity_columns must name existing non-time dimensions.",
@@ -642,6 +662,9 @@ TEXT = {
                                       "{unit_type}): rates, means, indices and unknown units are "
                                       "not compared here, because the change of such a value has "
                                       "no single definition. A reviewed recipe may exist.",
+        "period.percent_of_rate": "{code} is a percentage or rate. A percent change of a "
+                                  "percentage is a percent of a percent and is not computed.",
+        "period.use_absolute": "Use metric absolute: the change is in percentage points.",
         "period.non_additive": "non-additive",
         "period.unknown_unit_type": "unknown",
         "period.find_recipe": "Look for a reviewed recipe or indicator for this measure.",
@@ -1210,11 +1233,28 @@ TEXT = {
                                           "încă acceptate. Specifică o comparație a schimbărilor "
                                           "pe județe sau un clasament al populației orașelor "
                                           "pentru un singur an.",
-        "policy.unsupported_measure": "Această întrebare necesită alt numitor sau o operație de "
-                                      "densitate ori corelație. Nu a fost înlocuit niciun număr "
-                                      "sau raport față de suprafața construită. Cere separat "
-                                      "clasamentul populației sau rețeta revizuită a înnoptărilor "
-                                      "pe locuitor.",
+        "policy.unsupported_measure": "Această întrebare necesită alt numitor turistic. Nu a fost "
+                                      "înlocuit niciun număr. Cere separat numărul de înnoptări "
+                                      "sau rețeta revizuită a înnoptărilor pe locuitor.",
+        "policy.unsupported_correlation": "Această întrebare necesită o corelație. Instrumentele "
+                                          "nu o calculează. Cere separat fiecare serie.",
+        "policy.no_density": "Nu există o serie publicată a densității populației pentru această "
+                             "întrebare, deci nu a fost calculată niciuna. Nu a fost înlocuit "
+                             "niciun număr sau raport față de suprafață. Cere separat clasamentul "
+                             "populației.",
+        "discover.no_density_population": "Clasifică în schimb populația.",
+        "discover.no_close_match": "Niciun concept revizuit și nicio familie apropiată de seturi de "
+                                   "date nu se potrivește cu întrebarea. Familiile listate au în "
+                                   "comun cu ea doar cuvinte singure. Consideră-le fără legătură, "
+                                   "dacă niciun titlu nu se potrivește.",
+        "discover.rephrase_close": "Reformulează cu indicatorul și locul sau spune utilizatorului "
+                                   "că setul de date nu conține o astfel de serie.",
+        "discover.longer_series": "{asked} este în afara seriei {name} ({first}–{last}). Există o "
+                                  "serie mai lungă: {alt} ({afirst}–{alast}, setul {code}). Are "
+                                  "propria definiție: citește nota ei înainte de folosire.",
+        "discover.beyond_coverage": "{asked} este în afara seriei {name} ({first}–{last}). Nu a "
+                                    "fost găsită o serie mai lungă pentru acest indicator.",
+        "discover.use_longer": "Cere seria mai lungă: {alt}.",
         "policy.city_not_population": "Nicio serie revizuită la nivel de oraș nu răspunde la "
                                       "această întrebare: singura este populația anuală după "
                                       "domiciliul legal, ca clasament. Datele pe județ nu au fost "
@@ -1258,8 +1298,13 @@ TEXT = {
         "rank.siruta_required": "Valorile localităților trebuie să poarte chei SIRUTA exacte; "
                                 "numele nu se asociază.",
         "rank.siruta_repeated": "O cheie SIRUTA de oraș apare la mai multe entități.",
-        "rank.additive_only": "Acest clasament acceptă doar măsuri aditive; folosește o rețetă "
-                              "revizuită pentru rate.",
+        "rank.additive_only": "Acest clasament ar combina mai multe valori ale unei rate, medii "
+                              "sau măsuri pe locuitor. Astfel de valori nu se pot aduna sau media. "
+                              "O rată se clasifică doar când fiecare entitate este o singură "
+                              "celulă din sursă.",
+        "rank.rate_recovery": "Fixează fiecare altă dimensiune la o valoare sau la totalul ei, "
+                              "astfel încât fiecare entitate să fie o singură celulă din sursă, "
+                              "și întreabă din nou.",
         "rank.annual_required": "Este necesară o perioadă anuală de observație.",
         "rank.use_year": "Folosește year în loc de un filtru de timp.",
         "rank.entity_columns": "entity_columns trebuie să numească dimensiuni existente, care nu "
@@ -1403,6 +1448,10 @@ TEXT = {
                                       "necunoscute nu sunt comparate aici, deoarece schimbarea "
                                       "unei astfel de valori nu are o definiție unică. Poate "
                                       "exista o rețetă revizuită.",
+        "period.percent_of_rate": "{code} este un procent sau o rată. Schimbarea procentuală a "
+                                  "unui procent este un procent dintr-un procent și nu se "
+                                  "calculează.",
+        "period.use_absolute": "Folosește metric absolute: schimbarea este în puncte procentuale.",
         "period.non_additive": "neaditivă",
         "period.unknown_unit_type": "necunoscut",
         "period.find_recipe": "Caută o rețetă sau un indicator revizuit pentru această măsură.",
