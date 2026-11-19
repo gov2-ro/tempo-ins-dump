@@ -101,8 +101,11 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   coverage); a named city resolved to its county (Q07); more concepts (life expectancy, infant mortality,
   dwellings, pupils, exports, EN wage aliases); INS Total cells for non-additive datasets (owner decision);
   month-to-year sums; a municipii-only class.
-- [ ] **P1 — Deploy AQ-09** (merged `e6c7005`). Code only, same generation `be715608`: VPS `deploy.sh`, and a static
-  rebuild (discovery messages and concepts reach the static site through recorded answers).
+- [x] **AQ-09 + AQ-13 deployed 2026-11-20**, generation `f20fc32a` (= `be715608` + `published_totals` with
+  `breakdown`, 20,659 INS cells for 12 matrices). API `20261119-233610-f20fc32a` (previous `be715608` kept);
+  static `f20fc32ac8ec-9549144389c8` (previous kept); rollback corpus `data/_archive/corpus-be715608`. Gates: strict
+  release check (2,534 passed / 63 skipped), VPS smoke, static 537/537 parity, live MCP probe and published-cell
+  calls, 7-page smoke. Sweep 8/20 → 9/20 (AQ-09) → 13/20 (AQ-13).
 - [ ] **Owner (core-assets) — County area, km².** No usable source in the corpus (AGR101A holds private ownership
   only and ends 2014; TAZ0221 is registered land; core-assets polygons have no area attribute). Proposal: a small
   reviewed km² table owned by core-assets; then area and density concepts here. Do not derive area from
@@ -116,21 +119,17 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   review the diff first).
 - Owner decisions recorded 2026-11-19 (AQ-09): `weighted_mean` stays refused in rankings; a percent change of a
   percentage stays refused (use percentage points).
-- [ ] **P2 — AQ-13: INS published Total cells for non-additive indicators** (owner decision 2026-11-19,
-  sweep fix #7; phase 1 curated: life expectancy, infant mortality, CPI, average wage, unemployment rates,
-  GDP per inhabitant). Brief ready: [13-published-totals.md](plans/ask-and-public-mcp/remaining/13-published-totals.md).
-  Start after AQ-09 is merged. Phase 2 (fetch totals for all ~580 rate/percentage datasets) is decided
-  after the observation week, from live MCP refusal counts.
-- [x] **P1 — `rank_entities` refuses to rank rates with one value per entity** (done AQ-09, merged 2026-11-19, not deployed) (2026-11-18, live Ask
-  with DeepSeek: "top 5 județe după PIB per capita și suprafață"). On CON103H_judete (GDP per
-  inhabitant) it returned `unsupported_measure` ("additive measures only"). A one-year, county-level
-  selection has one cell per county; ranking sorts and sums nothing. Allow non-additive measures when
-  the selection proves one cell per entity (grain check), and keep the refusal when a sum is needed.
-- [x] **P2 — Discovery finds no concept for GDP per capita by county or county area** (GDP done AQ-09; county area: see the core-assets item) (same chat). Six
-  `discover_indicators` calls returned 0 reviewed concepts. The model re-worded and used half of its
-  12 dispatches. Add reviewed concepts (CON103H for GDP/inhabitant; a county-area source, e.g. AGR101
-  fondul funciar total, which ends in 2014) or a discovery default. Brief: AQ-09 part B (plus a
-  20-question MCP sweep, part C).
+- [x] **P2 — AQ-13: INS published Total cells** (merged `9549144`, deployed with `f20fc32a`; record `aq-13-record.md`).
+  Review fix: a published ranking never mixes geographic levels (split parents refuse; children rank).
+- [ ] **P2 — Refresh TCP0341** (life expectancy): 65 male cells of 2022–2023 in the file differ from INS's published
+  cells by 0.01–0.05 (INS revision). A file ranking with the published national value mixes vintages.
+- [ ] **P2 — `compare_periods` on published cells** per area when the file has no Total (lookup ready:
+  `recipes.published_selection`).
+- [ ] **P2 — `discover_indicators`: a dataset with published cells counts as a verified candidate**, so `next_call`
+  is the ranking or the query (today `no_verified_candidate`).
+- [ ] **P3 — Concept and reviewed recipe for gross wage (FOM107E)**, as for net wage, if a recipe route is wanted.
+- [ ] **Owner — AQ-13 phase 2:** a systematic Total fetch for the ~580 non-additive datasets, decided from live MCP
+  refusal counts after the observation week. The spec format (`breakdown`, `area`) already supports it.
 - [ ] **P2 — Ask hides a query table that holds the answer** (same chat). `query_data` returned the 42
   county rows for 2022. The page hid them as "a preview that does not answer the ranking", and the final
   text had no ranking. When the rows contain every entity of the requested ranking, show them sorted,

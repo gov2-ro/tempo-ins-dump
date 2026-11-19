@@ -1,5 +1,22 @@
 # Activity History
 
+## 2026-11-20 — AQ-13 INS published Total cells; AQ-09 + AQ-13 deployed (generation f20fc32a)
+
+- **What:** `published_totals` gains a `breakdown` column in its key (canonical JSON such as `{"SEX":"Feminin"}`, `''`
+  when every dimension is Total). The spec lists 12 matrices: life expectancy (TCP0341, POP217A), infant mortality
+  (POP209A/B), CPI (IPC102A/B/E), gross and net wage (FOM107E, FOM106E), registered and ILO unemployment (SOM103A,
+  AMG157A), GDP per inhabitant (CON103H); 20,659 cells, 16 re-checked against INS. One lookup
+  (`recipes.published_cell/_selection`). `query_data` serves the cell after a non-additive refusal for a dropped Total
+  (warning `published_total`); `rank_entities` ranks published cells of a one-level dataset with no recipe; national
+  values go to `aggregates`. No contract bump, no new aggregation method.
+- **Why:** the download drops INS's Total option, so rates, indices and averages had no national or county total.
+  Sweep 9/20 → 13/20 (Q05, Q10, Q11, Q12).
+- **Review fix (Opus):** the published ranking mixed counties, regions and macroregions on split parents (FOM107E);
+  it now runs only on one parsed geographic level.
+- **Deployed** (owner, 2026-11-20): generation `f20fc32a` (only `published_totals` differs from `be715608`). API
+  `20261119-233610-f20fc32a`; static `f20fc32ac8ec-9549144389c8`. Built by a Sonnet agent from brief 13.
+- **Known:** TCP0341 2022–2023 file values differ from INS's cells by up to 0.05 (INS revision; backlog).
+
 ## 2026-11-19 — AQ-09 MCP usability (merged, not deployed)
 
 - **What:** `rank_entities` and `compare_periods` accept a rate when each entity is one source cell
