@@ -374,6 +374,18 @@ TEXT = {
         "discover.kind.age": "age",
         "discover.kind.denominator": "denominator",
         "discover.kind.geography": "geography",
+        "discover.kind.residence": "residence",
+        "discover.kind.locality": "locality",
+        "discover.kind.currency": "currency",
+        "discover.national_word": "national",
+        "discover.national_unavailable": "No source answers this question at national level. The "
+                                         "listed sources give regional rows, and regional rows "
+                                         "are not a national value.",
+        "discover.qualifier_applied": "The question names {kind} ({words}). It is applied as the "
+                                      "filter {column} = {value}, read from the data file.",
+        "discover.qualifier_lookup": "The question names {kind} ({words}). It matches several "
+                                     "values of {column}. Look up the exact value first; no data "
+                                     "call is suggested yet.",
         "discover.constraint_warning": "The question asks for {kind} ({words}) but discovery did "
                                        "not apply it; the candidates do not answer it as they "
                                        "stand. Filter explicit values after describe_dataset, or "
@@ -1143,6 +1155,18 @@ TEXT = {
         "discover.kind.age": "vârstă",
         "discover.kind.denominator": "numitor",
         "discover.kind.geography": "geografie",
+        "discover.kind.residence": "mediu de reședință",
+        "discover.kind.locality": "localitate",
+        "discover.kind.currency": "monedă",
+        "discover.national_word": "național",
+        "discover.national_unavailable": "Nicio sursă nu răspunde la această întrebare la nivel "
+                                         "național. Sursele listate dau rânduri regionale, iar "
+                                         "rândurile regionale nu sunt o valoare națională.",
+        "discover.qualifier_applied": "Întrebarea conține {kind} ({words}). Se aplică filtrul "
+                                      "{column} = {value}, citit din fișierul de date.",
+        "discover.qualifier_lookup": "Întrebarea conține {kind} ({words}). Aceasta se potrivește "
+                                     "cu mai multe valori ale coloanei {column}. Caută mai întâi "
+                                     "valoarea exactă; încă nu se sugerează niciun apel de date.",
         "discover.constraint_warning": "Întrebarea conține o constrângere de tip {kind} "
                                        "({words}), dar discovery nu a aplicat-o; candidații nu "
                                        "răspund la ea așa cum sunt. Filtrează valori explicite "
