@@ -8,7 +8,12 @@ see also [charting-ideas.md](charting-ideas.md)
 
 - [x] **Lossy decoding in the metadata fetchers** (code fixed 2026-11-19: `tempo_http.decode_body`
   in `3-fetch-metas.py` and `update-pipeline.fetch_meta`; confirmed live: JUS109B sends raw 0xE2).
-- [ ] **Promote the UTF-8 repair (generation `be715608`).** Built 2026-11-19 on the APFS clone
+- [ ] **Deploy generation `be715608` (UTF-8 repair).** Promoted locally 2026-11-19: `data/corpus` is
+  `be715608`, old corpus in `data/_archive/corpus-adc6762a`, damaged metas in
+  `data/_archive/metas-fffd-20261119`, evidence `data/_archive/repair-utf8-be715608-*`. Full suite
+  (alone) 2,435 passed / 63 skipped (old-generation pins only); `deploy-data/` staged; strict
+  `release-check.py --local --stage` passed. Next: steps 4–6 of P1 (VPS, static, live checks).
+  Original note: Built 2026-11-19 on the APFS clone
   `~/devbox/gov2/tempo-gen-20261119-utf8/data`: 13 metas patched (only the U+FFFD runs, lost
   characters taken from a fresh fetch; INS has changed those metas since, so they were not replaced),
   24 metadata DB values fixed by SQL (evidence `repair-utf8-evidence.json`, scripts in `repair/`),
