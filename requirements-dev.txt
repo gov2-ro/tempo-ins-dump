@@ -7,3 +7,5 @@ PyYAML==6.0.2         # app/services/agent_eval.py (optional import)
 jsonschema==4.23.0    # tests: published tool schemas (tempo-tools/1)
 requests==2.33.1      # tests load the fetch scripts (6-fetch-csv.py); same pin as requirements-pipeline.txt
 tqdm==4.66.5          # same
+pandas==2.1.3         # tests load update-pipeline.py; never in requirements.txt (the VPS venv refuses it)
+numpy==1.26.4         # pandas' pin from requirements-pipeline.txt
