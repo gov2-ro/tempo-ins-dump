@@ -10,6 +10,19 @@
 - **Why:** the table opened far below the chart after a click; loading it eagerly would cost a 1,000-row
   request on every page open, so it loads on scroll to keep the page fast.
 
+## 2026-11-19 — AQ-11: generation refresh on a copy (not promoted)
+
+- **What:** copy `~/devbox/gov2/tempo-gen-20261118` of generation 062bd2b0, now `adc6762a`. Stage 12 re-run on 81 parents
+  removed all 95 `_judet` children (no `REF_AREA_2` structure is verified additive, so the strict rule never keeps one;
+  owner chose to accept that). `has_time` repaired on 339 profiles. Search index and manifest rebuilt; staged in
+  `deploy-data` there; strict `release-check --local` passes. Tests: 2,408 passed, 63 skipped.
+- **Why:** the served `_judet` children had repeated keys, so 95 dataset pages were empty.
+- **Non-obvious:** stage 12 does not delete a removed child's rows in six profile tables nor its view profile and index
+  entry; done by hand on the copy (backlog). `concepts.json` county variant of `domicile_population` is now
+  `POP107D_grupe_localitate`; note `TUR105EH-county-split` retired. Chart eval: 43 codes change, all from the `has_time`
+  repair. Agent search baseline was already stale on the served generation. KPI check not run (needs INS).
+  Record: `docs/plans/ask-and-public-mcp/remaining/aq-11-record.md`.
+
 ## 2026-11-18 — AQ-10: "Din care" options are never summed with their parent
 
 - **What:** `aggregation_policy` refuses a sum over a dimension that has a "Din care:" / "of which" option

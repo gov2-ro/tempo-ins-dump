@@ -1663,7 +1663,7 @@ class LensApp {
                 snapshotChartTypes = ['bar_vertical', 'horizontal_bar'];
             }
             // For geo datasets, prepend choropleth. Selector-driven (split
-            // children like LOC103B_judet have archetype null but a valid
+            // children like AGR101B_localitate have archetype null but a valid
             // choropleth recommendation); archetype kept as fallback for
             // datasets scored before the selector existed.
             const _mapRanked = (cfg.ranked_charts || []).some(r => r.chart_type === 'choropleth');

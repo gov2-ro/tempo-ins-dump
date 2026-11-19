@@ -198,10 +198,25 @@ are recorded next to each item.
   agriculture × men although INS publishes a Total series the app already stores. The composer's
   default pin should use the published cell when one exists; define how a Total with no parquet row
   is presented.
-- [ ] **P1 — Pipeline: `has_time` for split children** (CH-10, owner: "we should"). Code fix in
-  `audit/pkg-pipeline`; the stored profiles of ~350 children stay wrong until the scoped recompute
-  runs on a copied generation (command in the activity entry). Run the chart eval before publishing.
-- [ ] **P1 — Pipeline: stage-12 children that drop a key column** (AQ-11, owner: ok). AGR101B_judet,
+- [x] **P1 — Pipeline: `has_time` for split children** (CH-10). Done on the copy
+  `~/devbox/gov2/tempo-gen-20261118` (AQ-11, 2026-11-19): 339 profiles repaired, 0 left; the 11 other of the
+  350 were `_judet` children that no longer exist. Not promoted yet; record `aq-11-record.md`.
+- [ ] **P2 — Stage 12 and the orchestrator leave profile rows and view profiles of a removed child**
+  (found in AQ-11). Stage 12 deletes the child's `matrices`, `dimensions` and `dataset_splits` rows and file,
+  but not its rows in `matrix_profiles`, `dataset_trends`, `dataset_value_profiles`, `dimension_structure`,
+  `dataset_coverage`, `kpi_total_checks`, nor its `view-profiles/*.json` and its `_index.json` entry
+  (`generate_view_profiles.py --matrix` merges into the old index). AQ-11 deleted them by hand on the copy.
+  Fix: let `swap_children` delete them, and test it.
+- [ ] **P2 — Redirect old `/dataset-v2.html?code=X_judet` links** (AQ-11). The served `sitemap.xml` lists all 95
+  removed `_judet` codes. Send each to its `_localitate` sibling (or the parent) in the static build and
+  the app; drop the codes from the sitemap.
+- [ ] **P3 — `data/eval/agent_search_baseline.json` is stale** (found in AQ-11). All 17 questions already
+  differ from the served generation 062bd2b0; only the three removed `_judet` entries were dropped. Rebuild it
+  after the next generation is promoted (`scripts/build_agent_search_baseline.py`), and review the diff.
+- [x] **P1 — Pipeline: stage-12 children that drop a key column** (AQ-11, owner: ok). Done on the copy
+  (2026-11-19, not promoted): stage 12 now writes no `_judet` child unless the roll-up is verified. None is,
+  so all 95 are gone and the grain audit lists no `_judet` file. The owner accepted that county figures
+  come from the `_localitate` children. Original note: AGR101B_judet,
   POP201D_judet, POP201K_judet and SOM101E_anual_judet keep one row per locality after dropping
   REF_AREA_2. New rule: aggregate only with a verified additive measure, otherwise skip the child.
   Regenerate those four parents' children on a copied generation and re-run the grain audit.
