@@ -63,7 +63,7 @@ agents finish.
 `api-ins.gov2.ro` (API, Ask, `/mcp`) runs on the VPS since 2026-11-16 23:50 UTC (HZ-2 and the HZ-4
 DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
 
-- [ ] **P1 — HZ-3: measure on Linux** ([plan](plans/hosting-hetzner.md)). Benchmark with the
+- [x] **P1 — HZ-3: measure on Linux** (done 2026-11-17: [journal](plans/hosting-hetzner-journal.md), `hz-3-record.md`) ([plan](plans/hosting-hetzner.md)). Benchmark with the
   `api.env` settings, cgroup `memory.peak` over the week, final `MemoryMax=` (peak plus at least 50%),
   and the 10 live questions of 2026-11-15 against `https://api-ins.gov2.ro/mcp`. Explain the latency
   gap: new `discover_indicators` queries take 0.6-3.8 s on the VPS, 47 ms median on the Mac.
@@ -90,7 +90,8 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   the recovery for a refused child. Look for other parents with "Din care" options. Cause: the policy's
   `label_hierarchy_cues` does not know "Din care" (364 datasets have such an option). Brief:
   [10-din-care-subsets.md](plans/ask-and-public-mcp/remaining/10-din-care-subsets.md).
-- [ ] **P2 — MCP usability fixes from the AQ-09C sweep** (2026-11-18; 8/20 answered correctly). Record
+- [ ] **P2 — MCP usability fixes from the AQ-09C sweep** (fixes #1, #2, #3, #5 + MCP-04: brief
+  [09-mcp-usability.md](plans/ask-and-public-mcp/remaining/09-mcp-usability.md), revised 2026-11-19, Sonnet agent) (2026-11-18; 8/20 answered correctly). Record
   with the ranked causes and 12 proposed fixes:
   [aq-09c-sweep-baseline.md](plans/ask-and-public-mcp/remaining/aq-09c-sweep-baseline.md). Not yet in a
   brief: discovery text (a "per capita" measure flagged as unapplied, filler words in the family query,
