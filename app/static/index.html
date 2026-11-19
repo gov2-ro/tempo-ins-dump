@@ -29,7 +29,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/explore.css?v=44">
+    <link rel="stylesheet" href="/css/explore.css?v=46">
     <script>
         // Theme before first paint (as explore-app.js decides it), so light-theme visitors see no dark flash.
         (function(){
@@ -39,7 +39,7 @@
         })();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-    <link rel="stylesheet" href="/css/ui-rhythm.css?v=5">
+    <link rel="stylesheet" href="/css/ui-rhythm.css?v=7">
     <script src="/js/ui-preferences.js?v=3" defer></script>
 </head>
 <body>
@@ -118,24 +118,23 @@
 
         <!-- Browse view -->
         <section id="browse-view" class="browse-view">
-            <!-- Home only (hidden on a drilled category): heading, search, figures, county map -->
-            <header id="landing-hero" class="landing-hero">
-                <div class="landing-hero-main"></div>
-                <div class="landing-hero-map">
-                    <nav class="landing-map" aria-label="Profiluri de județ"></nav>
-                    <div class="landing-map-legend"></div>
-                    <div class="landing-county"></div>
-                </div>
-            </header>
-            <section id="landing-features" class="landing-band" aria-labelledby="landing-features-title">
-                <h2 id="landing-features-title" class="landing-band-title">Ce poți face aici</h2>
-                <div class="landing-features"></div>
-            </section>
-            <h2 id="landing-questions-title" class="landing-section-title">Întrebări de pornire</h2>
-            <div class="entry-points" id="entry-points"></div>
-            <h2 id="landing-themes-title" class="landing-section-title">Teme</h2>
-            <!-- On a drilled category, renderQuestions moves the nav back above the questions -->
+            <!-- Home only (hidden on a drilled category): heading and search -->
+            <header id="landing-hero" class="landing-hero"></header>
             <nav class="theme-nav" id="theme-nav" aria-label="Teme"></nav>
+            <!-- First screen: questions beside the key figures, then the latest updates and the tool links -->
+            <div class="landing-first">
+                <div class="landing-first-col">
+                    <h2 id="landing-questions-title" class="landing-section-title">Întrebări de pornire</h2>
+                    <div class="entry-points" id="entry-points"></div>
+                </div>
+                <section id="landing-figures" class="landing-first-col landing-home" aria-labelledby="landing-figures-title">
+                    <h2 id="landing-figures-title" class="landing-section-title">Cifre-cheie</h2>
+                    <div class="headline-cards"></div>
+                </section>
+            </div>
+            <div id="landing-updates" class="landing-line landing-home"></div>
+            <nav id="landing-tools" class="landing-line landing-home" aria-label="Instrumente"></nav>
+            <h2 id="landing-themes-title" class="landing-section-title landing-themes-title">Teme</h2>
             <!-- Categories with their themes: chart previews, subsections, recent updates -->
             <div class="category-grid" id="category-grid"></div>
             <div class="dataset-panel hidden" id="dataset-panel">
@@ -230,7 +229,7 @@
     <script src="/js/chart-new-types.js?v=36"></script>
     <script src="/js/chart-geo.js?v=23"></script>
     <script src="/js/chart-demographic.js?v=26"></script>
-    <script src="/js/explore-app.js?v=108"></script>
+    <script src="/js/explore-app.js?v=111"></script>
 <style>
     #page-loader {
         display: flex;

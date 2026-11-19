@@ -21,12 +21,13 @@ const UI = {
         countyProfiles: 'Profiluri de județ',
         residents: 'locuitori',
         mapLegend: year => `Populația rezidentă, ${year} · sursa: INS, POP105A`,
-        featuresTitle: 'Ce poți face aici',
+        keyFigures: 'Cifre-cheie',
+        toolsLabel: 'Instrumente',
         questionsTitle: 'Întrebări de pornire',
         themesTitle: 'Teme',
         featPlaces: ['Profiluri de județ', 'Populație, salarii, șomaj și natalitate pentru fiecare județ.', 'Toate județele'],
         featRecipes: ['Indicatori gata calculați', 'Indicatori pe județe, cu metoda și sursele la vedere.', 'Compară două seturi'],
-        featAsk: ['Întreabă (Ask)', 'Pune o întrebare în limbaj natural; răspunsul vine cu surse.', 'Deschide Ask', 'beta · poate cere propria cheie API'],
+        featAsk: ['Întreabă (Ask)', 'Pune o întrebare în limbaj natural; răspunsul vine cu surse. Aceleași date se pot folosi în Claude și în alți asistenți AI, prin conectorul MCP.', 'Deschide Ask', 'beta · poate cere propria cheie API', 'Conectorul MCP'],
         featDev: ['Pentru dezvoltatori', 'Acces din cod și din asistenți AI.', 'Documentația API SDMX', 'Server MCP'],
         featDims: ['Explorator de dimensiuni', 'Vezi ce dimensiuni au seturile și unde se regăsesc.', 'Deschide exploratorul'],
         noticeText: 'Versiune alfa / preview. Acesta nu este un proiect oficial al Guvernului României. Date preluate de pe <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank">insse.ro</a>.',
@@ -110,12 +111,13 @@ const UI = {
         countyProfiles: 'County profiles',
         residents: 'residents',
         mapLegend: year => `Resident population, ${year} · source: INS, POP105A`,
-        featuresTitle: 'What you can do here',
+        keyFigures: 'Key figures',
+        toolsLabel: 'Tools',
         questionsTitle: 'Starter questions',
         themesTitle: 'Themes',
         featPlaces: ['County profiles', 'Population, earnings, unemployment and births for every county.', 'All counties'],
         featRecipes: ['Ready-made indicators', 'County indicators with their method and sources in view.', 'Compare two datasets'],
-        featAsk: ['Ask', 'Ask a question in plain language; the answer comes with sources.', 'Open Ask', 'beta · may ask for your own API key'],
+        featAsk: ['Ask', 'Ask a question in plain language; the answer comes with sources. The same data works in Claude and other AI assistants through the MCP connector.', 'Open Ask', 'beta · may ask for your own API key', 'The MCP connector'],
         featDev: ['For developers', 'Access from code and from AI assistants.', 'SDMX API documentation', 'MCP server'],
         featDims: ['Dimensions explorer', 'See which dimensions the datasets have and where they recur.', 'Open the explorer'],
         noticeText: 'Alpha/preview. This is not an official Romanian Government project. Data sourced from <a href="https://insse.ro" target="_blank">insse.ro</a>.',
@@ -570,8 +572,9 @@ class LensApp {
 
         this.headlines = summary.headlines || [];
         this.recentlyUpdated = summary.recently_updated || [];
+        this.latestUpdates = summary.latest_updates || [];
         this.renderNoticeBar();
-        this.renderHero(summary.corpus);
+        this.renderHero();
         this.renderQuestions();
 
         document.getElementById('page-loader')?.classList.add('hidden');
@@ -629,11 +632,11 @@ class LensApp {
         const header = document.createElement('div');
         header.className = 'cat-section-header';
         header.innerHTML = `
+            ${imgTag}
             <div class="cat-section-title">
                 <span class="cat-section-name">${this.shortName(cat.name)}</span>
                 <span class="cat-section-meta"><strong>${cat.total_datasets || 0}</strong> ${this.ui.datasets} · <strong>${cat.children.length}</strong> ${this.ui.subcategories}</span>
             </div>
-            ${imgTag}
         `;
         header.addEventListener('click', () => this.drillCategory(cat, i));
         section.appendChild(header);
@@ -686,6 +689,7 @@ class LensApp {
     subcatLinks(children, trail, catIdx) {
         const wrap = document.createElement('div');
         wrap.className = 'cat-subcats';
+        children = [...children].sort((a, b) => (b.total_datasets || 0) - (a.total_datasets || 0));
         children.forEach((child, ci) => {
             const path = [...trail, child];
             const link = document.createElement('a');
@@ -698,8 +702,12 @@ class LensApp {
                 this.drillStack = path.slice(0, -1).map((cat, depth) => ({ cat, colorIdx: depth ? 0 : catIdx }));
                 this.drillCategory(child, 0);
             });
-            wrap.appendChild(link);
-            if (ci < children.length - 1) wrap.insertAdjacentHTML('beforeend', '<span class="cat-subcat-sep">·</span>');
+            // Item and separator wrap as one unit, so no line starts with '·'.
+            const item = document.createElement('span');
+            item.className = 'cat-subcat-item';
+            item.appendChild(link);
+            if (ci < children.length - 1) item.insertAdjacentHTML('beforeend', '<span class="cat-subcat-sep">·</span>');
+            wrap.appendChild(item);
         });
         return wrap;
     }
@@ -735,61 +743,58 @@ class LensApp {
         };
     }
 
-    /** Home hero: heading, a search field that opens the search overlay, corpus figures. */
-    renderHero(corpus) {
+    static KEY_FIGURES = ['FOM106F', 'AMG130M', 'POP201A_judete', 'TUR104G'];
+
+    /** Home hero: a short heading and a search field that opens the search overlay.
+     *  The corpus figures, the county map and the county picker are off the home for now
+     *  (renderCountyMap and renderCountyPicker stay, without a caller). */
+    renderHero() {
         const ui = this.ui;
-        const span = corpus?.time_span;
-        const figures = corpus ? [
-            [formatNumber(corpus.datasets, 0), ui.heroDatasets],
-            [formatCompact(corpus.observations, this.lang), ui.heroObservations],
-            [span?.min && span?.max ? `${span.min}–${span.max}` : '—', ui.heroSpan],
-        ] : [];
-        const main = document.querySelector('#landing-hero .landing-hero-main');
-        main.innerHTML = `<h1 class="landing-title">${ui.heroTitle}</h1>
-            <p class="landing-lead">${ui.heroLead}</p>
+        const hero = document.getElementById('landing-hero');
+        hero.innerHTML = `<h1 class="landing-title">${ui.heroTitle}</h1>
             <button type="button" class="landing-search">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <span>${ui.heroSearch}</span><kbd>/</kbd></button>
-            <div class="landing-figures">${figures.map(([value, label]) =>
-                `<div class="landing-figure"><strong>${_escHtml(value)}</strong><span>${label}</span></div>`).join('')}</div>`;
-        main.querySelector('.landing-search').addEventListener('click', () => this.openSearch());
+                <span>${ui.heroSearch}</span><kbd>/</kbd></button>`;
+        hero.querySelector('.landing-search').addEventListener('click', () => this.openSearch());
         document.getElementById('landing-questions-title').textContent = ui.questionsTitle;
         document.getElementById('landing-themes-title').textContent = ui.themesTitle;
-        this.renderCountyMap();
-        this.renderCountyPicker();
-        this.renderFeatures();
+        this.renderKeyFigures();
+        this.renderLatestUpdates();
+        this.renderTools();
     }
 
-    /** Home feature band: five tiles that link the site's tools. */
-    async renderFeatures() {
-        const ui = this.ui, lang = this.lang, q = lang === 'en' ? '?lang=en' : '';
-        const icon = d => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
-        const link = (href, text, extra = '') => `<a href="${href}"${extra}>${text} →</a>`;
-        const tile = (id, svg, [title, text], links) => `<article class="landing-feature" data-feature="${id}">${icon(svg)}
-            <h3>${title}</h3><p>${text}</p><div class="landing-feature-links">${links}</div></article>`;
-        const origin = String(window.TEMPO_CONFIG?.api_origin || '').replace(/\/$/, '');
-        const host = document.getElementById('landing-features');
-        host.querySelector('h2').textContent = ui.featuresTitle;
-        host.querySelector('.landing-features').innerHTML = [
-            tile('places', '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>', ui.featPlaces,
-                link(`/places${q}`, ui.featPlaces[2])),
-            tile('recipes', '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>', ui.featRecipes,
-                `<span class="landing-recipes"></span>${link(`/compare.html${q}`, ui.featRecipes[2])}`),
-            tile('ask', '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>', ui.featAsk,
-                `${link(`/ask.html${q}`, ui.featAsk[2])}<small>${ui.featAsk[3]}</small>`),
-            tile('developers', '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>', ui.featDev,
-                link('/llms.txt', 'llms.txt') + link('https://github.com/gov2-ro/tempo-ins-dump/blob/main/docs/SDMX-API.md', ui.featDev[2], ' target="_blank" rel="noopener"')
-                + (origin ? `<span>${ui.featDev[3]}: <code>${_escHtml(origin)}/mcp</code></span>` : '')),
-            tile('dimensions', '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>', ui.featDims,
-                link(`/dimensions-explorer.html${q}`, ui.featDims[2])),
-        ].join('');
-        try {
-            const { recipes = [] } = await API.fetch('/recipes', { lang });
-            const slot = host.querySelector('.landing-recipes');
-            if (this.lang !== lang || !slot) return;
-            slot.innerHTML = recipes.map(r => link(`/compare.html?recipe=${encodeURIComponent(r.id)}${lang === 'en' ? '&lang=en' : ''}`,
-                _escHtml(String(r.name || r.id).replace(/\s*\(.*\)\s*$/, '')))).join('');
-        } catch (e) { console.warn('Recipes unavailable:', e); }
+    /** Home key figures: four of the summary's headline indicators, by dataset code. */
+    renderKeyFigures() {
+        const host = document.getElementById('landing-figures');
+        const all = (this.headlines || []).flatMap(t => t.indicators || []);
+        const picks = LensApp.KEY_FIGURES.map(code => all.find(ind => ind.code === code)).filter(Boolean);
+        host.hidden = !picks.length;
+        host.querySelector('h2').textContent = this.ui.keyFigures;
+        host.querySelector('.headline-cards').replaceChildren(...picks.map(ind => this.teaserCard(ind)));
+    }
+
+    /** Home: the two datasets INS updated last, whatever their age. */
+    renderLatestUpdates() {
+        const host = document.getElementById('landing-updates');
+        const q = this.lang === 'en' ? '?lang=en' : '';
+        host.hidden = !this.latestUpdates?.length;
+        host.innerHTML = `<span class="landing-line-label">${this.ui.recentlyUpdated}</span>` + (this.latestUpdates || []).map(ds =>
+            `<a href="/dataset/${encodeURIComponent(ds.matrix_code)}${q}" title="${_escHtml(ds.matrix_name)}"><span class="landing-update-name">${_escHtml(ds.matrix_name)}</span>
+                <span class="landing-update-meta">${_escHtml(ds.matrix_code)} · ${_escHtml(ds.ultima_actualizare || '')}</span></a>`).join('');
+    }
+
+    /** Home: one line of links to the site's tools. */
+    renderTools() {
+        const ui = this.ui, en = this.lang === 'en', q = en ? '?lang=en' : '';
+        const host = document.getElementById('landing-tools');
+        host.setAttribute('aria-label', ui.toolsLabel);
+        host.innerHTML = [
+            [`/places${q}`, ui.featPlaces[0], ui.featPlaces[1]],
+            [`/compare.html${q}`, ui.featRecipes[0], ui.featRecipes[1]],
+            [`/ask.html${q}`, ui.featAsk[0], ui.featAsk[1]],
+            [`/?page=about${en ? '&lang=en' : ''}`, ui.featAsk[4], ui.featAsk[1]],
+            [`/dimensions-explorer.html${q}`, ui.featDims[0], ui.featDims[1]],
+        ].map(([href, text, title]) => `<a href="${href}" title="${_escHtml(title)}">${text} →</a>`).join('');
     }
 
     /** County tile map: each tile links to its county profile; shaded by resident
@@ -865,9 +870,6 @@ class LensApp {
         const theme = (this.headlines || []).find(t => t.context_code === cat?.code);
         host.innerHTML = ThemeOverviews.questions(theme?.theme || 'general', this.lang,
             cat && !theme ? ThemeOverviews.clean(cat.name).toLocaleLowerCase() : '');
-        // Home: questions, then the themes heading, nav and grid. A category keeps its nav above the questions.
-        const nav = document.getElementById('theme-nav');
-        if (cat) host.before(nav); else document.getElementById('landing-themes-title').after(nav);
         this.renderThemeNav();
     }
 
@@ -880,7 +882,7 @@ class LensApp {
         for (const theme of this.headlines || []) {
             const a = document.createElement('a');
             a.href = `/?cat=${theme.context_code}${en ? '&lang=en' : ''}`;
-            a.textContent = theme.theme_label;
+            a.innerHTML = `<span class="theme-nav-icon" aria-hidden="true">${THEME_ICONS[theme.icon] || '📊'}</span>${_escHtml(theme.theme_label)}`;
             if (active && (active.code === theme.context_code || this.drillStack.some(c => c.cat.code === theme.context_code))) a.setAttribute('aria-current','page');
             nav.appendChild(a);
         }
@@ -3570,7 +3572,9 @@ class LensApp {
     // --- Utilities ----------------------------------------------------------
     shortName(name) {
         // Remove numbering prefix like "1. " or "A.01 ", then title-case
-        const stripped = name.replace(/^[A-Z]?\.\d*\s*/, '').replace(/^\d+\.\s*/, '');
+        // INS ships some names with an empty "()" at the end; drop it.
+        const stripped = name.replace(/^[A-Z]?\.\d*\s*/, '').replace(/^\d+\.\s*/, '')
+            .replace(/\s*\(\s*\)\s*$/, '');
         // Title-case: first letter upper, rest lower (handles all-caps from API)
         return stripped.charAt(0).toUpperCase() + stripped.slice(1).toLowerCase();
     }

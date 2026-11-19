@@ -153,3 +153,38 @@ Remaining:
 `app/static/index.html`, `app/static/js/explore-app.js`, `app/static/css/ui-rhythm.css`,
 new `app/static/js/county-tiles.js`, new `tests/test_county_tiles.py`, `AGENTS.md`,
 `docs/BACKLOG.md`, this folder.
+
+## Owner revision (2026-11-19, not committed)
+
+The owner previewed the home twice and asked for a dense first screen. Plan and choices: two
+columns, four key figures, the two latest updates, a one-line title, tools as a line of links.
+Changed files: `app/static/index.html`, `app/static/js/explore-app.js`,
+`app/static/css/ui-rhythm.css`, `app/routers/categories.py`, `tests/test_landing_summary.py`.
+
+- **First screen, in order:** title (1rem) with the search field; theme nav; starter questions
+  (left) beside "Cifre-cheie" (right); "Actualizate recent"; one line of tool links; "Teme".
+  At 1440×900 the tool links end at 559 px. Under 900 px the two columns stack.
+- **Key figures:** `LensApp.KEY_FIGURES` (`FOM106F`, `AMG130M`, `POP201A_judete`, `TUR104G`),
+  taken from the summary's headline indicators and drawn with `teaserCard`. A missing code is
+  skipped; with none, the block is hidden.
+- **Latest updates:** `/api/corpus/summary` has a new key `latest_updates`: the 2 canonical
+  datasets updated last, with no age window. A split dataset counts once (its parent when
+  canonical, otherwise its first canonical child). `recently_updated` (30 days) is unchanged and
+  is empty on the served generation. The static site gets the key with its next build (the
+  summary is a recorded answer); until then the line is hidden there.
+- **Tool links:** county profiles, ready-made indicators, Ask, the MCP connector (`/?page=about`;
+  that section arrives with `main`), dimensions explorer. `renderFeatures` and the band CSS are gone.
+- **Off the home for now:** the lead text, the three corpus figures, the county map, the county
+  picker and the developers tile. `renderCountyMap`, `renderCountyPicker`, `js/county-tiles.js`,
+  their CSS, their UI strings and `tests/test_county_tiles.py` stay, without a caller. Some
+  `feat*` UI strings now serve only as link titles.
+- **Subcategory lists:** sorted by dataset count, each item wraps whole with its separator,
+  line-height 1.25. The three hunks are copied unchanged from `ce696f7` (`fix/ask-answer-quality`),
+  so that branch merges without a content conflict there; the `?v=` lines of `index.html` will conflict.
+- **Icons:** the category illustration sits before the category title (it was at the right edge),
+  and each theme link in the theme nav carries its theme icon. Also changed: `app/static/css/explore.css`.
+- **Checked:** `tests/test_landing_summary.py` and `tests/test_county_tiles.py` pass. Playwright
+  at 1440, 1024 and 390 px (RO light, EN dark) and `/?cat=1`: four figures with sparklines, two
+  update links, five tool links, no horizontal scroll, no console error, no failed request.
+- **Not re-run after this revision:** the full test suite, `audit_layout.py`, static mode, the
+  manual checks (`/` shortcut, language and theme toggles).

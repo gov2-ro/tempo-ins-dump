@@ -728,7 +728,7 @@ kbd {
 
 .cat-section-header {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 10px;
     margin-bottom: 10px;
     cursor: pointer;
@@ -738,7 +738,6 @@ kbd {
 .cat-section-header:hover .cat-section-name { color: var(--accent); }
 .cat-section-img {
     flex-shrink: 0;
-    margin-left: auto;
     height: 77px;
     width: auto;
     object-fit: contain;
@@ -773,8 +772,10 @@ kbd {
 /* Subcategory list — inline flow with middot separators */
 .cat-subcats {
     margin-left: 0;
-    line-height: 1.45;
+    line-height: 1.25;
 }
+
+.cat-subcat-item { display: inline-block; }
 
 .cat-subcat {
     display: inline;
