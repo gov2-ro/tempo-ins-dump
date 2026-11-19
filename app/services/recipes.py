@@ -328,17 +328,201 @@ def compute_rate_from_counts(rates, counts, *, by: str, year=None, areas=None) -
 # keeps its reconstruction as a cross-check: a mean or rate rebuilt from rounded
 # published parts can differ from INS's total by one unit (docs/METHODOLOGY.md §4).
 
+_PT_COLUMNS = "ref_area, time_period, value, unit, query_id, fetched_at, file_sha256, ins_updated"
+
+
+def _pt_query(conn, where: str, params: list) -> list:
+    """Rows of `published_totals` (`_PT_COLUMNS`, then `breakdown`) for a WHERE clause. A
+    generation without the `breakdown` column (before AQ-13) has only rows whose breakdown is
+    ''; one without the table gives []."""
+    for breakdown in ("breakdown", "'' AS breakdown"):
+        try:
+            return conn.execute(f"SELECT {_PT_COLUMNS}, {breakdown} FROM published_totals WHERE {where}",
+                                params).fetchall()
+        except Exception:
+            continue
+    return []
+
+
 def _published_cells(conn, matrix: str) -> dict:
-    """{(geo_id, year): row} for one matrix, or {} when the generation has none."""
-    try:
-        rows = conn.execute(
-            "SELECT ref_area, time_period, value, unit, query_id, fetched_at, file_sha256, "
-            "ins_updated FROM published_totals WHERE matrix_code = ?", [matrix]).fetchall()
-    except Exception:           # older generations have no published_totals table
-        return {}
+    """{(geo_id, year): row} for one matrix, or {} when the generation has none. A row of a
+    breakdown (by sex) is not the Total cell: only rows where every dimension is Total count."""
+    rows = [r[:-1] for r in _pt_query(conn, "matrix_code = ?", [matrix]) if not r[-1]]
     return {(geo_id(a), y): {"label": a, "year": y, "value": v, "unit": u, "query_id": q,
                              "fetched_at": f, "sha256": s, "ins_updated": iu}
             for a, y, v, u, q, f, s, iu in rows}
+
+
+# ------------------------------------------------------------------ published cells for tools (AQ-13)
+#
+# `published_totals` holds INS's Total cells per (matrix, area, period, breakdown). A tool asks for
+# one only after the shared policy refused a non-additive value because the Total option was dropped
+# from the download. A published cell is never mixed into the rows of a parquet result.
+
+PUBLISHED_COLUMNS = ("REF_AREA", "TIME_PERIOD")
+NATIONAL_LABEL = "TOTAL"
+MAX_PUBLISHED_CELLS = 5000
+
+
+def _is_total_word(v) -> bool:
+    return str(v).strip().lower() == "total"
+
+
+def _provenance(row: dict) -> dict:
+    return {k: row.get(k) for k in ("query_id", "fetched_at", "sha256", "ins_updated")}
+
+
+def published_matrix(conn, code: str) -> str | None:
+    """The matrix whose published cells serve a dataset: the dataset's own code, or its parent's
+    (split children read their parent's cells). None when the generation holds none."""
+    try:
+        row = conn.execute("SELECT parent_matrix_code FROM matrices WHERE matrix_code = ?", [code]).fetchone()
+    except Exception:
+        row = None
+    for c in [code] + ([row[0]] if row and row[0] else []):
+        if _pt_query(conn, "matrix_code = ? LIMIT 1", [c]):
+            return c
+    return None
+
+
+def _breakdown_of(text: str) -> dict:
+    try:
+        v = json.loads(text) if text else {}
+    except ValueError:
+        return {}
+    return v if isinstance(v, dict) else {}
+
+
+def _cell(row: tuple) -> dict:
+    a, y, v, u, q, f, s, iu, b = row
+    return {"area": a, "period": y, "value": v, "unit": u, "breakdown": _breakdown_of(b),
+            "query_id": q, "fetched_at": f, "sha256": s, "ins_updated": iu}
+
+
+def published_cell(conn, code: str, ref_area: str, period: str, breakdown=None) -> dict | None:
+    """INS's Total cell of a dataset for one area, period and breakdown ({} or '' for none, or a
+    dict such as {"SEX": "Feminin"}), with its provenance; None when no value is published."""
+    matrix = published_matrix(conn, code)
+    if not matrix:
+        return None
+    want = json.dumps(breakdown, sort_keys=True, ensure_ascii=False, separators=(",", ":")) \
+        if isinstance(breakdown, dict) and breakdown else (breakdown or "")
+    gid = geo_id(ref_area)
+    for row in _pt_query(conn, "matrix_code = ? AND time_period = ? AND breakdown = ?", [matrix, str(period), want]):
+        if geo_id(row[0]) == gid and row[2] is not None:
+            return {**_cell(row), "matrix": matrix}
+    return None
+
+
+def published_coverage(conn, code: str) -> dict | None:
+    """What INS Total cells a dataset has: {matrix, breakdowns (names with their labels), first and
+    last period, areas, national (TOTAL area has values), unit}. None when it has none."""
+    matrix = published_matrix(conn, code)
+    if not matrix:
+        return None
+    rows = [r for r in _pt_query(conn, "matrix_code = ?", [matrix]) if r[2] is not None]
+    if not rows:
+        return None
+    periods = sorted({r[1] for r in rows})
+    names: dict = {}
+    for r in rows:
+        for k, v in _breakdown_of(r[-1]).items():
+            names.setdefault(k, set()).add(v)
+    return {"matrix": matrix, "first": periods[0], "last": periods[-1], "unit": rows[0][3],
+            "areas": len({r[0] for r in rows}), "national": any(geo_id(r[0]) == "total" for r in rows),
+            "breakdowns": {k: sorted(v) for k, v in sorted(names.items())},
+            "ins_updated": max((r[7] or "" for r in rows), default="") or None,
+            "fetched_at": max((r[5] or "" for r in rows), default="") or None}
+
+
+def published_selection(conn, code: str, filters: dict, group_by, *, universe=None, require_pinned=(),
+                        limit: int = MAX_PUBLISHED_CELLS) -> dict | None:
+    """INS's Total cells that answer a selection the policy refused, or None.
+
+    Each dimension the request neither filters (to a non-Total option) nor groups by is collapsed,
+    and INS's Total option is exactly that collapse; the published cells are therefore the answer
+    only when the request touches nothing but the area, the period and the dimensions the cells
+    break down by (sex). An area left out means the country (the TOTAL cell); `universe`, when given,
+    limits an area grouping to the labels the dataset itself has. A non-Total pin on any other
+    dimension, or no period, returns None: no cell exists for that cut. `require_pinned` lists
+    columns the request must name in `filters` (a raw request leaves unnamed dimensions open, so
+    it cannot mean "Total" for them).
+
+    {matrix, columns, rows, cells, areas, periods, sources, truncated}; a row is
+    [area, period, *breakdown labels, unit, value]."""
+    matrix = published_matrix(conn, code)
+    if not matrix or any(c not in (filters or {}) for c in require_pinned):
+        return None
+    rows = [r for r in _pt_query(conn, "matrix_code = ?", [matrix]) if r[2] is not None]
+    names = sorted({k for r in rows for k in _breakdown_of(r[-1])})
+    allowed = set(PUBLISHED_COLUMNS) | set(names)
+    pins = {}
+    for col, vals in (filters or {}).items():
+        vals = [v for v in vals if not _is_total_word(v)]
+        if col in allowed:
+            if vals:
+                pins[col] = [str(v) for v in vals]
+        elif vals:
+            return None
+    group_by = list(group_by or [])
+    if any(c not in allowed for c in group_by):
+        return None
+    if "TIME_PERIOD" not in pins and "TIME_PERIOD" not in group_by:
+        return None
+    if "REF_AREA" in pins:
+        areas = {geo_id(a): a for a in pins["REF_AREA"]}
+    elif "REF_AREA" in group_by:
+        areas = {geo_id(a): a for a in universe} if universe is not None else None
+    else:
+        areas = {"total": NATIONAL_LABEL}
+    wanted: dict = {}                     # per breakdown name: labels, None (all) or empty (Total)
+    for n in names:
+        if n in pins:
+            if n not in group_by and len(pins[n]) > 1:
+                return None
+            wanted[n] = set(pins[n])
+        elif n in group_by:
+            wanted[n] = None              # every published label
+        else:
+            wanted[n] = set()             # collapsed: the cell where this dimension is Total
+    periods = set(pins.get("TIME_PERIOD") or [])
+    cells = []
+    for r in rows:
+        bd = _breakdown_of(r[-1])
+        if periods and r[1] not in periods:
+            continue
+        if areas is not None and geo_id(r[0]) not in areas:
+            continue
+        ok = True
+        for n in names:
+            w = wanted[n]
+            have = bd.get(n)
+            if w is None:
+                ok = ok and have is not None
+            elif not w:
+                ok = ok and have is None
+            else:
+                ok = ok and have in w
+        if ok:
+            cells.append(_cell(r))
+    if not cells:
+        return None
+    used = [n for n in names if wanted[n] is None or wanted[n]]
+    order = {geo_id(a): i for i, a in enumerate(universe or [])}
+    cells.sort(key=lambda c: (order.get(geo_id(c["area"]), len(order)), c["area"], c["period"],
+                              [c["breakdown"].get(n, "") for n in used]))
+    truncated = len(cells) > limit
+    cells = cells[:limit]
+    table = [[c["area"], c["period"], *[c["breakdown"].get(n, "") for n in used], c["unit"], c["value"]]
+             for c in cells]
+    sources = {}
+    for c in cells:
+        sources.setdefault(c["query_id"], _provenance(c))
+    return {"matrix": matrix,
+            "columns": ["REF_AREA", "TIME_PERIOD", *used, "UNIT_MEASURE", "OBS_VALUE"],
+            "breakdown_columns": used, "rows": table, "cells": cells,
+            "areas": sorted({c["area"] for c in cells}), "periods": sorted({c["period"] for c in cells}),
+            "sources": list(sources.values()), "truncated": truncated}
 
 
 def _county_ids(conn, code: str) -> set:
