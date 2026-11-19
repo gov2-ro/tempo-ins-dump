@@ -1,5 +1,25 @@
 # Activity History
 
+## 2026-11-19 — Homepage refresh, everything merged into main, generation adc6762a in place
+
+- **What:** the home starts with a one-line title and search, the theme nav, starter questions
+  beside four key figures, the two latest updated datasets and one line of tool links. The category
+  illustration sits before its title; theme nav links carry their icon. `/api/corpus/summary`
+  returns `latest_updates` (2 canonical datasets, no age window, a split dataset counted once).
+- **Why:** the owner rejected the first design (large hero, county map, boxed feature band) as too
+  loose; the first screen now carries questions and data.
+- **Merged into `main`** (owner, 2026-11-19): `feat/homepage-refresh`, `fix/ask-answer-quality`
+  and `aq-11-refresh` (AQ-08, AQ-09C, AQ-10, AQ-11). Full suite on merged `main` with the new
+  generation: 2,419 passed, 63 skipped, 0 failed.
+- **Data:** `data/corpus` is generation `adc6762a` (a clone of `~/devbox/gov2/tempo-gen-20261118`);
+  the served generation `062bd2b0` is kept at `data/_archive/corpus-062bd2b0` for rollback.
+  `deploy-data/` is staged from the new generation.
+- **Non-obvious:** the county map, the picker and the corpus figures are off the home but their
+  code and `tests/test_county_tiles.py` stay, without a caller. The static site reads the summary
+  from a recorded answer, so the updates line needs a static build. Details:
+  `docs/plans/homepage-refresh/handoff.md`.
+- **Not done here:** the API deploy to the VPS and the static upload (owner runs or confirms them).
+
 ## 2026-11-19 — UX: dataset table always shown (lazy), compact front-page subcategories
 
 - **What:** the dataset v2 page drops the "Tabel" button. The raw-rows table always shows under the charts,
