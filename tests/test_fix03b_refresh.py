@@ -156,6 +156,18 @@ def test_dimension_relabel_and_indexed_matrix_change_survive_fk(env):
     assert fingerprint(env, "TST202") == other
 
 
+def test_list_column_change_survives_fk(env):
+    """A changed list column (periodicitati) is also written as delete+insert in DuckDB."""
+    import json
+    data = __import__("fix03b_env").meta("TST101", periods=PER_V1, indicators=IND_V1)
+    data["periodicitati"] = ["Anuala", "Trimestriala"]
+    (env.data / "2-metas" / "ro" / "TST101.json").write_text(json.dumps(data), encoding="utf-8")
+    env.run("10-import-metadata.py", "--matrix", "TST101")
+    assert env.q("SELECT periodicitati FROM matrices WHERE matrix_code = 'TST101'") == [
+        (["Anuala", "Trimestriala"],)]
+    assert env.q("SELECT COUNT(*) FROM dimensions WHERE matrix_code = 'TST101'") == [(3,)]
+
+
 def test_targeted_stages_leave_other_matrix_byte_identical(env):
     other = fingerprint(env, "TST202")
     shared = "SELECT * FROM {t} WHERE nom_item_id IN (100, 101, 300, 301) ORDER BY nom_item_id"

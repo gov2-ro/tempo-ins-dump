@@ -721,8 +721,8 @@
     "en": "Life expectancy at birth"
    },
    "note": {
-    "ro": "numărul mediu de ani de trăit al unui nou-născut, pe sexe, 2008–2023, pentru județe, regiuni și macroregiuni. Fișierul de date nu conține valoarea INS pentru ambele sexe și nici valoarea națională (o medie a județelor nu este speranța de viață a țării); INS le publică, iar instrumentele le returnează ca „total publicat de INS” când generația le conține. Pe medii de reședință (urban/rural, până în 2024): POP217A; pe vârste, doar regiuni: POP217B",
-    "en": "average years a newborn is expected to live, by sex, 2008–2023, for counties, regions and macroregions. The data file holds neither the INS both-sexes value nor the national value (an average of counties is not the life expectancy of the country). INS publishes them, and the tools return them as \"INS published total\" when the generation holds them. By urban/rural area (to 2024): POP217A; by age, regions only: POP217B"
+    "ro": "numărul mediu de ani de trăit al unui nou-născut, pe sexe, 2008–2024, pentru județe, regiuni și macroregiuni. Fișierul de date nu conține valoarea INS pentru ambele sexe și nici valoarea națională (o medie a județelor nu este speranța de viață a țării); INS le publică, iar instrumentele le returnează ca „total publicat de INS” când generația le conține. Pe medii de reședință (urban/rural, până în 2025): POP217A; pe vârste, doar regiuni: POP217B",
+    "en": "average years a newborn is expected to live, by sex, 2008–2024, for counties, regions and macroregions. The data file holds neither the INS both-sexes value nor the national value (an average of counties is not the life expectancy of the country). INS publishes them, and the tools return them as \"INS published total\" when the generation holds them. By urban/rural area (to 2025): POP217A; by age, regions only: POP217B"
    },
    "aliases": {
     "ro": [
@@ -916,8 +916,8 @@
     "en": "Annual exports (FOB)"
    },
    "note": {
-    "ro": "valoarea exporturilor FOB pe cele 10 secțiuni CSCI Rev.4, în milioane euro, anual, 2006–2024; totalul anual este suma secțiunilor (neverificată față de totalul INS, pe care descărcarea nu îl conține). Același tabel în dolari SUA: EXP101G_milioane_dolari_usd. Lunar, din 2013: EXP101I",
-    "en": "export value (FOB) by the 10 SITC Rev.4 sections, in million euro, yearly, 2006–2024; the yearly total is the sum of the sections (unchecked against the INS total, which the download does not hold). The same table in US dollars: EXP101G_milioane_dolari_usd. Monthly, from 2013: EXP101I"
+    "ro": "valoarea exporturilor FOB pe cele 10 secțiuni CSCI Rev.4, în milioane euro, anual, 2006–2025; totalul anual este suma secțiunilor (neverificată față de totalul INS, pe care descărcarea nu îl conține). Același tabel în dolari SUA: EXP101G_milioane_dolari_usd. Lunar, din 2013: EXP101I",
+    "en": "export value (FOB) by the 10 SITC Rev.4 sections, in million euro, yearly, 2006–2025; the yearly total is the sum of the sections (unchecked against the INS total, which the download does not hold). The same table in US dollars: EXP101G_milioane_dolari_usd. Monthly, from 2013: EXP101I"
    },
    "aliases": {
     "ro": [

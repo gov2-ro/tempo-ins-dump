@@ -370,9 +370,15 @@ def enforce_language(lang: str) -> None:
 
 
 def child_env() -> dict:
-    """Explicit language at every subprocess boundary."""
+    """Explicit language at every subprocess boundary.
+
+    On a copied generation, TEMPO_DATA_DIR follows TEMPO_PIPELINE_DATA_DIR: children that
+    read paths from app.config (build-search-index.py) would otherwise write the repo's data/.
+    """
     env = dict(os.environ)
     env["TEMPO_LANG"] = "ro"
+    if os.environ.get("TEMPO_PIPELINE_DATA_DIR"):
+        env["TEMPO_DATA_DIR"] = str(data_dir())
     return env
 
 
@@ -455,7 +461,13 @@ def parse_news(since: str | None) -> dict[str, str | None]:
     # Drop header row if it leaked in
     df = df[df["Cod matrice"] != "Cod matrice"]
     df = df.dropna(subset=["Cod matrice"])
-    df["_date"] = pd.to_datetime(df["Data"], format=DATE_FMT, errors="coerce")
+    # INS sometimes types the year separator as a comma ("21.10,2026"); without this
+    # the row gets no date and a --since/watermark filter drops it silently.
+    dates = df["Data"].astype(str).str.strip().str.replace(",", ".", regex=False)
+    df["_date"] = pd.to_datetime(dates, format=DATE_FMT, errors="coerce")
+    undated = df.loc[df["_date"].isna(), "Cod matrice"].tolist()
+    if undated:
+        log.warning(f"{len(undated)} news rows have an unreadable date: {undated[:10]}")
 
     if since:
         since_dt = parse_date(since)

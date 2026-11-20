@@ -131,6 +131,39 @@ def test_successful_swap_replaces_whole_set_and_retires_stale_child(env):
     assert state(env, "TST202") == sibling
 
 
+def _meta_lists_lei_without_data(env, code):
+    """INS metadata lists the 'Lei' unit, but the CSV has no rows for it."""
+    env.write_meta(code, periods=PER2, indicators=IND, ums=UM3)
+    env.write_csv(code, [(i, um, p, 1.0 + n) for n, (_, i) in enumerate(IND)
+                         for _, um in UM2 for _, p in PER2])
+
+
+def test_empty_child_never_served_is_dropped(env):
+    _meta_lists_lei_without_data(env, "TST303")
+    env.refresh("TST303")
+    assert child_codes(env, "TST303") == ["TST303_numar", "TST303_procente"]
+    assert not (env.parquet / "TST303_lei.parquet").exists()
+    assert state(env, "TST303")["leftovers"] == []
+
+
+def test_one_slice_left_after_dropping_empties_is_kept(env):
+    """INS lists 'Numar' and 'Lei', but publishes only 'Numar': one child stands alone."""
+    env.write_meta("TST404", periods=PER2, indicators=IND, ums=[UM3[0], UM3[2]])
+    env.write_csv("TST404", [(i, "Numar", p, 1.0) for _, i in IND for _, p in PER2])
+    env.refresh("TST404")
+    assert child_codes(env, "TST404") == ["TST404_numar"]
+    assert len(env.pq("TST404_numar")) == 6
+
+
+def test_empty_child_that_replaces_a_served_one_still_fails(env):
+    before = state(env, "TST101")
+    _meta_lists_lei_without_data(env, "TST101")
+    env.refresh("TST101", split=False)
+    env.run("12-split-datasets.py", "--matrix", "TST101", check=False)
+    assert child_codes(env, "TST101") == ["TST101_lei", "TST101_numar", "TST101_procente"]
+    assert state(env, "TST101")["files"] == before["files"]
+
+
 def test_rerun_never_duplicates_and_never_splits_children(env):
     for _ in range(2):
         env.run("12-split-datasets.py")           # every parent, twice

@@ -137,7 +137,10 @@ def import_matrices_basic(conn: duckdb.DuckDBPyConnection) -> int:
 # orchestrator retry) rebuilds them from the metadata JSON.
 # ---------------------------------------------------------------------------
 
-INDEXED_MATRIX_COLS = {"context_code", "mat_active", "mat_max_dim"}
+# List columns (ancestor_codes, periodicitati) are also updated as delete+insert
+# (verified on DuckDB 1.4.2: PPA102C failed when INS changed its periodicitati).
+INDEXED_MATRIX_COLS = {"context_code", "mat_active", "mat_max_dim",
+                       "ancestor_codes", "periodicitati"}
 STATS_COLS = ("row_count", "file_size_bytes", "parquet_path")
 
 

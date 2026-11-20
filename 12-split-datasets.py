@@ -1225,7 +1225,20 @@ def process_parent(conn, matrix_code: str, mrules: list) -> tuple[int, int] | No
             subs = split_parquet_cross_product(conn, matrix_code, mrules, stage_dir=stage_dir)
             register = lambda sub: register_cross_product_sub_dataset(conn, matrix_code, sub)  # noqa: E731
 
+        # A planned child with no rows is dropped when it is not in the current child set:
+        # INS lists options (quarters, macroregions) it publishes no data for. An empty
+        # child that would replace a served one still fails (possible lost data).
         empty = [s["sub_code"] for s in subs if s["row_count"] <= 0]
+        served = {r[0] for r in conn.execute(
+            "SELECT sub_matrix_code FROM dataset_splits WHERE parent_matrix_code = ?",
+            [matrix_code]).fetchall()} if empty else set()
+        never_served = [c for c in empty if c not in served]
+        if never_served:
+            logger.warning(f"{matrix_code}: dropping empty sub-dataset(s) never served: {never_served}")
+            subs = [s for s in subs if s["sub_code"] not in never_served]
+            # Counted like a policy skip, so the one remaining slice may stand alone.
+            POLICY_SKIPPED[matrix_code] = POLICY_SKIPPED.get(matrix_code, 0) + len(never_served)
+            empty = [c for c in empty if c in served]
         if empty:
             record_failure(f"{matrix_code}: empty sub-dataset(s) {empty}; previous children kept")
         if len(SPLIT_FAILURES) > failures_before:

@@ -80,9 +80,9 @@ def test_the_old_caen_series_is_named_as_not_comparable():
 @pytest.mark.corpus
 @pytest.mark.parametrize("cid,first,last", [
     ("gdp_per_inhabitant", "2000", "2022"), ("gdp_regional", "2000", "2022"),
-    ("life_expectancy", "2008", "2023"), ("infant_mortality_rate", "2012", "2024"),
+    ("life_expectancy", "2008", "2024"), ("infant_mortality_rate", "2012", "2024"),
     ("infant_mortality_domicile", "1990", "2024"), ("dwellings_completed", "1990", "2025"),
-    ("pupils_by_education_level", "1990", "2024"), ("exports_annual", "2006", "2024")])
+    ("pupils_by_education_level", "1990", "2024"), ("exports_annual", "2006", "2025")])
 def test_corpus_variants_exist_and_cover_the_period_the_note_names(cid, first, last):
     from app.db import get_conn
     conn = get_conn()

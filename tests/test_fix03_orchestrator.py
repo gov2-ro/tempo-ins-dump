@@ -122,6 +122,14 @@ def test_children_get_explicit_romanian_language(pipe):
     assert pipe.envs and all(e["TEMPO_LANG"] == "ro" for e in pipe.envs)
 
 
+def test_children_on_a_copy_get_its_data_dir_for_app_config(pipe, monkeypatch, tmp_path):
+    copy = tmp_path / "copy" / "data"
+    copy.mkdir(parents=True)
+    monkeypatch.setenv("TEMPO_PIPELINE_DATA_DIR", str(copy))
+    monkeypatch.setenv("TEMPO_DATA_DIR", "/elsewhere/data")
+    assert pipe.mod.child_env()["TEMPO_DATA_DIR"] == str(copy.resolve())
+
+
 def test_watermark_never_regresses_with_older_since(pipe):
     pipe.seed_watermark("10.04.2026")
     pipe.feed([("02.02.2026", "AAA1")])
@@ -313,6 +321,15 @@ def test_watermark_filter_is_inclusive(pipe):
     pipe.feed([("09.04.2026", "OLD1"), ("10.04.2026", "AAA1")])
     assert pipe.go() == 0
     assert {c for _, c in pipe.calls if c} == {"AAA1"}
+
+
+def test_comma_typed_feed_date_is_kept_by_watermark_filter(pipe):
+    # INS writes some dates as "21.10,2026" (quoted in the CSV).
+    pipe.seed_watermark("10.04.2026")
+    pipe.feed([('"21.10,2026"', "AAA1"), ("09.04.2026", "OLD1")])
+    assert pipe.go() == 0
+    assert {c for _, c in pipe.calls if c} == {"AAA1"}
+    assert pipe.state()["watermark"] == "21.10.2026"
 
 
 def test_legacy_last_run_file_used_when_no_state(pipe):
