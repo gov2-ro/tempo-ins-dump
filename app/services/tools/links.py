@@ -183,6 +183,14 @@ def _dataset(ctx, sel, gid: str):
     filters, dropped = _non_empty(sel.filters)
     norm = {"kind": "dataset", "dataset": sel.dataset, "filters": filters,
             "group_by": list(sel.group_by), "approximate": sel.approximate}
+    pub = []
+    if sel.value_source:
+        if not recipes.published_matrix(ctx.conn, sel.dataset):
+            raise C.query_failure(dq.QueryError(
+                400, f"Dataset {sel.dataset} has no INS published cells, so value_source "
+                     f"{sel.value_source!r} cannot be cited."), ctx, sel.dataset)
+        norm["value_source"] = sel.value_source
+        pub = [("value_source", sel.value_source)]
     fj, gj = C.dumps(filters), C.dumps(norm["group_by"])
     code = quote(sel.dataset, safe="")
     en = [("lang", "en")] if lang == "en" else []
@@ -190,13 +198,13 @@ def _dataset(ctx, sel, gid: str):
         _link("dataset", C.dataset_page(sel.dataset, lang, filters or None), tx["dataset"],
               "live_rerun"),
         _link("live_selection", _url(f"/api/datasets/{code}/data", [
-            ("filters", fj), ("group_by", gj), ("approximate", "1" if sel.approximate else "0")]),
+            ("filters", fj), ("group_by", gj), ("approximate", "1" if sel.approximate else "0")] + pub),
               tx["live_dataset"], "live_rerun"),
         _link("csv", _url(f"/api/datasets/{code}/download", [("format", "csv"), ("filters", fj)]
                           + en), tx["csv"], "live_rerun"),
         _link("evidence", _url(f"/api/datasets/{code}/evidence", [
             ("filters", fj), ("group_by", gj), ("approximate", "1" if sel.approximate else "0"),
-            *en, ("expected_generation", gid)]), tx["evidence"].format(gid=gid),
+            *pub, *en, ("expected_generation", gid)]), tx["evidence"].format(gid=gid),
               "expected_generation"),
     ]
     warnings = [C.warning("empty_filter_ignored", tx["empty"], ",".join(dropped))] if dropped else []

@@ -364,6 +364,9 @@ export function makeStaticApi(io) {
             if (limit !== 5) throw new ApiError(400, 'The static site records related datasets with the default limit only');
             return r;
         }
+        if (a === 'datasets' && (c === 'data' || c === 'evidence') && p.value_source) {
+            throw new ApiError(400, 'INS published cells are served by the API only.');
+        }
         if (a === 'datasets' && c === 'data') return data(b, p);
         if (a === 'datasets' && c === 'options') return options(b, p);
         if (a === 'datasets' && c === 'download') {

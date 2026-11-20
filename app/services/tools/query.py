@@ -267,6 +267,13 @@ def published_source(sel: dict) -> dict:
             "breakdown_columns": sel["breakdown_columns"], "fetches": sel["sources"]}
 
 
+def published_aggregation() -> dict:
+    """The aggregation decision of a published answer (also served by `/data?value_source=ins_published`)."""
+    return {"outcome": "available", "reason": None, "method": "single_row",
+            "verification": None, "approximation": False, "source": "ins_published_total",
+            "dimensions": [], "warnings": []}
+
+
 def published_scope(lang: str, sel: dict) -> dict:
     return {"description": M.t(lang, "query.published_scope", matrix=sel["matrix"]),
             "domain_complete": True, "limitations": []}
@@ -288,16 +295,8 @@ def _published_answer(aid: "_Aid", warnings: list):
     actx = aid.agg_ctx()
     if not actx or actx.get("measure") == "additive":
         return None
-    filters, gb = aid.canon_filters(), aid.canon_group_by()
     try:
-        raw_dims = [] if gb else [d["dim_column_name"] for d in actx["dimensions"]
-                                  if d["dim_column_name"] not in ("REF_AREA", "TIME_PERIOD", "UNIT_MEASURE")
-                                  and d.get("dim_type") != "unit"]
-        universe = None
-        if "REF_AREA" in gb and "REF_AREA" not in filters:
-            universe = dq.dimension_values(ctx.conn, aid.code, "REF_AREA", limit=500)["values"]
-        sel = recipes.published_selection(ctx.conn, aid.code, filters, gb, universe=universe,
-                                          require_pinned=raw_dims)
+        sel = recipes.published_answer(ctx.conn, aid.code, aid.request["filters"], aid.request["group_by"], actx)
     except Exception:
         log.exception("published cells unavailable code=%s", aid.code)
         return None
@@ -313,11 +312,10 @@ def _published_envelope(aid: "_Aid", warnings: list, sel: dict) -> dict:
     source = {**C.source_entry(ctx.conn, aid.code, lang), "published_total": src}
     prov = {"sources": [source],
             "selection": {"kind": "dataset", "dataset": aid.code, "filters": request.get("filters") or {},
-                          "group_by": list(request.get("group_by") or []), "approximate": False},
+                          "group_by": list(request.get("group_by") or []), "approximate": False,
+                          "value_source": "ins_published"},
             "effective_selection": {"filters": request.get("filters") or {}, "levels": {}, "published_total": src},
-            "aggregation": {"outcome": "available", "reason": None, "method": "single_row",
-                            "verification": None, "approximation": False, "source": "ins_published_total",
-                            "dimensions": [], "warnings": []},
+            "aggregation": published_aggregation(),
             "quality": {}, "scope": published_scope(lang, sel)}
     cut = len(rows) < len(sel["rows"]) or sel["truncated"]
     limits = {"returned_rows": len(rows), "total_rows": None if sel["truncated"] else len(sel["rows"]),
