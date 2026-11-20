@@ -320,3 +320,13 @@ ThemeOverviews.theme({theme:'economy',indicators:[{code:'BASE'}]},'en').then(car
  assert.deepEqual(cards[1].filters.CATEGORY,['PRODUS INTERN BRUT']);
 }).catch(e=>{console.error(e);process.exitCode=1;});
 '''])
+
+
+def test_static_search_word_lists_mirror_concept_search():
+    """The static engine's query parsing must drop the same words as concept_search
+    (a filler word missing in search.js broke /api/search parity on 2026-11-20)."""
+    import re
+    from app.services import concept_search as cs
+    js = (Path(__file__).resolve().parents[1] / "app/static/js/engine/search.js").read_text()
+    block = re.search(r"const STOPWORDS = new Set\(`(.*?)`", js, re.S).group(1)
+    assert set(block.split()) == set(cs._STOPWORDS)
