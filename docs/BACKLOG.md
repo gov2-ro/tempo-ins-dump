@@ -4,6 +4,24 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Data refresh (2026-11-20, generation 9f1cf61f)
+
+- [ ] **P1 — Batch 2 of the refresh: 840 matrices.** A metadata sweep of all 1,943 INS matrices (2026-11-20) found
+  1,127 updated since our copy (most of our CSVs date from 2025) and 24 new matrices. The INS news feed only shows
+  the last month (21.10–20.11), so batch 1 took only its 327. The rest (826 updated + 14 new) is listed in
+  `data/logs/batch2-codes-20261120.txt`. Run it on an APFS clone with `update-pipeline.py --matrix <list>`,
+  then `--since <date> --global-profiles`, the audit, the manifest, the gates and a separate deploy. Expect 8–10 h.
+- [ ] **P2 — Make the metadata sweep a pipeline step.** The feed misses any update older than about a month.
+  The sweep script `scripts/utils/meta-sweep.py` fetched every meta read-only (about 90 min)
+  and compared `ultimaActualizare` with `matrices.ultima_actualizare`. Add it to `update-pipeline.py` (e.g.
+  `--sweep`), or run it weekly, so the corpus cannot fall behind silently again.
+- [ ] **P3 — Stage 12 leaves rows of a retired child.** It happened again in batch 1 (3 codes:
+  `IND106C_numar_bucati_echivalent_4_osii`, `SAR118B_macroregiuni`, `SAR118B_regiuni`). The rows in
+  `dimension_structure`, `matrix_profiles` and `sdmx_column_map`, the view profiles and the `_index.json` entries
+  were removed by hand on the copy. `data/eval/chart_selector_baseline.json` still names them.
+- [ ] **P3 — Re-run the chart-selector and agent evals on 9f1cf61f.** Not run in the refresh; baselines are
+  generation-pinned and will show data-driven diffs.
+
 ## Public MCP review (2026-11-20)
 
 - [x] **Replay published-cell citations end to end.** Fixed 2026-11-20 on `fix/mcp-published-citations` (0388830).

@@ -1,5 +1,32 @@
 # Activity History
 
+## 2026-11-20 — Data refresh, batch 1 (generation 9f1cf61f, deployed)
+
+- **What:** the INS news feed (21.10–20.11, 327 matrices, 10 of them new at INS) ran through `update-pipeline.py`
+  on an APFS clone, then `--global-profiles`, audit, manifest, full tests and gates. The clone was promoted to `data/`;
+  the previous generation `f20fc32a` is at `data/_archive/data-f20fc32a/`. **Deployed** the same day: API
+  `20261120-163842-9f1cf61f` (VPS, `deploy.sh` run by the owner), static `9f1cf61f25bf-38025218e66b` (DreamHost).
+  Live smoke: 9 pages incl. Ask clean; `/api/health` reports `9f1cf61f`. This also shipped the two MCP review fixes
+  merged earlier today.
+- **Finding:** the corpus was far older than the feed suggests. A read-only sweep of all 1,943 INS metas found 1,127
+  matrices updated since our copy (most CSVs from 2025) and 24 new ones. The feed covers only about a month. The
+  other 840 are batch 2 (backlog P1, list in `data/logs/batch2-codes-20261120.txt`; sweep: `scripts/utils/meta-sweep.py`).
+- **Pipeline fixes (57f5b8d):** feed dates typed `21.10,2026` were dropped by any date filter; a changed list column
+  (`periodicitati`) failed DuckDB's FK check in `10-import-metadata` (PPA102C, PPA103A); stage 12 drops an empty planned
+  child that was never served (BUF104I–BUF115I quarterly, INO101C/INO102A macroregions; INS lists options it publishes
+  no rows for), counted as a policy skip so one slice may stand alone; an empty child replacing a served one still
+  fails (owner decision). On a copy, children now get `TEMPO_DATA_DIR` too.
+- **Incident:** before that last fix, `build-search-index.py` (reads `app.config`) rebuilt the repo's served
+  `search.duckdb` from the served metadata during the clone's run. Restored from the clone's untouched copy; sha256
+  equals the manifest (`f177533e…`). No other served file was written.
+- **Static fix (3802521):** `search.js` lacked AQ-09's filler words; the first static gate failed `/api/search` parity
+  2/1,017. A test now compares the two word lists. Second build: parity 1,017/1,017.
+- **Manual cleanup on the copy:** 3 retired children (`IND106C_numar_bucati_echivalent_4_osii`, `SAR118B_macroregiuni`,
+  `SAR118B_regiuni`, replaced by renamed children): rows in 3 tables, view profiles and index entries.
+- **Tests:** full suite on the copy 2,600 passed, 77 skipped, 2 failed (concept notes naming old periods; notes and
+  test updated: life expectancy 2008–2024, exports 2006–2025). `release-check --local` strict: passed. Not run:
+  chart-selector and agent evals (backlog).
+
 ## 2026-11-20 — Public MCP answer and citation review
 
 - Exercised bilingual discovery, numerical follow-ups and evidence replay on local generation `f20fc32a`. Recorded reproducible selection, published-cell routing, translation and citation issues in the backlog. The life-expectancy ZIP and JSON links both returned HTTP 200, so a release check needs to compare their contents with the tool's rows.
