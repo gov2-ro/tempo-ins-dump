@@ -1,5 +1,41 @@
 # Activity History
 
+## 2026-11-20 — Public MCP answer and citation review
+
+- Exercised bilingual discovery, numerical follow-ups and evidence replay on local generation `f20fc32a`. Recorded reproducible selection, published-cell routing, translation and citation issues in the backlog. The life-expectancy ZIP and JSON links both returned HTTP 200, so a release check needs to compare their contents with the tool's rows.
+- The offline direct/MCP replay passed all executed positive cases, skipped generation-pinned cases and accepted the known age-subset negative control in both languages. Tool choice was scripted.
+
+## 2026-11-20 — Public MCP review: published citations replay, discovery keeps qualifiers
+
+- **What:** two fixes from the public MCP review (backlog items 1–2), integrated on `fix/mcp-review-2026-11-20`
+  (5e760ae), tested read-only on generation `f20fc32a` and merged to `main` (b1ce84b). Not deployed. Opus wrote the
+  briefs and reviewed; one Sonnet agent per fix implemented in its own worktree.
+  1. **Published citations.** A cited published-cell answer refused itself when its links were followed: the live
+     JSON gave `missing_weights` and the evidence ZIP held a header-only `result.csv`. The dataset selection now has
+     an optional `value_source: "ins_published"` (left out when unset). `get_evidence_links` adds it to the
+     `live_selection` and `evidence` links. `/data` and `/evidence` serve the cells through one shared lookup,
+     `recipes.published_answer`, which the tool also uses. `evidence.published_bundle` writes the ZIP.
+  2. **Discovery qualifiers.** Discovery dropped rural/urban, a named locality and a currency. `intent.py` now reads
+     them, and discovery resolves each against the candidate's own data file. It applies an exact filter with a
+     `qualifier_applied` warning, offers a `find_dimension_values` lookup, or withholds the call and reports the
+     qualifier in `unapplied_constraints`. A national question uses INS's published national cell when the
+     qualifiers allow it, and never prefers regional rows.
+- **Why:** a citation must reproduce the cited value, and a suggested call must not answer a wider question than
+  the user asked.
+- **Non-obvious decisions:** the published marker is a field on the selection, not a route-wide fallback, so plain
+  `/data` keeps its documented refusal. `dataset_bundle` is unchanged, and the static engine refuses the parameter
+  with 400 because the links point at the API. A locality call also groups by the locality column, because the
+  aggregation policy refuses a filter-only pin on SIRUTA-prefixed labels. A locality needs a cue word ("municipiul",
+  "city of"). The contract change is one optional selection field plus new warning codes (`00-tool-contract.md`).
+- **Results on `f20fc32a`:** TCP0341_judete 2023 → `TOTAL,2023,Ani,75.5` in the tool, the live JSON and `result.csv`.
+  Rural resident population 2023 → 9,114,421; urban → 9,940,807; Timișoara by domicile → 308,823; Cluj-Napoca →
+  328,239 (all still `partial` with `unverified_total`). GDP per capita in euros → no numerical call, currency and
+  geography reported as unapplied.
+- **Tests (integration branch):** full suite 2609 passed, 63 skipped, 0 failed. Static parity 11 passed. Offline
+  Ask/MCP replay 132 of 132 executed cases passed; 12 skipped (X01–X08, pinned to another generation); negative
+  controls 30 detected, 10 resolved, 2 known limitations (T11 `ages_0_2_as_total`, identical on `main`), so the
+  verdict stays `blocked_by_known_limitations`. Not run: `release-check.py`, browser smoke.
+
 ## 2026-11-20 — AQ-13 INS published Total cells; AQ-09 + AQ-13 deployed (generation f20fc32a)
 
 - **What:** `published_totals` gains a `breakdown` column in its key (canonical JSON such as `{"SEX":"Feminin"}`, `''`

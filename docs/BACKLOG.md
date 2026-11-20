@@ -4,6 +4,32 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Public MCP review (2026-11-20)
+
+- [x] **Replay published-cell citations end to end.** Fixed 2026-11-20 on `fix/mcp-published-citations` (0388830).
+  The selection carries `value_source: "ins_published"`. `/data` and `/evidence` serve the same cells through
+  `recipes.published_answer`. On `f20fc32a`, `TCP0341_judete` 2023 gives `TOTAL,2023,Ani,75.5` in the live JSON and
+  in `result.csv`. Merged to `main` (b1ce84b); **not deployed.**
+- [x] **Preserve qualifiers in discovery's suggested calls.** Fixed 2026-11-20 on `fix/mcp-discovery-scope` (ad99390).
+  Discovery applies residence, a named locality and a currency as exact filters, offers a lookup, or reports them in
+  `unapplied_constraints`. A national question uses INS's published national cell, or reports "national" as
+  unapplied; it never prefers regional rows. Merged to `main` (b1ce84b); **not deployed.**
+- [ ] **Use published-cell coverage when choosing an analytical tool.** For county infant mortality in 2024 discovery marks `POP209B_judete` unqueryable while `rank_entities` returns the published ranking. For a change between two years, evaluate whether the exact same breakdown and comparable published cells exist at both endpoints.
+- [ ] **Use translated parent metadata on split discovery cards.** On an English resident-population query, the concept definition and split titles are Romanian. The parent has an English title and definition. Preserve exact filter values and localize the display text and split labels.
+- [ ] **Locality filter on POP107D without grouping.** The aggregation policy compares metadata options with the
+  SIRUTA-prefixed values of `REF_AREA_2` and refuses a filter-only pin (`slice_value_missing`). Discovery works
+  around this: its locality call also groups by `REF_AREA_2`.
+- [ ] **Exact locality matching in discovery.** Discovery matches a locality name by substring and applies the filter
+  when one value matches, even if that value has another locality type. Compare the name with the label after the
+  type prefix (MUNICIPIUL, ORAS, COMUNA) and use the type of the cue word. A locality without a cue word
+  (a bare "Timișoara") is not detected.
+- [ ] **Euro request where only a lei cell exists.** Discovery reports currency and "national" as unapplied. Say
+  "available in lei" instead.
+- [ ] **Evidence replay for published aggregates in `compare_periods`.** The `aggregates` field (INS national cells
+  beside the ranked rows) has no evidence replay of its own. Check it against the `value_source` path.
+- [ ] **`csv` link of a published citation.** It downloads the raw observations, not the published cell. The link
+  description says so; decide whether that is sufficient.
+
 ## From the insseption review (2026-11-19) — [report](reports/2026-11-19-insseption-review.md)
 
 - [x] **Lossy decoding in the metadata fetchers** (code fixed 2026-11-19: `tempo_http.decode_body`
