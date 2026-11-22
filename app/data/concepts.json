@@ -624,8 +624,8 @@
     "en": "Regional GDP per inhabitant"
    },
    "note": {
-    "ro": "produsul intern brut pe locuitor, în lei, prețuri curente, calculat conform CAEN Rev.2 și SEC 2010; județe, regiuni și macroregiuni, 2000–2022. Seria veche CAEN Rev.1 (CON103B, doar regiuni, 1993–2008) nu este comparabilă cu aceasta",
-    "en": "gross domestic product per inhabitant, in lei, current prices, calculated under NACE Rev.2 and ESA 2010; counties, regions and macroregions, 2000–2022. The older NACE Rev.1 series (CON103B, regions only, 1993–2008) is not comparable with it"
+    "ro": "produsul intern brut pe locuitor, în lei, prețuri curente, calculat conform CAEN Rev.2 și SEC 2010; județe, regiuni și macroregiuni, 2000–2023. Seria veche CAEN Rev.1 (CON103B, doar regiuni, 1993–2008) nu este comparabilă cu aceasta",
+    "en": "gross domestic product per inhabitant, in lei, current prices, calculated under NACE Rev.2 and ESA 2010; counties, regions and macroregions, 2000–2023. The older NACE Rev.1 series (CON103B, regions only, 1993–2008) is not comparable with it"
    },
    "aliases": {
     "ro": [
@@ -666,8 +666,8 @@
     "en": "Regional GDP, total"
    },
    "note": {
-    "ro": "produsul intern brut, în milioane lei, prețuri curente, calculat conform CAEN Rev.2 și SEC 2010; județe, regiuni și macroregiuni, 2000–2022. Pe ramuri de activitate: CON103J (până în 2023). Seria veche CAEN Rev.1 (CON103A, CON103C, până în 2008) nu este comparabilă",
-    "en": "gross domestic product, in million lei, current prices, calculated under NACE Rev.2 and ESA 2010; counties, regions and macroregions, 2000–2022. By branch of activity: CON103J (to 2023). The older NACE Rev.1 series (CON103A, CON103C, to 2008) is not comparable"
+    "ro": "produsul intern brut, în milioane lei, prețuri curente, calculat conform CAEN Rev.2 și SEC 2010; județe, regiuni și macroregiuni, 2000–2023. Pe ramuri de activitate: CON103J (până în 2023). Seria veche CAEN Rev.1 (CON103A, CON103C, până în 2008) nu este comparabilă",
+    "en": "gross domestic product, in million lei, current prices, calculated under NACE Rev.2 and ESA 2010; counties, regions and macroregions, 2000–2023. By branch of activity: CON103J (to 2023). The older NACE Rev.1 series (CON103A, CON103C, to 2008) is not comparable"
    },
    "aliases": {
     "ro": [
@@ -755,8 +755,8 @@
     "en": "Infant mortality rate"
    },
    "note": {
-    "ro": "decese sub 1 an la 1000 născuți vii, după reședința obișnuită, 2012–2024, pe județe, regiuni și macroregiuni. Fișierul de date are doar urban și rural, fără totalul INS și fără valoarea națională; INS le publică, iar instrumentele le returnează ca „total publicat de INS” când generația le conține. Un clasament pe medii cere fixarea mediului de reședință. Seria după domiciliu (POP209A) începe în 1990",
-    "en": "deaths under 1 year per 1,000 live births, by usual residence, 2012–2024, by county, region and macroregion. The data file has urban and rural only, without the INS total and without the national value. INS publishes them, and the tools return them as \"INS published total\" when the generation holds them. A ranking by area needs one residence area. The domicile series (POP209A) starts in 1990"
+    "ro": "decese sub 1 an la 1000 născuți vii, după reședința obișnuită, 2012–2025, pe județe, regiuni și macroregiuni. Fișierul de date are doar urban și rural, fără totalul INS și fără valoarea națională; INS le publică, iar instrumentele le returnează ca „total publicat de INS” când generația le conține. Un clasament pe medii cere fixarea mediului de reședință. Seria după domiciliu (POP209A) începe în 1990",
+    "en": "deaths under 1 year per 1,000 live births, by usual residence, 2012–2025, by county, region and macroregion. The data file has urban and rural only, without the INS total and without the national value. INS publishes them, and the tools return them as \"INS published total\" when the generation holds them. A ranking by area needs one residence area. The domicile series (POP209A) starts in 1990"
    },
    "aliases": {
     "ro": [
@@ -793,8 +793,8 @@
     "en": "Infant mortality rate, by domicile"
    },
    "note": {
-    "ro": "decese sub 1 an la 1000 născuți vii, seria mai lungă (1990–2024), pe județe, regiuni și macroregiuni; doar urban și rural în fișierul de date; totalul INS se returnează ca „total publicat de INS” când generația îl conține. Seria după reședința obișnuită (POP209B) începe în 2012",
-    "en": "deaths under 1 year per 1,000 live births, the longer series (1990–2024), by county, region and macroregion; urban and rural only in the data file; the INS total is returned as \"INS published total\" when the generation holds it. The usual-residence series (POP209B) starts in 2012"
+    "ro": "decese sub 1 an la 1000 născuți vii, seria mai lungă (1990–2025), pe județe, regiuni și macroregiuni; doar urban și rural în fișierul de date; totalul INS se returnează ca „total publicat de INS” când generația îl conține. Seria după reședința obișnuită (POP209B) începe în 2012",
+    "en": "deaths under 1 year per 1,000 live births, the longer series (1990–2025), by county, region and macroregion; urban and rural only in the data file; the INS total is returned as \"INS published total\" when the generation holds it. The usual-residence series (POP209B) starts in 2012"
    },
    "aliases": {
     "ro": [
@@ -864,8 +864,8 @@
     "en": "Enrolled pupils by education level"
    },
    "note": {
-    "ro": "elevi și studenți înscriși, pe niveluri de educație și sexe, 1990–2024, pe județe, regiuni și macroregiuni. Nivelurile se suprapun: alege unul singur. Fără suprapunere: creșe, grădinițe, învățământ primar și gimnazial, liceal („secundar ciclul 2”), profesional, postliceal și de maiștri, universitar. Totalurile „preuniversitar” și „liceal și profesional” conțin celelalte niveluri",
-    "en": "enrolled pupils and students, by education level and sex, 1990–2024, by county, region and macroregion. The levels overlap: choose exactly one. Without overlap: nurseries, kindergartens, primary and lower secondary, upper secondary general (“liceal”), vocational, post-secondary and foremen, tertiary. The totals “pre-university” and “upper secondary general and vocational” contain the other levels"
+    "ro": "elevi și studenți înscriși, pe niveluri de educație și sexe, 1990–2025, pe județe, regiuni și macroregiuni. Nivelurile se suprapun: alege unul singur. Fără suprapunere: creșe, grădinițe, învățământ primar și gimnazial, liceal („secundar ciclul 2”), profesional, postliceal și de maiștri, universitar. Totalurile „preuniversitar” și „liceal și profesional” conțin celelalte niveluri",
+    "en": "enrolled pupils and students, by education level and sex, 1990–2025, by county, region and macroregion. The levels overlap: choose exactly one. Without overlap: nurseries, kindergartens, primary and lower secondary, upper secondary general (“liceal”), vocational, post-secondary and foremen, tertiary. The totals “pre-university” and “upper secondary general and vocational” contain the other levels"
    },
    "aliases": {
     "ro": [
