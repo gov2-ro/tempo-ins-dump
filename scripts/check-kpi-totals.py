@@ -505,13 +505,16 @@ def write_dims_db(db: Path, results: dict) -> int:
     return len(rows)
 
 
-TABLE_DDL = """CREATE OR REPLACE TABLE kpi_total_checks (
+TABLE_DDL = """CREATE TABLE IF NOT EXISTS kpi_total_checks (
     matrix_code VARCHAR PRIMARY KEY, period VARCHAR, ours DOUBLE, ins DOUBLE, rel DOUBLE,
     status VARCHAR, reason VARCHAR, source_matrix VARCHAR, cell VARCHAR, checked_at TIMESTAMP)"""
 
 
 def write_db(db: Path, results: dict) -> int:
-    """Store results as kpi_total_checks in a COPY's metadata.duckdb (the app's gate reads it)."""
+    """Store results as kpi_total_checks in a COPY's metadata.duckdb (the app's gate reads it).
+
+    Only the rows of the checked codes are replaced, so a --codes-file subset keeps
+    every other dataset's check."""
     import datetime
     import duckdb
     live = (REPO / "data" / "corpus").resolve()
@@ -525,6 +528,9 @@ def write_db(db: Path, results: dict) -> int:
     con = duckdb.connect(str(db))
     try:
         con.execute(TABLE_DDL)
+        if rows:
+            con.executemany("DELETE FROM kpi_total_checks WHERE matrix_code = ?",
+                            [(r[0],) for r in rows])
         con.executemany("INSERT INTO kpi_total_checks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
     finally:
         con.close()

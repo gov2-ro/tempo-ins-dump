@@ -144,3 +144,24 @@ def test_write_db_stores_results_and_refuses_the_repo_corpus(ck, tree, tmp_path)
     con.close()
     with pytest.raises(SystemExit):
         ck.write_db(ROOT / "data" / "corpus" / "metadata.duckdb", res)
+
+
+def test_write_db_replaces_only_the_checked_codes(ck, tree, tmp_path):
+    """A --codes-file subset must not wipe the other datasets' checks (AS-01)."""
+    db = tree / "corpus" / "metadata.duckdb"
+    con = duckdb.connect(str(db))
+    con.execute(ck.TABLE_DDL)
+    con.execute("DELETE FROM kpi_total_checks")
+    con.execute("INSERT INTO kpi_total_checks VALUES ('OTHER', '2022', 1, 1, 0, 'match', NULL, NULL, NULL, NULL)")
+    con.execute("INSERT INTO kpi_total_checks VALUES ('ACC1_numar', '2020', 9, 1, 8, 'mismatch', NULL, NULL, NULL, NULL)")
+    con.close()
+    cache = tmp_path / "cache"
+    k = kpi(112.0, [SUM_CAT, TIME])
+    seed(ck, cache, ck.Resolver(tree).resolve("ACC1_numar", k),
+         "Categorii, Perioade, UM, Valoare\nTotal, Anul 2023, Numar persoane, 112\n")
+    res = ck.check(tree, {"ACC1_numar": k}, cache, 0.005, 0, offline=True)
+    assert ck.write_db(db, res) == 1
+    con = duckdb.connect(str(db), read_only=True)
+    assert con.execute("SELECT matrix_code, period, status FROM kpi_total_checks ORDER BY 1").fetchall() == [
+        ("ACC1_numar", "2023", "match"), ("OTHER", "2022", "match")]
+    con.close()
