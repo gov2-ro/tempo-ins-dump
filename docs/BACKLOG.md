@@ -10,7 +10,11 @@ see also [charting-ideas.md](charting-ideas.md)
   niveluri de vârstă suprapuse" although `15 - 74 ani` equals `15 - 24` + `25 - 74`. Fix 1: the structure
   profiler marks such a band as the verified aggregate after a data check. Fix 2: the v2 page hides the
   whole-dataset refusal card while a selection is active. Brief: `docs/plans/age-span-total/brief.md`.
-  Run after batch 2 is deployed.
+  Run after batch 2 is deployed. Revision 2 (2026-11-22): pin the spanning band by metadata, never sum.
+- [ ] **P2 — Stage 13 samples only the 3 latest periods.** `13-dimension-structure.py` (`SAMPLE_PERIODS`)
+  builds levels from the options seen in that window, so an option that ends earlier is invisible to every
+  proposer (AMG130M `15 - 24 ani` ends 2026-06 and the dimension is stored as `flat`). Affects every
+  dimension of every dataset. Found by the AS-01 run, 2026-11-22.
 
 ## Data refresh (2026-11-20, generation 9f1cf61f)
 
