@@ -371,6 +371,30 @@ def age_ranges_overlap(options) -> bool | None:
     return any(spans[i][1] >= spans[i + 1][0] for i in range(len(spans) - 1))
 
 
+def spanning_age_option(dim, eff):
+    """The (option, data value) whose age range contains every other option's.
+
+    Metadata only (AS-01): INS publishes such a band (AMG130M "15 - 74 ani"
+    next to "15 - 24 ani" and "25 - 74 ani") as its own estimate for the whole
+    range, without a "Total" label. The caller pins it like a Total option; the
+    other bands are never summed or compared to it, so the rule is safe for
+    rates. None unless the dim is an age dim, every option has a parsed
+    age_min and age_max, and exactly one option spans all the others.
+    """
+    if dim.get('dim_type') != 'age' or len(eff) < 2:
+        return None
+    spans = []
+    for o, _ in eff:
+        p = o.get('parsed') or {}
+        lo, hi = p.get('age_min'), p.get('age_max')
+        if lo is None or hi is None:
+            return None
+        spans.append((lo, hi))
+    hits = [i for i, (lo, hi) in enumerate(spans)
+            if all(lo <= a and b <= hi for a, b in spans)]
+    return eff[hits[0]] if len(hits) == 1 else None
+
+
 _SEX_VALUES = frozenset({'masculin', 'feminin', 'masculi', 'barbati', 'femei',
                          'male', 'female', 'males', 'females', 'men', 'women'})
 _RESIDENCE_VALUES = frozenset({'urban', 'rural'})
@@ -573,7 +597,8 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
                 o, dv = matched[0]
                 if col in declared_agg:
                     note(col, 'pinned_aggregate', 'curated')
-                elif _is_total_option(dim, o, dv, struct):
+                elif _is_total_option(dim, o, dv, struct) \
+                        or spanning_age_option(dim, eff) == (o, dv):
                     note(col, 'pinned_aggregate', _total_verif(dim, struct))
                 else:
                     slice_like = True
@@ -598,7 +623,8 @@ def decide(*, dimensions: list, effective: dict, group_by=(), filters=None,
 
         # ---- unfiltered, several options: needs structure ----
         total = next(((o, dv) for o, dv in eff
-                      if _is_total_option(dim, o, dv, struct)), None)
+                      if _is_total_option(dim, o, dv, struct)), None) \
+            or spanning_age_option(dim, eff)
         if total is not None:
             o, dv = total
             out_filters[col] = [dv if dv is not None else (o.get('label') or '')]
