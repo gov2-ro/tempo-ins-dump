@@ -754,7 +754,13 @@ class DashboardV2 {
         // change cards is routine (single period) and stays quiet.
         const keyLabel = { latest: this.ui.latest, yoy: this.ui.yoy, prev: this.ui.yoy, overall: this.ui.overall };
         const have = new Set((ins.kpis || []).map(k => k.key));
+        // With a selection the cards describe the whole dataset (PA-02b), so a
+        // whole-dataset refusal of the headline total would sit beside the
+        // "Selecția ta" card and contradict it: hide it. Without a selection
+        // it explains the missing headline number and stays (AS-01 Fix 2).
+        const hasSelection = Object.keys(this.expandedUserFilters()).length > 0;
         const unavail = (ins.suppressed || []).filter(x => keyLabel[x.key] && !have.has(x.key)
+            && !(x.key === 'latest' && hasSelection)
             && !(x.key !== 'latest' && x.reason === 'comparator_missing'));
         const unavailCards = unavail.map(x => `<div class="dbv2-kpi dbv2-kpi-unavail" role="note">
                 <div class="dbv2-kpi-label">${keyLabel[x.key]}</div>
