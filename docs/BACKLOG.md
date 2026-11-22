@@ -4,6 +4,14 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Age bands (2026-11-22)
+
+- [ ] **P2 — AS-01: an age band that spans the others is the total.** AMG130M shows "Total indisponibil:
+  niveluri de vârstă suprapuse" although `15 - 74 ani` equals `15 - 24` + `25 - 74`. Fix 1: the structure
+  profiler marks such a band as the verified aggregate after a data check. Fix 2: the v2 page hides the
+  whole-dataset refusal card while a selection is active. Brief: `docs/plans/age-span-total/brief.md`.
+  Run after batch 2 is deployed.
+
 ## Data refresh (2026-11-20, generation 9f1cf61f)
 
 - [ ] **P1 — Batch 2 of the refresh: 840 matrices.** A metadata sweep of all 1,943 INS matrices (2026-11-20) found
