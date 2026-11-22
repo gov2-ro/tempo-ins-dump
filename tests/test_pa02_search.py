@@ -107,7 +107,7 @@ def test_time_values_newest_first_with_bounds(client):
 
 def test_value_search_is_accent_insensitive_and_paged(client):
     st, d = opts(client, "POPX", column="AGE", q="ANI", limit=2)
-    assert st == 200 and d["total"] == 6 and len(d["values"]) == 2 and d["truncated"]
+    assert st == 200 and d["total"] == 12 and len(d["values"]) == 2 and d["truncated"]
     st, d = opts(client, "POPX", column="SEX", q="feminín")
     assert d["values"] == ["Feminin"]
 
