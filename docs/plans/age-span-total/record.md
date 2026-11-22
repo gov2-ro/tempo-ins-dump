@@ -50,7 +50,15 @@ Latest period 2026-09. There is no `Total` option in SEX (data: Feminin, Masculi
 
 See the final report: unit tests `tests/test_as01_age_span.py` (12), static parity, chart-selector A/B (no diff), offline Ask tasks, browser smoke.
 
+## Fixture (owner decision: fix the fixture)
+
+The span rule fires on the old POPX shape (single years 0-4 plus one `0-4 ani` band), which pins the band. POPX now has single years 0-9 and two bands, `0-4 ani` and `5-9 ani`, so no band spans the others and the overlapping-grain tests keep their meaning. Ages 5-9 hold zeros, so every quoted figure (110, 220) and the Ask tasks T10/T15 are unchanged; their expectations were not edited. Counts that follow the option set changed (12 AGE options, 24 raw rows, 12 option values) and the POPX entries of `tests/at01_scope_golden.json` were regenerated from base commit c5eca0d with the new fixture. `tests/test_as01_span_data.py` covers the old shape: the band is pinned (`aggregate_row`) and its own cell is returned.
+
+## INS check of the datasets the rule touches
+
+`scripts/check-kpi-totals.py write_db` now creates the table if missing and replaces only the checked codes' rows (test added). `collect` on the 87 pinned datasets keeps 15 summed latest KPIs: AMG111A/B, AMG131A/B (each with `_anual` and `_trimestrial`) and AMG130M/N/O. The other 72 have no summed latest KPI (rates need weights). `check` could not run: INS pivot requests hung (no answer within 60 s; no cell cached after two runs, about 12 minutes), so the run was stopped as agreed. The clone's `kpi_total_checks` is unchanged (it has no rows for these 15 datasets).
+
 ## Assumptions and open points
 
-- The span rule also fires on the synthetic POPX fixture (single years plus one `0-4 ani` band that equals their sum). The offline Ask tasks T10 and T15 expected a refusal there and now see a pinned `0-4 ani`.
+- The span rule also fires on the old POPX fixture shape (see above).
 - Several pinned spans are the dataset's own domain, not the whole population (SAR119C `0-64`, 15-34 youth series, 15-64 working age).
