@@ -60,7 +60,7 @@ def test_verified_level_applied_gives_the_true_total(client_struct):
 def test_axis_with_several_levels_is_restricted_to_one_grain(client_struct):
     body = q(client_struct, "POPX", ["AGE"], {"TIME_PERIOD": ["2025"]})
     ages = {r[0] for r in body["rows"]}
-    assert ages == {f"{a} ani" for a in range(5)}      # no band mixed in
+    assert ages == {f"{a} ani" for a in range(10)}     # no band mixed in
     assert body["aggregation"]["levels"] == {"AGE": "age_y1"}
 
 
@@ -75,7 +75,7 @@ def test_valid_explicit_slice_still_works(client):
 def test_raw_rows_are_untouched(client):
     body = q(client, "POPX", None, {"TIME_PERIOD": ["2025"]})
     assert body["aggregation"] is None
-    assert body["returned_rows"] == 12     # 6 AGE options x 2 sexes, raw
+    assert body["returned_rows"] == 24     # 12 AGE options x 2 sexes, raw
 
 
 # ------------------------------------------------------ totals and rates

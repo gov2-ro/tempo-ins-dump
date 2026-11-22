@@ -100,6 +100,23 @@ export function ageRangesOverlap(options) {
     return false;
 }
 
+// AS-01: the option whose age range contains every other option's (mirror of
+// aggregation_policy.spanning_age_option). Metadata only; never summed.
+export function spanningAgeOption(dim, eff) {
+    if (dim.dim_type !== 'age' || eff.length < 2) return null;
+    const spans = [];
+    for (const [o] of eff) {
+        const p = o.parsed || {};
+        if (p.age_min == null || p.age_max == null) return null;
+        spans.push([p.age_min, p.age_max]);
+    }
+    const hits = [];
+    spans.forEach(([lo, hi], i) => {
+        if (spans.every(([a, b]) => lo <= a && b <= hi)) hits.push(i);
+    });
+    return hits.length === 1 ? eff[hits[0]] : null;
+}
+
 export function optKeys(opt, dv) {
     const out = new Set();
     for (const x of [dv, opt.label, opt.sdmx_value]) if (x != null) out.add(norm(x));
@@ -351,7 +368,8 @@ export function decide({ dimensions, effective, groupBy = [], filters = {}, stru
             if (!matched.length) return unavailable('slice_value_missing', col, audit, outFilters);
             if (matched.length === 1) {
                 const [o, dv] = matched[0];
-                if (isTotalOption(dim, o, dv, struct)) {
+                if (isTotalOption(dim, o, dv, struct)
+                    || (spanningAgeOption(dim, eff) || [])[0] === o) {
                     note(col, 'pinned_aggregate', totalVerif(dim, struct));
                 } else {
                     sliceLike = true;
@@ -372,7 +390,8 @@ export function decide({ dimensions, effective, groupBy = [], filters = {}, stru
             note(col, 'explicit_set', 'user_selected');
             continue;
         }
-        const total = eff.find(([o, dv]) => isTotalOption(dim, o, dv, struct));
+        const total = eff.find(([o, dv]) => isTotalOption(dim, o, dv, struct))
+            || spanningAgeOption(dim, eff);
         if (total) {
             const [o, dv] = total;
             outFilters[col] = [dv != null ? dv : (o.label || '')];

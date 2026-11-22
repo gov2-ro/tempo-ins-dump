@@ -3,8 +3,9 @@
 Three tiny datasets with known answers; metadata tables are complete enough for
 get_dataset_meta (so the shared aggregation context is the real one):
 
-  POPX   POP107A-like. AGE has 5 single years AND one 0-4 band (overlapping
-         grains), SEX is a flat partition. Per year the true population is 100
+  POPX   POP107A-like. AGE has 10 single years AND two bands, 0-4 and 5-9
+         (overlapping grains; no single band spans the others), SEX is a flat
+         partition. Ages 5-9 hold zeros. Per year the true population is 100
          (singles) — a naive SUM over every AGE option gives 200.
   ADDX   additive counts: CATEGORY has a Total row (120 = 50 + 70 in 2023).
   RATEX  percentage rates by region, no total: an unweighted mean is not an
@@ -20,9 +21,12 @@ import duckdb
 POPX_ROWS = []
 for year, k in (("2024", 1.0), ("2025", 1.1)):
     for sex in ("Masculin", "Feminin"):
-        for a in range(5):
-            POPX_ROWS.append((f"{a} ani", sex, year, 10.0 * k))
-        POPX_ROWS.append(("0-4 ani", sex, year, 50.0 * k))   # band = sum of singles
+        for a in range(10):
+            # ages 5-9 hold zero here, so every figure the tests and the Ask
+            # tasks quote (110, 220) stays the same; each band = its singles' sum
+            POPX_ROWS.append((f"{a} ani", sex, year, (10.0 if a < 5 else 0.0) * k))
+        POPX_ROWS.append(("0-4 ani", sex, year, 50.0 * k))
+        POPX_ROWS.append(("5-9 ani", sex, year, 0.0))
 POPX_TRUE_2025 = 100.0 * 1.1
 POPX_NAIVE_2025 = 200.0 * 1.1
 
@@ -101,8 +105,9 @@ def build_corpus(tmp_path, structure: bool = False):
     spec = {
         "POPX": ("Populatia rezidenta", "count", len(POPX_ROWS), [
             ("AGE", "Grupe de varsta", "age",
-             [(f"{a} ani", dict(age_min=a, age_max=a)) for a in range(5)]
-             + [("0-4 ani", dict(age_min=0, age_max=4))]),
+             [(f"{a} ani", dict(age_min=a, age_max=a)) for a in range(10)]
+             + [("0-4 ani", dict(age_min=0, age_max=4)),
+                ("5-9 ani", dict(age_min=5, age_max=9))]),
             ("SEX", "Sexe", "gender",
              [("Masculin", dict(gender="M")), ("Feminin", dict(gender="F"))]),
             ("TIME_PERIOD", "Ani", "time",
@@ -154,9 +159,9 @@ def build_corpus(tmp_path, structure: bool = False):
         import json
         levels = [
             {"level_id": "age_y1", "name": "single years", "verified": True,
-             "members": [f"{a} ani" for a in range(5)]},
+             "members": [f"{a} ani" for a in range(10)]},
             {"level_id": "age_w5", "name": "5-year bands", "verified": True,
-             "members": ["0-4 ani"]}]
+             "members": ["0-4 ani", "5-9 ani"]}]
         db.execute("INSERT INTO dimension_structure VALUES ('POPX', 'AGE', ?, 'age_y1', "
                    "2, NULL, FALSE, NULL, NULL, 1.0, 1.0, 'verified', 'test')",
                    [json.dumps(levels)])
