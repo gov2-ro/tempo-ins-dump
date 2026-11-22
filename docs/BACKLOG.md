@@ -18,7 +18,7 @@ see also [charting-ideas.md](charting-ideas.md)
 
 ## Data refresh (2026-11-20, generation 9f1cf61f)
 
-- [ ] **P1 — Batch 2 of the refresh: 840 matrices.** A metadata sweep of all 1,943 INS matrices (2026-11-20) found
+- [x] **P1 — Batch 2 of the refresh: 840 matrices.** Done 2026-11-22, generation `5e226fc3`, deployed. A metadata sweep of all 1,943 INS matrices (2026-11-20) found
   1,127 updated since our copy (most of our CSVs date from 2025) and 24 new matrices. The INS news feed only shows
   the last month (21.10–20.11), so batch 1 took only its 327. The rest (826 updated + 14 new) is listed in
   `data/logs/batch2-codes-20261120.txt`. Run it on an APFS clone with `update-pipeline.py --matrix <list>`,

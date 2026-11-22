@@ -1,5 +1,27 @@
 # Activity History
 
+## 2026-11-22 — Data refresh, batch 2 (generation 5e226fc3, deployed)
+
+- **What:** the 840 matrices the INS feed did not list (826 updated since our copy, 14 new: FOM104I–FOM113B,
+  SAN111A–C) ran on an APFS clone in chunks of 20 (`update-pipeline.py --matrix`, a pausable driver), then a feed
+  run since the 20.11 watermark with the 3 retries and `--global-profiles`. Promoted to `data/`; previous
+  `9f1cf61f` at `data/_archive/data-9f1cf61f/`. **Deployed:** API `5e226fc3` on the VPS (owner, live 22:01), static
+  `5e226fc3b3b0-9681307bc02a` (DreamHost). Live smoke: 10 pages incl. 3 new datasets and Ask, clean.
+- **Results:** 3,333 served datasets (from 3,301); every one now has a matrix and view profile (ART124A fixed by
+  its refresh). Full suite 2,598 passed, 5 failed on concept notes naming old periods (updated, e177cdc). Strict
+  `release-check --local` and the static gate (parity 1,017/1,017) passed.
+- **Metadata DB compacted:** thousands of small rewrites had grown `metadata.duckdb` to 2.7 GB. Rebuilt with
+  `COPY FROM DATABASE … (SCHEMA)` plus inserts in FK order (contexts, matrices, dimensions, options, rest):
+  120 MB, all 20 tables equal by row count and content hash, same constraints, indexes and sequence values.
+  The staged release went from 1.5 GB to 457 MB. A plain `COPY FROM DATABASE` fails (alphabetical table order
+  breaks the FK from `dimensions` to `matrices`).
+- **INS instability:** connection timeouts and drops at INS (and one local DNS loss) failed 13 matrices and
+  aborted 3 chunks at the data probe; all were retried and passed. The first driver counted the aborted chunks'
+  codes as done; fixed (a chunk without "=== Processing" counts nothing and backs off 10 min).
+- **Manual cleanup on the copy:** 4 retired children (`LMV101E/LMV102E` `_regiuni`/`_macroregiuni`, now split by
+  periodicity too): rows in `dimension_structure` 12, `matrix_profiles` 4, `kpi_total_checks` 2, view profiles,
+  index entries.
+
 ## 2026-11-20 — Data refresh, batch 1 (generation 9f1cf61f, deployed)
 
 - **What:** the INS news feed (21.10–20.11, 327 matrices, 10 of them new at INS) ran through `update-pipeline.py`
