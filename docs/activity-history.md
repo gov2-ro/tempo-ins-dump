@@ -1,5 +1,26 @@
 # Activity History
 
+## 2026-11-24 — AS-01: a spanning age band is pinned as the total (deployed)
+
+- **What:** `aggregation_policy.spanning_age_option` (mirrored in `static/js/engine/policy.js`): on an age dimension
+  where every option has parsed ages, the one band that contains every other band is pinned like a "Total" option
+  (`aggregate_row`); the other bands are never summed, so it is safe for rates. A "Total" label or
+  `dimension_structure.aggregate_value` still wins; an explicit multi-band selection keeps `overlapping_levels`.
+  The rule pins a band in 87 datasets (AMG labour series, 15–64/15–34/0–64 series). Fix 2: the v2 page hides the
+  whole-dataset "Ultima valoare" refusal while a selection is active. POPX fixture now has two bands (0-4, 5-9) so
+  the overlapping-grain refusal stays tested. `check-kpi-totals.py --write-db` now replaces only the checked codes'
+  rows (it used to `CREATE OR REPLACE` the whole table). Merged 2ef14d8; full suite 2,617 passed.
+- **Why:** AMG130M showed "Total indisponibil: niveluri de vârstă suprapuse" next to a valid selection. The first
+  design (prove the parts sum to the span) failed on the data: `15 - 24 ani` is a quarterly estimate and the parts
+  miss the span by up to 12.4%; INS's span is its own estimate, so it is pinned, not derived.
+- **Deployed** (code only, generation `5e226fc3` unchanged): API release `20261124-235039-5e226fc3` (owner), static
+  `5e226fc3b3b0-2ef14d87884b`. Live: AMG130M with the 15–74 filter shows no refusal card; unfiltered it says
+  "totalul nu a fost verificat cu INS".
+- **Pending:** the 15 AMG datasets whose total sums SEX (no Total sex option in the download) need an INS check
+  (`check-kpi-totals.py`). INS's data endpoint has not answered since 2026-11-22 ~23:20 (metadata still answers);
+  a watcher in `~/devbox/gov2/tempo-gen-as01/` runs the check into that clone when it does. Built by a Sonnet agent
+  from the brief (revision 2), reviewed by Opus; record `docs/plans/age-span-total/record.md`.
+
 ## 2026-11-22 — Data refresh, batch 2 (generation 5e226fc3, deployed)
 
 - **What:** the 840 matrices the INS feed did not list (826 updated since our copy, 14 new: FOM104I–FOM113B,

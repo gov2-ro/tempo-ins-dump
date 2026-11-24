@@ -6,11 +6,19 @@ see also [charting-ideas.md](charting-ideas.md)
 
 ## Age bands (2026-11-22)
 
-- [ ] **P2 — AS-01: an age band that spans the others is the total.** AMG130M shows "Total indisponibil:
+- [x] **P2 — AS-01: an age band that spans the others is the total.** Deployed 2026-11-24 (2ef14d8). AMG130M shows "Total indisponibil:
   niveluri de vârstă suprapuse" although `15 - 74 ani` equals `15 - 24` + `25 - 74`. Fix 1: the structure
   profiler marks such a band as the verified aggregate after a data check. Fix 2: the v2 page hides the
   whole-dataset refusal card while a selection is active. Brief: `docs/plans/age-span-total/brief.md`.
   Run after batch 2 is deployed. Revision 2 (2026-11-22): pin the spanning band by metadata, never sum.
+- [ ] **P1 — INS check for the 15 AS-01 datasets that sum SEX.** AMG111A/B, AMG131A/B (+ `_anual`,
+  `_trimestrial`), AMG130M/N/O: `latest` stays withheld (`source_total_unchecked`) until `check-kpi-totals.py check`
+  records a match. Inputs and a watcher are in `~/devbox/gov2/tempo-gen-as01/` (`watch-ins-check.sh`, writes to that
+  clone only); then manifest, gates, promote, deploy. INS's data endpoint has been silent since 2026-11-22 ~23:20:
+  check in a browser whether TEMPO Online works (outage) or only our scripted requests fail (throttling/block).
+- [ ] **P2 — An explicit set of age bands sums silently incomplete** when one band has no data in the latest periods
+  (AMG130M `15 - 24 ani` + `25 - 74 ani` = 385,079 for 2026-09; `15 - 24 ani` ends 2026-06). Refuse or disclose a
+  missing member. Found by AS-01.
 - [ ] **P2 — Stage 13 samples only the 3 latest periods.** `13-dimension-structure.py` (`SAMPLE_PERIODS`)
   builds levels from the options seen in that window, so an option that ends earlier is invisible to every
   proposer (AMG130M `15 - 24 ani` ends 2026-06 and the dimension is stored as `flat`). Affects every
