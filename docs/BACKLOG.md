@@ -11,7 +11,7 @@ see also [charting-ideas.md](charting-ideas.md)
   profiler marks such a band as the verified aggregate after a data check. Fix 2: the v2 page hides the
   whole-dataset refusal card while a selection is active. Brief: `docs/plans/age-span-total/brief.md`.
   Run after batch 2 is deployed. Revision 2 (2026-11-22): pin the spanning band by metadata, never sum.
-- [ ] **P1 — INS check for the 15 AS-01 datasets that sum SEX.** AMG111A/B, AMG131A/B (+ `_anual`,
+- [x] **P1 — INS check for the 15 AS-01 datasets that sum SEX.** Done 2026-11-25: all 15 match INS; generation `9c3e8eaa` deployed. AMG111A/B, AMG131A/B (+ `_anual`,
   `_trimestrial`), AMG130M/N/O: `latest` stays withheld (`source_total_unchecked`) until `check-kpi-totals.py check`
   records a match. Inputs and a watcher are in `~/devbox/gov2/tempo-gen-as01/` (`watch-ins-check.sh`, writes to that
   clone only); then manifest, gates, promote, deploy. INS's data endpoint has been silent since 2026-11-22 ~23:20:

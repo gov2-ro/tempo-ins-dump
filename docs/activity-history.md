@@ -1,5 +1,23 @@
 # Activity History
 
+## 2026-11-25 — Insights fetch with the decision's filters; AMG headlines verified by INS (generation 9c3e8eaa)
+
+- **Bug (introduced by AS-01, never shown live):** insights fetched the headline and ranking with the composer's
+  filters. The composer pins "Total"-labelled options itself, but the spanning age band is pinned only by
+  `decide()`, so the headline summed every band (AMG130M 900,843 instead of 515,764). The source-total gate
+  withheld it; the INS check exposed it (all 15 mismatched by 75–412%). Fix `ca54028`: insights use
+  `decision.effective_filters`, as composer tiles and `data_query` already did; test reproduces 61 vs 31.
+  No ranking sentence changed in any of the 87 affected datasets.
+- **INS check:** with the fix, all 15 AMG datasets that sum SEX under the age pin match INS exactly (AMG131A_anual
+  differs by 1 in 500,271). The rows from the buggy run were deleted first; the policy refuses a dimension INS
+  contradicts, so stale mismatch rows would have blocked the re-collect.
+- **INS outage:** `POST /tempo-ins/pivot` did not answer from about 2026-11-22 23:20 until early 2026-11-25 while
+  `/tempo-ins/matrix/…` answered; the watcher ran the check at 03:42 when it came back.
+- **Deployed:** generation `9c3e8eaa` (only `kpi_total_checks` differs from `5e226fc3`, +15 rows; previous DB at
+  `data/_archive/data-5e226fc3/`). API `20261125-144402-9c3e8eaa` (owner), static `9c3e8eaae549-ca5402883105`
+  (parity 1,017/1,017). Live: AMG130M "Ultima valoare 515.764" (RO, EN, with and without the AGE filter), source
+  check INS diff 0.
+
 ## 2026-11-24 — AS-01: a spanning age band is pinned as the total (deployed)
 
 - **What:** `aggregation_policy.spanning_age_option` (mirrored in `static/js/engine/policy.js`): on an age dimension
