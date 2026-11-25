@@ -12,7 +12,9 @@ def main():
 
     os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
 
-    with open(output_csv_path, mode='w', newline='', encoding='utf-8') as csv_file:
+    # Temp + rename: a hard-linked copy of the tree (cp -al, HZ-5) keeps the old inode.
+    tmp_csv_path = output_csv_path + '.tmp'
+    with open(tmp_csv_path, mode='w', newline='', encoding='utf-8') as csv_file:
         fieldnames = ['filename', 'context-code', 'matrixName', 'ultimaActualizare']
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         writer.writeheader()
@@ -48,6 +50,7 @@ def main():
                     'ultimaActualizare': ultima_actualizare
                 })
 
+    os.replace(tmp_csv_path, output_csv_path)
     print(f'CSV file has been created at {output_csv_path}')
 
 
