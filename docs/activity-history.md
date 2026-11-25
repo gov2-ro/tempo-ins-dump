@@ -5,6 +5,31 @@
 
 
 
+## 2026-11-26 — DP-01 dataset page v2 (index notes, pills, table filters); Ask key warning; MCP type filter
+
+- **Trigger:** on `CLV104A_litri_alcool_pur_100` the Index view showed 121.1 as if it were litres (it is
+  9.2 / 7.6 × 100), and the KPI said "INS nu publică un total" although "Consum total de alcool" is INS's total.
+- **DP-01 parts 2–4** (Sonnet, brief `docs/plans/dataset-page-v2-fixes/brief.md`, reviewed by Opus):
+  - Index and Δ% show a note under the chart that names the base period ("Indice: 1990 = 100") or the time grain.
+  - The y-axis and tooltip carry "indice, 1990 = 100" or "%".
+  - A single series is named by its option, not by the dataset title.
+  - The base stays the first period in the data when the user zooms (owner decision, option A).
+  - A dimension with 2–6 options shows pills instead of a dropdown.
+  - The table has a multi-select per column, a period range and "N din M rânduri".
+  - `chart-factory.js` changes apply only when the new config is passed, so v1 is unaffected.
+- **DP-01 part 1, the scan only:** total detection matches only a label that starts with "Total". The KPI then
+  summed 2.0 + 8.7 = 10.7, and the INS-check gate correctly withheld it. A read-only scan found 410 options with
+  "total" inside the label. 48 of them dominate their siblings; about 14 are plausible totals
+  (`docs/plans/dataset-page-v2-fixes/scan.md`). Step 2 (the rule) waits for Opus's review and a data refresh.
+  Suggested guards: skip `UNIT_MEASURE` columns and labels that start with "Din total".
+- **Ask:** on an own-key-only server, an amber RO/EN warning with an "Open settings" link appears, and the input
+  stays disabled until a key is saved. When Ask is off, the key gear is hidden.
+- **MCP connect page:** `ba62ece` had replaced the interface-type pills with service pills without the owner
+  asking. Both rows are back and combine. "Chat apps" is now split into Web (online) and Desktop apps, and a
+  client may have several types (Claude: web + desktop; Claude Code: CLI + IDE). Old `?cat=chat` links open Web.
+- **Decided against:** stacked bars for this dataset, because "Consum total" already includes the spirits row.
+- **Backlog:** share one number (P3), choose the index base year (P4).
+
 ## 2026-11-25 — Place children (UATs, counties, regions); static release 3bf9ac5
 
 - **What** (Sonnet, merged by Opus as `3bf9ac5`): a county page lists its UATs (municipii, orașe, comune; the 7 listed
