@@ -48,6 +48,8 @@ def meta_conn():
 @pytest.fixture
 def env(tmp_path, monkeypatch, meta_conn):
     grain_guard._cache.clear()           # keyed by file stem: one test's verdict must not reach the next
+    # no generation manifest: the slice is checked at query time, not certified by the live corpus's audit
+    monkeypatch.setattr(grain_guard.generation, "current", lambda: grain_guard.generation._empty("missing"))
     monkeypatch.setattr(ps, "PARQUET_DIR", tmp_path)
     monkeypatch.setattr(places_router, "get_conn", lambda: meta_conn)
 
