@@ -130,6 +130,20 @@ agents finish.
   `dataset-v2.html?code=X_judet` links should go to the `_localitate` sibling (static: `.htaccess` or the
   page's missing-dataset path).
 
+## NEXT — Public API launch and UI notes — 2026-11-25
+
+- [ ] **P1 — HZ-6: Cloudflare rules for `api-ins`** (owner, dashboard): per-IP rate limit (429), Browser
+  Integrity Check off for the API host, Bot Fight Mode off. Steps and checks:
+  [hosting-hetzner.md § HZ-6](plans/hosting-hetzner.md). `/api.html` already promises the 429 behaviour.
+- [ ] **P1 — Deploy the API page and UI notes** to the static site and the VPS: `/api.html`, API link in every
+  top bar and in the home footer, gov2.ro links, search loader, `llms.txt` base URL (it said
+  `https://ins.gov2.ro`, where `/api` is a 404).
+- [ ] **P2 — CP: profile pages for the large cities (≥ 200,000 inhabitants)** — brief
+  [city-pages.md](plans/city-pages.md) (Sonnet). "Locuri" lists only counties and regions today; the
+  `locality` route exists but has no KPIs and is not listed.
+- [ ] **P1 — NAV: one top bar for every page** — brief [nav-bar.md](plans/nav-bar.md) (Sonnet). Seven pages
+  copy the top bar by hand and have drifted. Needed before selected user testing.
+
 ## NEXT — HZ-3 on the Hetzner VPS — 2026-11-17
 
 `api-ins.gov2.ro` (API, Ask, `/mcp`) runs on the VPS since 2026-11-16 23:50 UTC (HZ-2 and the HZ-4
@@ -139,7 +153,7 @@ DNS cutover done; [journal](plans/hosting-hetzner-journal.md)).
   `api.env` settings, cgroup `memory.peak` over the week, final `MemoryMax=` (peak plus at least 50%),
   and the 10 live questions of 2026-11-15 against `https://api-ins.gov2.ro/mcp`. Explain the latency
   gap: new `discover_indicators` queries take 0.6-3.8 s on the VPS, 47 ms median on the Mac.
-- [ ] **P1 — Observation week, then promote the MCP** (until about 2026-11-24): memory, restarts
+- [x] **P1 — Observation week, then promote the MCP** (closed 2026-11-25 by the owner; next: selected user testing; promoted on `/api.html`) (until about 2026-11-24): memory, restarts
   (`systemctl status tempo-api`) and `MCP_METRICS` in `journalctl -u tempo-api`.
 - [ ] **P2 — Retire the Fly app `tempo-ins-explorer`** after the observation week. It still runs
   (`min_machines_running = 1`, two 1 GB volumes) but gets no traffic since the cutover. Before that:

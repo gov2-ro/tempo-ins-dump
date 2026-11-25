@@ -4,7 +4,9 @@
 
 ## Base URL
 
-https://ins.gov2.ro 
+https://api-ins.gov2.ro (free, no key, read-only; a per-IP rate limit answers 429: wait and retry).
+Human documentation: https://ins.gov2.ro/api.html. Interactive reference: https://api-ins.gov2.ro/docs.
+The website https://ins.gov2.ro is static and has no /api routes.
 
 ## Concepts
 
@@ -171,8 +173,8 @@ GET /sdmx/2.1/data/INS,ACC102B?startPeriod=2023&endPeriod=2023
 
 ## Public MCP (optional)
 
-- Endpoint: `/mcp` on the app's API origin. Streamable HTTP. Read-only.
-- Disabled by default. A 404 means the endpoint is off.
+- Endpoint: `https://api-ins.gov2.ro/mcp` (`/mcp` on the API origin). Streamable HTTP. Read-only, no key.
+- Disabled by default in a self-hosted copy. A 404 means the endpoint is off.
 - It never calls a model. It never runs SQL or code.
 - Tools:
   - `discover_indicators`: find indicators for a question. Concept first.

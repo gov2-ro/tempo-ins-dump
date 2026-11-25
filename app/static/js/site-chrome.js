@@ -15,6 +15,7 @@ const CHROME_UI = {
         searchEmpty: 'Tastează pentru a căuta în toate seturile de date',
         searchNoResults: 'Niciun rezultat',
         searchError: 'Eroare la căutare',
+        searchLoading: 'Se încarcă rezultatele, poate dura câteva secunde…',
         sidebarTitle: 'Navighează',
         sidebarFilter: 'Filtrează seturile...',
     },
@@ -24,6 +25,7 @@ const CHROME_UI = {
         searchEmpty: 'Type to search across all datasets',
         searchNoResults: 'No results',
         searchError: 'Search error',
+        searchLoading: 'Loading results, this can take a few seconds…',
         sidebarTitle: 'Navigate',
         sidebarFilter: 'Filter datasets...',
     },
@@ -143,6 +145,10 @@ class SiteChrome {
             return;
         }
         const seq = this._searchSeq = (this._searchSeq || 0) + 1;
+        const slow = setTimeout(() => {          // the first search can take seconds (index load)
+            if (seq === this._searchSeq) results.innerHTML =
+                `<div class="search-empty search-loading"><span class="search-spinner"></span>${this.ui.searchLoading}</div>`;
+        }, 300);
         try {
             const resp = await API.search(query, { limit: 10, lang: this.lang });
             if (seq !== this._searchSeq) return;         // a newer keystroke owns the list
@@ -153,6 +159,8 @@ class SiteChrome {
             }
         } catch (_) {
             if (seq === this._searchSeq) results.innerHTML = `<div class="search-empty">${this.ui.searchError}</div>`;
+        } finally {
+            clearTimeout(slow);
         }
     }
 

@@ -95,3 +95,41 @@ Point `api-ins.gov2.ro` at the tunnel in Cloudflare. Probe `/mcp` with a non-bro
 check that Browser Integrity Check (error 1010) does not block MCP clients; add a rule for `/mcp`
 if it does. Watch memory, restarts and `MCP_METRICS` for one week before promoting the MCP.
 Rollback: point DNS back to Fly.
+
+## HZ-6 — Cloudflare rules for the public API launch (owner, dashboard)
+
+Written by Opus on 2026-11-25. The API page (`/api.html`) promotes `api-ins.gov2.ro` to anyone.
+Cloudflare does not cache the API (`cf-cache-status: DYNAMIC`), so every request reaches the VPS
+(2 vCPU). The REST API has no rate limit of its own; `/mcp` has its own per-worker gate. The page
+promises "a per-IP limit; a `429` means wait and retry", so these rules make that true.
+
+All rules go in the `gov2.ro` zone and match only `http.host eq "api-ins.gov2.ro"`.
+
+1. **Rate limiting rule** (Security → WAF → Rate limiting rules). The Free plan allows one rule,
+   a 10-second period and a 10-second block.
+   - Name: `api-ins per-IP limit`.
+   - Expression: `(http.host eq "api-ins.gov2.ro")`.
+   - Characteristic: IP. Limit: 60 requests per 10 seconds. Action: Block for 10 seconds.
+     Cloudflare answers `429`.
+   - On a paid plan, add a second, stricter rule: 10 requests per minute for
+     `/api/datasets/*/download` and `/api/ask*`, because those are the expensive routes.
+2. **Configuration rule** (Rules → Configuration rules) for the same expression: Browser Integrity
+   Check **off**, Security Level **essentially off**. API clients send plain User-Agents; the 2026-10
+   Fly setup returned error 1010 to `python-urllib`. Today `Python-urllib` and `python-requests`
+   both get 200, so this rule only keeps it that way.
+3. **Check zone-wide settings:** Bot Fight Mode must stay **off** (it challenges `curl`, Python and
+   MCP clients, and the Free plan cannot scope it to one host). Do not turn on "Under Attack" for the
+   zone without a skip rule for `api-ins`.
+4. **No cache rule.** Responses depend on the served generation. Keep them DYNAMIC.
+
+Verify from the Mac after you save:
+
+```bash
+for i in $(seq 1 80); do curl -s -o /dev/null -w "%{http_code}\n" https://api-ins.gov2.ro/api/health; done | sort | uniq -c
+# expect mostly 200, then some 429; after 10 s, 200 again
+curl -s -o /dev/null -w "%{http_code}\n" -A "Python-urllib/3.12" https://api-ins.gov2.ro/api/datasets?limit=1   # 200
+python scripts/mcp_probe.py https://api-ins.gov2.ro/mcp   # check its --help for the exact flags first
+```
+
+The app keys nothing on the client IP for REST, so no app change is needed. Record the rule values
+in `hz-3-record.md` once applied.

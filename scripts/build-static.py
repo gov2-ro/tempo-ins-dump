@@ -314,6 +314,9 @@ LLMS_STATIC = """# INS+ (static edition)
 > static files. The pages compute in the browser with the same rules as the INS+
 > API; there is no server API on this host.
 
+The live API (REST, SDMX 2.1, MCP) is https://api-ins.gov2.ro; its own guide is
+https://api-ins.gov2.ro/llms.txt and the human documentation is /api.html.
+
 ## Data files (per generation; see /build.json)
 
 - /build.json: generation id, commit, limits, the list of partitioned datasets.

@@ -38,6 +38,7 @@ const UI = {
         searchEmpty: 'Tastează pentru a căuta în toate seturile de date',
         searchNoResults: 'Niciun rezultat',
         searchError: 'Eroare la căutare',
+        searchLoading: 'Se încarcă rezultatele, poate dura câteva secunde…',
         noDatasets: 'Niciun set de date în această categorie',
         backExplore: '← Explorare',
         backCategories: '← Categorii',
@@ -92,9 +93,11 @@ const UI = {
         aboutTitle: 'Despre INS+',
         aboutContent: `
    
-            <p><b>INS+</b> (n-am găsit încă altă rimă) este un explorator de date statistice oficiale ale României, construit pe baza datelor publice disponibile prin <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank" rel="noopener">INS TEMPO Online</a> — platforma Institutului Național de Statistică.</p>
+            <p><b>INS+</b> (n-am găsit încă altă rimă) este un explorator de date statistice oficiale ale României, construit pe baza datelor publice disponibile prin <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank" rel="noopener">INS TEMPO Online</a> — platforma Institutului Național de Statistică. Este un proiect <a href="https://gov2.ro/" target="_blank" rel="noopener">gov2.ro</a>.</p>
             <p><b>Disclaimer</b>: proiectul este la nivelul alfa / prototip, încă n-a trecut printr-un control riguros al calității datelor. Cu alte cuvinte, mai avem câte una alta de făcut până la lansare.</p>
             <p>Aplauze, sugestii sau dojene: <a href="mailto:cancelarie@gov2.ro">cancelarie@gov2.ro</a> sau, și mai bine: github &rarr; <a href="https://github.com/gov2-ro/tempo-ins-dump/issues/new" target="_blank" rel="noopener">gov2-ro/tempo-ins-dump</a>.</p>
+            <h3>API și MCP</h3>
+            <p>Datele sunt disponibile și din cod, gratuit și fără cheie: REST (JSON), SDMX 2.1 și MCP. Documentația: <a href="/api.html">API și MCP</a>.</p>
             <h3>Folosește datele în asistentul tău AI (MCP)</h3>
             <p>INS+ are un server MCP public, doar pentru citire, fără cheie: <code>https://api-ins.gov2.ro/mcp</code>. Adaugă-l ca <i>conector personalizat</i> în orice aplicație care acceptă servere MCP la distanță (Streamable HTTP):</p>
             <ul>
@@ -138,6 +141,7 @@ const UI = {
         searchEmpty: 'Type to search across all datasets',
         searchNoResults: 'No results',
         searchError: 'Search error',
+        searchLoading: 'Loading results, this can take a few seconds…',
         noDatasets: 'No datasets in this category',
         backExplore: '← Explore',
         backCategories: '← Categories',
@@ -192,10 +196,12 @@ const UI = {
         aboutTitle: 'About INS+',
         aboutContent: `
             <h2>About INS+</h2>
-            <p>INS+ is an explorer for Romania's official statistical data, built on public data from <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank" rel="noopener">INS TEMPO Online</a> — the platform of Romania's National Institute of Statistics.</p>
+            <p>INS+ is an explorer for Romania's official statistical data, built on public data from <a href="http://statistici.insse.ro:8077/tempo-online/" target="_blank" rel="noopener">INS TEMPO Online</a> — the platform of Romania's National Institute of Statistics. It is a <a href="https://gov2.ro/" target="_blank" rel="noopener">gov2.ro</a> project.</p>
             <p><b>Disclaimer</b>: this is work in progress, the features and data have not undergone a proper quality check yet.</p>
 
          <p>Contact: <a href="mailto:cancelarie@gov2.ro">cancelarie@gov2.ro</a> or <a href="https://github.com/gov2-ro/tempo-ins-dump/" target="_blank" rel="noopener">github.com/gov2-ro/tempo-ins-dump</a>.</p>
+            <h3>API and MCP</h3>
+            <p>The data is also available to code, free and with no key: REST (JSON), SDMX 2.1 and MCP. Documentation: <a href="/api.html">API and MCP</a>.</p>
             <h3>Use the data in your AI assistant (MCP)</h3>
             <p>INS+ has a public, read-only MCP server that needs no key: <code>https://api-ins.gov2.ro/mcp</code>. Add it as a <i>custom connector</i> in any app that supports remote MCP servers (Streamable HTTP):</p>
             <ul>
@@ -3558,6 +3564,10 @@ class LensApp {
         }
 
         const seq = this._searchSeq = (this._searchSeq || 0) + 1;
+        const slow = setTimeout(() => {          // the first search can take seconds (index load)
+            if (seq === this._searchSeq) results.innerHTML =
+                `<div class="search-empty search-loading"><span class="search-spinner"></span>${this.ui.searchLoading}</div>`;
+        }, 300);
         try {
             const resp = await API.search(query, { limit: 10, lang: this.lang });
             if (seq !== this._searchSeq) return;         // a newer keystroke owns the list
@@ -3568,6 +3578,8 @@ class LensApp {
             }
         } catch (_) {
             if (seq === this._searchSeq) results.innerHTML = `<div class="search-empty">${this.ui.searchError}</div>`;
+        } finally {
+            clearTimeout(slow);
         }
     }
 

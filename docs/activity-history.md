@@ -1,5 +1,18 @@
 # Activity History
 
+
+## 2026-11-25 — API and MCP page, UI notes
+
+- New bilingual page `/api.html`: REST, MCP and SDMX quick start, route table, how to read a data
+  response (truncated, unavailable, generation), limits and citation. It links to the live Swagger
+  (`api-ins.gov2.ro/docs`), `/openapi.json` and `/llms.txt`, which existed but were not linked anywhere.
+- "API" link in every page's top bar and in the home footer; gov2.ro links in the footer and About.
+- `llms.txt` named `https://ins.gov2.ro` as the base URL; that host is static and 404s `/api`. Now
+  `https://api-ins.gov2.ro`. The static `llms.txt` points to the API too.
+- Search overlay (home and standalone pages): after 300 ms without results, a spinner and "this can
+  take a few seconds". The first search on the static site loads the index.
+- Briefs: Cloudflare rules for the launch (HZ-6, owner) and city pages (CP, Sonnet).
+
 ## 2026-11-25 — Insights fetch with the decision's filters; AMG headlines verified by INS (generation 9c3e8eaa)
 
 - **Bug (introduced by AS-01, never shown live):** insights fetched the headline and ranking with the composer's
