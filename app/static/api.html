@@ -34,11 +34,12 @@
         .doc th { color: var(--text-0); font-weight: 600; }
         .doc td code { white-space: nowrap; }
         .table-wrap { overflow-x: auto; }
-        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .7rem; margin: 1rem 0 .5rem; }
-        .card { display: block; padding: .9rem 1rem; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; text-decoration: none; transition: border-color .15s; }
-        .card:hover { border-color: var(--accent); }
-        .card b { display: block; color: var(--text-0); font-size: .95rem; margin-bottom: .2rem; }
-        .card span { color: var(--text-1); font-size: .84rem; }
+        .cards { display: flex; flex-direction: column; margin: 1rem 0 .8rem; border-top: 1px solid var(--border); }
+        .card { display: grid; grid-template-columns: 17rem 1fr; align-items: baseline; gap: .2rem 1rem; padding: .6rem .2rem; border-bottom: 1px solid var(--border); text-decoration: none; }
+        @media (max-width: 640px) { .card { grid-template-columns: 1fr; } }
+        .card:hover b { color: var(--accent); }
+        .card b { color: var(--text-0); font-size: .95rem; }
+        .card span { color: var(--text-1); font-size: .86rem; }
         .toc { font-size: .86rem; color: var(--text-2); margin: .6rem 0 0; }
         .toc a { margin-right: .9rem; }
         .note { border-left: 3px solid var(--accent); padding: .3rem .9rem; margin: 1rem 0; background: var(--accent-dim); border-radius: 0 6px 6px 0; }
@@ -61,6 +62,7 @@
         <a class="card" href="#ro-mcp"><b>Server MCP</b><span>Pentru Claude, ChatGPT și alți asistenți AI.</span></a>
         <a class="card" href="#ro-sdmx"><b>SDMX 2.1</b><span>Standardul statisticii oficiale (XML).</span></a>
         <a class="card" href="https://api-ins.gov2.ro/docs" target="_blank" rel="noopener"><b>Referință interactivă ↗</b><span>Toate rutele, cu parametri, în Swagger UI.</span></a>
+        <a class="card" href="/mcp-connect.html"><b>Instrucțiuni pentru fiecare client</b><span>Conectarea la MCP din Gemini, Grok, Cursor, VS Code, Codex, OpenCode și altele.</span></a>
     </div>
 
     <p>Adresa de bază: <code>https://api-ins.gov2.ro</code> · Specificația OpenAPI: <a href="https://api-ins.gov2.ro/openapi.json">/openapi.json</a> · Ghid pentru LLM-uri: <a href="https://api-ins.gov2.ro/llms.txt">/llms.txt</a></p>
@@ -141,6 +143,7 @@ GET /sdmx/2.1/dataflow/INS/{cod}/1.0</code></pre>
         <a class="card" href="#en-mcp"><b>MCP server</b><span>For Claude, ChatGPT and other AI assistants.</span></a>
         <a class="card" href="#en-sdmx"><b>SDMX 2.1</b><span>The official-statistics standard (XML).</span></a>
         <a class="card" href="https://api-ins.gov2.ro/docs" target="_blank" rel="noopener"><b>Interactive reference ↗</b><span>Every route with its parameters, in Swagger UI.</span></a>
+        <a class="card" href="/mcp-connect.html"><b>Setup for each client</b><span>Connect the MCP from Gemini, Grok, Cursor, VS Code, Codex, OpenCode and more.</span></a>
     </div>
 
     <p>Base URL: <code>https://api-ins.gov2.ro</code> · OpenAPI spec: <a href="https://api-ins.gov2.ro/openapi.json">/openapi.json</a> · Guide for LLMs: <a href="https://api-ins.gov2.ro/llms.txt">/llms.txt</a></p>

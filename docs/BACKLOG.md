@@ -146,6 +146,15 @@ agents finish.
   establishments" declaration. [ ] **P3 — Resident population for cities.** TEMPO has no resident population
   at UAT level; the list uses the RPL 2021 census (core-assets) and the card shows domicile population. On a
   domicile basis Oradea and Ploiești would also pass 200,000.
+- [ ] **P2 — MCP answers link to an interactive dashboard on ins.gov2.ro** (owner, 2026-11-25). Each
+  `query_data`, `rank_entities`, `compare_periods` and `run_recipe` result should carry one link that opens the
+  same selection as an interactive page on `https://ins.gov2.ro` (filters, period, level and chart), so a user
+  can move from the assistant's answer to an explorable view. Today results have `get_evidence_links` (dataset,
+  CSV, evidence) and the AQ-08 `data.chart` hint, whose link carries filters, period and levels only: dataset-v2
+  has no stable preset for a bar ranking or a change ranking, and nothing shows a cross-dataset recipe. Design
+  first (Opus): a URL contract for the preset (it must work on the static site, with no server), which views
+  exist (dataset slice, ranking, change, recipe), and the contract field (`tempo-tools/2` is additive-only).
+  Use `TEMPO_PUBLIC_SITE_URL` for the origin.
 - [x] **P1 — NAV: one top bar for every page** (done 2026-11-25, merged on main, not deployed; at 375 px the bar wraps to two rows) — brief [nav-bar.md](plans/nav-bar.md) (Sonnet). Seven pages
   copy the top bar by hand and have drifted. Needed before selected user testing.
 
