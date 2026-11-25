@@ -25,6 +25,9 @@ if (missing.length || extra.length) {
     process.exit(1);
 }
 
+const untagged = M.CLIENTS.filter((c) => c.svc === '?').map((c) => c.id);
+if (untagged.length) { console.error(`No service in SVC_OF (js/mcp-connect.js) for: ${untagged.join(', ')}`); process.exit(1); }
+
 M.setState(M.DEFAULTS);
 const parts = {
     warns: M.warningsHtml(),

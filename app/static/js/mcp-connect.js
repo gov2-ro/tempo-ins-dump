@@ -9,7 +9,7 @@
     'use strict';
     var DEFAULT_URL = 'https://api-ins.gov2.ro/mcp';
     var DEFAULT_NAME = 'ins-tempo';
-    var DEFAULTS = { url: DEFAULT_URL, name: DEFAULT_NAME, t: 'http', auth: 'none', hdr: 'X-API-Key', env: 'MCP_TOKEN', cat: 'all' };
+    var DEFAULTS = { url: DEFAULT_URL, name: DEFAULT_NAME, t: 'http', auth: 'none', hdr: 'X-API-Key', env: 'MCP_TOKEN', svc: 'all' };
     var S = Object.assign({}, DEFAULTS);
 
     // ---------- helpers ----------
@@ -43,17 +43,8 @@
     };
 
     // ---------- clients ----------
-    // Each: id, cat, name, where, docs, cloud (connects from vendor cloud), tested, sse:false when unsupported,
-    // build() -> { steps:[], snips:[{lbl, code}], notes:[L], buttons:[{href,label}] }
-    var CATS = [
-        ['all', L('Toate', 'All')],
-        ['chat', L('Aplicații chat', 'Chat apps')],
-        ['cli', L('Linie de comandă', 'CLI agents')],
-        ['ide', L('Editoare / IDE', 'IDEs & editors')],
-        ['self', L('Desktop / self-hosted', 'Desktop / self-hosted')],
-        ['api', 'API'],
-        ['test', L('Test / cod', 'Test / code')]
-    ];
+    // Each: id, name, where, docs, cloud (connects from vendor cloud), sse:false when unsupported, nosupport,
+    // build() -> { steps:[], snips:[{lbl, code}], notes:[L], buttons:[{href,label}] }. Service: SVC_OF below.
 
     function urlSnip() { return { lbl: 'URL', code: S.url }; }
     function authNotes(opts) {
@@ -65,26 +56,26 @@
 
     var CLIENTS = [
         // ---------------- chat apps ----------------
-        { id: 'claude', cat: 'chat', name: 'Claude', where: 'web · desktop · mobile', cloud: true,
+        { id: 'claude', name: 'Claude', where: 'web · desktop · mobile', cloud: true,
           docs: 'https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp',
           build: function () { return {
             steps: ['claude.ai → Customize → Connectors → Add custom connector', 'Name: ' + nm() + ' · URL: paste', 'Chat: + → Connectors → enable ' + nm()],
             snips: [urlSnip()],
             notes: [L('Adăugat o dată, merge pe web, desktop, mobil și în Claude Code. Planul Free: un singur conector propriu. Doar portul 443.', 'Added once, it works on web, desktop, mobile and in Claude Code. Free plan: one custom connector. Port 443 only.'),
                     L('Team/Enterprise: un administrator îl adaugă din Organization settings → Connectors.', 'Team/Enterprise: an admin adds it in Organization settings → Connectors.')].concat(authNotes()) }; } },
-        { id: 'chatgpt', cat: 'chat', name: 'ChatGPT', where: 'web', cloud: true,
+        { id: 'chatgpt', name: 'ChatGPT', where: 'web', cloud: true,
           docs: 'https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt',
           build: function () { return {
             steps: ['Settings → Apps / Plugins → Advanced → enable Developer mode', '+ Add custom MCP server → name, URL, authentication', 'Chat: @' + nm() + ' or pick it from + → More'],
             snips: [urlSnip()],
             notes: [L('Complet pe Business/Enterprise/Edu (administratorul decide); Pro: doar citire. Doar pe web, nu din aplicația mobilă.', 'Full support on Business/Enterprise/Edu (admin-controlled); Pro: read-only tools. Web only, not from the mobile app.')].concat(authNotes({ hdr: false })) }; } },
-        { id: 'chatgpt-desktop', cat: 'chat', name: 'ChatGPT', where: 'desktop (macOS)',
+        { id: 'chatgpt-desktop', name: 'ChatGPT', where: 'desktop (macOS)',
           docs: 'https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt',
           build: function () { return {
             steps: ['Settings → Integrations → Plugins → MCPs → Add', 'URL: paste' + (S.auth === 'bearer' ? ' · Bearer token env var: ' + env() : '') + (S.auth === 'header' ? ' · Headers from environment variables: ' + hName() + ' = ' + env() : '')],
             snips: [urlSnip()],
             notes: [L('Conexiunea pleacă de pe calculatorul dvs.: merge și cu adrese locale.', 'The connection starts from your computer: local URLs work too.')].concat(S.auth === 'oauth' ? [N.oauthUi] : []) }; } },
-        { id: 'gemini', cat: 'chat', name: 'Gemini', where: 'web · mobile', cloud: true,
+        { id: 'gemini', name: 'Gemini', where: 'web · mobile', cloud: true,
           docs: 'https://support.google.com/gemini/answer/17209137',
           build: function () { return {
             steps: ['gemini.google.com → Settings → Connected Apps', 'Custom apps → Add a custom app → URL → Next', 'Chat: @' + nm(), 'Check: gemini.google.com/devmode → Tool schemas'],
@@ -92,7 +83,7 @@
             notes: [L('Restricționat: cont personal Google, 18+, SUA, engleză, istoric activat.', 'Restricted: personal Google account, 18+, US, English, history on.')].concat(
                     S.auth === 'oauth' ? [L('Fără înregistrare dinamică (DCR): Advanced features → client ID/secret.', 'Without dynamic registration (DCR): Advanced features → client ID/secret.')] : [],
                     hasHdr() ? [N.noHdr] : []) }; } },
-        { id: 'grok', cat: 'chat', name: 'Grok', where: 'web · Grok desktop', cloud: true,
+        { id: 'grok', name: 'Grok', where: 'web · Grok desktop', cloud: true,
           docs: 'https://docs.x.ai/grok/connectors',
           build: function () { return {
             steps: ['Web: grok.com/connectors → New Connector → Custom → URL → authenticate', 'Desktop: Connect apps → Add a custom connector → Type: Remote HTTPS → Server URL' + (hasHdr() ? ' → HTTP headers' : '')],
@@ -100,23 +91,23 @@
             notes: [L('Business/Enterprise: un administrator aprobă conectorul în console.x.ai.', 'Business/Enterprise: an admin approves the connector in console.x.ai.')].concat(
                     hasHdr() ? [L('Antete fixe: doar în aplicația desktop. Pe web: OAuth.', 'Fixed headers: desktop app only. On the web: OAuth.')] : [],
                     S.auth === 'oauth' ? [N.oauthUi] : []) }; } },
-        { id: 'perplexity', cat: 'chat', name: 'Perplexity', where: 'web', cloud: true,
+        { id: 'perplexity', name: 'Perplexity', where: 'web', cloud: true,
           docs: 'https://www.perplexity.ai/help-center/en/',
           build: function () { return {
             steps: ['Settings → Connectors → + Custom connector → Remote', 'URL; auth: ' + ({ none: 'None', oauth: 'OAuth', bearer: 'API key', header: 'API key' })[S.auth]],
             snips: [urlSnip()],
             notes: S.auth === 'header' ? [L('Verificați dacă formularul acceptă alt antet decât Authorization.', 'Check whether the form accepts a header other than Authorization.')] : [] }; } },
-        { id: 'mistral', cat: 'chat', name: 'Le Chat (Mistral)', where: 'web', cloud: true,
+        { id: 'mistral', name: 'Le Chat (Mistral)', where: 'web', cloud: true,
           docs: 'https://help.mistral.ai/',
           build: function () { return {
             steps: ['chat.mistral.ai → Intelligence → Connectors → Add Connector', 'Custom MCP Connector → URL → authentication'],
             snips: [urlSnip()], notes: authNotes() }; } },
-        { id: 'copilot-studio', cat: 'chat', name: 'Copilot Studio', where: 'Microsoft 365 agents', cloud: true,
+        { id: 'copilot-studio', name: 'Copilot Studio', where: 'Microsoft 365 agents', cloud: true,
           docs: 'https://learn.microsoft.com/en-us/microsoft-copilot-studio/mcp-add-existing-server-to-agent',
           build: function () { return {
             steps: ['Agent → Tools → Add a tool → New tool → Model Context Protocol', 'Server name, URL; auth: ' + ({ none: 'None', oauth: 'OAuth 2.0', bearer: 'API key (header)', header: 'API key → header ' + hName() })[S.auth]],
             snips: [urlSnip()], notes: [] }; } },
-        { id: 'deepseek', cat: 'chat', name: 'DeepSeek', where: 'chat · API', cloud: true, nosupport: true,
+        { id: 'deepseek', name: 'DeepSeek', where: 'chat · API', cloud: true, nosupport: true,
           docs: 'https://api-docs.deepseek.com/',
           build: function () { return {
             steps: [],
@@ -124,7 +115,7 @@
             notes: [L('Chat-ul și API-ul DeepSeek nu conectează servere MCP. Folosiți modelul DeepSeek într-un client MCP (OpenCode, Cline, Roo, Continue, LibreChat).', 'DeepSeek chat and API do not connect to MCP servers. Use the DeepSeek model inside an MCP client (OpenCode, Cline, Roo, Continue, LibreChat).')] }; } },
 
         // ---------------- CLI agents ----------------
-        { id: 'claude-code', cat: 'cli', name: 'Claude Code', where: 'CLI · IDE',
+        { id: 'claude-code', name: 'Claude Code', where: 'CLI · IDE',
           docs: 'https://code.claude.com/docs/en/mcp',
           build: function () {
             var cmd = 'claude mcp add --transport ' + S.t + ' --scope user ' + nm() + ' ' + S.url;
@@ -134,7 +125,7 @@
             if (S.auth === 'oauth') s.push({ lbl: L('Apoi, în Claude Code', 'Then, inside Claude Code'), code: '/mcp' });
             s.push({ lbl: L('Sau în proiect: .mcp.json', 'Or per project: .mcp.json'), code: J(cfg) });
             return { steps: [], snips: s, notes: [L('Conectorul adăugat pe claude.ai apare și aici, fără comandă.', 'A connector added on claude.ai shows up here too, with no command.')].concat(hasHdr() ? [N.envSet()] : []) }; } },
-        { id: 'codex', cat: 'cli', name: 'Codex', where: 'CLI · IDE extension', sse: false,
+        { id: 'codex', name: 'Codex', where: 'CLI · IDE extension', sse: false,
           docs: 'https://developers.openai.com/codex/mcp',
           build: function () {
             var cmd = 'codex mcp add ' + nm() + ' --url ' + S.url;
@@ -147,7 +138,7 @@
             if (S.auth === 'oauth') s.push({ lbl: 'OAuth', code: 'codex mcp login ' + nm() });
             s.push({ lbl: '~/.codex/config.toml', code: toml });
             return { steps: [], snips: s, notes: [L('CLI-ul și extensia IDE folosesc același config.toml.', 'The CLI and the IDE extension share config.toml.')].concat(hasHdr() ? [N.envSet()] : []) }; } },
-        { id: 'gemini-cli', cat: 'cli', name: 'Gemini CLI', where: 'CLI',
+        { id: 'gemini-cli', name: 'Gemini CLI', where: 'CLI',
           docs: 'https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md',
           build: function () {
             var cmd = 'gemini mcp add --scope user --transport ' + S.t + ' ' + nm() + ' ' + S.url;
@@ -158,19 +149,19 @@
             if (S.auth === 'oauth') s.push({ lbl: L('Apoi, în Gemini CLI', 'Then, inside Gemini CLI'), code: '/mcp auth ' + nm() });
             s.push({ lbl: '~/.gemini/settings.json', code: J(cfg) });
             return { steps: [], snips: s, notes: hasHdr() ? [N.envSet()] : [] }; } },
-        { id: 'grok-cli', cat: 'cli', name: 'Grok CLI', where: 'CLI', sse: false,
+        { id: 'grok-cli', name: 'Grok CLI', where: 'CLI', sse: false,
           docs: 'https://docs.x.ai/build/features/mcp-servers',
           build: function () {
             var cmd = 'grok mcp add --transport http ' + nm() + ' ' + S.url;
             if (hasHdr()) cmd += ' \\\n  --header "' + hName() + ': ' + hVal('${' + env() + '}') + '"';
             return { steps: [], snips: [{ lbl: 'Terminal', code: cmd + '\ngrok mcp doctor ' + nm() }],
                      notes: (S.auth === 'oauth' ? [L('OAuth pornește automat la prima conectare.', 'OAuth starts automatically on first connection.')] : []).concat(hasHdr() ? [N.envSet()] : []) }; } },
-        { id: 'copilot-cli', cat: 'cli', name: 'GitHub Copilot CLI', where: 'CLI',
+        { id: 'copilot-cli', name: 'GitHub Copilot CLI', where: 'CLI',
           docs: 'https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli',
           build: function () {
             var cfg = wrap('mcpServers', obj({ type: S.t, url: S.url }, { headers: headers(TOK), tools: ['*'] }));
             return { steps: ['copilot → /mcp add → HTTP → URL'], snips: [{ lbl: '~/.copilot/mcp-config.json', code: J(cfg) }], notes: hasHdr() ? [N.lit] : [] }; } },
-        { id: 'opencode', cat: 'cli', name: 'OpenCode', where: 'CLI · any model',
+        { id: 'opencode', name: 'OpenCode', where: 'CLI · any model',
           docs: 'https://opencode.ai/docs/mcp-servers/',
           build: function () {
             var inner = obj({ type: 'remote', url: S.url, enabled: true }, { headers: headers('{env:' + env() + '}') });
@@ -178,20 +169,20 @@
             var s = [{ lbl: 'opencode.json', code: J(cfg) }];
             if (S.auth === 'oauth') s.push({ lbl: 'OAuth', code: 'opencode mcp auth ' + nm() });
             return { steps: [], snips: s, notes: [L('Funcționează cu orice model: DeepSeek, Qwen, modele locale.', 'Works with any model: DeepSeek, Qwen, local models.')].concat(hasHdr() ? [N.envSet()] : []) }; } },
-        { id: 'qwen', cat: 'cli', name: 'Qwen Code', where: 'CLI',
+        { id: 'qwen', name: 'Qwen Code', where: 'CLI',
           docs: 'https://qwenlm.github.io/qwen-code-docs/en/users/features/mcp/',
           build: function () {
             var cmd = 'qwen mcp add --transport ' + S.t + ' ' + nm() + ' ' + S.url;
             if (hasHdr()) cmd += ' \\\n  -H "' + hName() + ': ' + hVal('$' + env()) + '"';
             return { steps: [], snips: [{ lbl: 'Terminal', code: cmd }], notes: [L('Aceeași sintaxă ca Gemini CLI (~/.qwen/settings.json).', 'Same syntax as Gemini CLI (~/.qwen/settings.json).')] }; } },
-        { id: 'kiro', cat: 'cli', name: 'Kiro', where: 'IDE · CLI',
+        { id: 'kiro', name: 'Kiro', where: 'IDE · CLI',
           docs: 'https://kiro.dev/docs/mcp/',
           build: function () {
             var cfg = wrap('mcpServers', obj({ url: S.url }, { headers: headers(TOK) }));
             return { steps: [], snips: [{ lbl: '~/.kiro/settings/mcp.json', code: J(cfg) }], notes: hasHdr() ? [N.lit] : [] }; } },
 
         // ---------------- IDEs ----------------
-        { id: 'vscode', cat: 'ide', name: 'VS Code (Copilot)', where: 'IDE',
+        { id: 'vscode', name: 'VS Code (Copilot)', where: 'IDE',
           docs: 'https://code.visualstudio.com/docs/copilot/customization/mcp-servers',
           build: function () {
             var srv = obj({ type: S.t, url: S.url }, { headers: headers('${input:' + env().toLowerCase() + '}') });
@@ -206,7 +197,7 @@
             return { steps: ['Command Palette → MCP: Add Server → HTTP → URL'], buttons: b,
                      snips: [{ lbl: '.vscode/mcp.json', code: J(cfg) }],
                      notes: hasHdr() ? [L('VS Code cere tokenul la pornire și îl păstrează criptat.', 'VS Code asks for the token on start and stores it encrypted.')] : [] }; } },
-        { id: 'cursor', cat: 'ide', name: 'Cursor', where: 'IDE',
+        { id: 'cursor', name: 'Cursor', where: 'IDE',
           docs: 'https://cursor.com/docs/context/mcp',
           build: function () {
             var srv = obj({ url: S.url }, { headers: headers('${env:' + env() + '}') });
@@ -214,29 +205,29 @@
             if (!hasHdr()) b.push({ href: 'cursor://anysphere.cursor-deeplink/mcp/install?name=' + encodeURIComponent(nm()) + '&config=' + encodeURIComponent(btoa(JSON.stringify({ url: S.url }))), label: L('Adaugă în Cursor', 'Add to Cursor') });
             return { steps: [], buttons: b, snips: [{ lbl: L('~/.cursor/mcp.json (global) sau .cursor/mcp.json', '~/.cursor/mcp.json (global) or .cursor/mcp.json'), code: J(wrap('mcpServers', srv)) }],
                      notes: (S.auth === 'oauth' ? [L('Settings → MCP → Login.', 'Settings → MCP → Login.')] : []).concat(hasHdr() ? [N.envSet()] : []) }; } },
-        { id: 'windsurf', cat: 'ide', name: 'Windsurf', where: 'IDE',
+        { id: 'windsurf', name: 'Windsurf', where: 'IDE',
           docs: 'https://docs.windsurf.com/windsurf/cascade/mcp',
           build: function () {
             var srv = obj({ serverUrl: S.url }, { headers: headers('${env:' + env() + '}') });
             return { steps: ['Cascade → MCP servers → Configure (or edit the file)'], snips: [{ lbl: '~/.codeium/windsurf/mcp_config.json', code: J(wrap('mcpServers', srv)) }], notes: hasHdr() ? [N.envSet()] : [] }; } },
-        { id: 'zed', cat: 'ide', name: 'Zed', where: 'editor',
+        { id: 'zed', name: 'Zed', where: 'editor',
           docs: 'https://zed.dev/docs/ai/mcp',
           build: function () {
             var srv = obj({ url: S.url }, { headers: headers(TOK) });
             return { steps: [], snips: [{ lbl: 'settings.json', code: J(wrap('context_servers', srv)) }],
                      notes: (S.auth === 'oauth' ? [L('Fără antet Authorization, Zed pornește OAuth.', 'Without an Authorization header, Zed starts OAuth.')] : []).concat(hasHdr() ? [N.lit] : []) }; } },
-        { id: 'cline', cat: 'ide', name: 'Cline', where: 'VS Code extension',
+        { id: 'cline', name: 'Cline', where: 'VS Code extension',
           docs: 'https://docs.cline.bot/mcp/connecting-to-a-remote-server',
           build: function () {
             var srv = obj({ type: S.t === 'http' ? 'streamableHttp' : 'sse', url: S.url }, { headers: headers(TOK) });
             return { steps: ['MCP Servers → Remote Servers → Streamable HTTP → URL'], snips: [{ lbl: 'cline_mcp_settings.json', code: J(wrap('mcpServers', srv)) }],
                      notes: [L('Fără "type", Cline presupune SSE.', 'Without "type", Cline assumes SSE.')].concat(hasHdr() ? [N.lit] : []) }; } },
-        { id: 'roo', cat: 'ide', name: 'Roo Code', where: 'VS Code extension',
+        { id: 'roo', name: 'Roo Code', where: 'VS Code extension',
           docs: 'https://docs.roocode.com/features/mcp/using-mcp-in-roo',
           build: function () {
             var srv = obj({ type: S.t === 'http' ? 'streamable-http' : 'sse', url: S.url }, { headers: headers('${env:' + env() + '}') });
             return { steps: [], snips: [{ lbl: '.roo/mcp.json', code: J(wrap('mcpServers', srv)) }], notes: hasHdr() ? [N.envSet()] : [] }; } },
-        { id: 'continue', cat: 'ide', name: 'Continue', where: 'VS Code · JetBrains',
+        { id: 'continue', name: 'Continue', where: 'VS Code · JetBrains',
           docs: 'https://docs.continue.dev/customize/deep-dives/mcp',
           build: function () {
             var y = 'mcpServers:\n  - name: ' + nm() + '\n    type: ' + (S.t === 'http' ? 'streamable-http' : 'sse') + '\n    url: ' + S.url;
@@ -244,24 +235,24 @@
             return { steps: [], snips: [{ lbl: 'config.yaml', code: y }], notes: [L('Uneltele MCP merg doar în modul Agent.', 'MCP tools work in Agent mode only.')] }; } },
 
         // ---------------- desktop / self-hosted ----------------
-        { id: 'lmstudio', cat: 'self', name: 'LM Studio', where: 'desktop · local models',
+        { id: 'lmstudio', name: 'LM Studio', where: 'desktop · local models',
           docs: 'https://lmstudio.ai/docs/app/mcp',
           build: function () {
             var srv = obj({ url: S.url }, { headers: headers(TOK) });
             return { steps: ['Program → Install → Edit mcp.json'], snips: [{ lbl: 'mcp.json', code: J(wrap('mcpServers', srv)) }], notes: hasHdr() ? [N.lit] : [] }; } },
-        { id: 'openwebui', cat: 'self', name: 'Open WebUI', where: 'self-hosted',
+        { id: 'openwebui', name: 'Open WebUI', where: 'self-hosted',
           docs: 'https://docs.openwebui.com/features/mcp',
           build: function () { return {
             steps: ['Admin Settings → External Tools → + Add Server', 'Type: MCP (Streamable HTTP) → URL' + (hasHdr() ? ' → Auth: Bearer / headers' : '')],
             snips: [urlSnip()], notes: S.t === 'sse' ? [N.noSse] : [] }; } },
-        { id: 'librechat', cat: 'self', name: 'LibreChat', where: 'self-hosted',
+        { id: 'librechat', name: 'LibreChat', where: 'self-hosted',
           docs: 'https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/mcp_servers',
           build: function () {
             var y = 'mcpServers:\n  ' + nm() + ':\n    type: ' + (S.t === 'http' ? 'streamable-http' : 'sse') + '\n    url: ' + S.url;
             if (hasHdr()) y += '\n    headers:\n      ' + hName() + ': "' + hVal('${' + env() + '}') + '"';
             return { steps: ['UI: MCP Settings → Add MCP → URL'], snips: [{ lbl: 'librechat.yaml', code: y }],
                      notes: [L('Fără "type", LibreChat presupune SSE.', 'Without "type", LibreChat assumes SSE.')].concat(hasHdr() ? [N.envSet()] : []) }; } },
-        { id: 'claude-desktop-local', cat: 'self', name: L('Clienți doar stdio (punte mcp-remote)', 'stdio-only clients (mcp-remote bridge)'), where: 'Claude Desktop config · others',
+        { id: 'claude-desktop-local', name: L('Clienți doar stdio (punte mcp-remote)', 'stdio-only clients (mcp-remote bridge)'), where: 'Claude Desktop config · others',
           docs: 'https://www.npmjs.com/package/mcp-remote',
           build: function () {
             var args = ['-y', 'mcp-remote', S.url];
@@ -272,7 +263,7 @@
                      notes: [L('Doar pentru clienți fără suport HTTP. În Claude Desktop folosiți Connectors. Necesită Node.js.', 'Only for clients without HTTP support. In Claude Desktop, use Connectors. Needs Node.js.')] }; } },
 
         // ---------------- APIs ----------------
-        { id: 'anthropic-api', cat: 'api', name: 'Claude API', where: 'Messages API (beta)', cloud: true,
+        { id: 'anthropic-api', name: 'Claude API', where: 'Messages API (beta)', cloud: true,
           docs: 'https://platform.claude.com/docs/en/agents-and-tools/mcp-connector',
           build: function () {
             var srv = { type: 'url', url: S.url, name: nm() };
@@ -281,7 +272,7 @@
             var c = 'curl https://api.anthropic.com/v1/messages \\\n  -H "x-api-key: $ANTHROPIC_API_KEY" \\\n  -H "anthropic-version: 2023-06-01" \\\n  -H "anthropic-beta: mcp-client-2025-11-20" \\\n  -H "content-type: application/json" \\\n  -d \'' + J(body) + '\'';
             return { steps: [], snips: [{ lbl: 'curl', code: c }],
                      notes: [N.cloud].concat(S.auth === 'header' ? [L('Acceptă doar un token Bearer (authorization_token), nu antete proprii.', 'Accepts a Bearer token only (authorization_token), not custom headers.')] : [], S.auth === 'oauth' ? [L('OAuth: obțineți tokenul în aplicația dvs. și trimiteți-l la fiecare cerere.', 'OAuth: get the token in your app and send it with every request.')] : []) }; } },
-        { id: 'openai-api', cat: 'api', name: 'OpenAI API', where: 'Responses API', cloud: true,
+        { id: 'openai-api', name: 'OpenAI API', where: 'Responses API', cloud: true,
           docs: 'https://platform.openai.com/docs/guides/tools-connectors-mcp',
           build: function () {
             var tool = { type: 'mcp', server_label: nm(), server_url: S.url, require_approval: 'never' };
@@ -290,7 +281,7 @@
             var body = { model: 'gpt-5', tools: [tool], input: question() };
             var c = 'curl https://api.openai.com/v1/responses \\\n  -H "Authorization: Bearer $OPENAI_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d \'' + J(body) + '\'';
             return { steps: [], snips: [{ lbl: 'curl', code: c }], notes: [N.cloud] }; } },
-        { id: 'xai-api', cat: 'api', name: 'xAI API', where: 'Responses API', cloud: true,
+        { id: 'xai-api', name: 'xAI API', where: 'Responses API', cloud: true,
           docs: 'https://docs.x.ai/developers/tools/remote-mcp',
           build: function () {
             var tool = { type: 'mcp', server_label: nm(), server_url: S.url };
@@ -301,7 +292,7 @@
             return { steps: [], snips: [{ lbl: 'curl', code: c }], notes: [N.cloud] }; } },
 
         // ---------------- test / code ----------------
-        { id: 'curl', cat: 'test', name: L('Test rapid (curl)', 'Quick test (curl)'), where: 'initialize',
+        { id: 'curl', name: L('Test rapid (curl)', 'Quick test (curl)'), where: 'initialize',
           docs: 'https://modelcontextprotocol.io/specification/latest/basic/transports',
           build: function () {
             var init = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'curl', version: '0' } } };
@@ -310,12 +301,12 @@
             c += "  -d '" + JSON.stringify(init) + "'";
             return { steps: [], snips: [{ lbl: 'Terminal', code: c }],
                      notes: [L('Răspunsul corect conține serverInfo. 401 = lipsește autentificarea.', 'A good response contains serverInfo. 401 = authentication missing.')].concat(S.t === 'sse' ? [L('Testul este pentru Streamable HTTP.', 'This test is for Streamable HTTP.')] : []) }; } },
-        { id: 'inspector', cat: 'test', name: 'MCP Inspector', where: 'browser UI',
+        { id: 'inspector', name: 'MCP Inspector', where: 'browser UI',
           docs: 'https://modelcontextprotocol.io/docs/tools/inspector',
           build: function () { return {
             steps: ['Transport: ' + (S.t === 'http' ? 'Streamable HTTP' : 'SSE') + ' → URL' + (hasHdr() ? ' → Authentication: header ' + hName() : '') + ' → Connect → Tools → List'],
             snips: [{ lbl: 'Terminal', code: 'npx @modelcontextprotocol/inspector' }], notes: [] }; } },
-        { id: 'python', cat: 'test', name: 'Python (SDK mcp)', where: 'pip install mcp',
+        { id: 'python', name: 'Python (SDK mcp)', where: 'pip install mcp',
           docs: 'https://github.com/modelcontextprotocol/python-sdk',
           build: function () {
             var imp = S.t === 'http' ? 'from mcp.client.streamable_http import streamablehttp_client as connect' : 'from mcp.client.sse import sse_client as connect';
@@ -326,7 +317,7 @@
                 '        async with ClientSession(read, write) as s:\n            await s.initialize()\n' +
                 '            tools = await s.list_tools()\n            print([t.name for t in tools.tools])\n\nasyncio.run(main())';
             return { steps: [], snips: [{ lbl: 'client.py', code: c }], notes: S.auth === 'oauth' ? [L('OAuth: vezi OAuthClientProvider în SDK.', 'OAuth: see OAuthClientProvider in the SDK.')] : [] }; } },
-        { id: 'typescript', cat: 'test', name: 'TypeScript (SDK)', where: 'npm i @modelcontextprotocol/sdk',
+        { id: 'typescript', name: 'TypeScript (SDK)', where: 'npm i @modelcontextprotocol/sdk',
           docs: 'https://github.com/modelcontextprotocol/typescript-sdk',
           build: function () {
             var http = S.t === 'http';
@@ -338,6 +329,28 @@
                 'console.log((await client.listTools()).tools.map(t => t.name));\nawait client.close();';
             return { steps: [], snips: [{ lbl: 'client.mjs', code: c }], notes: [] }; } }
     ];
+
+    // ---------- service filter: popular services as pills, the rest in one "Others" dropdown ----------
+    var SERVICES = [  // [key, label, pill?]
+        ['claude', 'Claude', true], ['openai', 'ChatGPT / Codex', true], ['google', 'Gemini', true], ['xai', 'Grok', true],
+        ['microsoft', 'VS Code / Copilot', true], ['cursor', 'Cursor', true],
+        ['perplexity', 'Perplexity'], ['mistral', 'Mistral (Le Chat)'], ['deepseek', 'DeepSeek'], ['opencode', 'OpenCode'],
+        ['qwen', 'Qwen Code'], ['kiro', 'Kiro'], ['windsurf', 'Windsurf'], ['zed', 'Zed'], ['cline', 'Cline'], ['roo', 'Roo Code'],
+        ['continue', 'Continue'], ['lmstudio', 'LM Studio'], ['openwebui', 'Open WebUI'], ['librechat', 'LibreChat'],
+        ['mcp-remote', 'mcp-remote (stdio)'], ['sdk', L('Test / SDK (curl, Python, TS)', 'Test / SDK (curl, Python, TS)')]
+    ];
+    var SVC_OF = {
+        'claude': 'claude', 'claude-code': 'claude', 'anthropic-api': 'claude',
+        'chatgpt': 'openai', 'chatgpt-desktop': 'openai', 'codex': 'openai', 'openai-api': 'openai',
+        'gemini': 'google', 'gemini-cli': 'google', 'grok': 'xai', 'grok-cli': 'xai', 'xai-api': 'xai',
+        'copilot-studio': 'microsoft', 'copilot-cli': 'microsoft', 'vscode': 'microsoft', 'cursor': 'cursor',
+        'perplexity': 'perplexity', 'mistral': 'mistral', 'deepseek': 'deepseek', 'opencode': 'opencode', 'qwen': 'qwen', 'kiro': 'kiro',
+        'windsurf': 'windsurf', 'zed': 'zed', 'cline': 'cline', 'roo': 'roo', 'continue': 'continue',
+        'lmstudio': 'lmstudio', 'openwebui': 'openwebui', 'librechat': 'librechat', 'claude-desktop-local': 'mcp-remote',
+        'curl': 'sdk', 'inspector': 'sdk', 'python': 'sdk', 'typescript': 'sdk'
+    };
+    CLIENTS.forEach(function (c) { c.svc = SVC_OF[c.id] || '?'; });
+    function matches(cl) { return S.svc === 'all' || cl.svc === S.svc; }
 
     // ---------- verification status (CSV → {id: row}) ----------
     var ST = {
@@ -390,8 +403,21 @@
         return out.join('');
     }
 
+    // <option> cannot hold the per-language spans: it carries both labels and the page swaps the text.
+    function opt(v, label, sel) {
+        var l = typeof label === 'string' ? { ro: label, en: label } : label;
+        var cur = typeof document !== 'undefined' && document.documentElement.lang === 'en' ? 'en' : 'ro';
+        return '<option' + attrs({ value: v, selected: sel ? 'selected' : null, 'data-ro': l.ro, 'data-en': l.en }) + '>' + esc(l[cur]) + '</option>';
+    }
     function chipsHtml() {
-        return CATS.map(function (k) { return bi('button', 'chip', k[1], { type: 'button', 'data-cat': k[0], 'aria-pressed': String(S.cat === k[0]) }); }).join('');
+        var pill = function (key, label) { return bi('button', 'chip', label, { type: 'button', 'data-svc': key, 'aria-pressed': String(S.svc === key) }); };
+        var others = SERVICES.filter(function (x) { return !x[2]; });
+        var inOthers = others.some(function (x) { return x[0] === S.svc; });
+        return pill('all', L('Toate', 'All')) +
+            SERVICES.filter(function (x) { return x[2]; }).map(function (x) { return pill(x[0], x[1]); }).join('') +
+            '<select class="chip" data-svc-other aria-label="' + esc('Altele / Others') + '"' + (inOthers ? ' aria-pressed="true"' : '') + '>' +
+            opt('', L('Altele…', 'Others…'), !inOthers) +
+            others.map(function (x) { return opt(x[0], x[1], S.svc === x[0]); }).join('') + '</select>';
     }
 
     function cardHtml(cl, status, pub) {
@@ -415,8 +441,8 @@
 
     function cardsHtml(status) {
         var pub = isPublicHttps(urlInfo());
-        return CLIENTS.filter(function (cl) { return S.cat === 'all' || cl.cat === S.cat; })
-            .map(function (cl) { return cardHtml(cl, status || {}, pub); }).join('\n');
+        var html = CLIENTS.filter(matches).map(function (cl) { return cardHtml(cl, status || {}, pub); }).join('\n');
+        return html || bi('p', 'empty', L('Niciun client pentru acest filtru.', 'No client matches this filter.'));
     }
 
     function setState(st) { S = Object.assign({}, DEFAULTS, st || {}); }
@@ -467,8 +493,12 @@
         saveState(); render();
     });
     $('chips').addEventListener('click', function (e) {
-        var b = e.target.closest('[data-cat]'); if (!b) return;
-        S.cat = b.getAttribute('data-cat'); saveState(); render();
+        var b = e.target.closest('button[data-svc]'); if (!b) return;
+        S.svc = b.getAttribute('data-svc'); saveState(); render();
+    });
+    $('chips').addEventListener('change', function (e) {
+        if (!e.target.hasAttribute('data-svc-other')) return;
+        S.svc = e.target.value || 'all'; saveState(); render();
     });
     $('cards').addEventListener('click', function (e) {
         var b = e.target.closest('.copy'); if (!b) return;
