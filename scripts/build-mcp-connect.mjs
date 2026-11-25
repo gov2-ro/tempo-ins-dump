@@ -27,6 +27,8 @@ if (missing.length || extra.length) {
 
 const untagged = M.CLIENTS.filter((c) => c.svc === '?').map((c) => c.id);
 if (untagged.length) { console.error(`No service in SVC_OF (js/mcp-connect.js) for: ${untagged.join(', ')}`); process.exit(1); }
+const uncategorised = M.CLIENTS.filter((c) => c.cat === '?').map((c) => c.id);
+if (uncategorised.length) { console.error(`No type in CAT_OF (js/mcp-connect.js) for: ${uncategorised.join(', ')}`); process.exit(1); }
 
 M.setState(M.DEFAULTS);
 const parts = {

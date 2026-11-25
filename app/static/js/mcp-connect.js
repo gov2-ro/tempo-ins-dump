@@ -9,7 +9,7 @@
     'use strict';
     var DEFAULT_URL = 'https://api-ins.gov2.ro/mcp';
     var DEFAULT_NAME = 'ins-tempo';
-    var DEFAULTS = { url: DEFAULT_URL, name: DEFAULT_NAME, t: 'http', auth: 'none', hdr: 'X-API-Key', env: 'MCP_TOKEN', svc: 'all' };
+    var DEFAULTS = { url: DEFAULT_URL, name: DEFAULT_NAME, t: 'http', auth: 'none', hdr: 'X-API-Key', env: 'MCP_TOKEN', svc: 'all', cat: 'all' };
     var S = Object.assign({}, DEFAULTS);
 
     // ---------- helpers ----------
@@ -349,8 +349,28 @@
         'lmstudio': 'lmstudio', 'openwebui': 'openwebui', 'librechat': 'librechat', 'claude-desktop-local': 'mcp-remote',
         'curl': 'sdk', 'inspector': 'sdk', 'python': 'sdk', 'typescript': 'sdk'
     };
-    CLIENTS.forEach(function (c) { c.svc = SVC_OF[c.id] || '?'; });
-    function matches(cl) { return S.svc === 'all' || cl.svc === S.svc; }
+    // Interface type, combined with the service filter (a card must match both).
+    var CATS = [
+        ['all', L('Toate', 'All')],
+        ['chat', L('Aplicații chat', 'Chat apps')],
+        ['cli', L('Linie de comandă', 'CLI agents')],
+        ['ide', L('Editoare / IDE', 'IDEs & editors')],
+        ['self', L('Desktop / self-hosted', 'Desktop / self-hosted')],
+        ['api', 'API'],
+        ['test', L('Test / cod', 'Test / code')]
+    ];
+    var CAT_OF = {
+        'claude': 'chat', 'chatgpt': 'chat', 'chatgpt-desktop': 'chat', 'gemini': 'chat', 'grok': 'chat', 'perplexity': 'chat',
+        'mistral': 'chat', 'copilot-studio': 'chat', 'deepseek': 'chat',
+        'claude-code': 'cli', 'codex': 'cli', 'gemini-cli': 'cli', 'grok-cli': 'cli', 'copilot-cli': 'cli', 'opencode': 'cli',
+        'qwen': 'cli', 'kiro': 'cli',
+        'vscode': 'ide', 'cursor': 'ide', 'windsurf': 'ide', 'zed': 'ide', 'cline': 'ide', 'roo': 'ide', 'continue': 'ide',
+        'lmstudio': 'self', 'openwebui': 'self', 'librechat': 'self', 'claude-desktop-local': 'self',
+        'anthropic-api': 'api', 'openai-api': 'api', 'xai-api': 'api',
+        'curl': 'test', 'inspector': 'test', 'python': 'test', 'typescript': 'test'
+    };
+    CLIENTS.forEach(function (c) { c.svc = SVC_OF[c.id] || '?'; c.cat = CAT_OF[c.id] || '?'; });
+    function matches(cl) { return (S.svc === 'all' || cl.svc === S.svc) && (S.cat === 'all' || cl.cat === S.cat); }
 
     // ---------- verification status (CSV → {id: row}) ----------
     var ST = {
@@ -413,11 +433,14 @@
         var pill = function (key, label) { return bi('button', 'chip', label, { type: 'button', 'data-svc': key, 'aria-pressed': String(S.svc === key) }); };
         var others = SERVICES.filter(function (x) { return !x[2]; });
         var inOthers = others.some(function (x) { return x[0] === S.svc; });
-        return pill('all', L('Toate', 'All')) +
+        var catPill = function (x) { return bi('button', 'chip', x[1], { type: 'button', 'data-cat': x[0], 'aria-pressed': String(S.cat === x[0]) }); };
+        return '<div class="chip-row" role="group" aria-label="' + esc('Tip / Type') + '">' + CATS.map(catPill).join('') + '</div>' +
+            '<div class="chip-row" role="group" aria-label="' + esc('Serviciu / Service') + '">' +
+            pill('all', L('Toate', 'All')) +
             SERVICES.filter(function (x) { return x[2]; }).map(function (x) { return pill(x[0], x[1]); }).join('') +
             '<select class="chip" data-svc-other aria-label="' + esc('Altele / Others') + '"' + (inOthers ? ' aria-pressed="true"' : '') + '>' +
             opt('', L('Altele…', 'Others…'), !inOthers) +
-            others.map(function (x) { return opt(x[0], x[1], S.svc === x[0]); }).join('') + '</select>';
+            others.map(function (x) { return opt(x[0], x[1], S.svc === x[0]); }).join('') + '</select></div>';
     }
 
     function cardHtml(cl, status, pub) {
@@ -493,6 +516,8 @@
         saveState(); render();
     });
     $('chips').addEventListener('click', function (e) {
+        var c = e.target.closest('button[data-cat]');
+        if (c) { S.cat = c.getAttribute('data-cat'); saveState(); render(); return; }
         var b = e.target.closest('button[data-svc]'); if (!b) return;
         S.svc = b.getAttribute('data-svc'); saveState(); render();
     });
