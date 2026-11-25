@@ -99,7 +99,7 @@ say "Free on $BASE: ${FREE_GB:-?} GB (need $MIN_FREE_GB)"
 [ "${FREE_GB:-0}" -ge "$MIN_FREE_GB" ] || die "less than $MIN_FREE_GB GB free on $BASE"
 PREV="$(readlink -e "$BASE/current" 2>/dev/null || true)"
 say "Current release: ${PREV:-none}"
-[ ! -e "$REL" ] || die "$REL exists already"
+[ "$REL" != "$PREV" ] || die "$REL is the current release already"   # a folder left by a failed promote is reused
 RSYNC=(rsync -rlpt --delete)
 [ "$APPLY" = 1 ] || RSYNC+=(--dry-run)
 CODE_LINK=(); DATA_LINK=()

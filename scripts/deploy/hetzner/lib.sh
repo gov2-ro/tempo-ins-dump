@@ -12,6 +12,7 @@
 #   RESTART_CMD   sudo systemctl restart tempo-api
 #   PORT          8095 (the smoke runs on PORT and PORT+1)
 #   SMOKE_ARGS    strict release-check flags (change only with the owner's approval)
+#   PYTHON_BIN    interpreter for the release venv (python3; the VPS has 3.12)
 
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8080/api/health}"
 RESTART_CMD="${RESTART_CMD:-sudo systemctl restart tempo-api}"
@@ -25,7 +26,7 @@ run() { if [ "$APPLY" = 1 ]; then "$@"; else say "[dry-run] $*"; fi; }
 tl_build_venv() {
     local REL="$1"
     say "Building the venv in $REL ..."
-    run "${EXEC[@]}" "set -e; cd $REL && python3 -m venv venv && venv/bin/python -m pip install --no-cache-dir -q -r requirements.txt \
+    run "${EXEC[@]}" "set -e; cd $REL && ${PYTHON_BIN:-python3} -m venv venv && venv/bin/python -m pip install --no-cache-dir -q -r requirements.txt \
  && mkdir -p home \
  && HOME=$REL/home venv/bin/python -c \"import duckdb; c = duckdb.connect(); c.execute('INSTALL fts'); c.execute('LOAD fts'); print('fts', duckdb.__version__)\" \
  && if venv/bin/python -m pip list --format=freeze | grep -iE '^(pandas|numpy|pyarrow)=='; then echo 'ERROR: pandas, numpy or pyarrow in the venv' >&2; exit 1; fi \
@@ -45,7 +46,7 @@ tl_smoke() {
 }
 
 tl_health() { "${EXEC[@]}" "for i in \$(seq 1 40); do curl -fsS $HEALTH_URL >/dev/null && exit 0; sleep 1; done; exit 1"; }
-tl_swap() { "${EXEC[@]}" "ln -sfn $1 $BASE/current.new && mv -Tf $BASE/current.new $BASE/current && $RESTART_CMD"; }
+tl_swap() { "${EXEC[@]}" "ln -sfn $1 $BASE/current.new && mv -Tf $BASE/current.new $BASE/current && $RESTART_CMD 9>&-"; }   # 9>&-: the service must not inherit promote.sh's run.lock
 
 # tl_swap_with_rollback REL PREV: swap, restart, health check; swap back to PREV when it fails.
 tl_swap_with_rollback() {
