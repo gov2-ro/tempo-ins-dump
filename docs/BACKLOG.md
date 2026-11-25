@@ -4,6 +4,21 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## Dataset page v2 (2026-11-26)
+
+- [ ] **P3 — Share one number.** A user wants to share a single cell, for example CLV104A
+  "Consum total de alcool (alcool 100%)", 2019 = 9.1 L pure alcohol per capita. Give each cell a permalink
+  (dataset code + one value per dimension + period). The link opens a small card: the value, the unit, the
+  definition, the period, the INS source link and the generation id. Reuse the evidence bundle (`Dovezi`) for the
+  "how was this computed" part. A published total or a raw cell can be shared directly. A summed value can be
+  shared only where `data_query` allows the sum. Open points: entry point (click a table cell, a tooltip, a KPI);
+  a social preview image (OG) needs a server render or a prerender step, which the static site does not have;
+  a refresh can revise the value, so the card should show the generation's value and say when it was revised.
+- [ ] **P4 — Choose the index base year.** DP-01 keeps the index base at the first period in the data
+  (owner decision 2026-11-26, option A). If users ask: click a year to make it 100, kept in the URL.
+- [ ] **P1 — DP-01: total inside a label, index notes, option pills, table filters.** Brief:
+  `docs/plans/dataset-page-v2-fixes/brief.md`.
+
 ## VPS weekly refresh (2026-11-25)
 
 - [ ] **P1 — HZ-5b: install the weekly refresh on the VPS.** HZ-5a is on `main` (`scripts/refresh-run.py`,
