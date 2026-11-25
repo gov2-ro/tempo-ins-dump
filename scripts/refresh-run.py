@@ -49,6 +49,7 @@ CODE_FILES = ["requirements.txt", "llms.txt", "sdmx_labels.py", "fly.toml",
 CODE_DIRS = ["app"]
 # Top-level entries of the working data that a run never copies.
 NOT_COPIED = {"4-datasets", "4-datasets-slim-samples", "parquet-v2", "_archive", "quarantine", "eval"}
+API_CASES_CODES = "POP105A_judete_grupe,FOM106E_judete,SOM103A_judete,TUR105D_judete,ART124A,SOM101E"
 SWEEP_EVERY_DAYS = 28
 MIN_FREE_GB = 5
 
@@ -487,7 +488,8 @@ def run(args) -> int:
             status["api_parity"] = "SKIPPED (subset build: the cases name datasets that are not in it)"
             status["notes"].append(status["api_parity"])
         elif shutil.which("node") and not args.no_api_parity:
-            gen = [py, CODE / "scripts/gen-api-cases.py", "--out", cases, "--n", args.api_cases_n]
+            gen = [py, CODE / "scripts/gen-api-cases.py", "--out", cases, "--n", args.api_cases_n,
+                   "--codes", args.api_cases_codes]
             runner.step("api-cases", gen, env_extra=penv)
             gate += ["--api-cases", cases]
             status["api_parity"] = "run"
@@ -562,6 +564,10 @@ def main(argv=None) -> int:
     ap.add_argument("--static-codes", help="build the static site for these codes only (rehearsal)")
     ap.add_argument("--static-base-url", default="https://ins.gov2.ro")
     ap.add_argument("--api-cases-n", default="60")
+    ap.add_argument("--api-cases-codes", default=API_CASES_CODES,
+                    help="datasets for the /options and /download parity cases. The default leaves out POP107D "
+                         "(22M rows): its unfiltered CSV download held 3.6 GB in the test client; the whole "
+                         "step peaked at 4.9 GB with it and 0.9 GB without")
     ap.add_argument("--no-api-parity", action="store_true")
     ap.add_argument("--run-id")
     ap.add_argument("--simulate-probe-failure", action="store_true")

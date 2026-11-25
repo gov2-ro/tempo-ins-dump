@@ -472,3 +472,78 @@ def test_bucketed_grain_check_gives_the_single_pass_result(tmp_path, monkeypatch
         monkeypatch.setenv("TEMPO_AUDIT_GRAIN_BUCKET_ROWS", per)
         many = audit.inspect_parquet(duckdb.connect(), f, True)
         assert (many["dup_keys"], many["dup_rows"], many["conflicting_keys"]) == (58, 272, 51), per
+
+
+# ------------------------------------------------------------------ check-kpi-totals --write-db with nothing to write
+def test_write_db_with_no_results_replaces_the_touched_codes_and_keeps_the_rest(tmp_path):
+    ck = load("ck_t", "scripts/check-kpi-totals.py")
+    db = tmp_path / "m.duckdb"
+    con = duckdb.connect(str(db))
+    con.execute(ck.TABLE_DDL)
+    con.execute("INSERT INTO kpi_total_checks VALUES ('OTHER', '2022', 1, 1, 0, 'match', NULL, NULL, NULL, NULL)")
+    con.execute("INSERT INTO kpi_total_checks VALUES ('TOUCHED', '2020', 9, 9, 0, 'match', NULL, NULL, NULL, NULL)")
+    con.close()
+    # no result at all (the touched dataset sums nothing now): must not raise, must drop its old row
+    assert ck.write_db(db, {}, codes={"TOUCHED"}) == 0
+    con = duckdb.connect(str(db), read_only=True)
+    assert con.execute("SELECT matrix_code FROM kpi_total_checks").fetchall() == [("OTHER",)]
+    con.close()
+    assert ck.write_db(db, {}) == 0
+
+
+# ------------------------------------------------------------------ run script helpers
+def test_sweep_codes_split_updates_from_codes_ins_no_longer_lists(rr, tmp_path):
+    (tmp_path / "changes.csv").write_text(
+        "code,kind,ins_update,db_update\nA1,updated,01-11-2026,2026-01-01\nB2,new_in_ins,01-11-2026,\n"
+        "C3,not_listed_by_ins,01-01-2020,2020-01-01\n")
+    assert rr.sweep_codes(tmp_path) == (["A1", "B2"], ["C3"])
+    assert rr.sweep_codes(tmp_path / "missing") == ([], [])
+
+
+def test_touched_codes_are_this_runs_ok_parents_and_their_children(rr, tmp_path):
+    data = tmp_path / "data"
+    (data / "corpus").mkdir(parents=True)
+    (data / "logs").mkdir()
+    db = duckdb.connect(str(data / "corpus" / "metadata.duckdb"))
+    db.execute("CREATE TABLE dataset_splits (sub_matrix_code VARCHAR, parent_matrix_code VARCHAR)")
+    db.execute("INSERT INTO dataset_splits VALUES ('P_a', 'P'), ('P_b', 'P'), ('Z_a', 'Z')")
+    db.close()
+    (data / "logs" / "update-pipeline-state.json").write_text(json.dumps({"matrices": {
+        "P": {"outcome": "ok", "updated_at": "2026-11-25T03:00:10"},
+        "Q": {"outcome": "failed", "updated_at": "2026-11-25T03:00:20"},
+        "Z": {"outcome": "ok", "updated_at": "2026-11-18T03:00:10"},        # an earlier run
+        "E": {"outcome": "empty", "updated_at": "2026-11-25T03:00:30"}}}))
+    assert rr.touched_codes(data, "2026-11-25T03:00:00") == ["P", "P_a", "P_b"]
+
+
+def test_stale_dimension_checks_of_touched_codes_are_dropped(rr, tmp_path):
+    db = tmp_path / "m.duckdb"
+    con = duckdb.connect(str(db))
+    con.execute("CREATE TABLE kpi_dimension_checks (matrix_code VARCHAR, dim_column VARCHAR)")
+    con.execute("INSERT INTO kpi_dimension_checks VALUES ('T', 'AGE'), ('KEEP', 'AGE')")
+    con.close()
+    rr.clear_stale_dim_checks(db, ["T"])
+    con = duckdb.connect(str(db), read_only=True)
+    assert con.execute("SELECT matrix_code FROM kpi_dimension_checks").fetchall() == [("KEEP",)]
+    con.close()
+
+
+def test_candidate_code_folder_has_what_deploy_sh_uploads(rr, tmp_path):
+    out = rr.build_candidate(tmp_path, ROOT)
+    for f in rr.CODE_FILES:
+        assert (out / f).is_file(), f
+    assert (out / "app" / "main.py").is_file()
+    assert not list(out.rglob("__pycache__"))
+    deploy = (ROOT / "scripts" / "deploy" / "hetzner" / "deploy.sh").read_text()
+    for f in rr.CODE_FILES:                                         # the two lists must not drift apart
+        assert f in deploy, f
+
+
+def test_not_due_run_exits_quietly(rr, tmp_path, capsys):
+    base = tmp_path / "base"
+    (base / "data").mkdir(parents=True)
+    if date.today().weekday() == 6:
+        pytest.skip("today is a Sunday: a run is due")
+    assert rr.main(["--base", str(base)]) == 0
+    assert "not due" in capsys.readouterr().out
+    assert not (base / "runs").exists()
