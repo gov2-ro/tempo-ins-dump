@@ -206,7 +206,7 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
             dataMap[tid] = (dataMap[tid] || 0) + val;
         }
         series.push({
-            name: metadata.matrix_name || 'Value',
+            name: config._seriesName || metadata.matrix_name || 'Value',
             type: forceType || 'line',
             smooth: true,
             sampling: 'lttb',
@@ -245,6 +245,8 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
                     }
                 }
                 let html = `<b>${params[0].axisValue}</b>`;
+                // A transformed value must not read as the dataset's unit.
+                if (config._yAxisName) html += ` <span style="opacity:.7">(${config._yAxisName})</span>`;
                 if (!vfmt && showTotal && hasValues) {
                     html += `<br/>∑ <b>${formatNumber(total)}</b>`;
                     html += `<hr style="margin:4px 0;border-color:currentColor;opacity:0.15"/>`;
@@ -263,7 +265,7 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
         grid: {
             left: 16,
             right: 20,
-            top: 20,
+            top: config._yAxisName ? 36 : 20,
             bottom: series.length > 1 ? 60 : 30,
             containLabel: true,   // value-axis labels never clip, whatever their width
         },
@@ -277,6 +279,10 @@ function createTimeSeriesChart(container, config, data, metadata, forceType = nu
             type: (config._logScale && !vfmt
                    && series.every(s => s.data.every(v => v == null || v > 0)))
                 ? 'log' : 'value',
+            ...(config._yAxisName && {
+                name: config._yAxisName,
+                nameTextStyle: { fontSize: 11, align: 'left' },
+            }),
             axisLabel: {
                 fontSize: 11,
                 formatter: yAxisLabel,
