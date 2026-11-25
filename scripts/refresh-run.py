@@ -362,6 +362,7 @@ def run(args) -> int:
         return finish("probe_failed", f"INS probe failed, day {day}")
 
     before = None
+    status["base_generation"] = (read_json(data / "corpus" / "generation-manifest.json", {}) or {}).get("generation_id")
     try:
         # ---- space, copy
         if free_gb(base) < args.min_free_gb:
@@ -529,6 +530,7 @@ def run(args) -> int:
         status["error"] = str(e)
         if before is not None:
             status["live_tree_changed"] = changed_files(before, snapshot(data))[:20]
+        _prune(base, keep=args.keep_runs, protect=run_id)
         rc = finish("failed", str(e))
         notify(f"TEMPO refresh {run_id} FAILED: {e}. Run folder kept: {run_dir}. The served release is untouched.")
         return rc

@@ -60,6 +60,12 @@ case "$OUTCOME" in candidate|candidate_with_failures) ;; *) die "run $RUN_ID has
 if [ "$STATIC_ONLY" = 0 ]; then
     [ -f "$RUN/release/data/MANIFEST.json" ] && [ -d "$RUN/release/code/app" ] || die "$RUN has no staged candidate (promoted already?)"
 fi
+# The run was built from the working data of its day. Promoting it over a newer generation would undo that one.
+BASE_GEN="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('base_generation') or '')" "$RUN/status.json" 2>/dev/null || true)"
+NOW_GEN="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('generation_id') or '')" "$PIPE/data/corpus/generation-manifest.json" 2>/dev/null || true)"
+if [ "$STATIC_ONLY" = 0 ] && [ -n "$BASE_GEN" ] && [ "$BASE_GEN" != "$NOW_GEN" ]; then
+    die "run $RUN_ID was built on generation ${BASE_GEN:0:8}, but $PIPE/data is ${NOW_GEN:0:8}: another run was promoted since. Start a new run."
+fi
 [ "$STATIC" = 0 ] || [ -f "$RUN/static/static-manifest.json" ] || die "$RUN has no gated static build (use --no-static to skip it)"
 # One writer at a time: hold the refresh run's lock while promoting (the lock is on this shell's fd 9).
 exec 9>"$PIPE/run.lock"
