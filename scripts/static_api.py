@@ -206,6 +206,28 @@ def _category_codes(tree) -> list[str]:
     return out
 
 
+def record_places(client, put) -> None:
+    """Record /api/places, every listed place's profile and its KPI baselines, and the profile of
+    each child a page links (the UATs of a county): a link must resolve on the static site."""
+    places = _answer(client, "/api/places")
+    put(places, "places.json.gz")
+    recorded = {(p["type"], p["slug"]) for p in places.get("places", [])}
+    for p in places.get("places", []):
+        prof = _answer(client, f"/api/places/{p['type']}/{p['slug']}")
+        put(prof, f"place/{p['type']}/{p['slug']}.json.gz")
+        # a county page links its UATs: each one needs its own (light) profile, or the link 404s
+        for ch in prof.get("children") or []:
+            if (ch["type"], ch["slug"]) not in recorded:
+                recorded.add((ch["type"], ch["slug"]))
+                put(_answer(client, f"/api/places/{ch['type']}/{ch['slug']}"),
+                    f"place/{ch['type']}/{ch['slug']}.json.gz")
+        for k in sorted({x.get("key") for x in (prof.get("kpis") or []) if x.get("key")}):
+            if not re.fullmatch(r"[a-z0-9_]{1,80}", k):
+                raise SystemExit(f"KPI key {k!r} is not file-safe")
+            put(_answer(client, f"/api/places/{p['type']}/{p['slug']}/baselines/{k}"),
+                f"place/{p['type']}/{p['slug']}/baselines/{k}.json.gz")
+
+
 def record(conn, out: Path, codes: list[str], *, all_datasets: bool, base_url: str = "",
            log=print) -> dict:
     """Answer every bounded endpoint once with the real app."""
@@ -236,16 +258,7 @@ def record(conn, out: Path, codes: list[str], *, all_datasets: bool, base_url: s
         put(_answer(client, "/api/reference/population", {"level": level}), f"population.{level}.json.gz")
     log(f"  recorded globals ({n})")
 
-    places = _answer(client, "/api/places")
-    put(places, "places.json.gz")
-    for p in places.get("places", []):
-        prof = _answer(client, f"/api/places/{p['type']}/{p['slug']}")
-        put(prof, f"place/{p['type']}/{p['slug']}.json.gz")
-        for k in sorted({x.get("key") for x in (prof.get("kpis") or []) if x.get("key")}):
-            if not re.fullmatch(r"[a-z0-9_]{1,80}", k):
-                raise SystemExit(f"KPI key {k!r} is not file-safe")
-            put(_answer(client, f"/api/places/{p['type']}/{p['slug']}/baselines/{k}"),
-                f"place/{p['type']}/{p['slug']}/baselines/{k}.json.gz")
+    record_places(client, put)
     log(f"  recorded places ({n})")
 
     for rid in load_recipes():

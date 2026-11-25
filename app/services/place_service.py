@@ -46,6 +46,28 @@ REGION_NAMES = {
 }
 
 
+# Macroregions (NUTS 1) and the development regions they contain.
+MACROREGION_REGIONS = {
+    "macroregiunea-unu": ["nord-vest", "centru"],
+    "macroregiunea-doi": ["nord-est", "sud-est"],
+    "macroregiunea-trei": ["sud-muntenia", "bucuresti-ilfov"],
+    "macroregiunea-patru": ["sud-vest-oltenia", "vest"],
+}
+
+_UAT_PATH = Path(__file__).parent.parent / "data" / "county_uats.json"
+
+
+@lru_cache(maxsize=1)
+def _county_uats() -> dict:
+    """{by_siruta: {siruta: item}, by_county: {county_slug: [item, ...]}} from app/data/county_uats.json
+    (built by scripts/build-county-uats.py from the SIRUTA register)."""
+    items = json.loads(_UAT_PATH.read_text(encoding="utf-8"))["items"]
+    by_county: dict = {}
+    for it in items:
+        by_county.setdefault(it["county_slug"], []).append(it)
+    return {"by_siruta": {it["siruta"]: it for it in items}, "by_county": by_county}
+
+
 def slugify(name: str) -> str:
     """Normalize a place name to a URL slug."""
     s = re.sub(r'^(Regiunea|REGIUNEA)\s+', '', name.strip(), flags=re.IGNORECASE)
@@ -87,6 +109,9 @@ def resolve_place(place_type: str, slug: str, *, conn=None) -> dict | None:
     if conn is None:
         conn = get_conn()
 
+    if place_type == "locality":
+        return _resolve_locality(slug, conn)
+
     rows = conn.execute("""
         SELECT DISTINCT p.geo_name_clean
         FROM dimension_options_parsed p
@@ -118,10 +143,85 @@ def resolve_place(place_type: str, slug: str, *, conn=None) -> dict | None:
         "parent_type": "region",
         "siruta": None,
     }
-    item = featured_item(place_type, slug) if place_type == "locality" else None
-    if item:        # a listed city: its parent is the county, its rows are keyed by SIRUTA
+    return out
+
+
+def locality_slugs(conn) -> dict:
+    """{siruta: (slug, corpus name)} for every locality value in the corpus.
+
+    Corpus names repeat across counties (357 slugs would be shared), so a repeated slug gets
+    "-<siruta>" appended. Every locality then has one unique slug; the SIRUTA code is the key.
+    """
+    rows = conn.execute("""
+        SELECT DISTINCT siruta_code, geo_name_clean FROM dimension_options_parsed
+        WHERE dim_type = 'geo' AND geo_level = 'locality'
+          AND siruta_code IS NOT NULL AND geo_name_clean IS NOT NULL
+    """).fetchall()
+    base: dict = {}
+    for sir, name in rows:
+        base.setdefault(slugify(name), []).append((int(sir), name))
+    out = {}
+    for sl, lst in base.items():
+        for sir, name in lst:
+            out[sir] = (sl if len(lst) == 1 else f"{sl}-{sir}", name)
+    return out
+
+
+def _resolve_locality(slug: str, conn) -> dict | None:
+    hit = next(((s, v[1]) for s, v in locality_slugs(conn).items() if v[0] == slug), None)
+    if not hit:
+        return None
+    siruta, corpus_name = hit
+    out = {"name": corpus_name, "type": "locality", "slug": slug, "ref_area_values": [corpus_name],
+           "parent_slug": None, "parent_name": None, "parent_type": "county",
+           "siruta": None, "locality_siruta": siruta}
+    uat = _county_uats()["by_siruta"].get(siruta)
+    if uat:                                   # name and county from the SIRUTA register
+        out["name"] = uat["name"]
+        out["parent_slug"] = uat["county_slug"]
+        out["parent_name"] = _county_name(uat["county_slug"])
+    item = next((i for i in featured_localities().get("items", [])
+                 if i.get("type", "locality") == "locality" and i["slug"] == slug), None)
+    if item:        # a listed city: its rows are keyed by SIRUTA (KPI cards exist for these only)
         out.update(name=item["name"], siruta=str(item["siruta"]), parent_type="county",
                    parent_slug=item["county_slug"], parent_name=item["county"])
+    return out
+
+
+def _county_name(slug: str) -> str:
+    return next((k for k in COUNTY_REGION if slugify(k) == slug), slug)
+
+
+def get_place_children(place_type: str, slug: str, *, conn=None) -> list[dict]:
+    """The places a page links down to: UATs of a county, counties of a region, regions of a macroregion.
+
+    [{type, slug, name, kind?, featured?}]. Localities use the unique slugs of `locality_slugs`,
+    so each link resolves at /place/locality/{slug}. Municipalities come first.
+    """
+    if conn is None:
+        conn = get_conn()
+    if place_type == "macroregion":
+        return [{"type": "region", "slug": r, "name": REGION_NAMES[r]}
+                for r in MACROREGION_REGIONS.get(slug, [])]
+    if place_type == "region":
+        return sorted(({"type": "county", "slug": slugify(k), "name": k}
+                       for k, r in COUNTY_REGION.items() if r == slug), key=lambda c: c["name"])
+    if place_type != "county":
+        return []
+    slugs = locality_slugs(conn)
+    featured = {int(i["siruta"]) for i in featured_localities().get("items", [])
+                if i.get("type", "locality") == "locality"}
+    order = {"municipiu": 0, "oras": 1, "comuna": 2}
+    out = []
+    for it in _county_uats()["by_county"].get(slug, []):
+        hit = slugs.get(it["siruta"])
+        if not hit:
+            continue
+        child = {"type": "locality", "slug": hit[0], "name": it["name"], "kind": it["kind"]}
+        if it["siruta"] in featured:
+            child["featured"] = True
+        out.append(child)
+    out.sort(key=lambda c: (order[c["kind"]], c["name"]))
     return out
 
 
@@ -875,6 +975,9 @@ def get_place_datasets(place_type: str, slug: str, *, conn=None) -> list[dict]:
     if not place:
         return []
 
+    extra, extra_args = "", []
+    if place_type == "locality" and place.get("locality_siruta"):   # names repeat across counties
+        extra, extra_args = " AND p.siruta_code = ?", [place["locality_siruta"]]
     rows = conn.execute("""
         SELECT DISTINCT m.matrix_code, m.matrix_name, m.context_code, c.context_name
         FROM dimension_options o
@@ -886,9 +989,10 @@ def get_place_datasets(place_type: str, slug: str, *, conn=None) -> list[dict]:
           AND p.geo_level = ?
           AND p.geo_name_clean IN ({})
           AND m.is_canonical      -- served datasets only: a split parent has no page (static 404)
+          {}
         ORDER BY m.context_code, m.matrix_name
-    """.format(",".join("?" * len(place["ref_area_values"]))),
-        [place_type] + place["ref_area_values"]
+    """.format(",".join("?" * len(place["ref_area_values"])), extra),
+        [place_type] + place["ref_area_values"] + extra_args
     ).fetchall()
 
     lineage = _context_lineage(conn)

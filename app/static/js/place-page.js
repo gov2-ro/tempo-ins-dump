@@ -29,6 +29,8 @@ const PLACE_UI = {
           comparison: 'Comparație', national: 'Medie națională', sameRegion: 'Aceeași regiune:',
           similarSize: 'Mărime similară:', typeLabels: { county:'Județ', region:'Regiune', macroregion:'Macroregiune', locality:'Localitate' },
           searchPlaceholder: 'Caută un loc...',
+          children: { locality: 'Localități', county: 'Județe', region: 'Regiuni', filter: 'Filtrează...', none: 'Nicio potrivire', featuredTitle: 'oraș mare, cu indicatori',
+              kinds: { municipiu: 'Municipii', oras: 'Orașe', comuna: 'Comune' } },
           approx: 'aproximare', approxTitle: 'Aproximare: medie simplă, nu rata oficială pentru total',
           weighted: 'medie ponderată', source: 'Sursă', period: 'perioadă', method: 'Metodă',
           stale: 'date mai vechi', staleTitle: 'Sursa are date până în', changeNA: 'schimbare indisponibilă',
@@ -44,6 +46,8 @@ const PLACE_UI = {
           comparison: 'Comparison', national: 'National average', sameRegion: 'Same region:',
           similarSize: 'Similar size:', typeLabels: { county:'County', region:'Region', macroregion:'Macroregion', locality:'Locality' },
           searchPlaceholder: 'Search a place...',
+          children: { locality: 'Localities', county: 'Counties', region: 'Regions', filter: 'Filter...', none: 'No match', featuredTitle: 'large city, with indicators',
+              kinds: { municipiu: 'Municipalities', oras: 'Towns', comuna: 'Communes' } },
           approx: 'approximation', approxTitle: 'Approximation: simple mean, not the official rate for the total',
           weighted: 'weighted mean', source: 'Source', period: 'period', method: 'Method',
           stale: 'older data', staleTitle: 'Source has data through', changeNA: 'change unavailable',
@@ -133,6 +137,7 @@ class PlaceProfileApp {
     // KPI labels, methods and units are language-dependent
     _rerenderForLang() {
         if (!this.data) return;
+        this._renderChildren();
         this._renderKPIs();
         this._renderThemes();
         this._renderComparisonHeader();
@@ -202,6 +207,7 @@ class PlaceProfileApp {
         }
 
         this._renderHeader();
+        this._renderChildren();
         this._renderKPIs();
         this._renderIndicatorGrid();
         this._renderComparison();
@@ -229,6 +235,46 @@ class PlaceProfileApp {
         document.getElementById('place-name').textContent = place.name;
         document.getElementById('geo-badge').textContent = this._badgeText(place);
         document.getElementById('dataset-count').textContent = `${dataset_count} ${this.ui.datasets}`;
+    }
+
+    // UATs of a county, counties of a region: grouped links, filter box when the list is long
+    _renderChildren() {
+        const box = document.getElementById('place-children');
+        const list = document.getElementById('place-children-list');
+        const input = document.getElementById('place-children-filter');
+        const kids = this.data.children || [];
+        if (!kids.length) { box.style.display = 'none'; return; }
+        const c = this.ui.children;
+        const fold = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        box.style.display = '';
+        document.getElementById('place-children-title').textContent = `${c[kids[0].type] || ''} (${kids.length})`;
+        const link = k => `<a class="pc-link${k.featured ? ' featured' : ''}" href="/place/${k.type}/${k.slug}"`
+            + ` data-n="${_esc(fold(k.name))}"${k.featured ? ` title="${_esc(c.featuredTitle)}"` : ''}>${_esc(k.name)}</a>`;
+        const groups = [];
+        for (const k of kids) {
+            const key = k.kind || '';
+            let g = groups.find(x => x.key === key);
+            if (!g) { g = { key, items: [] }; groups.push(g); }
+            g.items.push(k);
+        }
+        list.innerHTML = groups.map(g => `<div class="pc-group">`
+            + (g.key ? `<span class="pc-group-label">${_esc(c.kinds[g.key] || g.key)} (${g.items.length})</span>` : '')
+            + g.items.map(link).join('') + `</div>`).join('') + `<div class="pc-empty pc-hidden">${_esc(c.none)}</div>`;
+        list.classList.toggle('short', kids.length <= 12);
+        input.style.display = kids.length > 12 ? '' : 'none';
+        input.placeholder = c.filter;
+        input.value = '';
+        input.oninput = () => {
+            const q = fold(input.value.trim());
+            let shown = 0;
+            list.querySelectorAll('.pc-link').forEach(a => {
+                const hit = !q || a.dataset.n.includes(q);
+                a.classList.toggle('pc-hidden', !hit);
+                if (hit) shown++;
+            });
+            list.querySelectorAll('.pc-group').forEach(g => g.classList.toggle('pc-hidden', !g.querySelector('.pc-link:not(.pc-hidden)')));
+            list.querySelector('.pc-empty').classList.toggle('pc-hidden', shown > 0);
+        };
     }
 
     // "Localitate · județul Cluj": a city names its county next to the type

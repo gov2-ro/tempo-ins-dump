@@ -19,7 +19,7 @@
         .breadcrumb { font-size:0.8rem; color:var(--text-muted); margin-bottom:0.5rem; }
         .breadcrumb a { color:var(--text-muted); text-decoration:none; }
         .breadcrumb a:hover { color:var(--text-primary); }
-        .place-title { font-size:1.8rem; font-weight:700; display:flex; align-items:center; gap:0.75rem; }
+        .place-title { font-size:1.8rem; font-weight:700; display:flex; flex-wrap:wrap; align-items:center; gap:0.25rem 0.75rem; }
         .geo-badge {
             font-size:0.7rem; font-weight:600; text-transform:uppercase; letter-spacing:0.06em;
             padding:0.2rem 0.6rem; border-radius:10px;
@@ -54,6 +54,21 @@
         .comparison-meta, .comparison-note { font-size:0.75rem; color:var(--text-muted); margin:0.25rem 0; overflow-wrap:anywhere; }
         .comparison-note { color:var(--amber, #f59e0b); }
         .kpi-sparkline { height:32px; margin-top:0.4rem; }
+
+        /* Children: UATs of a county, counties of a region */
+        .place-children { margin:0 0 1.25rem; }
+        .place-children-head { display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem 1rem; margin-bottom:0.5rem; }
+        .place-children-title { font-size:0.875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); margin:0; }
+        .place-children-filter { flex:1 1 12rem; min-width:0; max-width:20rem; padding:0.3rem 0.6rem; font:inherit; font-size:0.8rem; background:var(--bg-2); color:var(--text-primary); border:1px solid var(--border); border-radius:6px; }
+        .place-children-list { max-height:15rem; overflow-y:auto; overflow-x:hidden; border:1px solid var(--border); border-radius:8px; padding:0.5rem 0.75rem; background:var(--bg-2); }
+        .place-children-list.short { max-height:none; }
+        .pc-group { display:flex; flex-wrap:wrap; align-items:baseline; gap:0.2rem 0.9rem; margin:0.15rem 0 0.5rem; }
+        .pc-group-label { flex:0 0 100%; font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; }
+        .pc-link { font-size:0.8rem; color:var(--text-primary); text-decoration:none; overflow-wrap:anywhere; }
+        .pc-link:hover { color:var(--accent); text-decoration:underline; }
+        .pc-link.featured { font-weight:600; color:var(--accent); }
+        .pc-empty { font-size:0.8rem; color:var(--text-muted); }
+        .pc-hidden { display:none !important; }
 
         /* Theme Sections */
         .section-title {
@@ -192,6 +207,13 @@
                 </div>
                 <div class="dataset-count" id="dataset-count"></div>
             </div>
+            <section class="place-children" id="place-children" style="display:none" aria-labelledby="place-children-title">
+                <div class="place-children-head">
+                    <h2 class="place-children-title" id="place-children-title"></h2>
+                    <input type="search" id="place-children-filter" class="place-children-filter" autocomplete="off" style="display:none">
+                </div>
+                <div class="place-children-list" id="place-children-list"></div>
+            </section>
             <nav class="county-theme-tabs" id="county-theme-tabs" role="tablist" aria-label="Teme"></nav>
             <section id="county-general" role="tabpanel" aria-labelledby="county-tab-general">
             <div class="kpi-grid" id="kpi-grid"></div>
@@ -217,6 +239,6 @@
     <script src="/js/site-chrome.js?v=6"></script>
     <script src="/js/theme-overviews.js?v=2"></script>
 
-    <script src="/js/place-page.js?v=10"></script>
+    <script src="/js/place-page.js?v=11"></script>
 </body>
 </html>

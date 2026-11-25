@@ -10,7 +10,7 @@ from app.db import get_conn
 from app.services import generation
 from app.services.place_service import (
     resolve_place, get_place_datasets, get_place_kpi_report,
-    get_place_peers, get_kpi_baselines, slugify, featured_localities,
+    get_place_peers, get_place_children, get_kpi_baselines, slugify, featured_localities,
 )
 
 router = APIRouter()
@@ -155,6 +155,7 @@ def _build_place_profile(place_type: str, slug: str) -> dict:
     kpi_report = get_place_kpi_report(place_type, slug, conn=conn)
     datasets = get_place_datasets(place_type, slug, conn=conn)
     peers = get_place_peers(place_type, slug, conn=conn)
+    children = get_place_children(place_type, slug, conn=conn)
 
     return {
         "place": {
@@ -167,5 +168,6 @@ def _build_place_profile(place_type: str, slug: str) -> dict:
         "omitted_kpis": kpi_report["omitted"],
         "datasets": datasets,
         "peers": peers,
+        "children": children,
         "dataset_count": len(datasets),
     }
