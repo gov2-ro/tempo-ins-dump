@@ -19,6 +19,7 @@ let askContext = [];  // follow-up selections from the server; in memory only, c
 let isLoading = false;
 let MAX_HISTORY_TURNS = 20;  // overwritten from /api/ask/config
 let ASK_UNAVAILABLE = false; // /api/ask/config: neither hosted nor own-key Ask
+let ASK_HOSTED = null;       // /api/ask/config `enabled`: false = only own-key Ask, so a key is required
 let MAX_SECONDS = 90;        // /api/ask/config limits.max_seconds
 let DEBUG_AVAILABLE = false; // server runs with TEMPO_ASK_DEBUG
 
@@ -180,6 +181,8 @@ function showAskUnavailable() {
           + 'Find the same data through <a href="/">search</a> or <a href="/places">places</a>.';
     box.classList.remove('hidden');
     document.getElementById('byok-notice')?.classList.add('hidden');
+    const gear = document.querySelector('.settings-toggle-wrap');
+    if (gear) gear.style.display = 'none';   // a key would not help here
     for (const el of [document.getElementById('chat-input'), document.getElementById('chat-send'),
                       ...document.querySelectorAll('.chat-example')]) {
         if (el) el.disabled = true;
@@ -262,8 +265,37 @@ function updateKeyBadge() {
     if (remember) remember.checked = scope === 'device';
     const badge = document.getElementById('settings-badge');
     if (badge) badge.classList.toggle('hidden', !hasKey);
+    const needs = needsKey();
     const notice = document.getElementById('byok-notice');
-    if (notice) notice.classList.toggle('hidden', hasKey || ASK_UNAVAILABLE);
+    if (notice) {
+        notice.classList.toggle('hidden', !needs);
+        const msg = document.getElementById('byok-notice-text');
+        if (msg) msg.textContent = tr('Pentru a pune întrebări, adaugă întâi cheia ta API.',
+                                      'To ask questions, first add your own API key.');
+        const btn = document.getElementById('byok-notice-btn');
+        if (btn) btn.textContent = tr('Deschide setările', 'Open settings');
+    }
+    const input = document.getElementById('chat-input');
+    if (input && !ASK_UNAVAILABLE) {
+        if (input.dataset.ph === undefined) input.dataset.ph = input.placeholder;
+        input.disabled = needs;
+        document.getElementById('chat-send').disabled = needs;
+        input.placeholder = needs ? tr('Adaugă întâi cheia API (⚙ setări).', 'Add your API key first (⚙ settings).')
+                                  : input.dataset.ph;
+    }
+}
+
+/** Own-key Ask only (hosted off) and no key or keyless model chosen: nothing can be sent yet. */
+function needsKey() {
+    if (ASK_HOSTED !== false || ASK_UNAVAILABLE) return false;
+    const { provider } = getBYOK();
+    const keyless = KEYLESS.has(provider) && !!PROVIDER_MODELS[provider];
+    return keyScope() === 'none' && !keyless;
+}
+
+function openSettings() {
+    document.getElementById('ask-settings')?.classList.remove('hidden');
+    document.getElementById('s-key')?.focus();
 }
 
 /** Returns extra payload fields when a user key is stored, empty object otherwise. */
@@ -310,6 +342,7 @@ async function initSettings() {
     let labels = {};
     try { labels = await (await fetch('/ask-models.json')).json(); } catch { /* ids as labels */ }
     const cfg = await askConfig();
+    ASK_HOSTED = cfg ? !!cfg.enabled : null;
     const allowed = (cfg && cfg.byok_models) || {};
     PROVIDER_MODELS = {};
     for (const [p, ids] of Object.entries(allowed)) {
@@ -343,7 +376,7 @@ async function initSettings() {
 
     // "Open settings" link in the no-key notice
     const noticeBtn = document.getElementById('byok-notice-btn');
-    if (noticeBtn) noticeBtn.addEventListener('click', e => { e.stopPropagation(); panel.classList.remove('hidden'); });
+    if (noticeBtn) noticeBtn.addEventListener('click', e => { e.stopPropagation(); openSettings(); });
 
     // Toggle panel visibility
     toggle.addEventListener('click', e => {
@@ -1176,7 +1209,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Example questions
     document.querySelectorAll('.chat-example').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', e => {
+            if (needsKey()) { e.stopPropagation(); openSettings(); return; }
             input.value = btn.dataset.q;
             autoResize(input);
             input.focus();

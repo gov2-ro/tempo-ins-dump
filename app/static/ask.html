@@ -402,10 +402,10 @@
             margin-top: 6px;
         }
         #byok-notice {
-            font-size: 0.8rem;
-            color: var(--text-2);
-            background: var(--bg-2);
-            border: 1px solid var(--border);
+            font-size: 0.85rem;
+            color: var(--amber);
+            background: var(--amber-dim);
+            border: 1px solid var(--amber);
             border-radius: var(--radius-sm);
             padding: 8px 12px;
             margin-bottom: 8px;
@@ -415,7 +415,8 @@
         }
         #byok-notice.hidden { display: none; }
         #byok-notice-btn {
-            font-size: 0.78rem;
+            font-size: 0.85rem;
+            font-weight: 600;
             color: var(--accent);
             background: none;
             border: none;
@@ -609,7 +610,7 @@
                 Don't submit personal or confidential information.
             </div>
             <div id="byok-notice" class="hidden">
-                <span>🔑 Set your API key to start chatting.</span>
+                <span id="byok-notice-text">Pentru a pune întrebări, adaugă întâi cheia ta API.</span>
                 <button id="byok-notice-btn">Open settings</button>
             </div>
             <div class="chat-input-row">
@@ -638,7 +639,7 @@
     <script src="/js/utils.js?v=33"></script>
     <script src="/js/api.js?v=31"></script>
     <script src="/js/site-chrome.js?v=6"></script>
-    <script src="/js/ask.js?v=10"></script>
+    <script src="/js/ask.js?v=11"></script>
     <script>
         // Patch appendMessage to hide empty state on first message
         const _orig = window.appendMessage;
