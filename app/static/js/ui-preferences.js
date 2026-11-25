@@ -17,15 +17,7 @@
         host.innerHTML = `<button type="button" class="toggle-btn reading-toggle" aria-expanded="false" aria-controls="reading-options" aria-label="${ro() ? 'Mărimea textului' : 'Text size'}">Aa</button>
             <div id="reading-options" class="reading-options hidden" role="group" aria-label="${ro() ? 'Mărimea textului' : 'Text size'}">
             ${sizes.map((n, i) => `<button type="button" data-size="${n}" aria-pressed="${n === initial}">${['S', 'M', 'L', 'XL'][i]}</button>`).join('')}</div>`;
-        let ask = nav.querySelector('a[href="/ask.html"]');
-        if (!ask && !location.pathname.endsWith('/ask.html')) {
-            ask = document.createElement('a');
-            ask.href = '/ask.html';
-            ask.className = 'toggle-btn ask-nav-link';
-            nav.prepend(ask);
-        }
-        if (ask) { ask.textContent = '🤖 Ask'; ask.classList.add('ask-nav-link'); ask.setAttribute('aria-label','Ask'); }
-        nav.prepend(host);
+        nav.insertBefore(host, nav.querySelector('#about-btn') || nav.querySelector('#theme-toggle'));
         new MutationObserver(() => {
             const label = ro() ? 'Mărimea textului' : 'Text size';
             host.querySelector('.reading-toggle').setAttribute('aria-label', label);

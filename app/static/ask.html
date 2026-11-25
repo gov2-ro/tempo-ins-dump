@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/explore.css?v=47">
+    <link rel="stylesheet" href="/css/explore.css?v=48">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <style>
         /* ---------------------------------------------------------------
@@ -536,20 +536,14 @@
             line-height: 1.4;
         }
     </style>
-    <link rel="stylesheet" href="/css/ui-rhythm.css?v=4">
-    <script src="/js/ui-preferences.js?v=3" defer></script>
+    <link rel="stylesheet" href="/css/ui-rhythm.css?v=5">
+    <script src="/js/ui-preferences.js?v=4" defer></script>
 </head>
 <body>
     <!-- Top bar -->
-    <nav class="topbar" id="topbar" style="position:relative;">
-        <div class="topbar-left">
-            <a id="zelogo" href="/" class="logo"><span class="logo-dot"></span>INS<span style="margin: -1ex 0 0 -1ex;">+</span></a>
-            <a href="/" class="back-btn" style="display:inline-flex;align-items:center;gap:4px;font-size:0.85rem;color:var(--text-2);text-decoration:none;padding:4px 8px;border-radius:6px;transition:background 0.15s" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">&larr; Datasets</a>
-        </div>
-        <div class="topbar-right">
-            <a href="/api.html" class="toggle-btn" title="API și MCP" style="text-decoration:none;font-size:0.8rem;padding:0 10px;display:flex;align-items:center;">API</a>
+    <nav class="topbar" id="topbar" data-active="ask" data-own="theme" style="position:relative;">
             <!-- BYOK settings toggle -->
-            <div class="settings-toggle-wrap">
+            <div class="settings-toggle-wrap" data-slot="right">
                 <button class="toggle-btn" id="settings-toggle" title="API key settings">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                 </button>
@@ -586,11 +580,6 @@
                     <div class="settings-note" id="s-transit-note">Your key is sent to this server with each question so the server can call the model provider on your behalf. The server does not store or log it, but it does pass through the server, so only use a key you are comfortable with that. Clear removes it from this browser (tab and device storage).</div>
                 </div>
             </div>
-            <button class="toggle-btn" id="theme-toggle" title="Toggle light/dark theme">
-                <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-                <svg id="theme-icon-moon" class="hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-            </button>
-        </div>
     </nav>
 
     <!-- Chat page -->
@@ -646,8 +635,10 @@
         };
     </script>
     <script src="/js/config.js?v=1"></script>
+    <script src="/js/utils.js?v=33"></script>
     <script src="/js/api.js?v=31"></script>
-    <script src="/js/ask.js?v=9"></script>
+    <script src="/js/site-chrome.js?v=4"></script>
+    <script src="/js/ask.js?v=10"></script>
     <script>
         // Patch appendMessage to hide empty state on first message
         const _orig = window.appendMessage;

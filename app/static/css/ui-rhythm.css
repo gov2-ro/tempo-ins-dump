@@ -282,9 +282,6 @@ button, select, input { font-family: inherit; }
 .topbar .topbar-right { flex-wrap: wrap; min-width: 0; max-width: 100%; }
 .place-page .comparison-section { scroll-margin-top: calc(var(--topbar-h) + var(--county-tabs-h, 5rem) + 1rem); }
 @media (max-width: 900px) { .topbar { flex-wrap: wrap; } }
-@media (max-width: 640px) {
-    .place-page .topbar-right a[href="/places"], .place-page .topbar-right a[href="/"] { display: none; }
-}
 /* Landing: a category holds its themes (two previews, subsections, recent updates). */
 .category-grid { columns: auto; margin-top: 0; padding-bottom: 3rem; }
 .landing-themed > .cat-section { border-bottom: 1px solid var(--border-hover); padding: 1.25rem 0 1.5rem; margin-bottom: 0; }

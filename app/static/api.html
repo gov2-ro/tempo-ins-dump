@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/explore.css?v=47">
+    <link rel="stylesheet" href="/css/explore.css?v=48">
     <script>
         (function(){
             var t=localStorage.getItem('lens_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');
@@ -42,30 +42,12 @@
         .toc { font-size: .86rem; color: var(--text-2); margin: .6rem 0 0; }
         .toc a { margin-right: .9rem; }
         .note { border-left: 3px solid var(--accent); padding: .3rem .9rem; margin: 1rem 0; background: var(--accent-dim); border-radius: 0 6px 6px 0; }
-        .topbar a.toggle-btn.active { color: var(--accent); }
     </style>
-    <link rel="stylesheet" href="/css/ui-rhythm.css?v=4">
-    <script src="/js/ui-preferences.js?v=3" defer></script>
+    <link rel="stylesheet" href="/css/ui-rhythm.css?v=5">
+    <script src="/js/ui-preferences.js?v=4" defer></script>
 </head>
 <body>
-    <nav class="topbar">
-        <div class="topbar-left">
-            <a href="/" class="logo"><span class="logo-dot"></span>INS<span style="margin: -1ex 0 0 -1ex;">+</span></a>
-        </div>
-        <div class="topbar-right">
-            <a href="/" class="toggle-btn" style="text-decoration:none;font-size:0.8rem;padding:0 10px;"><span data-l="ro">Date</span><span data-l="en">Data</span></a>
-            <a href="/places" class="toggle-btn" style="text-decoration:none;font-size:0.8rem;padding:0 10px;"><span data-l="ro">Locuri</span><span data-l="en">Places</span></a>
-            <a href="/ask.html" class="toggle-btn" style="text-decoration:none;font-size:0.8rem;padding:0 10px;">Ask</a>
-            <a href="/api.html" class="toggle-btn active" aria-current="page" style="text-decoration:none;font-size:0.8rem;padding:0 10px;">API</a>
-            <button class="toggle-btn" id="theme-toggle" title="Temă luminoasă / întunecată" aria-label="Temă luminoasă / întunecată">
-                <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-                <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-            </button>
-            <button class="toggle-btn lang-toggle" id="lang-toggle" title="Schimbă limba / Change language">
-                <span id="lang-label">EN</span>
-            </button>
-        </div>
-    </nav>
+    <nav class="topbar" id="topbar" data-active="api" data-own="theme lang"></nav>
 
 <main class="doc">
 
@@ -228,6 +210,10 @@ GET /sdmx/2.1/dataflow/INS/{code}/1.0</code></pre>
 </div>
 </main>
 
+<script src="/js/config.js?v=1"></script>
+<script src="/js/utils.js?v=33"></script>
+<script src="/js/api.js?v=31"></script>
+<script src="/js/site-chrome.js?v=4"></script>
 <script>
 (function () {
     var root = document.documentElement;

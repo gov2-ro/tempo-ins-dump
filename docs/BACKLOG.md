@@ -141,7 +141,7 @@ agents finish.
 - [ ] **P2 — CP: profile pages for the large cities (≥ 200,000 inhabitants)** — brief
   [city-pages.md](plans/city-pages.md) (Sonnet). "Locuri" lists only counties and regions today; the
   `locality` route exists but has no KPIs and is not listed.
-- [ ] **P1 — NAV: one top bar for every page** — brief [nav-bar.md](plans/nav-bar.md) (Sonnet). Seven pages
+- [x] **P1 — NAV: one top bar for every page** (done 2026-11-25, merged on main, not deployed; at 375 px the bar wraps to two rows) — brief [nav-bar.md](plans/nav-bar.md) (Sonnet). Seven pages
   copy the top bar by hand and have drifted. Needed before selected user testing.
 
 ## NEXT — HZ-3 on the Hetzner VPS — 2026-11-17

@@ -234,6 +234,15 @@ kbd {
     color: var(--text-3);
 }
 
+/* Shared bar (js/site-chrome.js): text links with icons; the current page is accent-coloured. */
+.tb-link { text-decoration: none; font-size: 0.8rem; padding: 0 10px; gap: 5px; }
+.topbar a.toggle-btn[aria-current="page"] { color: var(--accent); }
+[data-theme="light"] #theme-icon-sun, :root:not([data-theme="light"]) #theme-icon-moon { display: none; }
+@media (max-width: 480px) {
+    .topbar.tb-compact .toggle-btn { min-width: 1.75rem; }
+    .topbar.tb-compact .about-btn { min-width: 1.4rem; width: 1.4rem; min-height: 1.4rem; }
+}
+
 .lang-toggle {
     width: auto;
     padding: 0 8px;

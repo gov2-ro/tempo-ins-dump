@@ -1,6 +1,25 @@
 # Activity History
 
 
+## 2026-11-25 — NAV: one top bar rendered by site-chrome.js
+
+- **What:** `site-chrome.js` now renders the whole top bar into `<nav class="topbar" id="topbar" data-active=...>` on
+  every page: logo, page slot (left), search trigger, Date/Locuri/Ask/API with icons, page slot (right), About,
+  theme, language. The current page link has `aria-current="page"`. `data-own="search sidebar about theme lang"`
+  lists the controls a page controller binds itself; the shared script skips them. Children with `data-slot`
+  (`left`, `right`) move into the slots: sidebar toggle and back button (home, dataset, compare), place search
+  (place page), Ask settings (Ask page).
+- **Why:** seven hand-copied bars had drifted (labels, icons, missing search, "NL2SQL", "← Datasets").
+- **Non-obvious decisions:** the controllers keep their own theme and language handlers (places, place, dims,
+  home), because their language switch re-renders in the page; the bar relabels itself after the click.
+  Theme icons follow `html[data-theme]` in CSS, so the three icon conventions (class, style, inverted in `ask.js`)
+  no longer fight. The flag image on the home language button is gone. `ui-preferences.js` no longer rewrites the Ask
+  link; it puts the Aa control before About. Pages without a search overlay get one from `site-chrome.js`
+  (they now load `utils.js` and `site-chrome.js`). About on other pages goes to `/?page=about`.
+  The mobile rule that hid Date and Locuri on the place page is gone; at 375 px the labels collapse to icons and the
+  bar wraps to two rows (three on the place page, with the place search).
+- Merged onto main by Opus with `api.html` converted (placeholder with `data-own="theme lang"`); `site-chrome.js` v=4.
+
 ## 2026-11-25 — API and MCP page, UI notes
 
 - New bilingual page `/api.html`: REST, MCP and SDMX quick start, route table, how to read a data

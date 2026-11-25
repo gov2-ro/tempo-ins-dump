@@ -1,12 +1,101 @@
 /**
- * Shared site chrome for standalone pages (dataset-v2, compare): topbar,
- * search overlay, quick-nav sidebar, theme & language toggles.
+ * Shared site chrome for every page: the one top bar (rendered here, from this
+ * file only), the search overlay, the quick-nav sidebar, theme & language toggles.
  *
- * Mirrors the explore-app chrome — same element ids and explore.css classes,
- * so the two look identical. Dataset links land on dashboard-v2 (the
- * canonical dataset page). Theme changes dispatch a `themechange` event on
- * window so page controllers can re-render their ECharts instances.
+ * A page holds `<nav class="topbar" id="topbar" data-active="data|places|ask|api">`.
+ *   data-active  which link carries aria-current="page".
+ *   data-own     space-separated controls the page controller binds itself, so
+ *                this file leaves them alone: search sidebar about theme lang.
+ *   [data-slot="left"|"right"] children of the nav move into the left slot
+ *                (after the logo) or the right slot (before About).
+ * The bar keeps the ids the controllers bind to: search-trigger, about-btn,
+ * theme-toggle, lang-toggle (and the page's own sidebar-toggle).
+ * Dataset links land on dashboard-v2 (the canonical dataset page). Theme changes
+ * dispatch a `themechange` event on window so controllers can re-render ECharts.
  */
+
+const BAR_UI = {
+    ro: {
+        nav: 'Navigare principală', data: 'Date', places: 'Locuri', ask: 'Ask', api: 'API',
+        about: 'Despre', theme: 'Schimbă tema luminoasă/întunecată', lang: 'Schimbă limba',
+        search: 'Caută seturi de date',
+    },
+    en: {
+        nav: 'Main navigation', data: 'Data', places: 'Places', ask: 'Ask', api: 'API',
+        about: 'About', theme: 'Toggle light/dark theme', lang: 'Switch language',
+        search: 'Search datasets',
+    },
+};
+
+const BAR_LINKS = [
+    ['data', '/', '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>'],
+    ['places', '/places', '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>'],
+    ['ask', '/ask.html', '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'],
+    ['api', '/api.html', '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>'],
+];
+
+function barLang() {
+    const l = new URLSearchParams(window.location.search).get('lang') || localStorage.getItem('lens_lang') || 'ro';
+    return l === 'en' ? 'en' : 'ro';
+}
+
+/** Fill the #topbar placeholder. Runs once, as soon as this script loads. */
+function renderTopbar() {
+    const nav = document.getElementById('topbar');
+    if (!nav || nav.dataset.rendered) return;
+    const slots = { left: [], right: [] };
+    for (const el of [...nav.children]) {
+        if (slots[el.dataset.slot]) slots[el.dataset.slot].push(el);
+    }
+    const ui = BAR_UI[barLang()];
+    const active = nav.dataset.active;
+    const links = BAR_LINKS.map(([key, href, icon]) => `
+        <a href="${href}" class="toggle-btn tb-link" data-bar="${key}"${key === active ? ' aria-current="page"' : ''}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg><span class="tb-label">${ui[key]}</span></a>`).join('');
+    nav.innerHTML = `
+        <div class="topbar-left">
+            <a id="zelogo" href="/" class="logo"><span class="logo-dot"></span>INS<span style="margin: -1ex 0 0 -1ex;">+</span></a>
+        </div>
+        <button class="search-trigger" id="search-trigger" aria-label="${ui.search}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span>${CHROME_UI[barLang()].searchTrigger}</span>
+            <kbd>&hairsp;/&hairsp;</kbd>
+        </button>
+        <div class="topbar-right">${links}
+            <button class="toggle-btn about-btn" id="about-btn" title="${ui.about}" aria-label="${ui.about}">?</button>
+            <button class="toggle-btn" id="theme-toggle" title="${ui.theme}" aria-label="${ui.theme}">
+                <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </button>
+            <button class="toggle-btn lang-toggle" id="lang-toggle" title="${ui.lang}" aria-label="${ui.lang}">
+                <span id="lang-label">${barLang() === 'ro' ? 'EN' : 'RO'}</span>
+            </button>
+        </div>`;
+    nav.classList.add('tb-compact');
+    nav.setAttribute('aria-label', ui.nav);
+    nav.querySelector('.topbar-left').append(...slots.left);
+    for (const el of slots.right) nav.querySelector('.topbar-right').insertBefore(el, nav.querySelector('#about-btn'));
+    nav.dataset.rendered = '1';
+}
+
+/** Relabel the bar for a language (the lang toggle changed it without a reload). */
+function setBarLang(lang) {
+    const nav = document.getElementById('topbar');
+    if (!nav) return;
+    const ui = BAR_UI[lang] || BAR_UI.ro;
+    for (const a of nav.querySelectorAll('[data-bar]')) a.querySelector('.tb-label').textContent = ui[a.dataset.bar];
+    for (const [id, key] of [['about-btn', 'about'], ['theme-toggle', 'theme'], ['lang-toggle', 'lang'], ['search-trigger', 'search']]) {
+        const node = document.getElementById(id);
+        if (!node) continue;
+        node.setAttribute('aria-label', ui[key]);
+        if (id !== 'search-trigger') node.title = ui[key];
+    }
+    nav.setAttribute('aria-label', ui.nav);
+    const label = document.getElementById('lang-label');
+    if (label) label.textContent = lang === 'ro' ? 'EN' : 'RO';
+    const trigger = document.querySelector('#search-trigger span');
+    if (trigger) trigger.textContent = CHROME_UI[lang].searchTrigger;
+}
 
 const CHROME_UI = {
     ro: {
@@ -37,6 +126,7 @@ class SiteChrome {
         this.lang = params.get('lang') || localStorage.getItem('lens_lang') || 'ro';
         if (!CHROME_UI[this.lang]) this.lang = 'ro';
         this.ui = CHROME_UI[this.lang];
+        this.own = new Set((document.getElementById('topbar')?.dataset.own || '').split(/\s+/));
         this.searchIdx = -1;
         this.categories = null;
         this._sidebarLoaded = false;
@@ -48,10 +138,37 @@ class SiteChrome {
 
     init() {
         this.applyLang();
-        this.syncThemeIcons();
         this.bindTopbar();
-        this.bindSearch();
-        this.initSidebar();
+        if (!this.own.has('search')) {
+            this.ensureSearchOverlay();
+            this.bindSearch();
+        }
+        if (!this.own.has('sidebar')) this.initSidebar();
+    }
+
+    setLang(lang) {
+        this.lang = lang;
+        this.ui = CHROME_UI[lang];
+        setBarLang(lang);
+    }
+
+    /** Pages without their own search overlay get this one. */
+    ensureSearchOverlay() {
+        if (document.getElementById('search-overlay')) return;
+        document.body.insertAdjacentHTML('beforeend', `
+    <div class="search-overlay hidden" id="search-overlay">
+        <div class="search-backdrop" id="search-backdrop"></div>
+        <div class="search-modal">
+            <div class="search-input-row">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="search-input" spellcheck="false">
+                <kbd>esc</kbd>
+            </div>
+            <div id="search-results" class="search-results"></div>
+        </div>
+    </div>`);
+        const input = document.getElementById('search-input');
+        input.placeholder = this.ui.searchPlaceholder;
     }
 
     applyLang() {
@@ -65,34 +182,34 @@ class SiteChrome {
         if (filter) filter.placeholder = this.ui.sidebarFilter;
         const label = document.getElementById('lang-label');
         if (label) label.textContent = this.lang === 'ro' ? 'EN' : 'RO';
-        localizeChrome(this.lang);
-        const flag = document.getElementById('lang-flag');
-        if (flag) flag.remove();  // standalone pages skip the flag asset
+        if (typeof localizeChrome === 'function') localizeChrome(this.lang);
     }
 
     // ------------------------------------------------------------ theme/lang
 
-    syncThemeIcons() {
-        const theme = document.body.dataset.theme || 'dark';
-        document.getElementById('theme-icon-sun')?.classList.toggle('hidden', theme !== 'dark');
-        document.getElementById('theme-icon-moon')?.classList.toggle('hidden', theme === 'dark');
-    }
-
     bindTopbar() {
-        document.getElementById('theme-toggle')?.addEventListener('click', () => {
-            const next = (document.body.dataset.theme === 'light') ? 'dark' : 'light';
+        if (!this.own.has('theme')) document.getElementById('theme-toggle')?.addEventListener('click', () => {
+            const next = (document.documentElement.dataset.theme === 'light') ? 'dark' : 'light';
             document.documentElement.dataset.theme = next;
             document.body.dataset.theme = next;
             localStorage.setItem('lens_theme', next);
-            this.syncThemeIcons();
             window.dispatchEvent(new CustomEvent('themechange'));
         });
-        document.getElementById('lang-toggle')?.addEventListener('click', () => {
-            const next = this.lang === 'ro' ? 'en' : 'ro';
-            localStorage.setItem('lens_lang', next);
-            const url = new URL(window.location);
-            url.searchParams.set('lang', next);
-            window.location.href = url.toString();
+        if (this.own.has('lang')) {
+            // The controller switches the language in the page. Relabel the bar after it did.
+            document.getElementById('lang-toggle')?.addEventListener('click', () =>
+                setTimeout(() => this.setLang(document.getElementById('lang-label').textContent === 'EN' ? 'ro' : 'en')));
+        } else {
+            document.getElementById('lang-toggle')?.addEventListener('click', () => {
+                const next = this.lang === 'ro' ? 'en' : 'ro';
+                localStorage.setItem('lens_lang', next);
+                const url = new URL(window.location);
+                url.searchParams.set('lang', next);
+                window.location.href = url.toString();
+            });
+        }
+        if (!this.own.has('about')) document.getElementById('about-btn')?.addEventListener('click', () => {
+            window.location.href = `/?page=about${this.lang === 'en' ? '&lang=en' : ''}`;
         });
     }
 
@@ -181,6 +298,7 @@ class SiteChrome {
     // --------------------------------------------------------------- sidebar
 
     initSidebar() {
+        if (!document.getElementById('lens-sidebar')) return;
         document.getElementById('sidebar-toggle')?.addEventListener('click', () => this.toggleSidebar());
         document.getElementById('sidebar-close')?.addEventListener('click', () => this.closeSidebar());
         document.getElementById('sidebar-search-input')?.addEventListener('input',
@@ -351,7 +469,11 @@ class SiteChrome {
     }
 }
 
+// Render now when the placeholder is already parsed (scripts sit at the end of body),
+// so the page controllers find the bar's ids when they bind.
+renderTopbar();
 document.addEventListener('DOMContentLoaded', () => {
+    renderTopbar();
     window.siteChrome = new SiteChrome();
     window.siteChrome.init();
 });

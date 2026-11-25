@@ -386,10 +386,7 @@ function initTheme() {
 function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('lens_theme', theme);
-    const sun = document.getElementById('theme-icon-sun');
-    const moon = document.getElementById('theme-icon-moon');
-    if (sun) sun.classList.toggle('hidden', theme === 'dark');
-    if (moon) moon.classList.toggle('hidden', theme === 'light');
+    // The bar's theme icons follow html[data-theme] in CSS (site-chrome).
 }
 
 // ---------------------------------------------------------------------------
