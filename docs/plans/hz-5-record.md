@@ -210,3 +210,131 @@ on the Mac before `promote.sh`.
 8. Sudo: `promote.sh` already needs the `systemctl restart tempo-api` rule from `deploy.sh`'s setup.
 9. Memory: if the static build or the parity gate does not fit next to the API and the scrapers, run the cron entry
    after the scrapers or stop `tempo-api`'s neighbours; see "Memory" below for the numbers.
+
+## 8. Rehearsal results (Mac, APFS clone of generation `9c3e8eaa`)
+
+Setup: the served `data/` cloned with `cp -c -R` (without `_archive`, `4-datasets*`) into `~/devbox/gov2/tempo-gen-hz5/data`;
+`refresh-run.py --base ~/devbox/gov2/tempo-gen-hz5`. The clone had no `4-datasets` and the run copy left out
+`parquet-v2`, `eval` and `quarantine`, as on the VPS. INS answered every time. Nothing in the main checkout was written.
+Promotion ran in a sandbox (`--base` a temp folder with a fake restart command, port 18080); the working data of the
+clone was promoted there, never the served one.
+
+| Run | Command (after `--base ... --python ... --force --sweep no`) | Result |
+|---|---|---|
+| 1 | `--matrix EXP101A,FOM114A,AGR210A --static-codes <5 codes>` | stopped at the static gate: the API parity cases name datasets that are not in a subset build. Fixed: with `--static-codes` the cases are skipped and the status says so |
+| 2 | same, full static build | stopped at `release-check-local`: the memory cap below made the audit mark 4 big files `invalid` (out of memory). The gate worked as meant. Fixed by the bucketed grain check |
+| 3 | `--matrix EXP101A,FOM114A,AGR210A` (**full static build, full API parity**) | **candidate**, 27 min |
+| 4 | `--matrix EXP103A,ZZZ9999 --static-codes <3>` (`ZZZ9999` does not exist: a failed matrix) | **candidate_with_failures**; exposed the `--write-db` bug (fixed) |
+| 5 | `--matrix EXP103B,FOM103H --static-codes <2>` after all fixes | **candidate**, about 6 min |
+| probe | `--simulate-probe-failure`, twice | `probe_failed`, notified on day 1 only, run folder removed, working data untouched |
+
+### Run 3, per step (the full run)
+
+| Step | Seconds | Peak resident memory (largest process of the step) |
+|---|---|---|
+| probe | 0.7 | 135 MB |
+| copy | 3.7 | |
+| feed (3 matrices, global profiles, search index) | 62 | 691 MB |
+| cleanup-retired | 0.6 | 178 MB |
+| kpi-collect / kpi-check | 0.6 / 1.4 | 218 / 181 MB |
+| compact | 2.7 | 418 MB |
+| manifest (audit with grain check, hashes) | 99 | 1,439 MB (**8,105 MB** before the cap and the buckets) |
+| audit report | 95 | 1,501 MB (8,284 MB before) |
+| stage (`prepare-deploy-data.sh`) | 6.4 | 198 MB |
+| release-check-local (default + MCP smoke) | 5.5 | 308 MB |
+| **static-build (full, 3,333 datasets)** | **1,069** | **1,511 MB** |
+| api-cases (`gen-api-cases.py`) | 253 | **4,379 MB** with POP107D; **930 MB** without it (measured apart; now the default) |
+| release-check-static (node parity, 537 cases) | 18 | 2,203 MB |
+| total | 1,620 | |
+
+Run 5 (small, after the fixes): feed 64 s / 702 MB, manifest 102 s / 1,265 MB, audit 102 s / 1,435 MB.
+
+### Footprint
+
+- Files of a full run folder: data copy 545 MB + staged release 461 MB + static site 609 MB = 1.55 GB.
+- Steady state on the sandbox after three promotions: working `data/` 545 MB, `data.prev` 273 MB unique (parquet is shared),
+  two releases about 0.6 GB each (the second shares files with the first once the staged mtimes are preserved, see below).
+  Estimate on the VPS: 2.0 GB at rest, 3.6 GB during a run. **Under the 4 GB budget.**
+- `peak_used_gb` in `status.json` is the lowest free space seen (sampled every 2 s) minus the start: 0.7 GB for the small runs.
+  Run 3 shows 7.2 GB because the 4.4 GB `api-cases` process made macOS swap; it is not file footprint.
+- Raw CSVs: never more than one matrix's CSV at a time; the rehearsal runs left no `4-datasets` behind.
+
+### Status and notification samples
+
+Success (`status.json`, run 3, trimmed; the steps are in the table above):
+
+    {"outcome": "candidate", "run_id": "rehearsal3", "generation": "c45dc4df...", "seconds": 1620,
+     "feed": {"exit_code": 0, "processed": 3, "failed": [], "empty": [], "optional_failed": [], "retry_set": [],
+              "watermark": "20.11.2026", "stale": {}},
+     "touched": {"count": 6, "codes": ["AGR210A", "EXP101A", "..."]}, "cleanup": {"codes": 18, "tables": 1},
+     "kpi_checks": {"match": 1}, "db_bytes_before": 140783616, "db_bytes_after": 120074240,
+     "live_tree_changed": [], "api_parity": "run", "notes": [],
+     "disk": {"free_before_gb": 38.66, "peak_used_gb": 7.23, "run_dir_bytes": 1548587826},
+     "pending_since": null, "last_success": "2026-11-25",
+     "promote": "bash scripts/deploy/hetzner/promote.sh --apply rehearsal3"}
+
+Notifications (a local webhook that logged the POST):
+
+    candidate:               TEMPO refresh rehearsal3: candidate. Generation c45dc4df, 6 datasets touched, 0 failed (), retry set 0. DB 141 -> 120 MB. Gates passed. Approve: bash scripts/deploy/hetzner/promote.sh --apply rehearsal3
+    candidate with failures: TEMPO refresh rehearsal4: candidate_with_failures. Generation 17955ee6, 3 datasets touched, 1 failed (ZZZ9999), retry set 1. DB 140 -> 120 MB. Gates passed. Approve: bash scripts/deploy/hetzner/promote.sh --apply rehearsal4
+    gate failed:             TEMPO refresh rehearsal1 FAILED: step release-check-static failed (rc 1), log .../13-release-check-static.log. Run folder kept: .../runs/rehearsal1. The served release is untouched.
+    INS down (day 1):        TEMPO refresh: INS does not answer a data query (day 1 of 7). Retrying daily.
+
+### What the rehearsal showed
+
+1. **The corpus the VPS would start from has 18 retired split children** (BUF110I ... BUF113J_*, 90 `sdmx_column_map`
+   rows); the first cleanup removed them. The cleanup count of run 3 is that.
+2. **`--write-db` of `check-kpi-totals.py` crashed on an empty result** and left the old rows of datasets that no
+   longer sum a dimension. Fixed, tested.
+3. **The audit used 8 GB** (one 22M-row dataset, POP107D, grouped in one pass). A memory cap alone made it fail (OOM,
+   reported as `invalid`, which the strict gate caught). The grain check now runs in hash buckets
+   (`TEMPO_AUDIT_GRAIN_BUCKET_ROWS`, same sums, tested): 1.4-1.5 GB with `TEMPO_AUDIT_MEMORY=512MB`, one thread.
+4. **`gen-api-cases.py` needed 4.9 GB** because its default list includes an unfiltered CSV download of POP107D held in the
+   test client. The run script passes `--codes` without it (0.9 GB). The static parity then covers `/options` and
+   `/download` for six datasets, not seven.
+5. **`rsync --link-dest` linked nothing**: `prepare-deploy-data.sh` used `cp`, so every staged file had a new mtime.
+   It uses `cp -p` now. The sandbox's first two releases pre-date the fix; proven with `cp -pR` + `rsync --link-dest`
+   (same inode). Not re-proven end to end: the third promotion compared against a release made before the fix.
+6. A `promote.sh` that fails before the swap leaves its release folder; a retry now reuses it. The service inherited the
+   `run.lock` file descriptor in the sandbox; `lib.sh` closes it for the restart command.
+7. Swap-back: with a release that does not start, `promote.sh` swapped back to the previous release, the health check
+   passed, the exit code was 1, and the run's data stayed unpromoted. A second promote on the same candidate succeeded.
+
+### Effect of the stale-check rule on the served generation
+
+Measured with `insights.compute_insights` on the clone of `9c3e8eaa`, old gate against new gate, for all 906
+datasets with a `match` row in `kpi_total_checks`:
+**541 datasets would lose their headline KPI** (withheld as `source_total_unchecked`), 361 keep it, 4 had none already.
+Examples: `ACC101B_judete`, `AGR206A_judete_mii_lei_ron`, `AGR210A`, `AGR301A_judete`. Their checks name an older
+period than the KPI shows. A weekly run re-checks only the datasets it touched. **Do not deploy the rule before a
+full re-check** (one-off, about 900 INS cells, throttled 0.7 s each; the cache is reusable): run
+`check-kpi-totals.py collect` and `check ... --write-db` on a copy of the DB (commands in the script's docstring), then
+compact, manifest and stage as in the run.
+
+## 9. Memory on the VPS (4 GB shared with the API at `MemoryMax=1G` and the scrapers)
+
+| Step | Peak on the Mac | Fits next to the API (1 GB) and a scraper? |
+|---|---|---|
+| feed | 0.7 GB (about 1.5 GB for a large matrix, not measured) | yes |
+| manifest, audit | 1.4-1.5 GB | yes if the scrapers are not at their peak: **check on the VPS** |
+| static-build | 1.5 GB | tight; run it after the scrapers |
+| api-cases | 0.9 GB (4.4 GB with POP107D) | yes without POP107D |
+| node parity gate | 2.2 GB | **no with API + scraper: verify**; options below |
+
+These are macOS resident sizes; nothing was measured on Linux. If the node gate does not fit: (a) run only that step
+on the Mac (`release-check.py --static <copied static dir> --api-cases ...`) before `promote.sh`; (b) lower
+`--max-old-space-size` in `release-check.py` (6000 now) after measuring; (c) add 2 GB swap during the run.
+The cron time can also move after the scrapers. `refresh-run.py` runs the steps one after another, never in parallel.
+
+## 10. Not done, not verified, assumed
+
+- **Nothing ran on the VPS.** Linux, Node, DreamHost, the real `systemctl restart`, the Python 3.12 venv build and memory
+  next to the API are unverified (commands in section 7).
+- **The monthly sweep** (`--sweep yes`, `sweep-refresh`) was not run (it fetches all 4,100 metas: about 90 minutes).
+  Its parts are tested (`sweep_codes`). A code that INS added (`new_in_ins`) goes through `update-pipeline.py --matrix`
+  without `--fetch-context`: untested whether a new matrix gets its context row. Run one sweep run on the Mac before
+  enabling it on the VPS.
+- `deploy-static.sh --go` was not run (no DreamHost access); its dry run was. The `--static-only` retry was not run.
+- The full static build ran once (run 3, before the `--codes` change for api-cases). Later runs used `--static-codes`.
+- `meta/`, `misc/` and `sdmx-dashboards/` were in the run copies; I did not prove the run needs them.
+- `deploy.sh` was refactored onto `lib.sh` and checked with `bash -n` and a read-through; it was not run against a host.
