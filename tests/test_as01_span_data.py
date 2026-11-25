@@ -28,3 +28,13 @@ def test_span_band_is_pinned_and_its_value_returned(tmp_path, monkeypatch):
     assert body["aggregation"]["method"] == "aggregate_row"
     assert body["aggregation"]["filters"]["AGE"] == ["0-2 ani"]
     assert [row[-1] for row in body["rows"]] == [31.0]        # the band's cell, not 30 (the singles' sum)
+
+
+def test_insights_headline_uses_the_pinned_band_not_the_sum(tmp_path, monkeypatch):
+    """The composer's slice leaves AGE unfiltered; only the decision pins the band.
+    Insights must fetch with the decision's filters (31), not sum every band (61)."""
+    env = make_env(tmp_path, monkeypatch, build=build)
+    r = env.client.get("/api/datasets/SPANX/insights", params={"lang": "ro"})
+    assert r.status_code == 200
+    latest = [k for k in r.json().get("kpis", []) if k.get("key") == "latest"]
+    assert latest and latest[0]["value"] == 31.0

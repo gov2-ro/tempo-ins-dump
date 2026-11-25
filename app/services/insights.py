@@ -87,6 +87,18 @@ def _period_label(p):
     return str(p).replace('Anul ', '').strip() if p is not None else None
 
 
+def _decided(spec, decision):
+    """The slice with the filters the decision actually allows (pins, levels).
+
+    The composer pins "Total" options itself, but some pins exist only in the
+    decision (AS-01's spanning age band): fetching with the composer's filters
+    would then sum every band. Composer tiles and data_query already read
+    `effective_filters`; insights must too.
+    """
+    eff = getattr(decision, 'effective_filters', None)
+    return {**spec, 'filters': eff} if eff else spec
+
+
 def _fetch_slice(conn, matrix_code, dimensions, spec, agg_func, schema=None):
     """Run one composed slice (filters are data-grounded by the composer).
 
@@ -175,7 +187,8 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
         decision = spec_decision(spec, dimensions, actual_values, struct,
                                  non_additive)
         if decision.available:
-            rows, refusal = _fetch_slice(conn, matrix_code, dimensions, spec,
+            rows, refusal = _fetch_slice(conn, matrix_code, dimensions,
+                                         _decided(spec, decision),
                                          decision.agg_func or 'SUM', schema)
             if refusal:
                 suppressed.append({'key': 'latest', 'outcome': ap.UNAVAILABLE,
@@ -339,7 +352,8 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
                                'reason': 'arbitrary_pin', 'column': None})
             rows = []
         elif rank_decision.available:
-            rows, refusal = _fetch_slice(conn, matrix_code, dimensions, spec,
+            rows, refusal = _fetch_slice(conn, matrix_code, dimensions,
+                                         _decided(spec, rank_decision),
                                          rank_decision.agg_func or 'SUM', schema)
             if refusal:
                 suppressed.append({'key': 'ranking', 'outcome': ap.UNAVAILABLE,
