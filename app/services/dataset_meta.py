@@ -574,7 +574,7 @@ def clear_context_cache():
 _WEAK_VERIFICATIONS = frozenset({'profile_flat', 'metadata', 'label', 'unverified', None})
 
 
-def source_total_gate(conn, matrix_code, decision):
+def source_total_gate(conn, matrix_code, decision, latest_period=None):
     """(reason to withhold | None, source_check | None) for a summed KPI.
 
     kpi_total_checks holds, per dataset, how its summed latest KPI compared with
@@ -582,6 +582,11 @@ def source_total_gate(conn, matrix_code, decision):
     Without that table the generation predates the check and nothing changes.
     A mismatch always withholds; a sum resting on weak verification also needs
     a match. Verified/curated sums stand unless INS disagrees.
+
+    `latest_period`: the period of the KPI the caller computed (insights). A `match` row
+    older than it says nothing about this number (a refresh added periods after INS was
+    asked), so it counts as unchecked. Callers that pass no period are unchanged. A stale
+    `mismatch` still withholds: it is never published on an older check's authority.
     """
     summed = [d for d in (decision.dimensions if decision else [])
               if d.get('treatment') in ('partition', 'level')]
@@ -594,6 +599,9 @@ def source_total_gate(conn, matrix_code, decision):
     except duckdb.CatalogException:
         return None, None
     status = row.get('status')
+    if status == 'match' and latest_period is not None and row.get('period') is not None \
+            and str(row['period']).strip() < str(latest_period).replace('Anul ', '').strip():
+        row, status = {}, None              # stale: as if INS had not been asked
     if status == 'mismatch':
         return 'source_total_mismatch', None
     if status == 'match':
