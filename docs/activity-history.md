@@ -39,6 +39,9 @@
   (they now load `utils.js` and `site-chrome.js`). About on other pages goes to `/?page=about`.
   The mobile rule that hid Date and Locuri on the place page is gone; at 375 px the labels collapse to icons and the
   bar wraps to two rows (three on the place page, with the place search).
+- Owner follow-up: an "MCP" link with a robot icon goes to `/api.html#mcp` (the page scrolls to its MCP section
+  in the current language). The About page's long MCP setup section is now a short "API și MCP" block with the
+  two endpoints and a link to `/api.html`.
 - Merged onto main by Opus with `api.html` converted (placeholder with `data-own="theme lang"`); `site-chrome.js` v=4.
 
 ## 2026-11-25 — API and MCP page, UI notes
