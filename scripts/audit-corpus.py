@@ -37,6 +37,7 @@ Exit code: 0, or 1 with --strict when a served/registered file has a violation.
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -219,7 +220,15 @@ def audit(data_dir: Path, do_grain=True, do_hashes=False, limit=None) -> dict:
     if not vp_dir.exists():
         warnings.append(f"view-profiles dir not found: {vp_dir}")
 
-    pconn = duckdb.connect()  # in-memory; reads parquet only
+    # In-memory; reads parquet only. The grain check can use several GB (8 GB seen on the Mac):
+    # TEMPO_AUDIT_MEMORY (e.g. 1GB) caps it, TEMPO_AUDIT_TMP is where it spills (the weekly refresh sets both).
+    cfg = {}
+    if os.environ.get("TEMPO_AUDIT_MEMORY"):
+        cfg["memory_limit"] = os.environ["TEMPO_AUDIT_MEMORY"]
+        cfg["threads"] = int(os.environ.get("TEMPO_AUDIT_THREADS", "2"))
+    if os.environ.get("TEMPO_AUDIT_TMP"):
+        cfg["temp_directory"] = os.environ["TEMPO_AUDIT_TMP"]
+    pconn = duckdb.connect(config=cfg)
     records: dict[str, dict] = {}
     for f in files:
         code = f.stem
