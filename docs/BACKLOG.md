@@ -4,6 +4,14 @@ Future tasks and intentions for the TEMPO INS data explorer.
 
 see also [charting-ideas.md](charting-ideas.md)
 
+## VPS weekly refresh (2026-11-25)
+
+- [ ] **P1 — HZ-5: weekly data refresh on the VPS, minimal footprint.** The INS feed lists only about a month, so
+  a missed month means a full metadata sweep. Weekly cron on the VPS: probe, feed run, retired-children cleanup,
+  INS KPI check for touched codes, DB compaction, gates, static build; build-gate-notify, the owner promotes.
+  No raw CSV kept (about 13 GB → under 4 GB). Brief: `docs/plans/hz-5-weekly-refresh.md`. Includes the stale
+  `kpi_total_checks` fix (an old period's check must not mark a newer KPI as checked).
+
 ## Age bands (2026-11-22)
 
 - [x] **P2 — AS-01: an age band that spans the others is the total.** Deployed 2026-11-24 (2ef14d8). AMG130M shows "Total indisponibil:
