@@ -4,6 +4,23 @@
 
 
 
+
+## 2026-11-25 — Place children (UATs, counties, regions); static release 3bf9ac5
+
+- **What** (Sonnet, merged by Opus as `3bf9ac5`): a county page lists its UATs (municipii, orașe, comune; the 7 listed
+  cities in bold; a filter box), a region page its counties, a macroregion page its regions. The place profile
+  gains an additive `children` field. County → UAT comes from the core-assets SIRUTA register, copied to
+  `app/data/county_uats.json` by `scripts/build-county-uats.py` (3,180 UATs). `MACROREGION_REGIONS` is the NUTS 1 grouping.
+- **Slugs:** 357 corpus locality slugs repeat across counties; a repeated slug now ends in `-<siruta>`
+  (`adancata-146799`), and the bare slug is a 404 instead of a page that merged two UATs. Locality dataset lists
+  filter by SIRUTA code. SIRUTA 70049 and 167589 are in the corpus but not in `siruta-2025.csv`, so no county links them.
+- **Static:** `static_api.record_places` records a light profile (dataset list, peers) for every linked locality:
+  3,180 locality files (+7 MB). Release `releases/9c3e8eaae549-3bf9ac5d18bc` (611 MB; gate passed, parity
+  1017/1017), rollback `…-ecf1433c71e7`. Live checks: county, region, UAT, API and MCP-connect pages clean;
+  dataset and child links answer 200. The API side waits for the owner's `deploy.sh`.
+- **Caution:** the `24871b06` static build in `~/devbox/gov2/tempo-gen-recheck/` is from `5daf977` and lacks this
+  work. Rebuild it from `3bf9ac5` or later before uploading, or the county UAT lists disappear.
+
 ## 2026-11-25 — HZ-5a weekly refresh; stale INS-check rule; full KPI re-check (generation 24871b06)
 
 - **HZ-5a** (Sonnet, brief `docs/plans/hz-5-weekly-refresh.md`, record `docs/plans/hz-5-record.md`): `scripts/refresh-run.py`
