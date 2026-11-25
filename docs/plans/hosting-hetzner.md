@@ -133,3 +133,12 @@ python scripts/mcp_probe.py https://api-ins.gov2.ro/mcp   # check its --help for
 
 The app keys nothing on the client IP for REST, so no app change is needed. Record the rule values
 in `hz-3-record.md` once applied.
+
+**Applied 2026-11-25 (Opus via the dashboard, owner's choice):** the zone is on the Free plan, and its one
+rate-limiting rule already served posturi.gov2.ro. The rule is now `gov2 API rate limit (posturi, api-ins)`:
+`(http.host eq "posturi.gov2.ro" and starts_with(http.request.uri.path, "/api/")) or (http.host eq "api-ins.gov2.ro")`,
+IP, 60 requests per 10 s, block 10 s. One IP shares one counter across both hosts. Not applied: the
+configuration rule (step 2), because Browser Integrity Check passes `Python-urllib` and `python-requests`
+today; add it only if a client gets error 1010. Bot Fight Mode was already off. Measured: 300 requests in
+5 s with 20 in parallel gave 135 × 200 and 165 × 429; 15 s later, 200 again; posturi.gov2.ro unaffected.
+A sequential curl loop stays under the limit and never sees a 429.

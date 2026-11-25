@@ -132,7 +132,7 @@ agents finish.
 
 ## NEXT — Public API launch and UI notes — 2026-11-25
 
-- [ ] **P1 — HZ-6: Cloudflare rules for `api-ins`** (owner, dashboard): per-IP rate limit (429), Browser
+- [x] **P1 — HZ-6: Cloudflare rules for `api-ins`** (done 2026-11-25: the posturi rate-limit rule now also covers `api-ins`; see HZ-6 "Applied") (owner, dashboard): per-IP rate limit (429), Browser
   Integrity Check off for the API host, Bot Fight Mode off. Steps and checks:
   [hosting-hetzner.md § HZ-6](plans/hosting-hetzner.md). `/api.html` already promises the 429 behaviour.
 - [ ] **P1 — Deploy the API page and UI notes** to the static site and the VPS: `/api.html`, API link in every
