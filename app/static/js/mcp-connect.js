@@ -352,25 +352,27 @@
     // Interface type, combined with the service filter (a card must match both).
     var CATS = [
         ['all', L('Toate', 'All')],
-        ['chat', L('Aplicații chat', 'Chat apps')],
+        ['web', L('Web (online)', 'Web (online)')],
+        ['desktop', L('Aplicații desktop', 'Desktop apps')],
         ['cli', L('Linie de comandă', 'CLI agents')],
         ['ide', L('Editoare / IDE', 'IDEs & editors')],
-        ['self', L('Desktop / self-hosted', 'Desktop / self-hosted')],
+        ['self', L('Self-hosted', 'Self-hosted')],
         ['api', 'API'],
         ['test', L('Test / cod', 'Test / code')]
     ];
+    // A client can have several types (Claude: web and desktop; Claude Code: CLI and IDE).
     var CAT_OF = {
-        'claude': 'chat', 'chatgpt': 'chat', 'chatgpt-desktop': 'chat', 'gemini': 'chat', 'grok': 'chat', 'perplexity': 'chat',
-        'mistral': 'chat', 'copilot-studio': 'chat', 'deepseek': 'chat',
-        'claude-code': 'cli', 'codex': 'cli', 'gemini-cli': 'cli', 'grok-cli': 'cli', 'copilot-cli': 'cli', 'opencode': 'cli',
-        'qwen': 'cli', 'kiro': 'cli',
-        'vscode': 'ide', 'cursor': 'ide', 'windsurf': 'ide', 'zed': 'ide', 'cline': 'ide', 'roo': 'ide', 'continue': 'ide',
-        'lmstudio': 'self', 'openwebui': 'self', 'librechat': 'self', 'claude-desktop-local': 'self',
-        'anthropic-api': 'api', 'openai-api': 'api', 'xai-api': 'api',
-        'curl': 'test', 'inspector': 'test', 'python': 'test', 'typescript': 'test'
+        'claude': ['web', 'desktop'], 'chatgpt': ['web'], 'chatgpt-desktop': ['desktop'], 'gemini': ['web'],
+        'grok': ['web', 'desktop'], 'perplexity': ['web'], 'mistral': ['web'], 'copilot-studio': ['web'], 'deepseek': ['web'],
+        'claude-code': ['cli', 'ide'], 'codex': ['cli', 'ide'], 'gemini-cli': ['cli'], 'grok-cli': ['cli'], 'copilot-cli': ['cli'],
+        'opencode': ['cli'], 'qwen': ['cli'], 'kiro': ['ide', 'cli'],
+        'vscode': ['ide'], 'cursor': ['ide'], 'windsurf': ['ide'], 'zed': ['ide'], 'cline': ['ide'], 'roo': ['ide'], 'continue': ['ide'],
+        'lmstudio': ['desktop'], 'claude-desktop-local': ['desktop'], 'openwebui': ['self'], 'librechat': ['self'],
+        'anthropic-api': ['api'], 'openai-api': ['api'], 'xai-api': ['api'],
+        'curl': ['test'], 'inspector': ['test'], 'python': ['test'], 'typescript': ['test']
     };
-    CLIENTS.forEach(function (c) { c.svc = SVC_OF[c.id] || '?'; c.cat = CAT_OF[c.id] || '?'; });
-    function matches(cl) { return (S.svc === 'all' || cl.svc === S.svc) && (S.cat === 'all' || cl.cat === S.cat); }
+    CLIENTS.forEach(function (c) { c.svc = SVC_OF[c.id] || '?'; c.cats = CAT_OF[c.id] || []; });
+    function matches(cl) { return (S.svc === 'all' || cl.svc === S.svc) && (S.cat === 'all' || cl.cats.indexOf(S.cat) >= 0); }
 
     // ---------- verification status (CSV → {id: row}) ----------
     var ST = {
@@ -484,6 +486,7 @@
     var qs = new URLSearchParams(location.search), init = {};
     Object.keys(DEFAULTS).forEach(function (k) { if (qs.get(k)) init[k] = qs.get(k); });
     if (init.t && init.t !== 'sse') delete init.t;
+    if (init.cat === 'chat') init.cat = 'web';   // the type was called 'chat' before 2026-11-26
     if (init.auth && ['oauth', 'bearer', 'header'].indexOf(init.auth) < 0) delete init.auth;
     setState(init);
 
