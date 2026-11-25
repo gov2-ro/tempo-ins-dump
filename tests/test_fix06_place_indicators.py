@@ -284,7 +284,7 @@ def _config():
 
 def test_som103a_never_labelled_bim_or_ilo_in_either_language():
     for level, specs in _config().items():
-        if level.startswith("_"):
+        if level.startswith("_") or not isinstance(specs, list):   # `featured_localities` is a block, not a KPI list
             continue
         for s in specs:
             if s.get("source_code") != "SOM103A":

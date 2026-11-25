@@ -35,8 +35,8 @@ const PLACE_UI = {
           diffDates: 'perioade diferite', vs: 'față de', since: 'din',
           units: { percent: '%', percentage_points: 'p.p.', per_mille_points: 'puncte ‰' },
           noteDiff: 'Atenție: perioade diferite în grafic —', nationalApprox: 'Medie națională (aproximare)',
-          regionWord: '(regiune)', omitted: 'Indicatori indisponibili:',
-          omittedReasons: { no_all_activities_total: 'nu există rând de total pe activități', no_data: 'fără date', missing_weights: 'fără ponderi',
+          regionWord: '(regiune)', countyWord: 'județul', omitted: 'Indicatori indisponibili:',
+          omittedReasons: { no_all_activities_total: 'nu există rând de total pe activități', type_coverage_varies: 'tipurile de structuri diferă de la un an la altul', no_data: 'fără date', missing_weights: 'fără ponderi',
               group_missing: 'lipsesc date pentru un sex' },
           between: 'între', reconstructed: 'reconstituit', reconstructedTitle: 'Reconstituit din ponderile publicate de INS (vezi nota)', sourceTotalTitle: 'Totalul publicat de INS (vezi nota)', },
     en: { loading: 'Loading...', notFound: 'Place not found.', error: 'Loading error.',
@@ -50,8 +50,8 @@ const PLACE_UI = {
           diffDates: 'different periods', vs: 'vs', since: 'since',
           units: { percent: '%', percentage_points: 'pp', per_mille_points: '‰ points' },
           noteDiff: 'Note: different periods in the chart —', nationalApprox: 'National mean (approximation)',
-          regionWord: '(region)', omitted: 'Unavailable indicators:',
-          omittedReasons: { no_all_activities_total: 'no all-activities total row in the source', no_data: 'no data', missing_weights: 'no weights',
+          regionWord: '(region)', countyWord: 'county', omitted: 'Unavailable indicators:',
+          omittedReasons: { no_all_activities_total: 'no all-activities total row in the source', type_coverage_varies: 'the structure types differ from year to year', no_data: 'no data', missing_weights: 'no weights',
               group_missing: 'data missing for one sex' },
           between: 'between', reconstructed: 'reconstructed', reconstructedTitle: 'Reconstructed from weights INS publishes (see the note)', sourceTotalTitle: 'The total INS publishes (see the note)', },
 };
@@ -126,8 +126,7 @@ class PlaceProfileApp {
         if (this.data) {
             document.getElementById('dataset-count').textContent =
                 `${this.data.dataset_count} ${t.datasets}`;
-            const typeLabel = t.typeLabels[this.data.place.type] || this.data.place.type;
-            document.getElementById('geo-badge').textContent = typeLabel;
+            document.getElementById('geo-badge').textContent = this._badgeText(this.data.place);
         }
     }
 
@@ -228,8 +227,15 @@ class PlaceProfileApp {
         crumbs.push(place.name);
         document.getElementById('breadcrumb').innerHTML = crumbs.join(' › ');
         document.getElementById('place-name').textContent = place.name;
-        document.getElementById('geo-badge').textContent = this.ui.typeLabels[place.type] || place.type;
+        document.getElementById('geo-badge').textContent = this._badgeText(place);
         document.getElementById('dataset-count').textContent = `${dataset_count} ${this.ui.datasets}`;
+    }
+
+    // "Localitate · județul Cluj": a city names its county next to the type
+    _badgeText(place) {
+        const label = this.ui.typeLabels[place.type] || place.type;
+        return place.type === 'locality' && place.parent
+            ? `${label} · ${this.ui.countyWord} ${place.parent.name}` : label;
     }
 
     // ---- KPI helpers (language-aware labels, dates, units, change) ----
@@ -523,6 +529,8 @@ class PlaceProfileApp {
         const { place } = this.data;
         const alwaysChips = document.getElementById('always-chips');
         const nat = this.comparisonData['__national__meta'];
+        // A city has no national or county baseline: those totals are not a comparable scale.
+        if (place.type === 'locality') { alwaysChips.innerHTML = ''; return; }
         const natLabel = nat && nat.approximation ? this.ui.nationalApprox : this.ui.national;
         const chips = [`<span class="baseline-chip">🇷🇴 ${_esc(natLabel)}</span>`];
         if (place.parent) chips.push(`<span class="baseline-chip">${_esc(place.parent.name)} ${_esc(this.ui.regionWord)}</span>`);

@@ -138,9 +138,14 @@ agents finish.
 - [ ] **P1 — Deploy the API page and UI notes** to the static site and the VPS: `/api.html`, API link in every
   top bar and in the home footer, gov2.ro links, search loader, `llms.txt` base URL (it said
   `https://ins.gov2.ro`, where `/api` is a 404).
-- [ ] **P2 — CP: profile pages for the large cities (≥ 200,000 inhabitants)** — brief
-  [city-pages.md](plans/city-pages.md) (Sonnet). "Locuri" lists only counties and regions today; the
-  `locality` route exists but has no KPIs and is not listed.
+- [x] **P2 — CP: profile pages for the large cities (≥ 200,000 inhabitants)** — brief
+  [city-pages.md](plans/city-pages.md). Done 2026-11-25, merged on main, not deployed: `/places` has an "Orașe mari"
+  section (7 municipalities and a link to Bucharest); six KPI cards per city, each checked against INS.
+  Follow-ups: [ ] **P3 — Tourist arrivals for cities.** TUR104E sums match INS, but the structure types
+  differ by year, so the series rule withholds the card; enable it with a curated "absent type = no
+  establishments" declaration. [ ] **P3 — Resident population for cities.** TEMPO has no resident population
+  at UAT level; the list uses the RPL 2021 census (core-assets) and the card shows domicile population. On a
+  domicile basis Oradea and Ploiești would also pass 200,000.
 - [x] **P1 — NAV: one top bar for every page** (done 2026-11-25, merged on main, not deployed; at 375 px the bar wraps to two rows) — brief [nav-bar.md](plans/nav-bar.md) (Sonnet). Seven pages
   copy the top bar by hand and have drifted. Needed before selected user testing.
 

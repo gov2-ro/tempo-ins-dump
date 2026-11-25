@@ -476,5 +476,202 @@
       ]
     }
   ],
-  "locality": []
+  "locality": [
+    {
+      "key": "domicile_population",
+      "label": "Populație după domiciliu",
+      "label_en": "Population by domicile",
+      "parquet": "POP107D_grupe_localitate.parquet",
+      "area_column": "REF_AREA_2",
+      "unit": "pers.",
+      "unit_en": "persons",
+      "unit_kind": "count",
+      "category": "Populație",
+      "source_code": "POP107D",
+      "source_title": "Populația după domiciliu la 1 ianuarie pe grupe de vârstă, sexe, județe și localități",
+      "source_title_en": "Population by domicile on 1 January by age group, sex, counties and localities",
+      "definition": "Populația după domiciliu la 1 ianuarie, însumată pe grupe de vârstă și sexe. Nu este populația rezidentă (recensământ); include persoanele cu domiciliul în localitate aflate temporar sau permanent în străinătate.",
+      "definition_en": "Population by domicile on 1 January, summed over age groups and sexes. Not the resident population (census): it includes persons domiciled in the locality who live abroad temporarily or permanently.",
+      "measure": "additive",
+      "partitions": [
+        "AGE",
+        "SEX"
+      ]
+    },
+    {
+      "key": "live_births",
+      "label": "Născuți vii",
+      "label_en": "Live births",
+      "parquet": "POP201D_localitate.parquet",
+      "area_column": "REF_AREA_2",
+      "unit": "pers.",
+      "unit_en": "persons",
+      "unit_kind": "count",
+      "category": "Populație",
+      "source_code": "POP201D",
+      "source_title": "Născuți vii pe județe și localități",
+      "source_title_en": "Live births by counties and localities",
+      "definition": "Număr de născuți vii într-un an, după localitatea de domiciliu a mamei.",
+      "definition_en": "Number of live births in a year, by the mother's locality of domicile.",
+      "measure": "additive"
+    },
+    {
+      "key": "deaths",
+      "label": "Decedați",
+      "label_en": "Deaths",
+      "parquet": "POP206D_localitate.parquet",
+      "area_column": "REF_AREA_2",
+      "unit": "pers.",
+      "unit_en": "persons",
+      "unit_kind": "count",
+      "category": "Populație",
+      "source_code": "POP206D",
+      "source_title": "Decedați pe județe și localități",
+      "source_title_en": "Deaths by counties and localities",
+      "definition": "Număr de decese într-un an, după localitatea de domiciliu.",
+      "definition_en": "Number of deaths in a year, by locality of domicile.",
+      "measure": "additive"
+    },
+    {
+      "key": "registered_unemployed",
+      "label": "Șomeri înregistrați",
+      "label_en": "Registered unemployed",
+      "parquet": "SOM101E_anual_localitate.parquet",
+      "area_column": "REF_AREA_2",
+      "unit": "pers.",
+      "unit_en": "persons",
+      "unit_kind": "count",
+      "category": "Muncă",
+      "source_code": "SOM101E",
+      "source_title": "Șomeri înregistrați la sfârșitul lunii, pe sexe, județe și localități",
+      "source_title_en": "Registered unemployed at the end of the month, by sex, counties and localities",
+      "definition": "Număr de șomeri înregistrați în evidența agențiilor de ocupare, însumat pe sexe (valoarea anuală publicată de INS). Număr, nu rată: INS nu publică rata pe localități.",
+      "definition_en": "Number of unemployed persons registered with the employment agencies, summed over sexes (the annual value INS publishes). A count, not a rate: INS does not publish the rate by locality.",
+      "measure": "additive",
+      "partitions": [
+        "SEX"
+      ]
+    },
+    {
+      "key": "average_employees",
+      "label": "Număr mediu de salariați",
+      "label_en": "Average number of employees",
+      "parquet": "FOM104D_localitate.parquet",
+      "area_column": "REF_AREA_2",
+      "unit": "pers.",
+      "unit_en": "persons",
+      "unit_kind": "count",
+      "category": "Muncă",
+      "source_code": "FOM104D",
+      "source_title": "Numărul mediu al salariaților pe județe și localități",
+      "source_title_en": "Average number of employees by counties and localities",
+      "definition": "Numărul mediu de salariați într-un an, după localitatea sediului unității (nu a domiciliului salariatului).",
+      "definition_en": "Average number of employees in a year, by the locality of the employer's seat (not of the employee's home).",
+      "measure": "additive"
+    },
+    {
+      "key": "dwellings",
+      "label": "Locuințe existente",
+      "label_en": "Existing dwellings",
+      "parquet": "LOC101B_localitate.parquet",
+      "area_column": "REF_AREA_2",
+      "unit": "nr.",
+      "unit_en": "number",
+      "unit_kind": "count",
+      "category": "Locuire",
+      "source_code": "LOC101B",
+      "source_title": "Locuințe existente la sfârșitul anului pe forme de proprietate, județe și localități",
+      "source_title_en": "Dwellings at year end by form of ownership, counties and localities",
+      "definition": "Număr de locuințe existente la sfârșitul anului, însumat pe forme de proprietate.",
+      "definition_en": "Number of dwellings at year end, summed over forms of ownership.",
+      "measure": "additive",
+      "partitions": [
+        "FORME_DE_PROPRIETATE"
+      ]
+    },
+    {
+      "key": "tourist_arrivals",
+      "label": "Sosiri de turiști",
+      "label_en": "Tourist arrivals",
+      "parquet": "TUR104E_localitate.parquet",
+      "area_column": "REF_AREA_2",
+      "unit": "pers.",
+      "unit_en": "persons",
+      "unit_kind": "count",
+      "category": "Turism",
+      "source_code": "TUR104E",
+      "suppress": "type_coverage_varies",
+      "suppress_note": "TUR104E has a row only for the structure types a city has; the set of types changes from year to year, so a year's sum cannot be told from a sum with a missing type. The sums match INS's Total in every spot check, but the series rule (same coverage in every period) withholds it."
+    }
+  ],
+  "featured_localities": {
+    "_note": "Large-city list shown on /places. A municipality is listed when its resident population is at least `threshold` in `population_year`. TEMPO has no resident population at UAT level, so the basis is the RPL 2021 census (core-assets data/geo/uat-populatie.csv, INS Table 1.03.2), the latest resident count per UAT. `siruta` keys the rows of the locality parquets (REF_AREA_2 is '<SIRUTA> NAME'). KPI cards exist only for the items of type locality; Bucharest is a county-level place and is linked, not duplicated.",
+    "threshold": 200000,
+    "population_year": 2021,
+    "population_basis": "resident population, RPL 2021",
+    "items": [
+      {
+        "type": "locality",
+        "slug": "municipiul-cluj-napoca",
+        "siruta": 54975,
+        "name": "Cluj-Napoca",
+        "county": "Cluj",
+        "county_slug": "cluj"
+      },
+      {
+        "type": "locality",
+        "slug": "municipiul-iasi",
+        "siruta": 95060,
+        "name": "Iasi",
+        "county": "Iasi",
+        "county_slug": "iasi"
+      },
+      {
+        "type": "locality",
+        "slug": "municipiul-constanta",
+        "siruta": 60419,
+        "name": "Constanta",
+        "county": "Constanta",
+        "county_slug": "constanta"
+      },
+      {
+        "type": "locality",
+        "slug": "municipiul-timisoara",
+        "siruta": 155243,
+        "name": "Timisoara",
+        "county": "Timis",
+        "county_slug": "timis"
+      },
+      {
+        "type": "locality",
+        "slug": "municipiul-brasov",
+        "siruta": 40198,
+        "name": "Brasov",
+        "county": "Brasov",
+        "county_slug": "brasov"
+      },
+      {
+        "type": "locality",
+        "slug": "municipiul-craiova",
+        "siruta": 69900,
+        "name": "Craiova",
+        "county": "Dolj",
+        "county_slug": "dolj"
+      },
+      {
+        "type": "locality",
+        "slug": "municipiul-galati",
+        "siruta": 75098,
+        "name": "Galati",
+        "county": "Galati",
+        "county_slug": "galati"
+      },
+      {
+        "type": "county",
+        "slug": "municipiul-bucuresti",
+        "siruta": 179132,
+        "name": "Municipiul Bucuresti"
+      }
+    ]
+  }
 }

@@ -1,22 +1,26 @@
 const UI = {
     ro: {
         title: 'Profiluri de locuri',
-        subtitle: 'Județe, regiuni de dezvoltare și macroregiuni România',
+        subtitle: 'Orașe mari, județe, regiuni de dezvoltare și macroregiuni din România',
+        featured: 'Orașe mari',
+        featuredNote: 'Municipii cu cel puțin 200.000 de locuitori rezidenți (recensământul 2021).',
         counties: 'Județe',
         regions: 'Regiuni de dezvoltare',
         macroregions: 'Macroregiuni',
-        search: 'Caută județ sau regiune...',
+        search: 'Caută oraș, județ sau regiune...',
         loading: 'Se încarcă...',
         error: 'Eroare la încărcare.',
         noResults: 'Niciun rezultat.',
     },
     en: {
         title: 'Place profiles',
-        subtitle: 'Counties, development regions and macroregions of Romania',
+        subtitle: 'Large cities, counties, development regions and macroregions of Romania',
+        featured: 'Large cities',
+        featuredNote: 'Municipalities with at least 200,000 resident inhabitants (2021 census).',
         counties: 'Counties',
         regions: 'Development regions',
         macroregions: 'Macroregions',
-        search: 'Search county or region...',
+        search: 'Search city, county or region...',
         loading: 'Loading...',
         error: 'Loading error.',
         noResults: 'No results.',
@@ -34,6 +38,8 @@ const UI = {
         const t = UI[l] || UI.ro;
         document.getElementById('page-title').textContent = t.title;
         document.getElementById('page-subtitle').textContent = t.subtitle;
+        document.getElementById('label-featured').textContent = t.featured;
+        document.getElementById('note-featured').textContent = t.featuredNote;
         document.getElementById('label-county').textContent = t.counties;
         document.getElementById('label-region').textContent = t.regions;
         document.getElementById('label-macroregion').textContent = t.macroregions;
@@ -84,7 +90,7 @@ const UI = {
         });
 
         // Show/hide section headers based on whether any chips are visible in that section
-        for (const type of ['county', 'region', 'macroregion']) {
+        for (const type of ['featured', 'county', 'region', 'macroregion']) {
             const grid = document.getElementById(`grid-${type}`);
             const header = document.getElementById(`label-${type}`);
             const anyVisible = [...grid.querySelectorAll('.place-chip')].some(c => !c.classList.contains('hidden'));
@@ -103,16 +109,19 @@ const UI = {
         const { places } = await API.fetch('/places');
         allPlaces = places;
 
-        const byType = { county: [], region: [], macroregion: [] };
+        // `featured` = the large-city list; Bucharest is a county-level place and stays in both lists.
+        const byType = { featured: [], county: [], region: [], macroregion: [] };
         for (const p of places) {
-            if (byType[p.type]) byType[p.type].push(p);
+            if (p.featured) byType.featured.push(p);
+            if (p.type !== 'locality' && byType[p.type]) byType[p.type].push(p);
         }
 
-        for (const type of ['county', 'region', 'macroregion']) {
+        for (const type of ['featured', 'county', 'region', 'macroregion']) {
             const grid = document.getElementById(`grid-${type}`);
             const sorted = byType[type].sort((a, b) => a.name.localeCompare(b.name, 'ro'));
             grid.innerHTML = sorted.map(p =>
-                `<a class="place-chip" href="/place/${p.type}/${p.slug}">${p.name}</a>`
+                `<a class="place-chip" href="/place/${p.type}/${p.slug}">${p.name}` +
+                `${type === 'featured' && p.county && p.county !== p.name ?`<span class="chip-sub">${p.county}</span>` : ''}</a>`
             ).join('');
         }
 

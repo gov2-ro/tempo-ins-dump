@@ -10,7 +10,7 @@ from app.db import get_conn
 from app.services import generation
 from app.services.place_service import (
     resolve_place, get_place_datasets, get_place_kpi_report,
-    get_place_peers, get_kpi_baselines, slugify,
+    get_place_peers, get_kpi_baselines, slugify, featured_localities,
 )
 
 router = APIRouter()
@@ -58,6 +58,18 @@ def list_places():
             continue
         seen.add(key)
         places.append({"type": geo_level, "slug": sl, "name": name})
+
+    # The large-city list (config `featured_localities`): a city that is already a place
+    # (Bucharest, a county-level row) is marked, not added twice; the others join as localities.
+    cfg = featured_localities()
+    by_key = {(p["type"], p["slug"]): p for p in places}
+    for it in cfg.get("items", []):
+        typ = it.get("type", "locality")
+        if (typ, it["slug"]) in by_key:
+            by_key[(typ, it["slug"])]["featured"] = True
+        elif typ == "locality":
+            places.append({"type": "locality", "slug": it["slug"], "name": it["name"],
+                           "featured": True, "county": it.get("county")})
 
     return {"places": places, "total": len(places)}
 
@@ -135,7 +147,7 @@ def _build_place_profile(place_type: str, slug: str) -> dict:
     parent = None
     if place.get("parent_slug"):
         parent = {
-            "type": "region",
+            "type": place.get("parent_type", "region"),
             "slug": place["parent_slug"],
             "name": place.get("parent_name", place["parent_slug"]),
         }

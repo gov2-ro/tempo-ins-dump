@@ -65,6 +65,18 @@ def _load_kpi_config() -> dict:
     return _kpi_config
 
 
+def featured_localities() -> dict:
+    """The curated large-city list: {threshold, population_year, ..., items: [...]}."""
+    return _load_kpi_config().get("featured_localities") or {}
+
+
+def featured_item(place_type: str, slug: str) -> dict | None:
+    for it in featured_localities().get("items", []):
+        if it.get("type", "locality") == place_type and it["slug"] == slug:
+            return it
+    return None
+
+
 def resolve_place(place_type: str, slug: str, *, conn=None) -> dict | None:
     """Resolve a (type, slug) pair to canonical place info.
 
@@ -96,14 +108,21 @@ def resolve_place(place_type: str, slug: str, *, conn=None) -> dict | None:
     if place_type == "county":
         parent_slug = {slugify(k): v for k, v in COUNTY_REGION.items()}.get(slug)
 
-    return {
+    out = {
         "name": canonical,
         "type": place_type,
         "slug": slug,
         "ref_area_values": matches,
         "parent_slug": parent_slug,
         "parent_name": REGION_NAMES.get(parent_slug) if parent_slug else None,
+        "parent_type": "region",
+        "siruta": None,
     }
+    item = featured_item(place_type, slug) if place_type == "locality" else None
+    if item:        # a listed city: its parent is the county, its rows are keyed by SIRUTA
+        out.update(name=item["name"], siruta=str(item["siruta"]), parent_type="county",
+                   parent_slug=item["county_slug"], parent_name=item["county"])
+    return out
 
 
 _COLLAPSE_NAMES = {
@@ -155,15 +174,18 @@ def _sql_list(values) -> str:
 
 
 @lru_cache(maxsize=256)
-def _parquet_info(path: str, mtime: float) -> dict:
-    """Columns, distinct dimension values and last period of a place parquet."""
+def _parquet_info(path: str, mtime: float, area_col: str = "REF_AREA") -> dict:
+    """Columns, distinct dimension values and last period of a place parquet.
+
+    `area_col` names the column that holds the place: REF_AREA (county, region,
+    macroregion) or REF_AREA_2 (a locality file keeps its county in REF_AREA)."""
     con = scratch_conn()
     try:
         cols = [r[0] for r in con.execute(
             "DESCRIBE SELECT * FROM read_parquet(?)", [path]).fetchall()]
         values = {}
         for c in cols:
-            if c in ("OBS_VALUE", "TIME_PERIOD", "REF_AREA"):
+            if c in ("OBS_VALUE", "TIME_PERIOD", "REF_AREA", "REF_AREA_2"):
                 continue
             values[c] = [r[0] for r in con.execute(
                 f'SELECT DISTINCT "{c}" FROM read_parquet(?) ORDER BY 1', [path]).fetchall()]
@@ -171,7 +193,7 @@ def _parquet_info(path: str, mtime: float) -> dict:
             "SELECT MAX(LEFT(CAST(TIME_PERIOD AS VARCHAR),4)) FROM read_parquet(?) "
             "WHERE OBS_VALUE IS NOT NULL", [path]).fetchone()[0]
         areas = [r[0] for r in con.execute(
-            "SELECT DISTINCT REF_AREA FROM read_parquet(?)", [path]).fetchall()]
+            f'SELECT DISTINCT "{area_col}" FROM read_parquet(?)', [path]).fetchall()]
     except Exception:
         return {"cols": [], "values": {}, "last": None, "areas": []}
     finally:
@@ -179,8 +201,12 @@ def _parquet_info(path: str, mtime: float) -> dict:
     return {"cols": cols, "values": values, "last": last, "areas": areas}
 
 
-def _info(path: Path) -> dict:
-    return _parquet_info(str(path), path.stat().st_mtime)
+def _info(path: Path, area_col: str = "REF_AREA") -> dict:
+    return _parquet_info(str(path), path.stat().st_mtime, area_col)
+
+
+def _area_col(spec: dict) -> str:
+    return spec.get("area_column", "REF_AREA")
 
 
 def _decide_for(spec: dict, info: dict, areas: list[str], geo_level: str,
@@ -192,8 +218,9 @@ def _decide_for(spec: dict, info: dict, areas: list[str], geo_level: str,
             "dim_column_name": col, "dim_type": _DIM_TYPES.get(col),
             "options": [{"label": str(v), "sdmx_value": str(v), "parsed": {}} for v in vals],
         })
+    ac = _area_col(spec)
     dims.append({
-        "dim_column_name": "REF_AREA", "dim_type": "geo",
+        "dim_column_name": ac, "dim_type": "geo",
         "options": [{"label": a, "sdmx_value": a, "parsed": {"geo_level": geo_level}}
                     for a in areas],
     })
@@ -204,7 +231,7 @@ def _decide_for(spec: dict, info: dict, areas: list[str], geo_level: str,
         weights = agg.WeightSpec(source_code=w["source_code"], aligned=True,
                                  note=w.get("note", ""))
     return agg.decide(
-        dimensions=dims, effective={}, group_by=() if collapse_areas else ("REF_AREA",),
+        dimensions=dims, effective={}, group_by=() if collapse_areas else (ac,),
         filters={k: [v] for k, v in (spec.get("filters") or {}).items()},
         measure=spec.get("measure", "additive"),
         weights=weights, allow_approximation=bool(spec.get("allow_approximation")),
@@ -224,9 +251,9 @@ def _series_query(spec: dict, parquet: Path, areas: list[str] | None,
     where = ["OBS_VALUE IS NOT NULL",
              "TRY_CAST(LEFT(CAST(TIME_PERIOD AS VARCHAR), 4) AS INTEGER) IS NOT NULL"]
     if areas is not None:
-        where.append(f"REF_AREA IN ({_sql_list(areas)})")
+        where.append(f'"{_area_col(spec)}" IN ({_sql_list(areas)})')
     for col, vals in decision.effective_filters.items():
-        if col == "REF_AREA":
+        if col == _area_col(spec):
             continue
         where.append(f'"{col}" IN ({_sql_list(vals)})')
     where_sql = " AND ".join(where)
@@ -329,8 +356,9 @@ def _kpi_identity(spec: dict) -> dict:
 def _grain_refusal(spec: dict, parquet: Path, areas: list[str], decision) -> str | None:
     """PA-01b: a KPI aggregates rows, so its slice (and any weights file) must
     have a unique grain. Returns the grain_guard reason, or None."""
-    filters = {c: list(v) for c, v in decision.effective_filters.items() if c != "REF_AREA"}
-    filters["REF_AREA"] = list(areas)
+    ac = _area_col(spec)
+    filters = {c: list(v) for c, v in decision.effective_filters.items() if c != ac}
+    filters[ac] = list(areas)
     con = scratch_conn()
     try:
         g = grain_guard.check_slice(con, parquet.stem, filters, path=str(parquet))
@@ -352,12 +380,17 @@ def _resolve_series(spec: dict, areas: list[str] | None, geo_level: str, *,
     parquet = PARQUET_DIR / spec["parquet"]
     if not parquet.exists():
         return [], None, None
-    info = _info(parquet)
-    # Match by slug: metadata names carry diacritics ("Municipiul București")
-    # that the parquet values do not ("Municipiul Bucuresti").
-    by_slug = {slugify(a): a for a in info["areas"]}
-    present = info["areas"] if areas is None else list(dict.fromkeys(
-        by_slug[slugify(a)] for a in areas if slugify(a) in by_slug))
+    info = _info(parquet, _area_col(spec))
+    if geo_level == "locality" and areas is not None:
+        # a locality value is "<SIRUTA> NAME": `areas` holds SIRUTA codes
+        want = {str(a) for a in areas}
+        present = [a for a in info["areas"] if str(a).split(" ", 1)[0] in want]
+    else:
+        # Match by slug: metadata names carry diacritics ("Municipiul București")
+        # that the parquet values do not ("Municipiul Bucuresti").
+        by_slug = {slugify(a): a for a in info["areas"]}
+        present = info["areas"] if areas is None else list(dict.fromkeys(
+            by_slug[slugify(a)] for a in areas if slugify(a) in by_slug))
     if not collapse and len(present) > 1:
         present = [min(present, key=len)]
     if not present:
@@ -532,6 +565,10 @@ def get_place_kpi_report(place_type: str, slug: str, *, conn=None) -> dict:
     place = resolve_place(place_type, slug, conn=conn)
     if not place:
         return {"kpis": [], "omitted": []}
+    # Locality KPIs were reviewed for the listed cities only.
+    if place_type == "locality" and not place.get("siruta"):
+        return {"kpis": [], "omitted": []}
+    areas = [place["siruta"]] if place_type == "locality" else place["ref_area_values"]
 
     kpis, omitted = [], []
     for spec in specs:
@@ -548,8 +585,7 @@ def get_place_kpi_report(place_type: str, slug: str, *, conn=None) -> dict:
             else:
                 omitted.append(om)
             continue
-        series, decision, last = _resolve_series(
-            spec, place["ref_area_values"], place_type, collapse=False)
+        series, decision, last = _resolve_series(spec, areas, place_type, collapse=False)
         if not series:
             reason = decision.reason if decision is not None and not decision.available \
                 else "no_data"
@@ -623,6 +659,13 @@ def get_place_peers(place_type: str, slug: str, *, conn=None) -> dict:
     place = resolve_place(place_type, slug, conn=conn)
     if not place:
         return {"same_region": [], "similar_size": []}
+
+    if place_type == "locality":
+        # the other listed cities, not 2,800 alphabetical neighbours
+        others = [{"slug": it["slug"], "name": it["name"], "type": "locality"}
+                  for it in featured_localities().get("items", [])
+                  if it.get("type", "locality") == "locality" and it["slug"] != slug]
+        return {"same_region": [], "similar_size": others if featured_item("locality", slug) else []}
 
     if place_type != "county":
         all_places = conn.execute("""
@@ -701,6 +744,17 @@ def get_kpi_baselines(place_type: str, slug: str, kpi_label: str) -> dict:
     if not spec or spec.get("suppress"):
         return {"national": [], "region": [], "kpi": None,
                 "national_meta": None, "region_meta": None}
+    if place_type == "locality":
+        # A country or county total is not a comparable scale for one city.
+        return {"national": [], "region": [],
+                "kpi": {"key": spec["key"], "label": spec["label"],
+                        "label_en": spec.get("label_en"), "unit": spec.get("unit"),
+                        "unit_kind": spec.get("unit_kind"), "matched_legacy_alias": via_alias},
+                "national_meta": {"scope": "national", "areas": None, "period": None,
+                                  "unit": spec.get("unit"), "available": False,
+                                  "reason": "not_applicable_to_locality", "method": None,
+                                  "approximation": False},
+                "region_meta": None}
     if spec.get("recipe"):
         return _recipe_baselines(spec, place_type, slug, via_alias)
 

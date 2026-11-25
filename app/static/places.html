@@ -77,6 +77,8 @@
             margin: 1.5rem 0 0.75rem;
         }
         .section-header.hidden { display: none; }
+        .section-note { color: var(--text-muted); font-size: 0.8rem; margin: 0.6rem 0 0; }
+        .place-chip .chip-sub { color: var(--text-muted); font-size: 0.75rem; margin-left: 0.35rem; }
     </style>
     <link rel="stylesheet" href="/css/ui-rhythm.css?v=5">
     <script src="/js/ui-preferences.js?v=4" defer></script>
@@ -86,15 +88,20 @@
 
     <div class="main-content" style="max-width:900px;margin:0 auto;padding:2rem 1rem;">
         <h1 id="page-title" style="font-size:1.6rem;font-weight:700;margin-bottom:0.25rem;">Profiluri de locuri</h1>
-        <p id="page-subtitle" style="color:var(--text-muted);margin-bottom:1.5rem;">Județe, regiuni de dezvoltare și macroregiuni România</p>
+        <p id="page-subtitle" style="color:var(--text-muted);margin-bottom:1.5rem;">Orașe mari, județe, regiuni de dezvoltare și macroregiuni din România</p>
 
         <div class="places-search-wrap">
             <svg class="places-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="places-search" class="places-search-input" placeholder="Caută județ sau regiune..." autocomplete="off">
+            <input type="text" id="places-search" class="places-search-input" placeholder="Caută oraș, județ sau regiune..." autocomplete="off">
         </div>
 
         <div id="places-loading" style="color:var(--text-muted);">Se încarcă...</div>
         <div id="places-content" style="display:none;">
+            <section id="section-featured">
+                <h2 id="label-featured" class="section-header">Orașe mari</h2>
+                <div id="grid-featured" class="places-grid"></div>
+                <p id="note-featured" class="section-note"></p>
+            </section>
             <section id="section-county">
                 <h2 id="label-county" class="section-header">Județe</h2>
                 <div id="grid-county" class="places-grid"></div>
@@ -116,6 +123,6 @@
     <script src="/js/api.js?v=31"></script>
     <script src="/js/site-chrome.js?v=4"></script>
 
-    <script src="/js/places-page.js?v=2"></script>
+    <script src="/js/places-page.js?v=3"></script>
 </body>
 </html>

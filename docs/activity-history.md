@@ -1,6 +1,27 @@
 # Activity History
 
 
+## 2026-11-25 — CP: profile pages for the large cities
+
+- **What:** `/places` lists a new "Orașe mari / Large cities" section; `/place/locality/{slug}` shows six KPI
+  cards for each city: domicile population, live births, deaths, registered unemployed, average employees,
+  dwellings. Tourist arrivals are listed as unavailable. The page names the parent county (breadcrumb and badge).
+- **List:** curated in `place_kpi_config.json` `featured_localities` (threshold 200,000, year 2021). TEMPO has no
+  resident population per UAT, so the basis is the RPL 2021 census (`core-assets` `uat-populatie.csv`): Cluj-Napoca,
+  Iasi, Constanta, Timisoara, Brasov, Craiova, Galati. Bucharest (a county-level place) is marked, not duplicated.
+- **Service:** a KPI spec may name `area_column` (`REF_AREA_2` for the `_localitate` parquets, whose value is
+  "<SIRUTA> NAME"; their `REF_AREA` is the county). The county rules are unchanged. Locality KPIs exist for the listed
+  cities only. A city has no national or county baseline (not a comparable scale) and its peers are the other listed
+  cities. `/api/places` marks listed places `featured`; the static build records them with no engine change.
+- **Gates:** `grain_guard.check_slice` on every slice, curated partitions (AGE, SEX, FORME_DE_PROPRIETATE; each
+  one level in `dimension_structure`), and the series rule (a year with a missing group is absent).
+  `scripts/check-city-kpis.py` compares each card with the INS pivot cell: 42 of 42 equal (7 cities, 6 KPIs).
+- **Omitted:** tourist arrivals. TUR104E has rows only for the structure types a city has, and the set changes by
+  year, so the same-coverage rule drops the latest years. The sums equal INS's Total in 28 of 28 spot checks.
+- **Non-obvious:** the card shows domicile population (Iasi 370,437) although the list uses residents (271,692):
+  the label says "după domiciliu" and the definition says it is not the census count. An existing test iterated
+  every top-level config key as a KPI list; it now skips the `featured_localities` block.
+
 ## 2026-11-25 — NAV: one top bar rendered by site-chrome.js
 
 - **What:** `site-chrome.js` now renders the whole top bar into `<nav class="topbar" id="topbar" data-active=...>` on
