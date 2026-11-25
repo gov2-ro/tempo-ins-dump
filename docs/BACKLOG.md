@@ -6,11 +6,15 @@ see also [charting-ideas.md](charting-ideas.md)
 
 ## VPS weekly refresh (2026-11-25)
 
-- [ ] **P1 — HZ-5: weekly data refresh on the VPS, minimal footprint.** The INS feed lists only about a month, so
-  a missed month means a full metadata sweep. Weekly cron on the VPS: probe, feed run, retired-children cleanup,
-  INS KPI check for touched codes, DB compaction, gates, static build; build-gate-notify, the owner promotes.
-  No raw CSV kept (about 13 GB → under 4 GB). Brief: `docs/plans/hz-5-weekly-refresh.md`. Includes the stale
-  `kpi_total_checks` fix (an old period's check must not mark a newer KPI as checked).
+- [ ] **P1 — HZ-5b: install the weekly refresh on the VPS.** HZ-5a is on `main` (`scripts/refresh-run.py`,
+  `scripts/deploy/hetzner/promote.sh`, `lib.sh`; record `docs/plans/hz-5-record.md`, install steps in section 7).
+  Before the install: run one monthly sweep run on the Mac (untested: does a new matrix get its context row?), and
+  check whether the 2.2 GB node parity gate fits on the VPS (install Node and measure, add swap, or run it on the Mac).
+  Open owner questions: `promote.sh --accept-failures` for a candidate with failed matrices; keep or delete `data.prev`.
+  `deploy.sh` now sources `lib.sh` and has not run against the host yet: read its dry run carefully.
+- [ ] **P3 — Extend the stale INS-check rule beyond the dataset page.** `insights` passes the KPI's period to
+  `dataset_meta.source_total_gate`; the `/data` headline, composer tiles and `tools/query` do not. Covering them
+  needs `policy.js` and `build-static.py` to carry the latest period.
 
 ## Age bands (2026-11-22)
 
@@ -39,11 +43,11 @@ see also [charting-ideas.md](charting-ideas.md)
   the last month (21.10–20.11), so batch 1 took only its 327. The rest (826 updated + 14 new) is listed in
   `data/logs/batch2-codes-20261120.txt`. Run it on an APFS clone with `update-pipeline.py --matrix <list>`,
   then `--since <date> --global-profiles`, the audit, the manifest, the gates and a separate deploy. Expect 8–10 h.
-- [ ] **P2 — Make the metadata sweep a pipeline step.** The feed misses any update older than about a month.
+- [ ] **P2 — Make the metadata sweep a pipeline step.** *(Partly done: `refresh-run.py` runs it monthly; not yet rehearsed.)* The feed misses any update older than about a month.
   The sweep script `scripts/utils/meta-sweep.py` fetched every meta read-only (about 90 min)
   and compared `ultimaActualizare` with `matrices.ultima_actualizare`. Add it to `update-pipeline.py` (e.g.
   `--sweep`), or run it weekly, so the corpus cannot fall behind silently again.
-- [ ] **P3 — Stage 12 leaves rows of a retired child.** It happened again in batch 1 (3 codes:
+- [x] **P3 — Stage 12 leaves rows of a retired child.** *(Done 2026-11-25: `scripts/cleanup-retired-children.py`, run by `refresh-run.py`.)* It happened again in batch 1 (3 codes:
   `IND106C_numar_bucati_echivalent_4_osii`, `SAR118B_macroregiuni`, `SAR118B_regiuni`). The rows in
   `dimension_structure`, `matrix_profiles` and `sdmx_column_map`, the view profiles and the `_index.json` entries
   were removed by hand on the copy. `data/eval/chart_selector_baseline.json` still names them.

@@ -4,6 +4,24 @@
 
 
 
+## 2026-11-25 — HZ-5a weekly refresh; stale INS-check rule; full KPI re-check (generation 24871b06)
+
+- **HZ-5a** (Sonnet, brief `docs/plans/hz-5-weekly-refresh.md`, record `docs/plans/hz-5-record.md`): `scripts/refresh-run.py`
+  builds and gates a candidate release and notifies (webhook + `status.json`); it never swaps `current` or uploads.
+  `promote.sh` is the owner's approval step on the VPS; `deploy.sh` and `promote.sh` share `lib.sh`. `update-pipeline.py`
+  gained `--drop-csv` and `--probe-only`. New: `scripts/cleanup-retired-children.py`, `scripts/compact-metadata.py`
+  (verified copy in foreign-key order). Four scripts now write temp + rename, so a run can work on a hard-linked copy.
+  The audit's grain check runs in hash buckets (8 GB → 1.5 GB). `prepare-deploy-data.sh` keeps mtimes (`cp -p`), so
+  `rsync --link-dest` links unchanged files. Mac rehearsal: full run 27 min, estimated VPS footprint 3.6 GB during a run.
+- **Stale INS-check rule:** a `kpi_total_checks` `match` for an older period no longer vouches for a newer headline KPI
+  (`insights` passes the period to `source_total_gate`). On `9c3e8eaa` it would have withheld 541 KPIs, because batches
+  1 and 2 added newer periods. So the rule went live only after a **full re-check** on a copy: 1,293 summed KPIs,
+  890 match, 25 mismatch, 371 unresolved (356 have no Total option), 10 blank at INS, 1 fetch error. With the re-checked
+  DB the rule withholds 13 KPIs, all of split parents that the site does not serve. 9 KPIs that matched for the old
+  period now disagree with INS (AMG110M/N/O/P/S/T quarterly, POP201I children) and are withheld.
+- **Generation `24871b06`** (only `kpi_total_checks` differs from `9c3e8eaa`; DB compacted): strict local gate passed;
+  static build from a pinned worktree at `5daf977`. Release folders: `~/devbox/gov2/tempo-gen-recheck/`. Not deployed yet.
+
 ## 2026-11-25 — Place page links, API page TOC, MCP connect pills
 
 - **Fix:** place pages listed split parents (for example `SCL101C`) next to their served child. A parent has no page
