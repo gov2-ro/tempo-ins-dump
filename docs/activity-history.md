@@ -2,6 +2,18 @@
 
 
 
+
+## 2026-11-25 — Released: API/MCP pages, shared top bar, city pages (static + VPS)
+
+- **VPS** (`api-ins.gov2.ro`): release `20261125-184942-9c3e8eaa`, run by the owner (`deploy.sh --apply`); release
+  check passed. Live: new `llms.txt`, `/api/places` with the 8 featured places, city KPIs, MCP on.
+- **Static** (`ins.gov2.ro`): built from `ecf1433` on generation `9c3e8eaa` at
+  `~/devbox/gov2/tempo-release-20261125/static` (43,503 files, 598 MB); `api.html` replaced by the `3dc0173` layout
+  before the manifest was written. `release-check --static` passed (API parity 1017/1017). Uploaded as
+  `releases/9c3e8eaae549-ecf1433c71e7`; rollback `releases/9c3e8eaae549-ca5402883105`. Live smoke clean on home,
+  places, a city page, `/api.html`, `/mcp-connect.html` and a dataset page.
+- `deploy-static.sh` needs the network outside this session's sandbox (ssh to the DreamHost host).
+
 ## 2026-11-25 — MCP connect page
 
 - New `/mcp-connect.html` (from a parallel session): a form (server URL, name, transport, authentication) and
