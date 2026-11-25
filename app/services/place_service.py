@@ -885,6 +885,7 @@ def get_place_datasets(place_type: str, slug: str, *, conn=None) -> list[dict]:
         WHERE p.dim_type = 'geo'
           AND p.geo_level = ?
           AND p.geo_name_clean IN ({})
+          AND m.is_canonical      -- served datasets only: a split parent has no page (static 404)
         ORDER BY m.context_code, m.matrix_name
     """.format(",".join("?" * len(place["ref_area_values"]))),
         [place_type] + place["ref_area_values"]
