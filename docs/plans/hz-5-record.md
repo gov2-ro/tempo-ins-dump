@@ -338,3 +338,27 @@ The cron time can also move after the scrapers. `refresh-run.py` runs the steps 
 - The full static build ran once (run 3, before the `--codes` change for api-cases). Later runs used `--static-codes`.
 - `meta/`, `misc/` and `sdmx-dashboards/` were in the run copies; I did not prove the run needs them.
 - `deploy.sh` was refactored onto `lib.sh` and checked with `bash -n` and a read-through; it was not run against a host.
+
+## 11. Tests
+
+`python -m pytest tests -q` on the branch, once, with nothing else running: **2582 passed, 146 skipped** (15 min).
+`tests/test_hz5_refresh.py`: 34 tests (stale rule, cleanup, compaction, the orchestrator flags, atomic writes, schedule,
+run copy, live-tree guard, notification, probe failure, bucketed audit, `--write-db`, sweep and touched-code helpers).
+
+## 12. Open questions for the owner
+
+1. **Stale rule scope.** The rule needs one line in `insights.py` (outside the brief's file list) and covers the dataset
+   page KPI only. `/data` headline, composer tiles and `tools/query` still accept an old `match`. Covering them needs the
+   static engine (`policy.js`, `build-static.py`) to carry the latest period. Decide: leave as is, or open a package.
+2. **541 KPIs.** The rule withholds the headline KPI of 541 served datasets today (section 8). Run a full re-check
+   before deploying it, or accept the gap until the weekly runs cover them.
+3. **Candidate with failures.** A run with failed matrices still makes a candidate (listed in the notification). Should
+   `promote.sh` refuse those without `--accept-failures`?
+4. **Order in `promote.sh`.** Data promotion before the static upload (section 6). Confirm.
+5. **Node on the VPS and the 2.2 GB parity gate** (section 9): install Node there, or run that gate on the Mac?
+6. **`parquet` in `data.prev`.** The previous working data stays after each promotion (273 MB unique). Keep, or delete
+   after the next successful run?
+7. **Curated notes.** A gate that fails on a note naming an old period is reported only (status note), as the brief says.
+   Nothing yet detects it before the gate; a pre-check of `concepts.json` periods could.
+8. The chart-selector baseline `data/eval/chart_selector_baseline.json` still names retired children (backlog P3);
+   the cleanup does not touch it.
