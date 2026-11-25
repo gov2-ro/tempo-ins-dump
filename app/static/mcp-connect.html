@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conectare MCP: Claude, ChatGPT, Gemini, Cursor, VS Code — INS+</title>
+    <meta name="description" content="Fișă rapidă: cum conectați un server MCP la distanță (Streamable HTTP) în Claude, ChatGPT, Gemini, Grok, Cursor, VS Code, Codex, OpenCode și alți clienți. Comenzi și configurări gata de copiat. / How to connect a remote MCP server in every major AI client.">
+    <link rel="canonical" href="https://ins.gov2.ro/mcp-connect.html">
+    <link rel="alternate" hreflang="ro" href="https://ins.gov2.ro/mcp-connect.html">
+    <link rel="alternate" hreflang="en" href="https://ins.gov2.ro/mcp-connect.html?lang=en">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://ins.gov2.ro/mcp-connect.html">
+    <meta property="og:title" content="Conectare la un server MCP — Claude, ChatGPT, Gemini, Cursor, VS Code, Codex">
+    <meta property="og:description" content="Comenzi și configurări gata de copiat pentru serverul MCP INS+ (date statistice oficiale din România) sau orice alt server MCP la distanță.">
+    <meta property="og:image" content="https://ins.gov2.ro/img/landing.png">
+    <script type="application/ld+json">
+    {"@context": "https://schema.org", "@type": "TechArticle",
+     "headline": "Connect to a remote MCP server: Claude, ChatGPT, Gemini, Grok, Cursor, VS Code, Codex, OpenCode",
+     "alternativeHeadline": "Conectare la un server MCP",
+     "description": "Copy-paste setup for a remote Model Context Protocol (MCP) server in chat apps, CLI agents, IDEs, self-hosted UIs and APIs, with the verification status of each client.",
+     "inLanguage": ["ro", "en"], "dateModified": "2026-11-25",
+     "about": ["Model Context Protocol", "MCP server", "INS TEMPO Online"],
+     "url": "https://ins.gov2.ro/mcp-connect.html",
+     "publisher": {"@type": "Organization", "name": "gov2.ro", "url": "https://gov2.ro/"}}
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/explore.css?v=48">
+    <script>
+        (function(){
+            var t=localStorage.getItem('lens_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');
+            document.documentElement.setAttribute('data-theme',t);
+            var l=new URLSearchParams(location.search).get('lang')||localStorage.getItem('lens_lang')||'ro';
+            document.documentElement.setAttribute('lang', l==='en'?'en':'ro');
+        })();
+    </script>
+    <style>
+        html[lang="ro"] [data-l="en"], html[lang="en"] [data-l="ro"] { display: none; }
+        .doc { max-width: 980px; width: 100%; min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 2rem 1rem 4rem; line-height: 1.55; color: var(--text-0); }
+        .doc h1 { font-size: 1.6rem; font-weight: 700; margin: 0 0 .3rem; }
+        .doc p, .doc li { color: var(--text-1); font-size: .92rem; }
+        .doc a { color: var(--accent); }
+        .doc code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .84em; background: var(--bg-2); border: 1px solid var(--border); border-radius: 4px; padding: .05em .35em; color: var(--text-0); }
+        .lead { margin: 0 0 1.2rem; }
+        .wiz { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .8rem 1rem; padding: 1rem; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; }
+        .wiz label { display: flex; flex-direction: column; gap: .25rem; font-size: .8rem; font-weight: 600; color: var(--text-1); min-width: 0; }
+        .wiz .wide { grid-column: 1 / -1; }
+        .wiz [hidden] { display: none; }
+        .wiz input, .wiz select { font: inherit; font-size: .88rem; font-weight: 400; padding: .45rem .55rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-1, var(--bg-0)); color: var(--text-0); min-width: 0; }
+        .wiz input:focus, .wiz select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+        .wiz .hint { font-weight: 400; color: var(--text-2); font-size: .76rem; }
+        .wiz .row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+        .linkbtn { font: inherit; font-size: .78rem; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; }
+        .warns { margin: .8rem 0 0; padding: 0; list-style: none; }
+        .warns li { border-left: 3px solid #d9822b; background: rgba(217,130,43,.1); padding: .35rem .8rem; margin: .35rem 0; border-radius: 0 6px 6px 0; font-size: .86rem; }
+        .warns li.info { border-color: var(--accent); background: var(--accent-dim); }
+        .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin: 1.4rem 0 .9rem; }
+        .chip { font: inherit; font-size: .82rem; padding: .3rem .75rem; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-2); color: var(--text-1); cursor: pointer; }
+        .chip[aria-pressed="true"] { border-color: var(--accent); color: var(--text-0); background: var(--accent-dim); }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: .8rem; }
+        .cc { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: .85rem 1rem; min-width: 0; }
+        .cc header { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; margin-bottom: .35rem; }
+        .cc h2 { font-size: 1rem; font-weight: 650; margin: 0; }
+        .cc .where { font-size: .74rem; color: var(--text-2); }
+        .cc .doclink { margin-left: auto; font-size: .78rem; }
+        .badge { font-size: .68rem; font-weight: 600; padding: .05rem .45rem; border-radius: 999px; border: 1px solid var(--border); color: var(--text-2); }
+        .badge.ok { border-color: #2e9e5b; color: #2e9e5b; }
+        .badge.bad { border-color: #d9822b; color: #d9822b; }
+        .badge.mid { border-color: var(--accent); color: var(--accent); }
+        .cc .note.unsure { border-left: 2px solid #d9822b; padding-left: .5rem; }
+        .cc .note.unsure b { color: #d9822b; }
+        .cc ol { margin: .3rem 0 .4rem; padding-left: 1.2rem; }
+        .cc ol li { font-size: .85rem; margin: .1rem 0; }
+        .cc .note { font-size: .8rem; color: var(--text-2); margin: .35rem 0 0; }
+        .cc .note.warn { color: #d9822b; }
+        .snip { position: relative; margin: .45rem 0 0; }
+        .snip .lbl { font-size: .72rem; color: var(--text-2); margin: 0 0 .15rem; }
+        .snip pre { margin: 0; background: var(--bg-0); border: 1px solid var(--border); border-radius: 7px; padding: .6rem 2.6rem .6rem .75rem; overflow-x: auto; font-size: .78rem; line-height: 1.45; }
+        .snip pre code { background: none; border: 0; padding: 0; font-size: 1em; }
+        .copy { position: absolute; right: .35rem; bottom: .35rem; font: inherit; font-size: .7rem; padding: .15rem .45rem; border-radius: 5px; border: 1px solid var(--border); background: var(--bg-2); color: var(--text-1); cursor: pointer; }
+        .copy:hover { border-color: var(--accent); color: var(--text-0); }
+        .btnrow { display: flex; gap: .5rem; flex-wrap: wrap; margin: .45rem 0 0; }
+        .btn { display: inline-block; font-size: .8rem; padding: .3rem .7rem; border-radius: 6px; border: 1px solid var(--accent); color: var(--accent); text-decoration: none; }
+        .foot { margin-top: 2rem; font-size: .8rem; color: var(--text-2); }
+    </style>
+    <link rel="stylesheet" href="css/ui-rhythm.css?v=5">
+    <script src="js/ui-preferences.js?v=4" defer></script>
+</head>
+<body>
+    <nav class="topbar" id="topbar" data-active="mcp" data-own="theme lang"></nav>
+
+<main class="doc">
+    <h1><span data-l="ro">Conectare la un server MCP</span><span data-l="en">Connect to an MCP server</span></h1>
+    <p class="lead">
+        <span data-l="ro">Completați formularul. Instrucțiunile de mai jos se adaptează. Nu introduceți chei aici: fragmentele folosesc variabile de mediu sau marcaje.</span>
+        <span data-l="en">Fill in the form. The instructions below adapt. Do not enter keys here: the snippets use environment variables or placeholders.</span>
+    </p>
+
+    <form class="wiz" id="wiz" autocomplete="off" onsubmit="return false">
+        <label class="wide"><span><span data-l="ro">Adresa serverului MCP</span><span data-l="en">MCP server URL</span></span>
+            <input id="f-url" type="url" spellcheck="false" placeholder="https://example.com/mcp" value="https://api-ins.gov2.ro/mcp">
+            <span class="row"><span class="hint" data-l="ro">Implicit: serverul INS+ (fără cheie).</span><span class="hint" data-l="en">Default: the INS+ server (no key).</span>
+            <button type="button" class="linkbtn" id="f-reset"><span data-l="ro">Revino la INS+</span><span data-l="en">Reset to INS+</span></button></span>
+        </label>
+        <label><span><span data-l="ro">Nume (identificator)</span><span data-l="en">Name (identifier)</span></span>
+            <input id="f-name" spellcheck="false" value="ins-tempo">
+        </label>
+        <label><span>Transport</span>
+            <select id="f-t">
+                <option value="http">Streamable HTTP</option>
+                <option value="sse">SSE (legacy)</option>
+            </select>
+        </label>
+        <label><span><span data-l="ro">Autentificare</span><span data-l="en">Authentication</span></span>
+            <select id="f-auth">
+                <option value="none" data-ro="Fără" data-en="None" selected>Fără / None</option>
+                <option value="oauth" data-ro="OAuth (login în browser)" data-en="OAuth (browser sign-in)">OAuth</option>
+                <option value="bearer" data-ro="Token Bearer" data-en="Bearer token">Bearer token</option>
+                <option value="header" data-ro="Antet propriu (cheie API)" data-en="Custom header (API key)">Custom header</option>
+            </select>
+        </label>
+        <label id="w-hdr" hidden><span><span data-l="ro">Numele antetului</span><span data-l="en">Header name</span></span>
+            <input id="f-hdr" spellcheck="false" placeholder="X-API-Key" value="X-API-Key">
+        </label>
+        <label id="w-env" hidden><span><span data-l="ro">Variabila de mediu cu tokenul</span><span data-l="en">Environment variable with the token</span></span>
+            <input id="f-env" spellcheck="false" placeholder="MCP_TOKEN" value="MCP_TOKEN">
+        </label>
+    </form>
+    <!-- Between the mcp:* markers: generated by scripts/build-mcp-connect.mjs (default state). Do not edit by hand. -->
+    <ul class="warns" id="warns"><!-- mcp:warns --><li class="info"><span data-l="ro">Serverul INS+: Streamable HTTP, fără cheie, doar citire. Lăsați „Fără” la autentificare.</span><span data-l="en">INS+ server: Streamable HTTP, no key, read-only. Keep authentication on “None”.</span></li><!-- /mcp:warns --></ul>
+
+    <div class="chips" id="chips" role="group"><!-- mcp:chips --><button class="chip" type="button" data-cat="all" aria-pressed="true"><span data-l="ro">Toate</span><span data-l="en">All</span></button><button class="chip" type="button" data-cat="chat" aria-pressed="false"><span data-l="ro">Aplicații chat</span><span data-l="en">Chat apps</span></button><button class="chip" type="button" data-cat="cli" aria-pressed="false"><span data-l="ro">Linie de comandă</span><span data-l="en">CLI agents</span></button><button class="chip" type="button" data-cat="ide" aria-pressed="false"><span data-l="ro">Editoare / IDE</span><span data-l="en">IDEs &amp; editors</span></button><button class="chip" type="button" data-cat="self" aria-pressed="false"><span data-l="ro">Desktop / self-hosted</span><span data-l="en">Desktop / self-hosted</span></button><button class="chip" type="button" data-cat="api" aria-pressed="false">API</button><button class="chip" type="button" data-cat="test" aria-pressed="false"><span data-l="ro">Test / cod</span><span data-l="en">Test / code</span></button><!-- /mcp:chips --></div>
+    <div class="grid" id="cards"><!-- mcp:cards -->
+<article class="cc" id="c-claude"><header><h2>Claude</h2><span class="where">web · desktop · mobile</span><span class="badge ok" title="Custom connector to api-ins.gov2.ro/mcp is in use; it also shows as &quot;claude.ai ins.gov2.ro ✔ Connected&quot; in claude mcp list. (2026-11-25)"><span data-l="ro">testat</span><span data-l="en">tested</span></span><a class="doclink" href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp" target="_blank" rel="noopener">docs ↗</a></header><ol><li>claude.ai → Customize → Connectors → Add custom connector</li><li>Name: ins-tempo · URL: paste</li><li>Chat: + → Connectors → enable ins-tempo</li></ol><div class="snip"><p class="lbl">URL</p><pre><code>https://api-ins.gov2.ro/mcp</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Adăugat o dată, merge pe web, desktop, mobil și în Claude Code. Planul Free: un singur conector propriu. Doar portul 443.</span><span data-l="en">Added once, it works on web, desktop, mobile and in Claude Code. Free plan: one custom connector. Port 443 only.</span></p><p class="note"><span data-l="ro">Team/Enterprise: un administrator îl adaugă din Organization settings → Connectors.</span><span data-l="en">Team/Enterprise: an admin adds it in Organization settings → Connectors.</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Exact menu label (Customize vs Settings) differs between plans. Fixed-header auth in Advanced settings is not confirmed.</p></article>
+<article class="cc" id="c-chatgpt"><header><h2>ChatGPT</h2><span class="where">web</span><span class="badge " title="OpenAI help article (via research reports)."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt" target="_blank" rel="noopener">docs ↗</a></header><ol><li>Settings → Apps / Plugins → Advanced → enable Developer mode</li><li>+ Add custom MCP server → name, URL, authentication</li><li>Chat: @ins-tempo or pick it from + → More</li></ol><div class="snip"><p class="lbl">URL</p><pre><code>https://api-ins.gov2.ro/mcp</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Complet pe Business/Enterprise/Edu (administratorul decide); Pro: doar citire. Doar pe web, nu din aplicația mobilă.</span><span data-l="en">Full support on Business/Enterprise/Edu (admin-controlled); Pro: read-only tools. Web only, not from the mobile app.</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Menu path differs between the two reports (Plugins vs Developer mode). Plan limits (Business/Enterprise/Edu full, Pro read-only) not checked. Static-header auth not checked.</p></article>
+<article class="cc" id="c-chatgpt-desktop"><header><h2>ChatGPT</h2><span class="where">desktop (macOS)</span><span class="badge ok" title="Owner screenshot: Settings → Plugins → MCPs → Add; INS+ server installed with URL, Bearer token env var, Headers, Headers from environment variables. (2026-11-25)"><span data-l="ro">confirmat în UI</span><span data-l="en">UI confirmed</span></span><a class="doclink" href="https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt" target="_blank" rel="noopener">docs ↗</a></header><ol><li>Settings → Integrations → Plugins → MCPs → Add</li><li>URL: paste</li></ol><div class="snip"><p class="lbl">URL</p><pre><code>https://api-ins.gov2.ro/mcp</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Conexiunea pleacă de pe calculatorul dvs.: merge și cu adrese locale.</span><span data-l="en">The connection starts from your computer: local URLs work too.</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Tool calls from a chat not yet checked. Windows app not checked.</p></article>
+<article class="cc" id="c-gemini"><header><h2>Gemini</h2><span class="where">web · mobile</span><span class="badge ok" title="Owner screenshot: gemini.google.com/devmode lists all 8 INS+ tools (Live schema 8/8). (2026-11-25)"><span data-l="ro">testat</span><span data-l="en">tested</span></span><a class="doclink" href="https://support.google.com/gemini/answer/17209137" target="_blank" rel="noopener">docs ↗</a></header><ol><li>gemini.google.com → Settings → Connected Apps</li><li>Custom apps → Add a custom app → URL → Next</li><li>Chat: @ins-tempo</li><li>Check: gemini.google.com/devmode → Tool schemas</li></ol><div class="snip"><p class="lbl">URL</p><pre><code>https://api-ins.gov2.ro/mcp</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Restricționat: cont personal Google, 18+, SUA, engleză, istoric activat.</span><span data-l="en">Restricted: personal Google account, 18+, US, English, history on.</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Exact path to add a custom app not captured. Eligibility limits (US, 18+, personal account, English) come from the reports, not checked. Mobile not checked.</p></article>
+<article class="cc" id="c-grok"><header><h2>Grok</h2><span class="where">web · Grok desktop</span><span class="badge " title="xAI docs (via research reports)."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://docs.x.ai/grok/connectors" target="_blank" rel="noopener">docs ↗</a></header><ol><li>Web: grok.com/connectors → New Connector → Custom → URL → authenticate</li><li>Desktop: Connect apps → Add a custom connector → Type: Remote HTTPS → Server URL</li></ol><div class="snip"><p class="lbl">URL</p><pre><code>https://api-ins.gov2.ro/mcp</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Business/Enterprise: un administrator aprobă conectorul în console.x.ai.</span><span data-l="en">Business/Enterprise: an admin approves the connector in console.x.ai.</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Desktop menu labels and header support come from one report only.</p></article>
+<article class="cc" id="c-perplexity"><header><h2>Perplexity</h2><span class="where">web</span><span class="badge bad" title="One research report only."><span data-l="ro">neverificat</span><span data-l="en">unverified</span></span><a class="doclink" href="https://www.perplexity.ai/help-center/en/" target="_blank" rel="noopener">docs ↗</a></header><ol><li>Settings → Connectors → + Custom connector → Remote</li><li>URL; auth: None</li></ol><div class="snip"><p class="lbl">URL</p><pre><code>https://api-ins.gov2.ro/mcp</code></pre><button type="button" class="copy">copy</button></div><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Menu path and auth options not confirmed. Docs link is the general help centre.</p></article>
+<article class="cc" id="c-mistral"><header><h2>Le Chat (Mistral)</h2><span class="where">web</span><span class="badge bad" title="One research report only."><span data-l="ro">neverificat</span><span data-l="en">unverified</span></span><a class="doclink" href="https://help.mistral.ai/" target="_blank" rel="noopener">docs ↗</a></header><ol><li>chat.mistral.ai → Intelligence → Connectors → Add Connector</li><li>Custom MCP Connector → URL → authentication</li></ol><div class="snip"><p class="lbl">URL</p><pre><code>https://api-ins.gov2.ro/mcp</code></pre><button type="button" class="copy">copy</button></div><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Menu path (Intelligence → Connectors) is a guess. Docs link is the general help centre.</p></article>
+<article class="cc" id="c-copilot-studio"><header><h2>Copilot Studio</h2><span class="where">Microsoft 365 agents</span><span class="badge " title="Microsoft Learn (via research reports)."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://learn.microsoft.com/en-us/microsoft-copilot-studio/mcp-add-existing-server-to-agent" target="_blank" rel="noopener">docs ↗</a></header><ol><li>Agent → Tools → Add a tool → New tool → Model Context Protocol</li><li>Server name, URL; auth: None</li></ol><div class="snip"><p class="lbl">URL</p><pre><code>https://api-ins.gov2.ro/mcp</code></pre><button type="button" class="copy">copy</button></div><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Docs URL and auth option labels not checked.</p></article>
+<article class="cc" id="c-deepseek"><header><h2>DeepSeek</h2><span class="where">chat · API</span><span class="badge " title="Research reports: chat and API ignore MCP."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><span class="badge bad"><span data-l="ro">fără MCP</span><span data-l="en">no MCP</span></span><a class="doclink" href="https://api-docs.deepseek.com/" target="_blank" rel="noopener">docs ↗</a></header><p class="note"><span data-l="ro">Chat-ul și API-ul DeepSeek nu conectează servere MCP. Folosiți modelul DeepSeek într-un client MCP (OpenCode, Cline, Roo, Continue, LibreChat).</span><span data-l="en">DeepSeek chat and API do not connect to MCP servers. Use the DeepSeek model inside an MCP client (OpenCode, Cline, Roo, Continue, LibreChat).</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>DeepSeek Harness (separate desktop app) is said to support MCP; not listed on the page.</p></article>
+<article class="cc" id="c-claude-code"><header><h2>Claude Code</h2><span class="where">CLI · IDE</span><span class="badge ok" title="claude mcp add --help matches the snippet; INS+ connected in claude mcp list. (2026-11-25)"><span data-l="ro">testat</span><span data-l="en">tested</span></span><a class="doclink" href="https://code.claude.com/docs/en/mcp" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">Terminal</p><pre><code>claude mcp add --transport http --scope user ins-tempo https://api-ins.gov2.ro/mcp</code></pre><button type="button" class="copy">copy</button></div><div class="snip"><p class="lbl"><span data-l="ro">Sau în proiect: .mcp.json</span><span data-l="en">Or per project: .mcp.json</span></p><pre><code>{
+  &quot;mcpServers&quot;: {
+    &quot;ins-tempo&quot;: {
+      &quot;type&quot;: &quot;http&quot;,
+      &quot;url&quot;: &quot;https://api-ins.gov2.ro/mcp&quot;
+    }
+  }
+}</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Conectorul adăugat pe claude.ai apare și aici, fără comandă.</span><span data-l="en">A connector added on claude.ai shows up here too, with no command.</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>--header with $VAR depends on the shell expanding the variable; .mcp.json ${VAR} expansion not run here.</p></article>
+<article class="cc" id="c-codex"><header><h2>Codex</h2><span class="where">CLI · IDE extension</span><span class="badge mid" title="codex mcp add --help: --url and --bearer-token-env-var exist; codex mcp login exists. (2026-11-25)"><span data-l="ro">sintaxă verificată</span><span data-l="en">syntax checked</span></span><a class="doclink" href="https://developers.openai.com/codex/mcp" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">Terminal</p><pre><code>codex mcp add ins-tempo --url https://api-ins.gov2.ro/mcp</code></pre><button type="button" class="copy">copy</button></div><div class="snip"><p class="lbl">~/.codex/config.toml</p><pre><code>[mcp_servers.ins-tempo]
+url = &quot;https://api-ins.gov2.ro/mcp&quot;</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">CLI-ul și extensia IDE folosesc același config.toml.</span><span data-l="en">The CLI and the IDE extension share config.toml.</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Not connected to INS+ yet. env_http_headers key in config.toml not checked. SSE unsupported is assumed from --help (streamable HTTP only).</p></article>
+<article class="cc" id="c-gemini-cli"><header><h2>Gemini CLI</h2><span class="where">CLI</span><span class="badge " title="Gemini CLI docs (via research reports)."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">Terminal</p><pre><code>gemini mcp add --scope user --transport http ins-tempo https://api-ins.gov2.ro/mcp</code></pre><button type="button" class="copy">copy</button></div><div class="snip"><p class="lbl">~/.gemini/settings.json</p><pre><code>{
+  &quot;mcpServers&quot;: {
+    &quot;ins-tempo&quot;: {
+      &quot;httpUrl&quot;: &quot;https://api-ins.gov2.ro/mcp&quot;
+    }
+  }
+}</code></pre><button type="button" class="copy">copy</button></div><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Not installed here. $VAR expansion in settings.json headers and /mcp auth command not checked.</p></article>
+<article class="cc" id="c-grok-cli"><header><h2>Grok CLI</h2><span class="where">CLI</span><span class="badge " title="xAI docs (via one research report)."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://docs.x.ai/build/features/mcp-servers" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">Terminal</p><pre><code>grok mcp add --transport http ins-tempo https://api-ins.gov2.ro/mcp
+grok mcp doctor ins-tempo</code></pre><button type="button" class="copy">copy</button></div><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Not installed here. SSE support unknown.</p></article>
+<article class="cc" id="c-copilot-cli"><header><h2>GitHub Copilot CLI</h2><span class="where">CLI</span><span class="badge bad" title="Research reports."><span data-l="ro">neverificat</span><span data-l="en">unverified</span></span><a class="doclink" href="https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli" target="_blank" rel="noopener">docs ↗</a></header><ol><li>copilot → /mcp add → HTTP → URL</li></ol><div class="snip"><p class="lbl">~/.copilot/mcp-config.json</p><pre><code>{
+  &quot;mcpServers&quot;: {
+    &quot;ins-tempo&quot;: {
+      &quot;type&quot;: &quot;http&quot;,
+      &quot;url&quot;: &quot;https://api-ins.gov2.ro/mcp&quot;,
+      &quot;tools&quot;: [
+        &quot;*&quot;
+      ]
+    }
+  }
+}</code></pre><button type="button" class="copy">copy</button></div><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>copilot mcp add flags and the mcp-config.json schema not confirmed. Docs URL not checked.</p></article>
+<article class="cc" id="c-opencode"><header><h2>OpenCode</h2><span class="where">CLI · any model</span><span class="badge bad" title="Research reports + memory."><span data-l="ro">neverificat</span><span data-l="en">unverified</span></span><a class="doclink" href="https://opencode.ai/docs/mcp-servers/" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">opencode.json</p><pre><code>{
+  &quot;$schema&quot;: &quot;https://opencode.ai/config.json&quot;,
+  &quot;mcp&quot;: {
+    &quot;ins-tempo&quot;: {
+      &quot;type&quot;: &quot;remote&quot;,
+      &quot;url&quot;: &quot;https://api-ins.gov2.ro/mcp&quot;,
+      &quot;enabled&quot;: true
+    }
+  }
+}</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Funcționează cu orice model: DeepSeek, Qwen, modele locale.</span><span data-l="en">Works with any model: DeepSeek, Qwen, local models.</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Reports disagree on config shape (mcp.&lt;name&gt; vs mcp.servers.&lt;name&gt;). opencode mcp add flags not used. {env:VAR} syntax from memory.</p></article>
+<article class="cc" id="c-qwen"><header><h2>Qwen Code</h2><span class="where">CLI</span><span class="badge " title="Research reports (mirrors Gemini CLI)."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://qwenlm.github.io/qwen-code-docs/en/users/features/mcp/" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">Terminal</p><pre><code>qwen mcp add --transport http ins-tempo https://api-ins.gov2.ro/mcp</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Aceeași sintaxă ca Gemini CLI (~/.qwen/settings.json).</span><span data-l="en">Same syntax as Gemini CLI (~/.qwen/settings.json).</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Docs URL not checked.</p></article>
+<article class="cc" id="c-kiro"><header><h2>Kiro</h2><span class="where">IDE · CLI</span><span class="badge bad" title="One research report."><span data-l="ro">neverificat</span><span data-l="en">unverified</span></span><a class="doclink" href="https://kiro.dev/docs/mcp/" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">~/.kiro/settings/mcp.json</p><pre><code>{
+  &quot;mcpServers&quot;: {
+    &quot;ins-tempo&quot;: {
+      &quot;url&quot;: &quot;https://api-ins.gov2.ro/mcp&quot;
+    }
+  }
+}</code></pre><button type="button" class="copy">copy</button></div><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Config path ~/.kiro/settings/mcp.json and headers field not confirmed.</p></article>
+<article class="cc" id="c-vscode"><header><h2>VS Code (Copilot)</h2><span class="where">IDE</span><span class="badge " title="VS Code docs (via research reports) + memory for install links."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://code.visualstudio.com/docs/copilot/customization/mcp-servers" target="_blank" rel="noopener">docs ↗</a></header><ol><li>Command Palette → MCP: Add Server → HTTP → URL</li></ol><div class="btnrow"><a class="btn" href="vscode:mcp/install?%7B%22name%22%3A%22ins-tempo%22%2C%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fapi-ins.gov2.ro%2Fmcp%22%7D"><span data-l="ro">Instalează în VS Code</span><span data-l="en">Install in VS Code</span></a><a class="btn" href="vscode-insiders:mcp/install?%7B%22name%22%3A%22ins-tempo%22%2C%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fapi-ins.gov2.ro%2Fmcp%22%7D">VS Code Insiders</a></div><div class="snip"><p class="lbl">.vscode/mcp.json</p><pre><code>{
+  &quot;servers&quot;: {
+    &quot;ins-tempo&quot;: {
+      &quot;type&quot;: &quot;http&quot;,
+      &quot;url&quot;: &quot;https://api-ins.gov2.ro/mcp&quot;
+    }
+  }
+}</code></pre><button type="button" class="copy">copy</button></div><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>vscode:mcp/install link and inputs/promptString block not clicked or run.</p></article>
+<article class="cc" id="c-cursor"><header><h2>Cursor</h2><span class="where">IDE</span><span class="badge " title="Cursor docs (via research reports) + memory for deeplink."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://cursor.com/docs/context/mcp" target="_blank" rel="noopener">docs ↗</a></header><div class="btnrow"><a class="btn" href="cursor://anysphere.cursor-deeplink/mcp/install?name=ins-tempo&amp;config=eyJ1cmwiOiJodHRwczovL2FwaS1pbnMuZ292Mi5yby9tY3AifQ%3D%3D"><span data-l="ro">Adaugă în Cursor</span><span data-l="en">Add to Cursor</span></a></div><div class="snip"><p class="lbl"><span data-l="ro">~/.cursor/mcp.json (global) sau .cursor/mcp.json</span><span data-l="en">~/.cursor/mcp.json (global) or .cursor/mcp.json</span></p><pre><code>{
+  &quot;mcpServers&quot;: {
+    &quot;ins-tempo&quot;: {
+      &quot;url&quot;: &quot;https://api-ins.gov2.ro/mcp&quot;
+    }
+  }
+}</code></pre><button type="button" class="copy">copy</button></div><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Add to Cursor deeplink format not clicked. ${env:VAR} in headers not checked.</p></article>
+<article class="cc" id="c-windsurf"><header><h2>Windsurf</h2><span class="where">IDE</span><span class="badge bad" title="Third-party sources only (report says Windsurf docs are in transition)."><span data-l="ro">neverificat</span><span data-l="en">unverified</span></span><a class="doclink" href="https://docs.windsurf.com/windsurf/cascade/mcp" target="_blank" rel="noopener">docs ↗</a></header><ol><li>Cascade → MCP servers → Configure (or edit the file)</li></ol><div class="snip"><p class="lbl">~/.codeium/windsurf/mcp_config.json</p><pre><code>{
+  &quot;mcpServers&quot;: {
+    &quot;ins-tempo&quot;: {
+      &quot;serverUrl&quot;: &quot;https://api-ins.gov2.ro/mcp&quot;
+    }
+  }
+}</code></pre><button type="button" class="copy">copy</button></div><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>serverUrl key and ${env:VAR} support not confirmed.</p></article>
+<article class="cc" id="c-zed"><header><h2>Zed</h2><span class="where">editor</span><span class="badge " title="Zed docs (via research reports)."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://zed.dev/docs/ai/mcp" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">settings.json</p><pre><code>{
+  &quot;context_servers&quot;: {
+    &quot;ins-tempo&quot;: {
+      &quot;url&quot;: &quot;https://api-ins.gov2.ro/mcp&quot;
+    }
+  }
+}</code></pre><button type="button" class="copy">copy</button></div><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>headers field under context_servers not checked.</p></article>
+<article class="cc" id="c-cline"><header><h2>Cline</h2><span class="where">VS Code extension</span><span class="badge " title="Cline docs (via research reports)."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://docs.cline.bot/mcp/connecting-to-a-remote-server" target="_blank" rel="noopener">docs ↗</a></header><ol><li>MCP Servers → Remote Servers → Streamable HTTP → URL</li></ol><div class="snip"><p class="lbl">cline_mcp_settings.json</p><pre><code>{
+  &quot;mcpServers&quot;: {
+    &quot;ins-tempo&quot;: {
+      &quot;type&quot;: &quot;streamableHttp&quot;,
+      &quot;url&quot;: &quot;https://api-ins.gov2.ro/mcp&quot;
+    }
+  }
+}</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Fără &quot;type&quot;, Cline presupune SSE.</span><span data-l="en">Without &quot;type&quot;, Cline assumes SSE.</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Docs URL path not checked.</p></article>
+<article class="cc" id="c-roo"><header><h2>Roo Code</h2><span class="where">VS Code extension</span><span class="badge " title="Roo docs (via research reports)."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://docs.roocode.com/features/mcp/using-mcp-in-roo" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">.roo/mcp.json</p><pre><code>{
+  &quot;mcpServers&quot;: {
+    &quot;ins-tempo&quot;: {
+      &quot;type&quot;: &quot;streamable-http&quot;,
+      &quot;url&quot;: &quot;https://api-ins.gov2.ro/mcp&quot;
+    }
+  }
+}</code></pre><button type="button" class="copy">copy</button></div><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>${env:VAR} in headers from memory.</p></article>
+<article class="cc" id="c-continue"><header><h2>Continue</h2><span class="where">VS Code · JetBrains</span><span class="badge bad" title="Research reports + memory."><span data-l="ro">neverificat</span><span data-l="en">unverified</span></span><a class="doclink" href="https://docs.continue.dev/customize/deep-dives/mcp" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">config.yaml</p><pre><code>mcpServers:
+  - name: ins-tempo
+    type: streamable-http
+    url: https://api-ins.gov2.ro/mcp</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Uneltele MCP merg doar în modul Agent.</span><span data-l="en">MCP tools work in Agent mode only.</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>requestOptions.headers and ${{ secrets.X }} syntax from memory.</p></article>
+<article class="cc" id="c-lmstudio"><header><h2>LM Studio</h2><span class="where">desktop · local models</span><span class="badge " title="LM Studio docs (via research reports)."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://lmstudio.ai/docs/app/mcp" target="_blank" rel="noopener">docs ↗</a></header><ol><li>Program → Install → Edit mcp.json</li></ol><div class="snip"><p class="lbl">mcp.json</p><pre><code>{
+  &quot;mcpServers&quot;: {
+    &quot;ins-tempo&quot;: {
+      &quot;url&quot;: &quot;https://api-ins.gov2.ro/mcp&quot;
+    }
+  }
+}</code></pre><button type="button" class="copy">copy</button></div><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Menu path (Program → Install → Edit mcp.json) from memory.</p></article>
+<article class="cc" id="c-openwebui"><header><h2>Open WebUI</h2><span class="where">self-hosted</span><span class="badge " title="Research reports."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://docs.openwebui.com/features/mcp" target="_blank" rel="noopener">docs ↗</a></header><ol><li>Admin Settings → External Tools → + Add Server</li><li>Type: MCP (Streamable HTTP) → URL</li></ol><div class="snip"><p class="lbl">URL</p><pre><code>https://api-ins.gov2.ro/mcp</code></pre><button type="button" class="copy">copy</button></div><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Menu labels (External Tools) may differ by version.</p></article>
+<article class="cc" id="c-librechat"><header><h2>LibreChat</h2><span class="where">self-hosted</span><span class="badge " title="LibreChat docs (via research reports)."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/mcp_servers" target="_blank" rel="noopener">docs ↗</a></header><ol><li>UI: MCP Settings → Add MCP → URL</li></ol><div class="snip"><p class="lbl">librechat.yaml</p><pre><code>mcpServers:
+  ins-tempo:
+    type: streamable-http
+    url: https://api-ins.gov2.ro/mcp</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Fără &quot;type&quot;, LibreChat presupune SSE.</span><span data-l="en">Without &quot;type&quot;, LibreChat assumes SSE.</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>${VAR} in headers from memory.</p></article>
+<article class="cc" id="c-claude-desktop-local"><header><h2><span data-l="ro">Clienți doar stdio (punte mcp-remote)</span><span data-l="en">stdio-only clients (mcp-remote bridge)</span></h2><span class="where">Claude Desktop config · others</span><span class="badge bad" title="mcp-remote README (memory)."><span data-l="ro">neverificat</span><span data-l="en">unverified</span></span><a class="doclink" href="https://www.npmjs.com/package/mcp-remote" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">claude_desktop_config.json / mcp.json</p><pre><code>{
+  &quot;mcpServers&quot;: {
+    &quot;ins-tempo&quot;: {
+      &quot;command&quot;: &quot;npx&quot;,
+      &quot;args&quot;: [
+        &quot;-y&quot;,
+        &quot;mcp-remote&quot;,
+        &quot;https://api-ins.gov2.ro/mcp&quot;
+      ]
+    }
+  }
+}</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Doar pentru clienți fără suport HTTP. În Claude Desktop folosiți Connectors. Necesită Node.js.</span><span data-l="en">Only for clients without HTTP support. In Claude Desktop, use Connectors. Needs Node.js.</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>--header and --transport sse-only flags from memory.</p></article>
+<article class="cc" id="c-anthropic-api"><header><h2>Claude API</h2><span class="where">Messages API (beta)</span><span class="badge " title="Anthropic docs (via research reports)."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://platform.claude.com/docs/en/agents-and-tools/mcp-connector" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">curl</p><pre><code>curl https://api.anthropic.com/v1/messages \
+  -H &quot;x-api-key: $ANTHROPIC_API_KEY&quot; \
+  -H &quot;anthropic-version: 2023-06-01&quot; \
+  -H &quot;anthropic-beta: mcp-client-2025-11-20&quot; \
+  -H &quot;content-type: application/json&quot; \
+  -d &#39;{
+  &quot;model&quot;: &quot;claude-sonnet-5-5&quot;,
+  &quot;max_tokens&quot;: 1024,
+  &quot;messages&quot;: [
+    {
+      &quot;role&quot;: &quot;user&quot;,
+      &quot;content&quot;: &quot;Care a fost populația rezidentă a județului Cluj în 2024?&quot;
+    }
+  ],
+  &quot;mcp_servers&quot;: [
+    {
+      &quot;type&quot;: &quot;url&quot;,
+      &quot;url&quot;: &quot;https://api-ins.gov2.ro/mcp&quot;,
+      &quot;name&quot;: &quot;ins-tempo&quot;
+    }
+  ],
+  &quot;tools&quot;: [
+    {
+      &quot;type&quot;: &quot;mcp_toolset&quot;,
+      &quot;mcp_server_name&quot;: &quot;ins-tempo&quot;
+    }
+  ]
+}&#39;</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Conexiunea pleacă din cloud-ul furnizorului: adresa trebuie să fie publică, HTTPS.</span><span data-l="en">The connection starts from the vendor&#39;s cloud: the URL must be public HTTPS.</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Beta header value mcp-client-2025-11-20 and model id not run.</p></article>
+<article class="cc" id="c-openai-api"><header><h2>OpenAI API</h2><span class="where">Responses API</span><span class="badge " title="OpenAI docs (via research reports)."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://platform.openai.com/docs/guides/tools-connectors-mcp" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">curl</p><pre><code>curl https://api.openai.com/v1/responses \
+  -H &quot;Authorization: Bearer $OPENAI_API_KEY&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &#39;{
+  &quot;model&quot;: &quot;gpt-5&quot;,
+  &quot;tools&quot;: [
+    {
+      &quot;type&quot;: &quot;mcp&quot;,
+      &quot;server_label&quot;: &quot;ins-tempo&quot;,
+      &quot;server_url&quot;: &quot;https://api-ins.gov2.ro/mcp&quot;,
+      &quot;require_approval&quot;: &quot;never&quot;
+    }
+  ],
+  &quot;input&quot;: &quot;Care a fost populația rezidentă a județului Cluj în 2024?&quot;
+}&#39;</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Conexiunea pleacă din cloud-ul furnizorului: adresa trebuie să fie publică, HTTPS.</span><span data-l="en">The connection starts from the vendor&#39;s cloud: the URL must be public HTTPS.</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Model name is a placeholder. headers field not run.</p></article>
+<article class="cc" id="c-xai-api"><header><h2>xAI API</h2><span class="where">Responses API</span><span class="badge " title="xAI docs (via one research report)."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://docs.x.ai/developers/tools/remote-mcp" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">curl</p><pre><code>curl https://api.x.ai/v1/responses \
+  -H &quot;Authorization: Bearer $XAI_API_KEY&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &#39;{
+  &quot;model&quot;: &quot;grok-4&quot;,
+  &quot;tools&quot;: [
+    {
+      &quot;type&quot;: &quot;mcp&quot;,
+      &quot;server_label&quot;: &quot;ins-tempo&quot;,
+      &quot;server_url&quot;: &quot;https://api-ins.gov2.ro/mcp&quot;
+    }
+  ],
+  &quot;input&quot;: &quot;Care a fost populația rezidentă a județului Cluj în 2024?&quot;
+}&#39;</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Conexiunea pleacă din cloud-ul furnizorului: adresa trebuie să fie publică, HTTPS.</span><span data-l="en">The connection starts from the vendor&#39;s cloud: the URL must be public HTTPS.</span></p><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>Endpoint /v1/responses and model name not run.</p></article>
+<article class="cc" id="c-curl"><header><h2><span data-l="ro">Test rapid (curl)</span><span data-l="en">Quick test (curl)</span></h2><span class="where">initialize</span><span class="badge ok" title="Snippet run against api-ins.gov2.ro/mcp: returns serverInfo ins-plus-statistics. (2026-11-25)"><span data-l="ro">testat</span><span data-l="en">tested</span></span><a class="doclink" href="https://modelcontextprotocol.io/specification/latest/basic/transports" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">Terminal</p><pre><code>curl -sS -X POST https://api-ins.gov2.ro/mcp \
+  -H &quot;Content-Type: application/json&quot; \
+  -H &quot;Accept: application/json, text/event-stream&quot; \
+  -d &#39;{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;initialize&quot;,&quot;params&quot;:{&quot;protocolVersion&quot;:&quot;2025-06-18&quot;,&quot;capabilities&quot;:{},&quot;clientInfo&quot;:{&quot;name&quot;:&quot;curl&quot;,&quot;version&quot;:&quot;0&quot;}}}&#39;</code></pre><button type="button" class="copy">copy</button></div><p class="note"><span data-l="ro">Răspunsul corect conține serverInfo. 401 = lipsește autentificarea.</span><span data-l="en">A good response contains serverInfo. 401 = authentication missing.</span></p></article>
+<article class="cc" id="c-inspector"><header><h2>MCP Inspector</h2><span class="where">browser UI</span><span class="badge " title="MCP docs."><span data-l="ro">doar din docs</span><span data-l="en">docs only</span></span><a class="doclink" href="https://modelcontextprotocol.io/docs/tools/inspector" target="_blank" rel="noopener">docs ↗</a></header><ol><li>Transport: Streamable HTTP → URL → Connect → Tools → List</li></ol><div class="snip"><p class="lbl">Terminal</p><pre><code>npx @modelcontextprotocol/inspector</code></pre><button type="button" class="copy">copy</button></div><p class="note unsure"><b><span data-l="ro">Neverificat: </span><span data-l="en">Unverified: </span></b>UI labels not checked.</p></article>
+<article class="cc" id="c-python"><header><h2>Python (SDK mcp)</h2><span class="where">pip install mcp</span><span class="badge ok" title="Snippet run against api-ins.gov2.ro/mcp: lists 8 tools. (2026-11-25)"><span data-l="ro">testat</span><span data-l="en">tested</span></span><a class="doclink" href="https://github.com/modelcontextprotocol/python-sdk" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">client.py</p><pre><code>import asyncio, os
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client as connect
+
+HEADERS = None
+
+async def main():
+    async with connect(&quot;https://api-ins.gov2.ro/mcp&quot;, headers=HEADERS) as (read, write, _):
+        async with ClientSession(read, write) as s:
+            await s.initialize()
+            tools = await s.list_tools()
+            print([t.name for t in tools.tools])
+
+asyncio.run(main())</code></pre><button type="button" class="copy">copy</button></div></article>
+<article class="cc" id="c-typescript"><header><h2>TypeScript (SDK)</h2><span class="where">npm i @modelcontextprotocol/sdk</span><span class="badge ok" title="Snippet run against api-ins.gov2.ro/mcp: lists 8 tools. (2026-11-25)"><span data-l="ro">testat</span><span data-l="en">tested</span></span><a class="doclink" href="https://github.com/modelcontextprotocol/typescript-sdk" target="_blank" rel="noopener">docs ↗</a></header><div class="snip"><p class="lbl">client.mjs</p><pre><code>import { Client } from &quot;@modelcontextprotocol/sdk/client/index.js&quot;;
+import { StreamableHTTPClientTransport } from &quot;@modelcontextprotocol/sdk/client/streamableHttp.js&quot;;
+
+const client = new Client({ name: &quot;demo&quot;, version: &quot;1.0.0&quot; });
+await client.connect(new StreamableHTTPClientTransport(new URL(&quot;https://api-ins.gov2.ro/mcp&quot;)));
+console.log((await client.listTools()).tools.map(t =&gt; t.name));
+await client.close();</code></pre><button type="button" class="copy">copy</button></div></article>
+<!-- /mcp:cards --></div>
+    <script type="application/json" id="mcp-status"><!-- mcp:status -->{"claude":{"id":"claude","client":"Claude","surface":"web · desktop · mobile","status":"tested","checked_on":"2026-11-25","how_checked":"Custom connector to api-ins.gov2.ro/mcp is in use; it also shows as \"claude.ai ins.gov2.ro ✔ Connected\" in claude mcp list.","uncertain":"Exact menu label (Customize vs Settings) differs between plans. Fixed-header auth in Advanced settings is not confirmed."},"chatgpt":{"id":"chatgpt","client":"ChatGPT","surface":"web","status":"docs","checked_on":"","how_checked":"OpenAI help article (via research reports).","uncertain":"Menu path differs between the two reports (Plugins vs Developer mode). Plan limits (Business/Enterprise/Edu full, Pro read-only) not checked. Static-header auth not checked."},"chatgpt-desktop":{"id":"chatgpt-desktop","client":"ChatGPT","surface":"desktop (macOS)","status":"ui-confirmed","checked_on":"2026-11-25","how_checked":"Owner screenshot: Settings → Plugins → MCPs → Add; INS+ server installed with URL, Bearer token env var, Headers, Headers from environment variables.","uncertain":"Tool calls from a chat not yet checked. Windows app not checked."},"gemini":{"id":"gemini","client":"Gemini","surface":"web · mobile","status":"tested","checked_on":"2026-11-25","how_checked":"Owner screenshot: gemini.google.com/devmode lists all 8 INS+ tools (Live schema 8/8).","uncertain":"Exact path to add a custom app not captured. Eligibility limits (US, 18+, personal account, English) come from the reports, not checked. Mobile not checked."},"grok":{"id":"grok","client":"Grok","surface":"web · Grok desktop","status":"docs","checked_on":"","how_checked":"xAI docs (via research reports).","uncertain":"Desktop menu labels and header support come from one report only."},"perplexity":{"id":"perplexity","client":"Perplexity","surface":"web","status":"unsure","checked_on":"","how_checked":"One research report only.","uncertain":"Menu path and auth options not confirmed. Docs link is the general help centre."},"mistral":{"id":"mistral","client":"Le Chat (Mistral)","surface":"web","status":"unsure","checked_on":"","how_checked":"One research report only.","uncertain":"Menu path (Intelligence → Connectors) is a guess. Docs link is the general help centre."},"copilot-studio":{"id":"copilot-studio","client":"Copilot Studio","surface":"Microsoft 365 agents","status":"docs","checked_on":"","how_checked":"Microsoft Learn (via research reports).","uncertain":"Docs URL and auth option labels not checked."},"deepseek":{"id":"deepseek","client":"DeepSeek","surface":"chat · API","status":"docs","checked_on":"","how_checked":"Research reports: chat and API ignore MCP.","uncertain":"DeepSeek Harness (separate desktop app) is said to support MCP; not listed on the page."},"claude-code":{"id":"claude-code","client":"Claude Code","surface":"CLI · IDE","status":"tested","checked_on":"2026-11-25","how_checked":"claude mcp add --help matches the snippet; INS+ connected in claude mcp list.","uncertain":"--header with $VAR depends on the shell expanding the variable; .mcp.json ${VAR} expansion not run here."},"codex":{"id":"codex","client":"Codex","surface":"CLI · IDE extension","status":"syntax-checked","checked_on":"2026-11-25","how_checked":"codex mcp add --help: --url and --bearer-token-env-var exist; codex mcp login exists.","uncertain":"Not connected to INS+ yet. env_http_headers key in config.toml not checked. SSE unsupported is assumed from --help (streamable HTTP only)."},"gemini-cli":{"id":"gemini-cli","client":"Gemini CLI","surface":"CLI","status":"docs","checked_on":"","how_checked":"Gemini CLI docs (via research reports).","uncertain":"Not installed here. $VAR expansion in settings.json headers and /mcp auth command not checked."},"grok-cli":{"id":"grok-cli","client":"Grok CLI","surface":"CLI","status":"docs","checked_on":"","how_checked":"xAI docs (via one research report).","uncertain":"Not installed here. SSE support unknown."},"copilot-cli":{"id":"copilot-cli","client":"GitHub Copilot CLI","surface":"CLI","status":"unsure","checked_on":"","how_checked":"Research reports.","uncertain":"copilot mcp add flags and the mcp-config.json schema not confirmed. Docs URL not checked."},"opencode":{"id":"opencode","client":"OpenCode","surface":"CLI · any model","status":"unsure","checked_on":"","how_checked":"Research reports + memory.","uncertain":"Reports disagree on config shape (mcp.\u003cname> vs mcp.servers.\u003cname>). opencode mcp add flags not used. {env:VAR} syntax from memory."},"qwen":{"id":"qwen","client":"Qwen Code","surface":"CLI","status":"docs","checked_on":"","how_checked":"Research reports (mirrors Gemini CLI).","uncertain":"Docs URL not checked."},"kiro":{"id":"kiro","client":"Kiro","surface":"IDE · CLI","status":"unsure","checked_on":"","how_checked":"One research report.","uncertain":"Config path ~/.kiro/settings/mcp.json and headers field not confirmed."},"vscode":{"id":"vscode","client":"VS Code (Copilot)","surface":"IDE","status":"docs","checked_on":"","how_checked":"VS Code docs (via research reports) + memory for install links.","uncertain":"vscode:mcp/install link and inputs/promptString block not clicked or run."},"cursor":{"id":"cursor","client":"Cursor","surface":"IDE","status":"docs","checked_on":"","how_checked":"Cursor docs (via research reports) + memory for deeplink.","uncertain":"Add to Cursor deeplink format not clicked. ${env:VAR} in headers not checked."},"windsurf":{"id":"windsurf","client":"Windsurf","surface":"IDE","status":"unsure","checked_on":"","how_checked":"Third-party sources only (report says Windsurf docs are in transition).","uncertain":"serverUrl key and ${env:VAR} support not confirmed."},"zed":{"id":"zed","client":"Zed","surface":"editor","status":"docs","checked_on":"","how_checked":"Zed docs (via research reports).","uncertain":"headers field under context_servers not checked."},"cline":{"id":"cline","client":"Cline","surface":"VS Code extension","status":"docs","checked_on":"","how_checked":"Cline docs (via research reports).","uncertain":"Docs URL path not checked."},"roo":{"id":"roo","client":"Roo Code","surface":"VS Code extension","status":"docs","checked_on":"","how_checked":"Roo docs (via research reports).","uncertain":"${env:VAR} in headers from memory."},"continue":{"id":"continue","client":"Continue","surface":"VS Code · JetBrains","status":"unsure","checked_on":"","how_checked":"Research reports + memory.","uncertain":"requestOptions.headers and ${{ secrets.X }} syntax from memory."},"lmstudio":{"id":"lmstudio","client":"LM Studio","surface":"desktop","status":"docs","checked_on":"","how_checked":"LM Studio docs (via research reports).","uncertain":"Menu path (Program → Install → Edit mcp.json) from memory."},"openwebui":{"id":"openwebui","client":"Open WebUI","surface":"self-hosted","status":"docs","checked_on":"","how_checked":"Research reports.","uncertain":"Menu labels (External Tools) may differ by version."},"librechat":{"id":"librechat","client":"LibreChat","surface":"self-hosted","status":"docs","checked_on":"","how_checked":"LibreChat docs (via research reports).","uncertain":"${VAR} in headers from memory."},"claude-desktop-local":{"id":"claude-desktop-local","client":"mcp-remote bridge","surface":"stdio-only clients","status":"unsure","checked_on":"","how_checked":"mcp-remote README (memory).","uncertain":"--header and --transport sse-only flags from memory."},"anthropic-api":{"id":"anthropic-api","client":"Claude API","surface":"Messages API (beta)","status":"docs","checked_on":"","how_checked":"Anthropic docs (via research reports).","uncertain":"Beta header value mcp-client-2025-11-20 and model id not run."},"openai-api":{"id":"openai-api","client":"OpenAI API","surface":"Responses API","status":"docs","checked_on":"","how_checked":"OpenAI docs (via research reports).","uncertain":"Model name is a placeholder. headers field not run."},"xai-api":{"id":"xai-api","client":"xAI API","surface":"Responses API","status":"docs","checked_on":"","how_checked":"xAI docs (via one research report).","uncertain":"Endpoint /v1/responses and model name not run."},"curl":{"id":"curl","client":"Quick test (curl)","surface":"initialize","status":"tested","checked_on":"2026-11-25","how_checked":"Snippet run against api-ins.gov2.ro/mcp: returns serverInfo ins-plus-statistics.","uncertain":""},"inspector":{"id":"inspector","client":"MCP Inspector","surface":"browser UI","status":"docs","checked_on":"","how_checked":"MCP docs.","uncertain":"UI labels not checked."},"python":{"id":"python","client":"Python SDK (mcp 1.27)","surface":"client","status":"tested","checked_on":"2026-11-25","how_checked":"Snippet run against api-ins.gov2.ro/mcp: lists 8 tools.","uncertain":""},"typescript":{"id":"typescript","client":"TypeScript SDK (1.32)","surface":"client","status":"tested","checked_on":"2026-11-25","how_checked":"Snippet run against api-ins.gov2.ro/mcp: lists 8 tools.","uncertain":""}}<!-- /mcp:status --></script>
+
+    <p class="foot">
+        <span data-l="ro">Verificat în documentația fiecărui produs la 2026-11-25. Meniurile se schimbă des: dacă un pas nu se potrivește, urmați linkul „docs”. Fiecare card arată ce am verificat; lista completă: <a href="data/mcp-clients.csv">mcp-clients.csv</a>. Erori: <a href="https://github.com/gov2-ro/tempo-ins-dump/issues/new" target="_blank" rel="noopener">GitHub</a>. Detalii despre server: <a href="api.html#ro-mcp">API și MCP</a>.</span>
+        <span data-l="en">Checked against each product's documentation on 2026-11-25. Menus change often: if a step does not match, follow the “docs” link. Each card shows what we checked; the full list: <a href="data/mcp-clients.csv">mcp-clients.csv</a>. Report errors on <a href="https://github.com/gov2-ro/tempo-ins-dump/issues/new" target="_blank" rel="noopener">GitHub</a>. Server details: <a href="api.html#en-mcp">API and MCP</a>.</span>
+    </p>
+</main>
+
+<script src="js/config.js?v=1"></script>
+<script src="js/utils.js?v=33"></script>
+<script src="js/api.js?v=31"></script>
+<script src="js/site-chrome.js?v=6"></script>
+<script src="js/mcp-connect.js?v=1"></script>
+<script>
+(function () {
+    var root = document.documentElement;
+    var $ = function (id) { return document.getElementById(id); };
+    function icons() {
+        if (!$('theme-icon-sun')) return;
+        var light = root.getAttribute('data-theme') === 'light';
+        $('theme-icon-sun').style.display = light ? 'none' : '';
+        $('theme-icon-moon').style.display = light ? '' : 'none';
+    }
+    function setLang(l) {
+        root.setAttribute('lang', l);
+        if ($('lang-label')) $('lang-label').textContent = l === 'ro' ? 'EN' : 'RO';
+        document.title = l === 'ro' ? 'Conectare MCP: Claude, ChatGPT, Gemini, Cursor, VS Code — INS+' : 'Connect to MCP: Claude, ChatGPT, Gemini, Cursor, VS Code — INS+';
+        Array.prototype.forEach.call($('f-auth').options, function (o) { o.textContent = o.getAttribute('data-' + l); });
+    }
+    if ($('theme-toggle')) $('theme-toggle').addEventListener('click', function () {
+        var t = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+        root.setAttribute('data-theme', t);
+        try { localStorage.setItem('lens_theme', t); } catch (_) {}
+        icons();
+    });
+    if ($('lang-toggle')) $('lang-toggle').addEventListener('click', function () {
+        var l = root.getAttribute('lang') === 'ro' ? 'en' : 'ro';
+        try { localStorage.setItem('lens_lang', l); } catch (_) {}
+        setLang(l);
+    });
+    icons();
+    setLang(root.getAttribute('lang'));
+})();
+</script>
+</body>
+</html>

@@ -1,6 +1,15 @@
 # Activity History
 
 
+
+## 2026-11-25 — MCP connect page
+
+- New `/mcp-connect.html` (from a parallel session): a form (server URL, name, transport, authentication) and
+  per-client setup steps for chat apps, CLIs, IDEs, desktop apps and APIs, generated from
+  `app/static/data/mcp-clients.csv` by `scripts/build-mcp-connect.mjs`. It uses the shared top bar. The sitemap lists
+  it and `/api.html`, and the API page links to it.
+- The top bar's MCP link now opens this page (active state `mcp`); the `#mcp` scroll on `/api.html` is gone.
+
 ## 2026-11-25 — CP: profile pages for the large cities
 
 - **What:** `/places` lists a new "Orașe mari / Large cities" section; `/place/locality/{slug}` shows six KPI

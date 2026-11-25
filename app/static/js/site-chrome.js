@@ -32,8 +32,8 @@ const BAR_LINKS = [
     ['places', '/places', '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>'],
     ['ask', '/ask.html', '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'],
     ['api', '/api.html', '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>'],
-    // MCP: the robot icon; the section of the API page that explains the connector
-    ['mcp', '/api.html#mcp', '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>'],
+    // MCP: the robot icon; the per-client connector setup page
+    ['mcp', '/mcp-connect.html', '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>'],
 ];
 
 function barLang() {

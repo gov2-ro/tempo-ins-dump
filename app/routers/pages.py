@@ -237,7 +237,9 @@ def sitemap(request: Request):
         return f"<lastmod>{m.group(3)}-{m.group(2)}-{m.group(1)}</lastmod>" if m else ""
 
     urls = [f"<url><loc>{html.escape(base)}/</loc></url>",
-            f"<url><loc>{html.escape(base)}/places</loc></url>"]
+            f"<url><loc>{html.escape(base)}/places</loc></url>",
+            f"<url><loc>{html.escape(base)}/api.html</loc></url>",
+            f"<url><loc>{html.escape(base)}/mcp-connect.html</loc></url>"]
     for level, name in sorted({(l, slugify(n)) for l, n in places}):
         urls.append(f"<url><loc>{html.escape(base)}/place/{level}/{html.escape(name)}</loc></url>")
     for code, upd in codes:

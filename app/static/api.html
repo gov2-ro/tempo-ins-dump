@@ -109,6 +109,7 @@ curl -G "https://api-ins.gov2.ro/api/datasets/POP107A/data" \
         <li><b>Claude</b> (testat): <i>Settings → Connectors → Add custom connector</i>. În Claude Code: <code>claude mcp add --transport http ins-tempo https://api-ins.gov2.ro/mcp</code></li>
         <li><b>ChatGPT</b> (netestat încă): <i>Developer mode → Add custom MCP server</i>, pe planurile plătite.</li>
         <li><b>Alți clienți</b>: orice aplicație care acceptă servere MCP la distanță prin HTTP.</li>
+        <li><a href="/mcp-connect.html"><b>Instrucțiuni pentru fiecare client</b></a>: Gemini, Grok, Cursor, VS Code, Codex, OpenCode, API-uri și altele.</li>
     </ul>
     <p>Unelte: <code>discover_indicators</code>, <code>describe_dataset</code>, <code>find_dimension_values</code>, <code>query_data</code>, <code>compare_periods</code>, <code>rank_entities</code>, <code>run_recipe</code>, <code>get_evidence_links</code>. Serverul nu apelează niciun model și nu rulează SQL sau cod. Fiecare rezultat își declară sursa, definiția, unitatea, perioada și generația datelor.</p>
     <p class="note"><b>Ce înregistrăm:</b> argumentele trimise uneltelor și rezultatele lor, fără adresa IP și fără identitatea clientului, ca să îmbunătățim răspunsurile. Nu trimiteți date personale sau confidențiale.</p>
@@ -188,6 +189,7 @@ curl -G "https://api-ins.gov2.ro/api/datasets/POP107A/data" \
         <li><b>Claude</b> (tested): <i>Settings → Connectors → Add custom connector</i>. In Claude Code: <code>claude mcp add --transport http ins-tempo https://api-ins.gov2.ro/mcp</code></li>
         <li><b>ChatGPT</b> (not tested yet): <i>Developer mode → Add custom MCP server</i>, on paid plans.</li>
         <li><b>Other clients</b>: any app that supports remote MCP servers over HTTP.</li>
+        <li><a href="/mcp-connect.html"><b>Setup for each client</b></a>: Gemini, Grok, Cursor, VS Code, Codex, OpenCode, APIs and more.</li>
     </ul>
     <p>Tools: <code>discover_indicators</code>, <code>describe_dataset</code>, <code>find_dimension_values</code>, <code>query_data</code>, <code>compare_periods</code>, <code>rank_entities</code>, <code>run_recipe</code>, <code>get_evidence_links</code>. The server never calls a model and never runs SQL or code. Every result states its source, definition, unit, period and data generation.</p>
     <p class="note"><b>What we record:</b> the arguments sent to the tools and their results, without the IP address or client identity, to improve the answers. Do not send personal or confidential information.</p>
@@ -213,7 +215,7 @@ GET /sdmx/2.1/dataflow/INS/{code}/1.0</code></pre>
 <script src="/js/config.js?v=1"></script>
 <script src="/js/utils.js?v=33"></script>
 <script src="/js/api.js?v=31"></script>
-<script src="/js/site-chrome.js?v=5"></script>
+<script src="/js/site-chrome.js?v=6"></script>
 <script>
 (function () {
     var root = document.documentElement;
@@ -240,14 +242,6 @@ GET /sdmx/2.1/dataflow/INS/{code}/1.0</code></pre>
     });
     icons();
     setLang(root.getAttribute('lang'));
-    // /api.html#mcp (the MCP link in the top bar): scroll to the MCP section in the current language
-    function toMcp() {
-        if (location.hash !== '#mcp') return;
-        var el = document.getElementById(root.getAttribute('lang') + '-mcp');
-        if (el) el.scrollIntoView();
-    }
-    window.addEventListener('hashchange', toMcp);
-    toMcp();
 })();
 </script>
 </body>

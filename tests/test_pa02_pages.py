@@ -55,6 +55,7 @@ def test_sitemap_lists_canonical_urls_only(client):
     assert r.status_code == 200 and r.headers["content-type"].startswith("application/xml")
     locs = re.findall(r"<loc>([^<]+)</loc>", r.text)
     assert "http://testserver/dataset/INCX" in locs and "http://testserver/" in locs
+    assert "http://testserver/mcp-connect.html" in locs and "http://testserver/api.html" in locs
     assert not any("?" in u for u in locs)
 
 
