@@ -3,6 +3,17 @@
 
 
 
+
+## 2026-11-25 — Place page links, API page TOC, MCP connect pills
+
+- **Fix:** place pages listed split parents (for example `SCL101C`) next to their served child. A parent has no page
+  on the static site, so its link returned 404. `get_place_datasets` now keeps `matrices.is_canonical` only, the same set
+  `build-static.py` builds pages for: 62 places, 28,618 links, all with a page (`03b8a56`). Not deployed yet.
+- `/api.html`: a sticky sidebar table of contents (h2/h3 of the current language; the section in view is marked)
+  on screens of 1,180 px and wider.
+- `/mcp-connect.html` (session a9, `ba62ece`): the popular services are pills, the other 16 are in one
+  "Altele / Others" dropdown; the duplicated category pills and the Service/Mode dropdowns are gone; `?svc=` keeps the choice.
+
 ## 2026-11-25 — Released: API/MCP pages, shared top bar, city pages (static + VPS)
 
 - **VPS** (`api-ins.gov2.ro`): release `20261125-184942-9c3e8eaa`, run by the owner (`deploy.sh --apply`); release

@@ -43,6 +43,20 @@
         .toc { font-size: .86rem; color: var(--text-2); margin: .6rem 0 0; }
         .toc a { margin-right: .9rem; }
         .note { border-left: 3px solid var(--accent); padding: .3rem .9rem; margin: 1rem 0; background: var(--accent-dim); border-radius: 0 6px 6px 0; }
+        /* Sidebar table of contents: built from the current language's h2/h3; wide screens only */
+        .doc h2, .doc h3 { scroll-margin-top: 80px; }
+        .toc-side { display: none; }
+        @media (min-width: 1180px) {
+            .doc-layout { display: grid; grid-template-columns: 220px minmax(0, 860px); gap: 2rem; justify-content: center; }
+            .doc-layout .doc { margin: 0; }
+            .toc-side { display: block; position: sticky; top: 80px; align-self: start; padding-top: 2.4rem;
+                max-height: calc(100vh - 100px); overflow-y: auto; font-size: .85rem; }
+        }
+        .toc-title { text-transform: uppercase; font-size: .72rem; letter-spacing: .05em; color: var(--text-2); margin: 0 0 .5rem .7rem; }
+        .toc-side a { display: block; padding: .28rem .7rem; color: var(--text-1); text-decoration: none; border-left: 2px solid var(--border); line-height: 1.35; }
+        .toc-side a.sub { padding-left: 1.5rem; font-size: .8rem; }
+        .toc-side a:hover { color: var(--text-0); }
+        .toc-side a.active { color: var(--accent); border-left-color: var(--accent); }
     </style>
     <link rel="stylesheet" href="/css/ui-rhythm.css?v=5">
     <script src="/js/ui-preferences.js?v=4" defer></script>
@@ -50,6 +64,8 @@
 <body>
     <nav class="topbar" id="topbar" data-active="api" data-own="theme lang"></nav>
 
+<div class="doc-layout">
+<nav class="toc-side" id="toc" aria-label="Cuprins"></nav>
 <main class="doc">
 
 <!-- ============================== RO ============================== -->
@@ -214,6 +230,7 @@ GET /sdmx/2.1/dataflow/INS/{code}/1.0</code></pre>
     <p>Questions, bugs, ideas: <a href="mailto:cancelarie@gov2.ro">cancelarie@gov2.ro</a> or <a href="https://github.com/gov2-ro/tempo-ins-dump/issues/new" target="_blank" rel="noopener">GitHub</a>. INS+ is a <a href="https://gov2.ro/" target="_blank" rel="noopener">gov2.ro</a> project.</p>
 </div>
 </main>
+</div>
 
 <script src="/js/config.js?v=1"></script>
 <script src="/js/utils.js?v=33"></script>
@@ -231,6 +248,31 @@ GET /sdmx/2.1/dataflow/INS/{code}/1.0</code></pre>
         root.setAttribute('lang', l);
         document.getElementById('lang-label').textContent = l === 'ro' ? 'EN' : 'RO';
         document.title = l === 'ro' ? 'API și MCP — INS+' : 'API and MCP — INS+';
+        buildToc(l);
+    }
+    // Sidebar TOC from the visible language's headings; the link of the section in view is marked.
+    var tocObserver = null;
+    function buildToc(l) {
+        var toc = document.getElementById('toc');
+        var heads = document.querySelectorAll('main [data-l="' + l + '"] h2, main [data-l="' + l + '"] h3');
+        var html = '<p class="toc-title">' + (l === 'ro' ? 'Pe această pagină' : 'On this page') + '</p>';
+        heads.forEach(function (h, i) {
+            if (!h.id) h.id = l + '-s' + i;
+            html += '<a href="#' + h.id + '"' + (h.tagName === 'H3' ? ' class="sub"' : '') + '>' + h.textContent + '</a>';
+        });
+        toc.innerHTML = html;
+        toc.setAttribute('aria-label', l === 'ro' ? 'Cuprins' : 'Contents');
+        if (tocObserver) tocObserver.disconnect();
+        if (!('IntersectionObserver' in window)) return;
+        tocObserver = new IntersectionObserver(function (entries) {
+            entries.forEach(function (e) {
+                if (!e.isIntersecting) return;
+                toc.querySelectorAll('a').forEach(function (a) {
+                    a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id);
+                });
+            });
+        }, { rootMargin: '-80px 0px -70% 0px' });
+        heads.forEach(function (h) { tocObserver.observe(h); });
     }
     document.getElementById('theme-toggle').addEventListener('click', function () {
         var t = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
