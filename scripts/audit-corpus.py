@@ -37,6 +37,7 @@ Exit code: 0, or 1 with --strict when a served/registered file has a violation.
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -183,11 +184,21 @@ def inspect_parquet(pconn, path: Path, do_grain: bool) -> dict:
             info["values_non_null"] = row[i]
         if do_grain and value_col and dims and row[0]:
             key = ", ".join(q(c) for c in dims)
-            g = pconn.execute(
-                f"SELECT count(*), coalesce(sum(c), 0), count(*) FILTER (WHERE d > 1) FROM ("
-                f"SELECT count(*) c, count(DISTINCT {q(value_col)}) d FROM read_parquet(?) "
-                f"GROUP BY {key} HAVING count(*) > 1)", [str(path)]).fetchone()
-            info["dup_keys"], info["dup_rows"], info["conflicting_keys"] = int(g[0]), int(g[1]), int(g[2])
+            # A big file grouped in one pass held up to 8 GB (22M rows). With
+            # TEMPO_AUDIT_GRAIN_BUCKET_ROWS=N the keys are split into ceil(rows / N) buckets by
+            # hash(key) and each bucket is grouped on its own (a key never spans two buckets), so
+            # the sums are the same and the peak is about one bucket's.
+            per = int(os.environ.get("TEMPO_AUDIT_GRAIN_BUCKET_ROWS") or 0)
+            n_buckets = max(1, -(-row[0] // per)) if per > 0 else 1
+            g = [0, 0, 0]
+            for b in range(n_buckets):
+                where = f"WHERE hash({key}) % {n_buckets} = {b} " if n_buckets > 1 else ""
+                part = pconn.execute(
+                    f"SELECT count(*), coalesce(sum(c), 0), count(*) FILTER (WHERE d > 1) FROM ("
+                    f"SELECT count(*) c, count(DISTINCT {q(value_col)}) d FROM read_parquet(?) {where}"
+                    f"GROUP BY {key} HAVING count(*) > 1)", [str(path)]).fetchone()
+                g = [g[0] + int(part[0]), g[1] + int(part[1]), g[2] + int(part[2])]
+            info["dup_keys"], info["dup_rows"], info["conflicting_keys"] = g
         else:
             info["dup_keys"] = info["dup_rows"] = info["conflicting_keys"] = None
     except Exception as e:
@@ -219,7 +230,15 @@ def audit(data_dir: Path, do_grain=True, do_hashes=False, limit=None) -> dict:
     if not vp_dir.exists():
         warnings.append(f"view-profiles dir not found: {vp_dir}")
 
-    pconn = duckdb.connect()  # in-memory; reads parquet only
+    # In-memory; reads parquet only. The grain check can use several GB (8 GB seen on the Mac):
+    # TEMPO_AUDIT_MEMORY (e.g. 1GB) caps it, TEMPO_AUDIT_TMP is where it spills (the weekly refresh sets both).
+    cfg = {}
+    if os.environ.get("TEMPO_AUDIT_MEMORY"):
+        cfg["memory_limit"] = os.environ["TEMPO_AUDIT_MEMORY"]
+        cfg["threads"] = int(os.environ.get("TEMPO_AUDIT_THREADS", "2"))
+    if os.environ.get("TEMPO_AUDIT_TMP"):
+        cfg["temp_directory"] = os.environ["TEMPO_AUDIT_TMP"]
+    pconn = duckdb.connect(config=cfg)
     records: dict[str, dict] = {}
     for f in files:
         code = f.stem

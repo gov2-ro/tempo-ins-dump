@@ -47,19 +47,21 @@ SNAP_BEFORE="$($RC snapshot "$CORPUS_DIR")"
 rm -rf "$TMP_DIR"
 mkdir -p "$TMP_DIR/corpus/parquet" "$TMP_DIR/corpus/view-profiles"
 
+# cp -p keeps the modification times: an rsync --link-dest against the previous release (deploy.sh, promote.sh)
+# then hard-links every unchanged file instead of copying it.
 echo "Copying parquet files..."
-cp "$CORPUS_DIR/parquet/"*.parquet "$TMP_DIR/corpus/parquet/"
+cp -p "$CORPUS_DIR/parquet/"*.parquet "$TMP_DIR/corpus/parquet/"
 echo "Copying metadata.duckdb + search.duckdb..."
-cp "$CORPUS_DIR/metadata.duckdb" "$CORPUS_DIR/search.duckdb" "$TMP_DIR/corpus/"
+cp -p "$CORPUS_DIR/metadata.duckdb" "$CORPUS_DIR/search.duckdb" "$TMP_DIR/corpus/"
 if [ -f "$CORPUS_DIR/generation-manifest.json" ]; then
     echo "Copying generation-manifest.json..."
-    cp "$CORPUS_DIR/generation-manifest.json" "$TMP_DIR/corpus/"
+    cp -p "$CORPUS_DIR/generation-manifest.json" "$TMP_DIR/corpus/"
 else
     echo "WARNING: no generation-manifest.json in $CORPUS_DIR (scripts/build-generation-manifest.py);" \
         "staging proceeds but release-check.py will FAIL until one is staged"
 fi
 echo "Copying view profiles..."
-cp "$CORPUS_DIR/view-profiles/"*.json "$TMP_DIR/corpus/view-profiles/"
+cp -p "$CORPUS_DIR/view-profiles/"*.json "$TMP_DIR/corpus/view-profiles/"
 
 # Reject mid-copy source changes
 SNAP_AFTER="$($RC snapshot "$CORPUS_DIR")"

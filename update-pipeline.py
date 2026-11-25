@@ -43,6 +43,8 @@ Modes
     --matrix A,B     exactly these codes; retry set and watermark untouched by the
                      selection (their own state/retry entries are updated)
     --skip-existing, --no-split, --skip-duckdb   partial runs: never advance watermark
+    --drop-csv       delete each matrix's CSV right after stage 9 (HZ-5: no raw CSV kept)
+    --probe-only     only run the TEMPO data probe (exit 0/1)
     --global-profiles  also rebuild coverage/trends/value profiles/search index (optional)
     --dry-run        no subprocess, fetch, DB, log, state or watermark writes
     --lang           only 'ro'; 'en' is rejected (would clobber canonical output)
@@ -269,6 +271,15 @@ GLOBAL_PROFILE_STAGES = (
 )
 
 
+def atomic_write_text(path: Path, text: str) -> None:
+    """Write temp + rename. A run on a hard-linked copy of the data tree (cp -al, HZ-5)
+    must never write into a file in place: that would change the original too."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
@@ -421,8 +432,7 @@ def read_last_run() -> str | None:
 
 def write_last_run(day: str) -> None:
     """Record the watermark (a feed date, never wall-clock today) for legacy readers."""
-    LAST_RUN_FILE.parent.mkdir(parents=True, exist_ok=True)
-    LAST_RUN_FILE.write_text(day)
+    atomic_write_text(LAST_RUN_FILE, day)
 
 
 def fetch_news() -> bool:
@@ -436,7 +446,9 @@ def fetch_news() -> bool:
             return False
         df = tables[0]
         NEWS_CSV.parent.mkdir(parents=True, exist_ok=True)
-        df.to_csv(NEWS_CSV, index=False, encoding="utf-8-sig")
+        tmp_csv = NEWS_CSV.with_name(NEWS_CSV.name + ".tmp")   # temp + rename (cp -al safety)
+        df.to_csv(tmp_csv, index=False, encoding="utf-8-sig")
+        os.replace(tmp_csv, NEWS_CSV)
         log.info(f"Saved {len(df)} rows to {NEWS_CSV}")
         return True
     except Exception as e:
@@ -508,7 +520,7 @@ def fetch_meta(code: str, lang: str, force: bool) -> bool:
         resp.raise_for_status()
         text = decode_body(resp.content)  # TEMPO mixes cp1250 bytes into UTF-8
         json.loads(text)  # validate before writing — a bad code can 200 with an empty/non-JSON body
-        output_path.write_text(text, encoding="utf-8")
+        atomic_write_text(output_path, text)
         time.sleep(random.uniform(0.4, 1.2))
         return True
     except Exception as e:
@@ -645,6 +657,20 @@ def validate_matrix(code: str, children: list[str], check_split: bool = True) ->
     return None
 
 
+def drop_csv(code: str, lang: str) -> bool:
+    """Delete one matrix's fetched CSV. Returns True when a file was removed."""
+    path = data_dir() / "4-datasets" / lang / f"{code}.csv"
+    try:
+        path.unlink()
+        log.info(f"{code}: dropped CSV ({path.name})")
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError as e:
+        log.warning(f"{code}: could not drop CSV: {e}")
+        return False
+
+
 def process_matrix(code: str, args, lang: str) -> tuple[str, dict, tuple[str, str] | None]:
     """Run all per-matrix stages in dependency order (see the stage list above).
 
@@ -711,6 +737,12 @@ def process_matrix(code: str, args, lang: str) -> tuple[str, dict, tuple[str, st
     f = required(STAGE_CONVERT, "9-csv-to-parquet.py", ["--matrix", code] + force_flag)
     if f:
         return fail(f)
+
+    # 6b. The CSV is read by stage 9 only (10-import-metadata falls back to it solely when
+    # no parquet exists, and the stats refresh below runs after stage 9). --drop-csv frees
+    # it now, so a run never holds more than one matrix's CSV (HZ-5).
+    if args.drop_csv and not dry:
+        drop_csv(code, lang)
 
     # 7. split + register children as one set (required when enabled)
     if not args.no_split:
@@ -830,6 +862,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="After the run, rebuild the whole-corpus profiles that have no per-matrix mode "
                              "(11-coverage-profiler, detect_trends, profile-values, search index). Optional "
                              "stages. Without it the touched matrices are recorded as stale in the state file")
+    parser.add_argument("--drop-csv", action="store_true",
+                        help="Delete each matrix's CSV right after stage 9 converted it (default: keep; the "
+                             "weekly refresh on the VPS holds no raw CSV)")
+    parser.add_argument("--probe-only", action="store_true",
+                        help="Run the TEMPO data probe (POP107A, one cell) and exit 0 (answers) or 1 (does not). "
+                             "No state, DB or file change")
     parser.add_argument("--refetch-news", action="store_true", help="Re-fetch news from INS before processing")
     parser.add_argument("--all", action="store_true",
                         help="Process every feed entry, ignoring the watermark (retries are merged too)")
@@ -865,7 +903,7 @@ def run_pipeline(argv: list[str] | None = None) -> int:
     started = now_iso()
     CHILDREN_SEEN.clear()
     handler = None
-    if not dry:
+    if not dry and not args.probe_only:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         log_file = LOG_DIR / f"update-pipeline-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
         handler = logging.FileHandler(log_file, encoding="utf-8")
@@ -888,6 +926,15 @@ def _run_pipeline(args, lang: str, started: str, dry: bool) -> int:
     except RuntimeError as e:
         log.error(str(e))
         return EXIT_FAILED
+
+    # ---- 0a. Probe only (the weekly run's first gate) ----
+    if args.probe_only:
+        reason = probe_tempo_data(lang)
+        if reason:
+            log.error(f"TEMPO data probe failed: {reason}")
+            return EXIT_FAILED
+        log.info("TEMPO data probe ok")
+        return EXIT_OK
 
     # ---- 0. Standalone propagate-splits shortcut ----
     if args.propagate_splits:

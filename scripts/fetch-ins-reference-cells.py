@@ -34,11 +34,20 @@ import csv
 import hashlib
 import io
 import json
+import os
 import re
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+def _atomic_write(path: Path, data: bytes) -> None:
+    """Temp + rename: a hard-linked copy of the tree (cp -al, HZ-5) keeps the old inode."""
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)
+
 
 PIVOT_URL = "http://statistici.insse.ro:8077/tempo-ins/pivot"
 REFERER = "http://statistici.insse.ro:8077/tempo-online/"
@@ -170,7 +179,7 @@ def main(argv=None) -> int:
             failed += 1
             continue
         out.mkdir(parents=True, exist_ok=True)
-        (out / f"{q['id']}.csv").write_bytes(r.content)
+        _atomic_write(out / f"{q['id']}.csv", r.content)
         text = r.content.decode("utf-8", errors="replace")
         info = summarize(text, labels)
         manifest["fetches"][q["id"]] = {
@@ -184,7 +193,7 @@ def main(argv=None) -> int:
         failed += 0 if ok else 1
         print(f"{q['id']}: {info['rows']} rows, {info['blank_or_suppressed']} blank, "
               f"labels_ok={info['labels_ok']}")
-        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
+        _atomic_write(manifest_path, (json.dumps(manifest, ensure_ascii=False, indent=1) + "\n").encode("utf-8"))
     return 1 if failed else 0
 
 

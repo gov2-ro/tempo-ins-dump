@@ -498,7 +498,8 @@ def write_dims_db(db: Path, results: dict) -> int:
         con.execute(DIMS_DDL)
         if codes:
             con.execute(f"DELETE FROM kpi_dimension_checks WHERE matrix_code IN ({','.join('?' * len(codes))})", codes)
-        con.executemany("INSERT INTO kpi_dimension_checks VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows)
+        if rows:
+            con.executemany("INSERT INTO kpi_dimension_checks VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows)
         con.execute("COMMIT")
     finally:
         con.close()
@@ -510,11 +511,13 @@ TABLE_DDL = """CREATE TABLE IF NOT EXISTS kpi_total_checks (
     status VARCHAR, reason VARCHAR, source_matrix VARCHAR, cell VARCHAR, checked_at TIMESTAMP)"""
 
 
-def write_db(db: Path, results: dict) -> int:
+def write_db(db: Path, results: dict, codes=None) -> int:
     """Store results as kpi_total_checks in a COPY's metadata.duckdb (the app's gate reads it).
 
     Only the rows of the checked codes are replaced, so a --codes-file subset keeps
-    every other dataset's check."""
+    every other dataset's check. `codes` (the --codes-file set) are replaced even when they
+    have no result: a refreshed dataset that no longer sums a dimension has no KPI to check,
+    and its old row must not keep vouching for it."""
     import datetime
     import duckdb
     live = (REPO / "data" / "corpus").resolve()
@@ -528,10 +531,11 @@ def write_db(db: Path, results: dict) -> int:
     con = duckdb.connect(str(db))
     try:
         con.execute(TABLE_DDL)
+        drop = sorted({r[0] for r in rows} | set(codes or ()))
+        if drop:
+            con.executemany("DELETE FROM kpi_total_checks WHERE matrix_code = ?", [(c,) for c in drop])
         if rows:
-            con.executemany("DELETE FROM kpi_total_checks WHERE matrix_code = ?",
-                            [(r[0],) for r in rows])
-        con.executemany("INSERT INTO kpi_total_checks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
+            con.executemany("INSERT INTO kpi_total_checks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
     finally:
         con.close()
     return len(rows)
@@ -616,6 +620,7 @@ def main(argv=None):
                   file=sys.stderr)
         print(json.dumps(dict(st)))
         return 0
+    keep = None
     if a.codes_file:
         keep = {l.strip() for l in open(a.codes_file) if l.strip()}
         kpis = {c: v for c, v in kpis.items() if c in keep}
@@ -625,7 +630,7 @@ def main(argv=None):
     if a.md:
         Path(a.md).write_text(render_md(summary, results))
     if a.write_db:
-        print(f"wrote {write_db(Path(a.write_db), results)} rows to kpi_total_checks in {a.write_db}",
+        print(f"wrote {write_db(Path(a.write_db), results, keep)} rows to kpi_total_checks in {a.write_db}",
               file=sys.stderr)
     print(json.dumps(summary, indent=1))
     return 0

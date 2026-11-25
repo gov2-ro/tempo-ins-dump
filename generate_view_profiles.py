@@ -1173,14 +1173,20 @@ def _index_entry(code: str, p: dict) -> dict:
     }
 
 
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write temp + rename: a hard-linked copy of the tree (cp -al, HZ-5) keeps the old inode."""
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding='utf-8')
+    os.replace(tmp, path)
+
+
 def write_profiles(profiles: dict, output_dir: Path, *, partial: bool = False):
     """Write one JSON per profile plus `_index.json`. `partial` (a --matrix run)
     updates only these codes' index entries and keeps the rest."""
     output_dir.mkdir(parents=True, exist_ok=True)
     for code, profile in profiles.items():
         path = output_dir / f"{code}.json"
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(profile, f, indent=2, ensure_ascii=False)
+        _atomic_write_text(path, json.dumps(profile, indent=2, ensure_ascii=False))
     log.info("Wrote %d profiles to %s/", len(profiles), output_dir)
 
     # Write index file for the preview UI
@@ -1190,8 +1196,7 @@ def write_profiles(profiles: dict, output_dir: Path, *, partial: bool = False):
         entries = {e["code"]: e for e in json.loads(index_path.read_text(encoding="utf-8"))}
     entries.update({code: _index_entry(code, p) for code, p in profiles.items()})
     index = [entries[c] for c in sorted(entries)]
-    with open(index_path, 'w', encoding='utf-8') as f:
-        json.dump(index, f, ensure_ascii=False)
+    _atomic_write_text(index_path, json.dumps(index, ensure_ascii=False))
     log.info("Wrote index (%d entries) to %s", len(index), index_path)
 
 
