@@ -445,6 +445,8 @@ def _client_with_period(tmp_path, monkeypatch, period):
     return client
 
 
+@pytest.mark.xfail(strict=True, reason="stale rule not yet active in insights.py: activate it after the full "
+                   "INS re-check (docs/plans/hz-5-record.md section 8)")
 def test_insights_publishes_a_current_match_and_withholds_an_older_one(tmp_path, monkeypatch):
     client = _client_with_period(tmp_path / "a", monkeypatch, '2025')
     assert any(k["key"] == "latest" for k in client.get("/api/datasets/POPX/insights").json()["kpis"])

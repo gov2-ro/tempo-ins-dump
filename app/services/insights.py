@@ -219,8 +219,7 @@ def compute_insights(matrix_code: str, lang: str = 'ro') -> dict | None:
     # scripts/check-kpi-totals.py asked INS for the same cell).
     source_check = None
     if period_totals:
-        reason, source_check = _source_total_gate(conn, matrix_code, decision,
-                                                  latest_period=period_totals[-1][0])
+        reason, source_check = _source_total_gate(conn, matrix_code, decision)
         if reason:
             suppressed.append({'key': 'latest', 'outcome': ap.UNAVAILABLE,
                                'reason': reason, 'column': None})
