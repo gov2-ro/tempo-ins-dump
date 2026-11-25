@@ -339,7 +339,8 @@ def run(args) -> int:
     # ---- probe (before any copy)
     probe_cmd = [args.python, str(CODE / "update-pipeline.py"), "--probe-only"]
     env = {**os.environ, "TEMPO_PIPELINE_DATA_DIR": str(data), "TEMPO_LANG": "ro",
-           "TEMPO_AUDIT_MEMORY": args.duckdb_memory, "TEMPO_AUDIT_TMP": str(run_dir / "tmp")}
+           "TEMPO_AUDIT_MEMORY": args.duckdb_memory, "TEMPO_AUDIT_THREADS": "1",
+           "TEMPO_AUDIT_GRAIN_BUCKET_ROWS": str(args.grain_bucket_rows), "TEMPO_AUDIT_TMP": str(run_dir / "tmp")}
     if args.simulate_probe_failure:
         probe_cmd = [args.python, "-c", "import sys; print('simulated probe failure'); sys.exit(1)"]
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -552,8 +553,10 @@ def main(argv=None) -> int:
     ap.add_argument("--keep-runs", type=int, default=2)
     ap.add_argument("--min-free-gb", type=float, default=MIN_FREE_GB)
     ap.add_argument("--port", default="8095")
-    ap.add_argument("--duckdb-memory", default="1GB",
+    ap.add_argument("--duckdb-memory", default="512MB",
                     help="memory_limit of the audit's DuckDB (the grain check used 8 GB uncapped on the Mac)")
+    ap.add_argument("--grain-bucket-rows", type=int, default=1_000_000,
+                    help="the audit's grain check groups a big file in buckets of about this many rows")
     ap.add_argument("--static-codes", help="build the static site for these codes only (rehearsal)")
     ap.add_argument("--static-base-url", default="https://ins.gov2.ro")
     ap.add_argument("--api-cases-n", default="60")

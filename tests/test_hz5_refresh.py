@@ -453,3 +453,22 @@ def test_insights_publishes_a_current_match_and_withholds_an_older_one(tmp_path,
     assert not any(k["key"] == "latest" for k in ins["kpis"])
     assert {"key": "latest", "reason": "source_total_unchecked"}.items() <= next(
         s for s in ins["suppressed"] if s["key"] == "latest").items()
+
+
+# ------------------------------------------------------------------ the audit's bucketed grain check
+def test_bucketed_grain_check_gives_the_single_pass_result(tmp_path, monkeypatch):
+    audit = load("audit_t", "scripts/audit-corpus.py")
+    f = tmp_path / "X.parquet"
+    con = duckdb.connect()
+    con.execute("CREATE TABLE t (REF_AREA VARCHAR, TIME_PERIOD VARCHAR, OBS_VALUE DOUBLE)")
+    con.execute("INSERT INTO t SELECT 'A' || (i % 50), '2020', i FROM range(200) r(i)")      # 50 keys x 4 rows, all conflicting
+    con.execute("INSERT INTO t SELECT 'B' || (i % 7), '2021', 1.0 FROM range(70) r(i)")      # 7 keys x 10 rows, same value
+    con.execute("INSERT INTO t VALUES ('C', '2022', 1.0), (NULL, '2022', 1.0), (NULL, '2022', 2.0)")
+    con.execute(f"COPY t TO '{f}' (FORMAT PARQUET)")
+    monkeypatch.delenv("TEMPO_AUDIT_GRAIN_BUCKET_ROWS", raising=False)
+    one = audit.inspect_parquet(duckdb.connect(), f, True)
+    assert (one["dup_keys"], one["dup_rows"], one["conflicting_keys"]) == (58, 272, 51)
+    for per in ("7", "30", "1000"):
+        monkeypatch.setenv("TEMPO_AUDIT_GRAIN_BUCKET_ROWS", per)
+        many = audit.inspect_parquet(duckdb.connect(), f, True)
+        assert (many["dup_keys"], many["dup_rows"], many["conflicting_keys"]) == (58, 272, 51), per

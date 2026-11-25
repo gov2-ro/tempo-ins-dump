@@ -184,11 +184,21 @@ def inspect_parquet(pconn, path: Path, do_grain: bool) -> dict:
             info["values_non_null"] = row[i]
         if do_grain and value_col and dims and row[0]:
             key = ", ".join(q(c) for c in dims)
-            g = pconn.execute(
-                f"SELECT count(*), coalesce(sum(c), 0), count(*) FILTER (WHERE d > 1) FROM ("
-                f"SELECT count(*) c, count(DISTINCT {q(value_col)}) d FROM read_parquet(?) "
-                f"GROUP BY {key} HAVING count(*) > 1)", [str(path)]).fetchone()
-            info["dup_keys"], info["dup_rows"], info["conflicting_keys"] = int(g[0]), int(g[1]), int(g[2])
+            # A big file grouped in one pass held up to 8 GB (22M rows). With
+            # TEMPO_AUDIT_GRAIN_BUCKET_ROWS=N the keys are split into ceil(rows / N) buckets by
+            # hash(key) and each bucket is grouped on its own (a key never spans two buckets), so
+            # the sums are the same and the peak is about one bucket's.
+            per = int(os.environ.get("TEMPO_AUDIT_GRAIN_BUCKET_ROWS") or 0)
+            n_buckets = max(1, -(-row[0] // per)) if per > 0 else 1
+            g = [0, 0, 0]
+            for b in range(n_buckets):
+                where = f"WHERE hash({key}) % {n_buckets} = {b} " if n_buckets > 1 else ""
+                part = pconn.execute(
+                    f"SELECT count(*), coalesce(sum(c), 0), count(*) FILTER (WHERE d > 1) FROM ("
+                    f"SELECT count(*) c, count(DISTINCT {q(value_col)}) d FROM read_parquet(?) {where}"
+                    f"GROUP BY {key} HAVING count(*) > 1)", [str(path)]).fetchone()
+                g = [g[0] + int(part[0]), g[1] + int(part[1]), g[2] + int(part[2])]
+            info["dup_keys"], info["dup_rows"], info["conflicting_keys"] = g
         else:
             info["dup_keys"] = info["dup_rows"] = info["conflicting_keys"] = None
     except Exception as e:
