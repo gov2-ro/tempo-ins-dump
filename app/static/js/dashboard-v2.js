@@ -38,6 +38,13 @@ const UI_STRINGS = {
         tableError: 'Tabelul nu a putut fi încărcat.',
         value: 'Valoare',
         indexTooltip: 'Index: prima perioadă = 100',
+        indexNote: b => `Indice: ${b} = 100. Peste 100 = mai mult decât în ${b}.`,
+        indexUnit: b => `indice, ${b} = 100`,
+        yoyNote: g => `Schimbare procentuală față de ${{ annual: 'anul anterior', quarterly: 'trimestrul anterior', monthly: 'luna anterioară' }[g] || 'perioada anterioară'}.`,
+        tableFilterAll: 'Toate', tableFilterFrom: 'De la', tableFilterTo: 'Până la',
+        tableFilterOf: (n, m) => `${n} din ${m} rânduri`,
+        tableFilterReset: 'Șterge filtrele',
+        tableFilterTip: 'Filtrele acționează doar asupra rândurilor din tabel. Descărcările CSV/XLSX exportă selecția, nu filtrul tabelului.',
         yoyTooltip: 'Schimbare % față de perioada anterioară',
         seasonal: 'Sezonier',
         seasonalTooltip: 'Suprapune anii: o linie pe an, luni/trimestre pe axa X',
@@ -117,6 +124,13 @@ const UI_STRINGS = {
         tableError: 'The table could not be loaded.',
         value: 'Value',
         indexTooltip: 'Index: first period = 100',
+        indexNote: b => `Index: ${b} = 100. Above 100 = more than in ${b}.`,
+        indexUnit: b => `index, ${b} = 100`,
+        yoyNote: g => `Percentage change from the previous ${{ annual: 'year', quarterly: 'quarter', monthly: 'month' }[g] || 'period'}.`,
+        tableFilterAll: 'All', tableFilterFrom: 'From', tableFilterTo: 'To',
+        tableFilterOf: (n, m) => `${n} of ${m} rows`,
+        tableFilterReset: 'Clear filters',
+        tableFilterTip: 'Filters only act on the rows in this table. CSV/XLSX downloads export the selection, not the table filter.',
         yoyTooltip: '% change vs. previous period',
         seasonal: 'Seasonal',
         seasonalTooltip: 'Overlay years: one line per year, months/quarters on X',
@@ -167,6 +181,7 @@ const UI_STRINGS = {
     },
 };
 
+const PILL_MAX = 6;
 const TABLE_ROW_CAP = 1000;
 
 // Mirror of dashboard_composer layout/slot rules — tiles whose slice comes
@@ -594,8 +609,8 @@ class DashboardV2 {
                     <a class="dl-btn v1-badge" href="/?code=${m.matrix_code}" title="${this.ui.v1Title}">← v1</a>
                     <a class="dl-btn" href="http://statistici.insse.ro/tempoins/index.jsp?page=tempo3&lang=${this.lang === 'en' ? 'en' : 'ro'}&ind=${insCode}" target="_blank" rel="noopener" title="${this.ui.insTitle}">INS ↗</a>
                     ${API.isStatic ? '' : `<a class="dl-btn" href="/sdmx/2.1/data/INS,${m.matrix_code}/" target="_blank" rel="noopener" title="SDMX-ML 2.1 data feed">SDMX ↗</a>`}
-                    <button class="dl-btn" id="dbv2-csv-btn">↓ CSV</button>
-                    <button class="dl-btn" id="dbv2-xlsx-btn">↓ XLSX</button>
+                    <button class="dl-btn" id="dbv2-csv-btn" title="${this.ui.tableFilterTip}">↓ CSV</button>
+                    <button class="dl-btn" id="dbv2-xlsx-btn" title="${this.ui.tableFilterTip}">↓ XLSX</button>
                     <button class="dl-btn" id="dbv2-evidence-btn" title="${this.ui.evidenceTitle}">↓ ${this.ui.evidence}</button>
                     <button class="dl-btn" id="dbv2-feedback-btn" title="${this.ui.feedbackTitle}">${this.ui.feedback}</button>
                 </div>
@@ -818,7 +833,74 @@ class DashboardV2 {
         return base;
     }
 
-    /** Inline selects for the tile's pinned dims (composer `controls`) —
+    /** Label of the earliest period in a slice (the Index base). */
+    firstPeriodLabel(data, timeDim) {
+        const ti = data?.columns?.indexOf(timeDim);
+        if (ti == null || ti === -1 || !data.rows.length) return null;
+        const first = data.rows.map(r => String(r[ti])).sort()[0];
+        const lbl = data.column_labels?.[timeDim]?.[first] || first;
+        return String(lbl).replace(/^Anul\s+/, '').trim();
+    }
+
+    /** Name of the one series a single-series tile shows: the option picked
+     *  in its controls, so the tooltip never names the whole dataset. */
+    selectedOptionName(chart) {
+        const names = [];
+        for (const ctrl of chart.controls || []) {
+            if (ctrl.dim_type === 'time') continue;
+            const cur = String(this.tileFilters[chart.id]?.[ctrl.column] ?? ctrl.default);
+            const o = ctrl.options.find(x => String(x.value) === cur);
+            if (o) names.push(String(o.label).trim());
+        }
+        return names.length ? names.join(', ') : null;
+    }
+
+    /** One-of-N picker. Up to PILL_MAX options show as pills (all choices
+     *  visible); more keep the native dropdown. Same callback either way. */
+    _optionPicker(options, current, title, onPick, cls = '') {
+        if (options.length >= 2 && options.length <= PILL_MAX) {
+            const group = document.createElement('span');
+            group.className = 'dbv2-opt-pills ' + cls;
+            group.setAttribute('role', 'group');
+            group.setAttribute('aria-label', title);
+            group.title = title;
+            const btns = [];
+            for (const opt of options) {
+                const b = document.createElement('button');
+                b.type = 'button';
+                const on = String(opt.value) === String(current);
+                b.className = 'dbv2-chip-btn dbv2-opt-pill' + (on ? ' active' : '');
+                b.setAttribute('aria-pressed', on ? 'true' : 'false');
+                b.textContent = String(opt.label).trim();
+                b.addEventListener('click', () => {
+                    btns.forEach(x => {
+                        const a = x === b;
+                        x.classList.toggle('active', a);
+                        x.setAttribute('aria-pressed', a ? 'true' : 'false');
+                    });
+                    onPick(String(opt.value));
+                });
+                btns.push(b);
+                group.appendChild(b);
+            }
+            return group;
+        }
+        const sel = document.createElement('select');
+        sel.className = 'dbv2-chip-select ' + cls;
+        sel.title = title;
+        sel.setAttribute('aria-label', title);
+        for (const opt of options) {
+            const o = document.createElement('option');
+            o.value = opt.value;
+            o.textContent = String(opt.label).trim();
+            sel.appendChild(o);
+        }
+        sel.value = current;
+        sel.addEventListener('change', () => onPick(sel.value));
+        return sel;
+    }
+
+    /** Inline pickers for the tile's pinned dims (composer `controls`) —
      *  every pin the composer made is a default the user can change. */
     tileControls(chart) {
         const frag = document.createDocumentFragment();
@@ -827,23 +909,13 @@ class DashboardV2 {
                 frag.appendChild(this.timeSlider(chart, ctrl));
                 continue;
             }
-            const sel = document.createElement('select');
-            sel.className = 'dbv2-chip-select';
-            sel.title = ctrl.label || ctrl.column;
-            for (const opt of ctrl.options) {
-                const o = document.createElement('option');
-                o.value = opt.value;
-                o.textContent = opt.label;
-                sel.appendChild(o);
-            }
-            sel.value = this.tileFilters[chart.id]?.[ctrl.column] ?? ctrl.default;
-            sel.addEventListener('change', () => {
+            const current = () => String(this.tileFilters[chart.id]?.[ctrl.column] ?? ctrl.default);
+            frag.appendChild(this._optionPicker(ctrl.options, current(), ctrl.label || ctrl.column, v => {
                 const tf = this.tileFilters[chart.id] ||= {};
-                if (sel.value === ctrl.default) delete tf[ctrl.column];
-                else tf[ctrl.column] = sel.value;
+                if (v === String(ctrl.default)) delete tf[ctrl.column];
+                else tf[ctrl.column] = v;
                 this.refresh();
-            });
-            frag.appendChild(sel);
+            }));
         }
         this.tileTransformChips(chart, frag);
         this.tilePerspectiveChips(chart, frag);
@@ -993,22 +1065,12 @@ class DashboardV2 {
     tilePickSelect(chart, seriesCol, values, current, bar) {
         bar.querySelector('.dbv2-pick')?.remove();
         if (values.length < 2) return;
-        const sel = document.createElement('select');
-        sel.className = 'dbv2-chip-select dbv2-pick';
-        sel.title = this.ui.pickTooltip;
-        sel.setAttribute('aria-label', this.ui.pickTooltip);
-        for (const v of values) {
-            const o = document.createElement('option');
-            o.value = v;
-            o.textContent = String(v).trim();
-            sel.appendChild(o);
-        }
-        sel.value = current;
-        sel.addEventListener('change', () => {
-            if (sel.value === values[0]) delete this.tilePicks[chart.id];
-            else this.tilePicks[chart.id] = sel.value;
-            this.refresh();
-        });
+        const sel = this._optionPicker(values.map(v => ({ value: v, label: v })), current,
+            this.ui.pickTooltip, v => {
+                if (v === values[0]) delete this.tilePicks[chart.id];
+                else this.tilePicks[chart.id] = v;
+                this.refresh();
+            }, 'dbv2-pick');
         const anchor = bar.querySelector('.dbv2-tile-type');
         bar.insertBefore(sel, bar.querySelector('.dbv2-view-group') || anchor);
     }
@@ -1291,7 +1353,9 @@ class DashboardV2 {
 
             let tileData = data;
             let valueFormat = null;
+            let yAxisName = null;
             let seasonalMode = false;
+            container.parentNode.querySelector('.dbv2-transform-note')?.remove();
             if (transform === 'seasonal') {
                 // one shared verdict: the dataset's additivity (server policy)
                 const useAvg = this.metadata.measure === 'non_additive';
@@ -1300,6 +1364,18 @@ class DashboardV2 {
             } else if (transform) {
                 tileData = applyTimeTransform(data, timeDim, roles?.series, transform);
                 valueFormat = transform === 'index' ? 'index' : 'pct_change';
+                // The base is the first period of the data, whatever the zoom.
+                const base = this.firstPeriodLabel(data, timeDim);
+                const grain = this.metadata.profile?.time_granularity;
+                const noteText = transform === 'index'
+                    ? (base ? this.ui.indexNote(base) : null) : this.ui.yoyNote(grain);
+                yAxisName = transform === 'index' ? (base ? this.ui.indexUnit(base) : 'index') : '%';
+                if (noteText) {
+                    const n = document.createElement('div');
+                    n.className = 'dbv2-transform-note';
+                    n.textContent = noteText;
+                    container.after(n);
+                }
             }
             if (this.tileNorms[chart.id] && !seasonalMode) {
                 // Never fall back to raw counts under a per-1,000 label: no
@@ -1318,6 +1394,7 @@ class DashboardV2 {
             // stacked or the heatmap — all drawn from the same slice.
             const view = this.tileView(chart);
             let renderType = chart.chart_type;
+            let pickName = null;
             const viewFlags = { _sumSeries: chart.views?.includes('stacked') || false };
             container.style.minHeight = '';
             let rowHeight = 0;
@@ -1333,6 +1410,7 @@ class DashboardV2 {
                     const parts = values.filter(v => !isTotalLabel(v));
                     const choices = parts.length ? parts : values;
                     const pick = choices.includes(this.tilePicks[chart.id]) ? this.tilePicks[chart.id] : choices[0];
+                    pickName = String(pick).trim();
                     this.tilePickSelect(chart, roles.series, choices, pick, bar0);
                     tileData = { ...tileData, rows: tileData.rows.filter(r => r[si] === pick) };
                     tileRoles = { ...roles, series: null };
@@ -1353,6 +1431,7 @@ class DashboardV2 {
                 if (view === 'bars') {
                     const pick = sVals.includes(this.tilePicks[chart.id])
                         ? this.tilePicks[chart.id] : sVals[0];
+                    pickName = String(pick).trim();
                     this.tilePickSelect(chart, roles.series, sVals, pick, bar0);
                     tileData = { ...tileData, rows: tileData.rows.filter(r => r[sIdx] === pick) };
                     if (!tileData.rows.length) {
@@ -1404,6 +1483,8 @@ class DashboardV2 {
                 time_dim: seasonalMode ? '__SUB__' : timeDim,
                 geo_dim: sliceDim('geo'),
                 _valueFormat: valueFormat,
+                _yAxisName: yAxisName,
+                _seriesName: tileRoles?.series ? null : (pickName || this.selectedOptionName(chart)),
                 _logScale: !!this.tileLogs[chart.id],
             };
             delete tileConfig.composition;
@@ -1660,14 +1741,44 @@ class DashboardV2 {
                     this.code, this.expandedUserFilters(), TABLE_ROW_CAP);
                 this.tableData = { key: filterKey, data };
                 this.tableSort = null;
+                this.tableFilter = { cols: {}, from: '', to: '' };
+                this._tableFilterBuilt = false;
             } catch (e) {
                 console.error('Table fetch failed:', e);
                 wrap.innerHTML = `<div class="dbv2-empty">${this.ui.tableError}</div>`;
                 return;
             }
         }
-        const { columns, rows, column_labels } = this.tableData.data;
+        const { columns, rows: allRows, column_labels } = this.tableData.data;
         const headers = columns.map(c => c === 'OBS_VALUE' ? this.ui.value : this.dimLabel(c));
+        this.tableFilter ||= { cols: {}, from: '', to: '' };
+        const tf = this.tableFilter;
+        const timeCol = columns.findIndex(c => (this.metadata.dimensions || []).some(
+            d => d.dim_type === 'time' && d.dim_column_name === c));
+        const label = (ci, v) => {
+            if (v == null) return '—';
+            const map = column_labels?.[columns[ci]];
+            const s = map?.[String(v)] ?? v;
+            return typeof s === 'number' ? formatNumber(s) : String(s).trim();
+        };
+        if (!this._tableFilterBuilt) {
+            this.buildTableFilters(columns, allRows, timeCol, label);
+            this._tableFilterBuilt = true;
+        }
+
+        // Filters act on the loaded rows only; no new request.
+        const active = Object.keys(tf.cols).length > 0 || tf.from || tf.to;
+        const rows = !active ? allRows : allRows.filter(r => {
+            for (const [ci, set] of Object.entries(tf.cols)) {
+                if (!set.has(String(r[ci]))) return false;
+            }
+            if (timeCol !== -1) {
+                const t = String(r[timeCol]);
+                if (tf.from && t < tf.from) return false;
+                if (tf.to && t > tf.to) return false;
+            }
+            return true;
+        });
 
         let sorted = rows;
         if (this.tableSort) {
@@ -1681,12 +1792,6 @@ class DashboardV2 {
             });
         }
 
-        const label = (ci, v) => {
-            if (v == null) return '—';
-            const map = column_labels?.[columns[ci]];
-            const s = map?.[String(v)] ?? v;
-            return typeof s === 'number' ? formatNumber(s) : String(s).trim();
-        };
         const head = headers.map((h, i) => {
             const arrow = this.tableSort?.col === i
                 ? (this.tableSort.dir > 0 ? ' ▲' : ' ▼') : '';
@@ -1696,7 +1801,11 @@ class DashboardV2 {
             `<tr>${r.map((v, ci) => `<td>${label(ci, v)}</td>`).join('')}</tr>`
         ).join('');
         wrap.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
-        countEl.textContent = this.ui.tableCount(rows.length, TABLE_ROW_CAP);
+        countEl.textContent = active
+            ? this.ui.tableFilterOf(rows.length, allRows.length)
+            : this.ui.tableCount(allRows.length, TABLE_ROW_CAP);
+        const reset = document.getElementById('dbv2-table-reset');
+        if (reset) reset.classList.toggle('hidden', !active);
 
         wrap.querySelectorAll('th').forEach(th => {
             th.addEventListener('click', () => {
@@ -1706,6 +1815,88 @@ class DashboardV2 {
                 this.renderTable();
             });
         });
+    }
+
+    /** Filter bar above the table: a multi-select per dimension column and a
+     *  period range. Built once per loaded dataset; changes re-render rows only. */
+    buildTableFilters(columns, rows, timeCol, label) {
+        const host = document.getElementById('dbv2-table-filters');
+        if (!host) return;
+        host.innerHTML = '';
+        const tf = this.tableFilter;
+        const redraw = () => this.renderTable();
+        columns.forEach((c, ci) => {
+            if (c === 'OBS_VALUE' || ci === timeCol) return;
+            const vals = [...new Set(rows.map(r => String(r[ci])))]
+                .sort((a, b) => label(ci, a).localeCompare(label(ci, b)));
+            if (vals.length < 2) return;
+            const det = document.createElement('details');
+            det.className = 'dbv2-tf';
+            const sum = document.createElement('summary');
+            const setSum = () => {
+                const n = tf.cols[ci]?.size || 0;
+                sum.textContent = `${this.dimLabel(c)}${n ? ` (${n})` : ` · ${this.ui.tableFilterAll}`}`;
+                det.classList.toggle('on', n > 0);
+            };
+            setSum();
+            det.appendChild(sum);
+            const list = document.createElement('div');
+            list.className = 'dbv2-tf-list';
+            for (const v of vals) {
+                const lab = document.createElement('label');
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = !!tf.cols[ci]?.has(v);
+                cb.addEventListener('change', () => {
+                    const set = tf.cols[ci] ||= new Set();
+                    if (cb.checked) set.add(v); else set.delete(v);
+                    if (!set.size) delete tf.cols[ci];
+                    setSum();
+                    redraw();
+                });
+                lab.append(cb, ' ' + label(ci, v));
+                list.appendChild(lab);
+            }
+            det.appendChild(list);
+            host.appendChild(det);
+        });
+        if (timeCol !== -1) {
+            const periods = [...new Set(rows.map(r => String(r[timeCol])))].sort();
+            if (periods.length > 1) {
+                const mk = (key, text) => {
+                    const lab = document.createElement('label');
+                    lab.className = 'dbv2-tf-range';
+                    lab.append(text + ' ');
+                    const sel = document.createElement('select');
+                    const blank = document.createElement('option');
+                    blank.value = ''; blank.textContent = '—';
+                    sel.appendChild(blank);
+                    for (const t of periods) {
+                        const o = document.createElement('option');
+                        o.value = t; o.textContent = label(timeCol, t);
+                        sel.appendChild(o);
+                    }
+                    sel.value = tf[key];
+                    sel.addEventListener('change', () => { tf[key] = sel.value; redraw(); });
+                    lab.appendChild(sel);
+                    return lab;
+                };
+                host.appendChild(mk('from', this.ui.tableFilterFrom));
+                host.appendChild(mk('to', this.ui.tableFilterTo));
+            }
+        }
+        const reset = document.createElement('button');
+        reset.id = 'dbv2-table-reset';
+        reset.type = 'button';
+        reset.className = 'dbv2-chip-btn hidden';
+        reset.textContent = this.ui.tableFilterReset;
+        reset.addEventListener('click', () => {
+            this.tableFilter = { cols: {}, from: '', to: '' };
+            this._tableFilterBuilt = false;
+            this.renderTable();
+        });
+        host.appendChild(reset);
+        host.title = this.ui.tableFilterTip;
     }
 
     // ----------------------------------------------------------- filter row

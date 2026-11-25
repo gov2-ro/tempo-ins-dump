@@ -819,3 +819,17 @@ body.sidebar-open .dbv2-main {
 .agg-badge-granularity { background: #e0e7ff; color: #3730a3; }
 :root[data-theme="dark"] .agg-badge-mixed { background: #4a3410; color: #fcd34d; }
 :root[data-theme="dark"] .agg-badge-granularity { background: #26295a; color: #c7d2fe; }
+
+/* DP-01: option pills, transform note, table filters */
+.dbv2-opt-pills { display: inline-flex; flex-wrap: wrap; gap: 4px; max-width: 100%; }
+.dbv2-opt-pill { white-space: normal; text-align: left; max-width: 100%; }
+.dbv2-transform-note { margin: .2rem 0 .4rem; font-size: 0.75rem; color: var(--text-2); }
+.dbv2-table-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 0.75rem; color: var(--text-2); }
+.dbv2-table-filters:empty { display: none; }
+.dbv2-tf { border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; background: var(--bg-1); max-width: 100%; }
+.dbv2-tf.on { border-color: var(--accent); }
+.dbv2-tf summary { cursor: pointer; }
+.dbv2-tf-list { max-height: 180px; overflow: auto; padding: 4px 0; display: flex; flex-direction: column; gap: 2px; }
+.dbv2-tf-list label { white-space: normal; color: var(--text-1); }
+.dbv2-tf-range select { font-size: 0.75rem; }
+.dbv2-table-filters .hidden { display: none; }

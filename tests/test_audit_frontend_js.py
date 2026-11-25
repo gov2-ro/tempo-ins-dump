@@ -38,7 +38,8 @@ def page():
         pg = browser.new_page()
         pg.set_content("<html><body><div id='c'></div></body></html>")
         pg.add_script_tag(content=STUB)
-        for name in ("utils.js", "chart-new-types.js", "chart-geo.js", "chart-factory.js"):
+        for name in ("utils.js", "chart-new-types.js", "chart-geo.js", "chart-factory.js",
+                     "dashboard-v2.js"):
             pg.add_script_tag(content=(JS / name).read_text(encoding="utf-8"))
         yield pg
         browser.close()
@@ -149,3 +150,55 @@ def test_v1_yearly_view_marks_an_incomplete_last_year(page):
     assert out["labels"]["2024"] == "2024"
     assert out["labels"]["2025"] == "2025 (an incomplet)"
     assert [r[1] for r in out["rows"]] == [12, 3]
+
+
+# DP-01: index/delta notes, option pills, series name
+
+def test_transformed_chart_carries_its_own_unit_and_series_name(page):
+    out = page.evaluate("""() => {
+        window.__opts.length = 0;
+        const data = { columns: ['TIME_PERIOD', 'OBS_VALUE'], column_labels: { TIME_PERIOD: {} },
+                       rows: [['1990', 100], ['1991', 121.1]] };
+        createTimeSeriesChart(document.getElementById('c'),
+            { primary_chart: 'line', time_dim: 'TIME_PERIOD', _valueFormat: 'index',
+              _yAxisName: 'indice, 1990 = 100', _seriesName: 'Bauturi' },
+            data, { matrix_name: 'Titlu [Litri]' });
+        const o = window.__opts[0];
+        const tip = o.tooltip.formatter([{ value: 121.1, seriesName: o.series[0].name,
+                                           marker: '', axisValue: '1991' }]).replace(/<[^>]+>/g, ' ');
+        return { name: o.series[0].name, axis: o.yAxis.name, tip };
+    }""")
+    assert out["name"] == "Bauturi"
+    assert out["axis"] == "indice, 1990 = 100"
+    assert "indice, 1990 = 100" in out["tip"] and "Litri" not in out["tip"]
+
+
+def test_option_picker_pills_up_to_six_dropdown_above(page):
+    out = page.evaluate("""() => {
+        const mk = n => Array.from({ length: n }, (_, i) => ({ value: 'v' + i, label: 'Opt ' + i }));
+        const picked = [];
+        const six = DashboardV2.prototype._optionPicker.call({}, mk(6), 'v0', 't', v => picked.push(v));
+        const seven = DashboardV2.prototype._optionPicker.call({}, mk(7), 'v0', 't', v => picked.push(v));
+        six.querySelectorAll('button')[2].click();
+        return { sixTag: six.tagName, pills: six.querySelectorAll('button').length,
+                 active: [...six.querySelectorAll('.active')].map(b => b.textContent),
+                 sevenTag: seven.tagName, picked };
+    }""")
+    assert out["sixTag"] == "SPAN" and out["pills"] == 6
+    assert out["active"] == ["Opt 2"] and out["picked"] == ["v2"]
+    assert out["sevenTag"] == "SELECT"
+
+
+def test_index_base_is_first_period_and_notes_name_the_grain(page):
+    out = page.evaluate("""() => {
+        const self = DashboardV2.prototype;
+        const data = { columns: ['T', 'OBS_VALUE'], column_labels: { T: { '1990': 'Anul 1990' } },
+                       rows: [['2001', 1], ['1990', 2]] };
+        return { base: self.firstPeriodLabel(data, 'T'),
+                 ro: UI_STRINGS.ro.indexNote('1990'), en: UI_STRINGS.en.indexNote('1990'),
+                 yoyM: UI_STRINGS.ro.yoyNote('monthly'), yoyA: UI_STRINGS.en.yoyNote('annual') };
+    }""")
+    assert out["base"] == "1990"
+    assert out["ro"] == "Indice: 1990 = 100. Peste 100 = mai mult decât în 1990."
+    assert "1990 = 100" in out["en"]
+    assert "luna anterioară" in out["yoyM"] and "previous year" in out["yoyA"]
