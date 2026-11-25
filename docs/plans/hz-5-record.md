@@ -342,7 +342,7 @@ The cron time can also move after the scrapers. `refresh-run.py` runs the steps 
 ## 11. Tests
 
 `python -m pytest tests -q` on the branch, once, with nothing else running: **2582 passed, 146 skipped** (15 min).
-`tests/test_hz5_refresh.py`: 34 tests (stale rule, cleanup, compaction, the orchestrator flags, atomic writes, schedule,
+`tests/test_hz5_refresh.py`: 33 test functions (stale rule, cleanup, compaction, the orchestrator flags, atomic writes, schedule,
 run copy, live-tree guard, notification, probe failure, bucketed audit, `--write-db`, sweep and touched-code helpers).
 
 ## 12. Open questions for the owner
