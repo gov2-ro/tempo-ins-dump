@@ -112,6 +112,11 @@ def _total_option(options):
     return tot[0] if len(tot) == 1 else None
 
 
+def _curated():
+    from app.services.dimension_structure import curated_totals
+    return curated_totals()
+
+
 class Resolver:
     def __init__(self, data_dir: Path):
         import duckdb
@@ -193,7 +198,8 @@ class Resolver:
             if t == "time":
                 o = _match_option(opts, kpi["period"])
             elif t in SUMMED:
-                o = _total_option(opts)
+                listed = _curated().get((code, col))     # hand-checked total (app/data/curated_totals.json)
+                o = _match_option(opts, listed) if listed else _total_option(opts)
                 if o is None:
                     return {"unresolved": f"no_total_option:{col}"}
             elif t in PINNED:
