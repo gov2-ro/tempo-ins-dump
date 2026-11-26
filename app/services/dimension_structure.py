@@ -22,6 +22,7 @@ exactly as it does today.
 """
 import json
 import logging
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +43,24 @@ def _table_exists(conn) -> bool:
         except Exception:
             _TABLE_OK = False
     return _TABLE_OK
+
+
+CURATED_TOTALS_FILE = Path(__file__).resolve().parent.parent / 'data' / 'curated_totals.json'
+_curated: dict | None = None
+
+
+def curated_totals() -> dict:
+    """{(code, column): option} from app/data/curated_totals.json, read once.
+    Hand-checked totals the label rule (TOTAL_RE) cannot recognise."""
+    global _curated
+    if _curated is None:
+        try:
+            doc = json.loads(CURATED_TOTALS_FILE.read_text(encoding='utf-8'))
+            _curated = {(e['code'], e['column']): e['option'] for e in doc.get('totals', [])}
+        except (OSError, ValueError, KeyError) as e:
+            log.warning("curated_totals read failed: %s", e)
+            _curated = {}
+    return _curated
 
 
 SOURCE_TOTAL_KEY = '__source_total__'   # same literal as aggregation_policy.SOURCE_TOTAL_KEY
@@ -83,6 +102,17 @@ def load(conn, matrix_code: str) -> dict:
                 'confidence': confidence,
                 'source': source,
             }
+
+    for (code, col), option in curated_totals().items():
+        if code != matrix_code:
+            continue
+        ent = out.setdefault(col, {'levels': [], 'default_level': None, 'n_levels': 0,
+                                   'aggregate_value': None, 'additive': None, 'nests_in': None,
+                                   'discrimination': None, 'dominance': None,
+                                   'confidence': None, 'source': None})
+        ent['aggregate_value'] = option
+        ent['additive'] = False
+        ent['source'] = 'curated'
 
     for col, info in _source_mismatches(conn, matrix_code).items():
         out.setdefault(col, {'levels': [], 'default_level': None, 'n_levels': 0,

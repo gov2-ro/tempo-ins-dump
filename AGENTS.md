@@ -174,6 +174,10 @@ The measured profile for enabling it on the 512 MB machine is `scripts/deploy/fl
   `app/data/dataset_notes.json` (a parent code covers its split children); public ones
   show on the dataset page and in `/api/datasets/{code}`. After editing, run
   `scripts/build-notes-report.py` (a test checks `docs/reports/ins-notes.md` is in sync).
+- **Curated totals:** `app/data/curated_totals.json` lists hand-checked total options that the label
+  rule (`TOTAL_RE`) cannot find (for example "Consum total de alcool (alcool 100%)"). `dimension_structure.load()`
+  makes each one the dimension's aggregate (`source='curated'`, not additive), so the KPI is INS's own cell, not a sum.
+  Add an entry only after checking the option list and values; a `corpus` test checks each option exists in its parquet.
 - `_obsolete/` folders are archived. Don't edit or import from them.
 
 ## Dev MCP Server (`tools/tempo-dev-mcp/`)

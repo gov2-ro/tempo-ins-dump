@@ -5,6 +5,17 @@
 
 
 
+## 2026-11-26 — DP-01 part 1 (option B): curated total options
+
+- **What:** `app/data/curated_totals.json` lists 16 datasets' total options that `TOTAL_RE` cannot recognise.
+  `dimension_structure.load()` reads it once and sets `aggregate_value` to the listed option (`additive=False`,
+  `source='curated'`). The policy then pins the option (`aggregate_row`): the KPI is INS's own cell and the
+  source-total gate does not apply. `scripts/check-kpi-totals.py` uses the same loader for a summed listed column.
+- **Static site:** no code change. `build-static.py` exports `ctx["struct"]` from `load()`, so it carries the entry.
+- **Not fixed:** `CON113A-D` and `TAZ0221` still withhold the KPI (`arbitrary_pin`): another dimension
+  (ECON_ACTIVITY; REF_AREA with counties only) has no total. That is outside this list.
+- **Tests:** `tests/test_curated_totals.py` (fixture KPI with and without the list; list shape; `corpus`: options exist).
+
 ## 2026-11-26 — DP-01 dataset page v2 (index notes, pills, table filters); Ask key warning; MCP type filter
 
 - **Trigger:** on `CLV104A_litri_alcool_pur_100` the Index view showed 121.1 as if it were litres (it is

@@ -1,0 +1,101 @@
+{
+  "_note": "Hand-checked total options that the label rule cannot find. See AGENTS.md (Dataset notes). Edit only after checking the option list and values.",
+  "totals": [
+    {
+      "code": "CLV104A_litri_alcool_pur_100",
+      "column": "PRINCIPALELE_PRODUSE_ALIMENTARE_SI_BAUTU",
+      "option": "Consum total de alcool (alcool 100%)",
+      "reason": "INS total consumption row; the other options are drink groups."
+    },
+    {
+      "code": "CON113A",
+      "column": "ACTIVE_NEFINANCIARE_VALORI_BRUTE",
+      "option": "N11G Total Active fixe, brute",
+      "reason": "Total of gross fixed assets; the label does not start with a total word."
+    },
+    {
+      "code": "CON113B",
+      "column": "ACTIVE_NEFINANCIARE_VALORI_BRUTE",
+      "option": "N11G Total Active fixe, brute",
+      "reason": "Total of gross fixed assets; the label does not start with a total word."
+    },
+    {
+      "code": "CON114A",
+      "column": "ACTIVE_NEFINANCIARE_VALORI_BRUTE",
+      "option": "N11G Total Active fixe, brute",
+      "reason": "Total of gross fixed assets; the label does not start with a total word."
+    },
+    {
+      "code": "CON114B",
+      "column": "ACTIVE_NEFINANCIARE_VALORI_BRUTE",
+      "option": "N11G Total Active fixe, brute",
+      "reason": "Total of gross fixed assets; the label does not start with a total word."
+    },
+    {
+      "code": "CON113C",
+      "column": "ACTIVE_NEFINANCIARE_VALORI_NETE",
+      "option": "N11N Total Active fixe, nete",
+      "reason": "Total of net fixed assets; the label does not start with a total word."
+    },
+    {
+      "code": "CON113D",
+      "column": "ACTIVE_NEFINANCIARE_VALORI_NETE",
+      "option": "N11N Total Active fixe, nete",
+      "reason": "Total of net fixed assets; the label does not start with a total word."
+    },
+    {
+      "code": "ECC501A",
+      "column": "TYPE",
+      "option": "Deseuri menajere si asimilabile colectate de la populatie si operatori economici - total, din care:",
+      "reason": "Total row of the collected household waste types; the label ends with a total word."
+    },
+    {
+      "code": "TNX1252",
+      "column": "TYPE",
+      "option": "Deseuri menajere si asimilabile colectate de la populatie si operatori economici - total, din care:",
+      "reason": "Total row of the collected household waste types; the label ends with a total word."
+    },
+    {
+      "code": "TOW1331",
+      "column": "CATEGORY",
+      "option": "Deseuri menajere si asimilabile generate - total, din care:",
+      "reason": "Total row of the generated household waste categories."
+    },
+    {
+      "code": "TAZ0221",
+      "column": "CATEGORY",
+      "option": "Suprafata terenurilor intabulate pe total tara",
+      "reason": "Whole-country row of the registered land area."
+    },
+    {
+      "code": "TFP0512",
+      "column": "TIMP_PETRECUT_CU_ACTIVITATI_CASNICE_SI_D",
+      "option": "Ingrijirea gospodariei si familiei si ajutor acordat altor gospodarii - TOTAL, din care:",
+      "reason": "Total row of the household care activities."
+    },
+    {
+      "code": "TMF1152",
+      "column": "EMISIUNI_EDUCATIVE_SI_SPOTURI_PUBLICITAR",
+      "option": "Emisiuni educative si mesaje de interes public cu rol de educatie in caz de cutremur - Total, din care:",
+      "reason": "Total row of the educational and public-interest broadcasts."
+    },
+    {
+      "code": "TSZ1682",
+      "column": "CATEGORY",
+      "option": "Infractiuni de coruptie si serviciu-total, din care",
+      "reason": "Total row of the corruption and service offences."
+    },
+    {
+      "code": "ZEC1631",
+      "column": "CATEGORY",
+      "option": "Infractiuni de coruptie si serviciu-total, din care",
+      "reason": "Total row of the corruption and service offences."
+    },
+    {
+      "code": "TFF4102",
+      "column": "DEPOZITELE_GOSPODARIILOR_POPULATIEI",
+      "option": "Depozitele gospodariilor populatiei - total, din care:",
+      "reason": "Total row of household deposits."
+    }
+  ]
+}

@@ -18,6 +18,8 @@ see also [charting-ideas.md](charting-ideas.md)
   (owner decision 2026-11-26, option A). If users ask: click a year to make it 100, kept in the URL.
 - [ ] **P1 — DP-01: total inside a label, index notes, option pills, table filters.** Brief:
   `docs/plans/dataset-page-v2-fixes/brief.md`.
+  - [x] Part 1 (option B): curated list `app/data/curated_totals.json` (brief `brief-curated-totals.md`, 2026-11-26).
+  - [ ] Part 1 (option A): profiler rule for totals inside a label, after HZ-5b; the curated list is its test cases.
 
 ## VPS weekly refresh (2026-11-25)
 
